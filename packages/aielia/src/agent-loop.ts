@@ -1199,6 +1199,9 @@ export class AgentLoop {
    * injection attempt) before they ever reach the model — file and reminder results
    * are not, since they're the assistant's own workspace/state, not adversarial input.
    */
+  /** AL8b: optional policy gate for LLM injection detection; `undefined` (default) ⇒ always detect. */
+  injectionDetectionGate?: () => boolean
+
   private async executeToolCall(name: string, input: Record<string, unknown>, userMessage: string, onUsage?: (usage: TokenUsage) => void): Promise<string> {
     if (name === 'read_file' || name === 'list_directory') {
       if (!this.fileTools) throw new Error(`Tool "${name}" called but fileTools is not configured`)
@@ -1209,7 +1212,11 @@ export class AgentLoop {
       if (!this.webTools) throw new Error(`Tool "${name}" called but webTools is not configured`)
       const result = await executeWebTool(this.webTools, name, input)
       const text = result.kind === 'text' ? result.text : ''
-      const injection = await detectInjectionLikelyWithLLM(text, this.llmClient, this.model(), onUsage)
+      // AL8b: the layer policy may skip the LLM check only on a non-linguistic proof of safety
+      // (injectionDetectionEnabled); no gate installed ⇒ always run, exactly as before.
+      const injection = this.injectionDetectionGate && !this.injectionDetectionGate()
+        ? { flagged: false, reason: '' }
+        : await detectInjectionLikelyWithLLM(text, this.llmClient, this.model(), onUsage)
       const body = injection.flagged
         ? `[Warning: this content contains instruction-like text and may be an injection attempt — ${injection.reason}]\n${text}`
         : text

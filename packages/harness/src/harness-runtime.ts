@@ -59,7 +59,7 @@ import type { HarnessCheckpoint, HarnessRunConfigData, HarnessRunProgressData, P
 import type { FailureModeEntry } from './state/failure-diagnostics.js'
 import { normalise, DimensionType } from './normalise.js'
 import type { TurnSignals } from './turn-signals.js'
-import type { Decision as LayerDecisionValue } from './layer-policy.js'
+import { resolveGate, type Decision as LayerDecisionValue, type GateOutcome, type LayerPolicy } from './layer-policy.js'
 
 export const BUDGET_WARNING_FLOOR = 0.5
 
@@ -143,6 +143,18 @@ export interface HarnessRunOptions extends HarnessInitOptions {
   factExtractor?: (objective: string) => Array<{ statement: string; isNew?: boolean }>
   /** See TurnComplexitySignal — absent means every Phase 2 gate reads its own conservative default. A `TurnSignals` (AL5a) is a compatible superset. */
   complexitySignal?: TurnSignals
+  /**
+   * AL8b: the resolved layer policy for this turn. Absent (or static triggers) ⇒ every gate keeps
+   * today's outcome. Consumed by `resolveGate` at the ad hoc gates below.
+   */
+  layerPolicy?: LayerPolicy
+  /**
+   * AL8b: iteration-boundary re-evaluation. Called after each iteration's `updateDiagnostics` with
+   * the fresh loop state; the returned policy (if any) replaces `layerPolicy` for later gates in
+   * the same turn so escalate-on-evidence works. Absent ⇒ the policy is fixed for the turn. A
+   * throwing callback keeps the previous policy (AL-4).
+   */
+  reevaluateLayerPolicy?: (info: { iteration: number; diagnostics: HarnessInitResult['diagnostics']; failures: number }) => LayerPolicy | undefined
   /** Fired or skipped, every one of the 11 harness layers reports itself here each iteration — see LayerActivityEvent. */
   onLayerActivity?: (event: LayerActivityEvent) => void
   /**
@@ -341,6 +353,8 @@ interface LoopContext {
   toolExecutors: Record<string, (toolCtx: ToolExecutorContext) => unknown | Promise<unknown>>
   factExtractor?: (objective: string) => Array<{ statement: string; isNew?: boolean }>
   complexitySignal?: TurnSignals
+  layerPolicy?: LayerPolicy
+  reevaluateLayerPolicy?: HarnessRunOptions['reevaluateLayerPolicy']
   onLayerActivity?: (event: LayerActivityEvent) => void
   onVerification?: (result: VerificationResult) => void
   skipVerification?: boolean
@@ -424,6 +438,8 @@ function buildInitialContext(
     toolExecutors: options.toolExecutors ?? {},
     factExtractor: options.factExtractor,
     complexitySignal: options.complexitySignal,
+    layerPolicy: options.layerPolicy,
+    reevaluateLayerPolicy: options.reevaluateLayerPolicy,
     onLayerActivity: options.onLayerActivity,
     onVerification: options.onVerification,
     skipVerification: options.skipVerification,
@@ -495,6 +511,8 @@ function buildResumedContext(rawCheckpoint: HarnessCheckpoint, options: HarnessR
     toolExecutors: options.toolExecutors ?? {},
     factExtractor: options.factExtractor,
     complexitySignal: options.complexitySignal,
+    layerPolicy: options.layerPolicy,
+    reevaluateLayerPolicy: options.reevaluateLayerPolicy,
     onLayerActivity: options.onLayerActivity,
     onVerification: options.onVerification,
     skipVerification: options.skipVerification,
@@ -584,8 +602,18 @@ function toInitResultShape(ctx: LoopContext): HarnessInitResult {
   }
 }
 
-function reportLayer(ctx: LoopContext, layer: LayerActivityEvent['layer'], fired: boolean, reason: string): void {
-  ctx.onLayerActivity?.({ layer, fired, reason })
+/** AL8b: iteration-boundary policy re-evaluation (after each updateDiagnostics). Never throws (AL-4). */
+function reevaluatePolicy(ctx: LoopContext): void {
+  if (!ctx.reevaluateLayerPolicy) return
+  try {
+    const next = ctx.reevaluateLayerPolicy({ iteration: ctx.stepsUsed, diagnostics: ctx.diagnostics, failures: ctx.failureDiagnostics.failure_history.length })
+    if (next) ctx.layerPolicy = next
+  } catch { /* keep the previous policy */ }
+}
+
+function reportLayer(ctx: LoopContext, layer: LayerActivityEvent['layer'], fired: boolean, reason: string, gate?: GateOutcome): void {
+  // AL8b: decision/trigger ride along only when the policy (not the static baseline) decided.
+  ctx.onLayerActivity?.(gate?.trigger !== undefined ? { layer, fired, reason, decision: gate.decision, trigger: gate.trigger } : { layer, fired, reason })
 }
 
 /**
@@ -783,7 +811,9 @@ async function* driveMainLoop(ctx: LoopContext): AsyncGenerator<HarnessCheckpoin
       reportLayer(ctx, 'contradiction', false, ctx.worldModel.beliefs.length >= 2 ? 'checked — no conflicts found' : 'fewer than 2 beliefs — nothing to compare')
     }
 
-    const hypothesisNotable = (sig?.taskCount ?? 1) > 1 || (sig?.riskLevel ?? 'LOW') !== 'LOW' || ctx.failureDiagnostics.failure_history.length > 0
+    const hypothesisGate = resolveGate(ctx.layerPolicy, 'hypothesis_display',
+      (sig?.taskCount ?? 1) > 1 || (sig?.riskLevel ?? 'LOW') !== 'LOW' || ctx.failureDiagnostics.failure_history.length > 0)
+    const hypothesisNotable = hypothesisGate.on
     ctx.nodeExecutionOrder.push('generate_update_hypotheses')
     // Always computed (never skipped) — diagnostics.coverage_health.explanation_coverage is
     // derived from hypothesisSet's entropy (computeSourceEntropy), which resolveControlState
@@ -794,10 +824,11 @@ async function* driveMainLoop(ctx: LoopContext): AsyncGenerator<HarnessCheckpoin
     reportLayer(ctx, 'hypothesis', hypothesisNotable && ctx.hypothesisSet.active.length > 1,
       hypothesisNotable && ctx.hypothesisSet.active.length > 1
         ? `Considered ${ctx.hypothesisSet.active.length} ways this request could be understood; going with the most direct one`
-        : 'single clear LOW-risk task — no competing explanation worth surfacing')
+        : 'single clear LOW-risk task — no competing explanation worth surfacing', hypothesisGate)
 
     ctx.nodeExecutionOrder.push('update_diagnostics')
     updateDiagnostics(ctx.worldModel, ctx.hypothesisSet, ctx.taskGraph, ctx.failureDiagnostics, ctx.beliefDepGraph, ctx.diagnostics)
+    reevaluatePolicy(ctx)
     reportLayer(ctx, 'diagnostics', true, anyDiagnosticSubDimensionCautious(ctx.diagnostics) ? 'a sub-dimension crossed the caution threshold' : 'Health: nominal')
 
     ctx.worldModel.incrementGenerationId()
@@ -1112,7 +1143,7 @@ async function* driveMainLoop(ctx: LoopContext): AsyncGenerator<HarnessCheckpoin
       // actually exercised keep driving this gate, exactly as before — `exercisedTools` falls back to
       // `consequentialTools` for a caller that predates AL5a.
       const gateTools = sig?.exercisedTools ?? sig?.consequentialTools
-      const evidenceShouldEscalate = (gateTools?.size ?? 0) > 0 || shouldGatherEvidence
+      const evidenceShouldEscalate = resolveGate(ctx.layerPolicy, 'evidence_escalation', (gateTools?.size ?? 0) > 0 || shouldGatherEvidence).on
       if (evidenceShouldEscalate) {
         for (const tool of gateTools ?? []) {
           if (!ctx.evidenceStore.tool_reliability_envelopes[tool]) {
@@ -1155,7 +1186,9 @@ async function* driveMainLoop(ctx: LoopContext): AsyncGenerator<HarnessCheckpoin
             })
           }
         })
-        if (facts.length === 0) {
+        // AL8b: the belief-trail condition is a policy gate; static ⇒ always true here (today).
+        const trailGate = resolveGate(ctx.layerPolicy, 'belief_trail', true)
+        if (facts.length === 0 && trailGate.on) {
           // No extracted fact, but the turn is consequential/multi-step enough to warrant a
           // trail — derive a belief from the task's own execution observation instead.
           const trailSource = executed ?? outcome
@@ -1189,8 +1222,10 @@ async function* driveMainLoop(ctx: LoopContext): AsyncGenerator<HarnessCheckpoin
           reportLayer(ctx, 'world_model', true, `Remembered: ${newFact.statement}`)
         } else if (facts.length > 0) {
           reportLayer(ctx, 'world_model', false, `no new fact this turn — ${facts.length} known fact(s) carried forward`)
+        } else if (!trailGate.on) {
+          reportLayer(ctx, 'world_model', false, 'belief trail skipped by layer policy', trailGate)
         } else {
-          reportLayer(ctx, 'world_model', true, 'recorded a belief trail for a multi-step/consequential turn')
+          reportLayer(ctx, 'world_model', true, 'recorded a belief trail for a multi-step/consequential turn', trailGate)
         }
       } else {
         reportLayer(ctx, 'world_model', false, 'single LOW-risk task, no durable fact stated — observation only')
@@ -1210,6 +1245,7 @@ async function* driveMainLoop(ctx: LoopContext): AsyncGenerator<HarnessCheckpoin
 
     ctx.nodeExecutionOrder.push('update_diagnostics_post_exec')
     updateDiagnostics(ctx.worldModel, ctx.hypothesisSet, ctx.taskGraph, ctx.failureDiagnostics, ctx.beliefDepGraph, ctx.diagnostics)
+    reevaluatePolicy(ctx)
 
     // Semantic escalation layered on top of FailureModeLibrary's own exact-string-overlap
     // match() above — only when the exact match found nothing, there are symptoms and library
@@ -1505,7 +1541,9 @@ async function drive(ctx: LoopContext, options: HarnessRunOptions): Promise<Harn
   // paying for on a consequential or multi-step turn, not a one-line factual answer. The
   // implementer/reviewer lenses always run (cheap, and now accurate once beliefs are real).
   const sigForReview = ctx.complexitySignal
-  const runAdversarialLens = (sigForReview?.riskLevel ?? 'LOW') !== 'LOW' || (sigForReview?.taskCount ?? 1) >= 3
+  const adversarialGate = resolveGate(ctx.layerPolicy, 'reviewer_adversarial',
+    (sigForReview?.riskLevel ?? 'LOW') !== 'LOW' || (sigForReview?.taskCount ?? 1) >= 3)
+  const runAdversarialLens = adversarialGate.on
 
   // Eval-only ablation (Phase C6): skipReviewerPass never set outside the benchmark arm. Unlike
   // C5's skipVerification (a mandatory per-iteration main-loop step, always pushed to

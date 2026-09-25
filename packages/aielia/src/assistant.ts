@@ -1,3 +1,6 @@
+import { deriveConsequentialTools } from '@buildaharness/harness'
+import { TOOL_EFFECT_CLASS } from './tool-effect-class.js'
+import { resolveEscalationPlan, injectionDetectionEnabled } from './layer-policy-wiring.js'
 import {
   EscalationHalt,
   InMemoryExperienceStore,
@@ -448,7 +451,18 @@ export class PersonalAssistant {
       this.onTrace,
       this.onDebugLog,
     )
-    this.turnInterpreter = new TurnInterpreter(this.llmClient, model, this.planService, reminderStore, options.ambiguityGuardMode ?? DEFAULT_AMBIGUITY_GUARD_MODE)
+    // AL8b: LLM injection detection is routed through the layer policy; it can only be skipped on a
+    // non-linguistic proof of safety (fetched content is untrusted by definition, so that means no
+    // tool-capable next step). Non-adaptive modes install no gate ⇒ always detect.
+    if ((options.layerPolicyMode ?? 'static') === 'adaptive') {
+      const mode = options.layerPolicyMode ?? 'static'
+      this.agentLoop.injectionDetectionGate = () => {
+        const consequentialTools = deriveConsequentialTools(Object.keys(TOOL_EFFECT_CLASS), TOOL_EFFECT_CLASS)
+        const plan = resolveEscalationPlan(mode, { riskLevel: 'LOW', taskCount: 1, hasDurablePlan: false, consequentialTools }, undefined)
+        return injectionDetectionEnabled(plan, { untrustedContentInContext: true, toolCapableNextStep: consequentialTools.size > 0 })
+      }
+    }
+    this.turnInterpreter = new TurnInterpreter(this.llmClient, model, this.planService, reminderStore, options.ambiguityGuardMode ?? DEFAULT_AMBIGUITY_GUARD_MODE, options.layerPolicyMode ?? 'static')
     this.harnessBridge = new HarnessBridge(
       this.memory, experienceStore, checkpointStore, this.llmClient, model, maxSteps,
       this.planService, this.session, this.onTrace, this.oneLoopMode, options.layerPolicyMode ?? 'static',

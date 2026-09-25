@@ -137,3 +137,32 @@ describe('LayerActivityEvent', () => {
     expect(next.layer).toBe(old.layer)
   })
 })
+
+import { resolveGate, reevaluateLayerPolicy, staticLayerPolicy as _static } from './layer-policy.js'
+
+describe('AL8b ad hoc gates', () => {
+  const sig = { riskLevel: 'LOW', taskCount: 1, hasDurablePlan: false, consequentialTools: new Set<string>() } as never
+  it('static / missing policy returns today\'s boolean unchanged', () => {
+    for (const b of [true, false]) {
+      expect(resolveGate(undefined, 'hypothesis_display', b)).toEqual({ on: b })
+      expect(resolveGate(_static(), 'belief_trail', b)).toEqual({ on: b })
+    }
+  })
+  it('a non-static trigger can turn a gate off and on', () => {
+    const p = { ..._static(), reviewer_adversarial: { decision: 'off', trigger: 'low_risk', reason: '' } } as never
+    expect(resolveGate(p, 'reviewer_adversarial', true)).toEqual({ on: false, decision: 'off', trigger: 'low_risk' })
+    const q = { reviewer_adversarial: { decision: 'full', trigger: 'soft_failure', reason: '' } } as never
+    expect(resolveGate(q, 'reviewer_adversarial', false)).toEqual({ on: true, decision: 'full', trigger: 'soft_failure' })
+  })
+  it('a malformed policy entry falls back to static', () => {
+    expect(resolveGate({ belief_trail: { decision: 'bogus', trigger: 'x' } } as never, 'belief_trail', true)).toEqual({ on: true })
+  })
+  it('re-evaluation picks up fresh state (escalate-on-evidence) and never throws', () => {
+    const rules = { change_review: (c: { state?: { consecutiveFailures: number } }) => (c.state?.consecutiveFailures ?? 0) > 0 ? { decision: 'full', trigger: 'failures' } : { decision: 'off', trigger: 'calm' } } as never
+    const calm = reevaluateLayerPolicy(_static(), sig, { consecutiveFailures: 0 } as never, { remainingCalls: null }, rules)
+    const hot = reevaluateLayerPolicy(calm, sig, { consecutiveFailures: 2 } as never, { remainingCalls: null }, rules)
+    expect(calm?.change_review.decision).toBe('off')
+    expect(hot?.change_review.decision).toBe('full')
+    expect(reevaluateLayerPolicy(undefined, sig, undefined, { remainingCalls: null }, rules)).toBeUndefined()
+  })
+})

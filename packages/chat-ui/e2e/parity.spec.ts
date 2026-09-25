@@ -151,3 +151,20 @@ test.describe('flag OFF vs ON parity matrix', () => {
     }
   })
 })
+
+// AL8b — layerPolicyMode static vs adaptive: a routine turn must give the same user-visible outcome
+// (the policy only restricts cost layers; floor layers and the reply path are untouched).
+test.describe('layerPolicyMode static vs adaptive parity', () => {
+  test('benign, no tools — identical reply and no approval card under both modes', async ({ chat }) => {
+    const script = { responses: ['84'], streamChunks: ['84'] }
+    const replies: string[] = []
+    for (const layerPolicyMode of ['static', 'adaptive'] as const) {
+      const page = await chat({ script, oneLoopMode: 'enabled', config: { layerPolicyMode } })
+      await page.sendMessage('What is 12 x 7?', 'reply')
+      replies.push(((await page.lastAssistantBubble().textContent()) ?? '').trim())
+      expect(await page.approvalCard().count()).toBe(0)
+    }
+    expect(replies[0]).toMatch(/84/)
+    expect(replies[1]).toBe(replies[0])
+  })
+})

@@ -127,9 +127,12 @@ export interface WhyChainItem {
 export function buildWhyChain(layerActivity: LayerActivityEvent[]): WhyChainItem[] {
   const chain: WhyChainItem[] = []
   for (const event of layerActivity) {
-    if (!event.fired) continue
+    // AL8b: a layer the policy decided (non-static trigger) is shown with its decision + trigger —
+    // fired (escalated) or skipped-with-reason. Routine, static layers stay quiet.
+    const note = event.trigger !== undefined && event.trigger !== 'static' ? `${event.decision ?? 'decided'}: ${event.trigger}` : undefined
+    if (!event.fired && note === undefined) continue
     if (chain.at(-1)?.layer === event.layer) continue
-    chain.push({ layer: event.layer, reason: event.reason })
+    chain.push({ layer: event.layer, reason: note ? `${event.reason} [${note}]` : event.reason })
   }
   return chain
 }

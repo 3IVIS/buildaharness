@@ -7,6 +7,9 @@ import { evaluateTurnPolicy, evaluateAbandonPolicy } from './turn-policy.js'
 import { looksLikeCodingFact } from './contradiction-checker.js'
 import { reframeTaskDescriptionWithLLM } from './decomposition-classifier.js'
 import type { PlanRecord } from './plan-store.js'
+import { deriveConsequentialTools, type LayerPolicyMode } from '@buildaharness/harness'
+import { TOOL_EFFECT_CLASS } from './tool-effect-class.js'
+import { resolveEscalationPlan, decompositionReframeEnabled } from './layer-policy-wiring.js'
 import { PlanService } from './plan-service.js'
 import { toHarnessTasks, toTaskRiskLevel, planTaskRiskLevel } from './task-mapping.js'
 import type { AssistantTrace, AssistantTurnResult } from './assistant-types.js'
@@ -64,7 +67,24 @@ export class TurnInterpreter {
     private readonly planService: PlanService,
     private readonly reminderStore: ReminderStore,
     private readonly ambiguityGuardMode: AmbiguityGuardMode = 'disabled',
+    // AL8b: routes the single-task reframe LLM call through the layer policy (static ⇒ today's behaviour).
+    private readonly layerPolicyMode: LayerPolicyMode = 'static',
   ) {}
+
+  /** AL8b: decomposition-reframe policy decision; any error ⇒ today's behaviour (allowed). */
+  private reframePolicyAllows(classification: { riskLevel: string; isTrivial?: boolean }, taskCount: number): boolean {
+    if (this.layerPolicyMode !== 'adaptive') return true
+    try {
+      const plan = resolveEscalationPlan(
+        this.layerPolicyMode,
+        { riskLevel: toTaskRiskLevel(classification.riskLevel as never), taskCount, hasDurablePlan: false, consequentialTools: deriveConsequentialTools(Object.keys(TOOL_EFFECT_CLASS), TOOL_EFFECT_CLASS), isTrivial: classification.isTrivial },
+        undefined,
+      )
+      return decompositionReframeEnabled(plan)
+    } catch {
+      return true
+    }
+  }
 
   async interpretIntent(params: {
     userMessage: string
@@ -249,6 +269,7 @@ export class TurnInterpreter {
     // construction) when no fact was extracted from the turn *and* riskLevel !== 'LOW'.
     if (
       decompose &&
+      this.reframePolicyAllows(classification, initialTasks.length) &&
       initialTasks.length === 1 &&
       initialTasks[0].id === 'respond' &&
       classification.riskLevel !== 'LOW' &&

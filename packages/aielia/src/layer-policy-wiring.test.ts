@@ -68,3 +68,75 @@ describe('AL8a escalation wiring', () => {
     expect(buildTurnFacts('s', 'hello there', stated, false).some(f => f.source === 'model_inferred')).toBe(false)
   })
 })
+
+import { harnessGatePolicy, decompositionReframeEnabled, injectionDetectionEnabled, decisionNote } from './layer-policy-wiring.js'
+import { buildWhyChain } from './node-display-names.js'
+
+describe('AL8b decomposition reframe + injection + rendering', () => {
+  const ruleOff: PolicyRules = { decomposition_reframe: () => ({ decision: 'off', trigger: 'single_step' }) }
+  const ruleOn: PolicyRules = { decomposition_reframe: (ctx) => ctx.signals.riskLevel === 'HIGH' ? { decision: 'full', trigger: 'high_risk' } : { decision: 'off', trigger: 'routine' } }
+
+  it('reframe: static/shadow ON; adaptive can turn it off and on from a trigger', () => {
+    expect(decompositionReframeEnabled(resolveEscalationPlan('static', routineSignals, healthy), {})).toBe(true)
+    expect(decompositionReframeEnabled(resolveEscalationPlan('shadow', routineSignals, healthy, ruleOff), {})).toBe(true)
+    // T2 (risky) turn so the tier override does not apply; rule decides.
+    expect(decompositionReframeEnabled(resolveEscalationPlan('adaptive', riskySignals, healthy, ruleOff), {})).toBe(false)
+    expect(decompositionReframeEnabled(resolveEscalationPlan('adaptive', riskySignals, healthy, ruleOn), {})).toBe(true)
+    expect(decompositionReframeEnabled(resolveEscalationPlan('adaptive', routineSignals, healthy, ruleOn), {})).toBe(false)
+  })
+
+  it('reframe: explicit AUDIT_DECOMPOSITION wins both ways; missing plan ⇒ ON', () => {
+    const off = resolveEscalationPlan('adaptive', riskySignals, healthy, ruleOff)
+    const on = resolveEscalationPlan('adaptive', riskySignals, healthy, ruleOn)
+    expect(decompositionReframeEnabled(off, { AUDIT_DECOMPOSITION: '1' })).toBe(true)
+    expect(decompositionReframeEnabled(on, { AUDIT_DECOMPOSITION: '0' })).toBe(false)
+    expect(decompositionReframeEnabled(undefined, {})).toBe(true)
+  })
+
+  it('reframe: a throwing rule falls back to static ON', () => {
+    const boom: PolicyRules = { decomposition_reframe: () => { throw new Error('x') } }
+    expect(decompositionReframeEnabled(resolveEscalationPlan('adaptive', riskySignals, healthy, boom), {})).toBe(true)
+  })
+
+  it('injection detection cannot be skipped when untrusted content is in context and a tool-capable step exists', () => {
+    const skip: PolicyRules = { injection_detection: () => ({ decision: 'off', trigger: 'try_skip' }) }
+    const untrusted = { ...healthy, untrustedContentInContext: true } as RunState
+    const withTools = { ...riskySignals, consequentialTools: new Set(['write_file']) } as TurnSignals
+    const plan = resolveEscalationPlan('adaptive', withTools, untrusted, skip)
+    expect(plan.policy.injection_detection.decision).toBe('full')
+    expect(injectionDetectionEnabled(plan, { untrustedContentInContext: true, toolCapableNextStep: true })).toBe(true)
+    // A hand-built plan that tries to skip is re-clamped by the wiring itself.
+    const forged = { ...plan, policy: { ...plan.policy, injection_detection: { decision: 'off', trigger: 'forged', reason: '' } } } as typeof plan
+    expect(injectionDetectionEnabled(forged, { untrustedContentInContext: true, toolCapableNextStep: true })).toBe(true)
+  })
+
+  it('injection detection may be skipped only on a non-linguistic proof', () => {
+    const forged = { mode: 'adaptive', tier: 'T2', policy: { injection_detection: { decision: 'off', trigger: 't', reason: '' } } } as unknown as ReturnType<typeof resolveEscalationPlan>
+    expect(injectionDetectionEnabled(forged, { untrustedContentInContext: false, toolCapableNextStep: true })).toBe(false)
+    expect(injectionDetectionEnabled(forged, { untrustedContentInContext: true, toolCapableNextStep: false })).toBe(false)
+    expect(injectionDetectionEnabled(undefined, { untrustedContentInContext: false, toolCapableNextStep: false })).toBe(true)
+  })
+
+  it('harnessGatePolicy only exposes an adaptive policy', () => {
+    expect(harnessGatePolicy(resolveEscalationPlan('static', routineSignals, healthy))).toBeUndefined()
+    expect(harnessGatePolicy(resolveEscalationPlan('shadow', routineSignals, healthy))).toBeUndefined()
+    expect(harnessGatePolicy(resolveEscalationPlan('adaptive', routineSignals, healthy))).toBeDefined()
+    expect(harnessGatePolicy(undefined)).toBeUndefined()
+  })
+
+  it('rendering: quiet when routine; shows decision+trigger when escalated or skipped-with-reason', () => {
+    expect(decisionNote({ decision: 'full', trigger: 'static' })).toBeUndefined()
+    expect(decisionNote({ decision: 'off', trigger: 'tier_t1' })).toBe('off: tier_t1')
+    const chain = buildWhyChain([
+      { layer: 'hypothesis', fired: false, reason: 'quiet' },
+      { layer: 'world_model', fired: false, reason: 'belief trail skipped by layer policy', decision: 'off', trigger: 'low_risk' },
+      { layer: 'contradiction', fired: true, reason: 'conflict', decision: 'full', trigger: 'belief_conflict' },
+      { layer: 'verification', fired: true, reason: 'ok', decision: 'full', trigger: 'static' },
+    ])
+    expect(chain).toEqual([
+      { layer: 'world_model', reason: 'belief trail skipped by layer policy [off: low_risk]' },
+      { layer: 'contradiction', reason: 'conflict [full: belief_conflict]' },
+      { layer: 'verification', reason: 'ok' },
+    ])
+  })
+})

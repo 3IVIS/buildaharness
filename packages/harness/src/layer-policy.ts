@@ -160,3 +160,54 @@ export function resolveLayerPolicy(
     return staticLayerPolicy()
   }
 }
+
+/**
+ * AL8b: the ad hoc booleans that used to live inline in `harness-runtime.ts` as named policy gates.
+ * Each is a *display / cost* gate, never a floor computation (hypothesis generation, evidence
+ * baseline and world-model updates always run). Under the static policy the outcome is exactly
+ * today's boolean (AL-2); an adaptive policy may only change it through a non-static trigger.
+ */
+export const AD_HOC_GATES = ['hypothesis_display', 'evidence_escalation', 'belief_trail', 'reviewer_adversarial'] as const
+export type AdHocGate = (typeof AD_HOC_GATES)[number]
+
+export interface GateOutcome {
+  on: boolean
+  /** Set only when the policy (not the static baseline) decided; drives "escalated/skipped-with-reason" rendering. */
+  decision?: Decision
+  trigger?: string
+}
+
+/**
+ * `staticOutcome` is today's boolean. A missing policy, a missing entry or a `static` trigger all
+ * return it unchanged. A non-static `full` forces the gate on (escalate-on-trigger), `off` forces
+ * it off, `cheap` (no separate form for a boolean gate) keeps the static outcome.
+ */
+export function resolveGate(policy: LayerPolicy | undefined, gate: AdHocGate, staticOutcome: boolean): GateOutcome {
+  try {
+    const d = (policy as Partial<Record<string, LayerDecision>> | undefined)?.[gate]
+    if (!d || d.trigger === STATIC_TRIGGER || !isDecision(d.decision)) return { on: staticOutcome }
+    if (d.decision === 'cheap') return { on: staticOutcome, decision: d.decision, trigger: d.trigger }
+    return { on: d.decision === 'full', decision: d.decision, trigger: d.trigger }
+  } catch {
+    return { on: staticOutcome }
+  }
+}
+
+/**
+ * Re-evaluates the policy at an iteration boundary with fresh state (after diagnostics/verify), so
+ * an escalate-on-evidence rule can fire within a turn. Never throws; on error returns `prev`.
+ */
+export function reevaluateLayerPolicy(
+  prev: LayerPolicy | undefined,
+  signals: TurnSignals,
+  state: RunState | undefined,
+  budget: PolicyBudget,
+  rules: PolicyRules,
+): LayerPolicy | undefined {
+  if (prev === undefined) return prev
+  try {
+    return resolveLayerPolicy(signals, state, budget, rules)
+  } catch {
+    return prev
+  }
+}

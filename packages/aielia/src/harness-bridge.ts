@@ -44,7 +44,7 @@ import type { AssistantSource } from './assistant-source.js'
 import type { AssistantProgress } from './assistant-types.js'
 import type { TraceEvent } from './trace-events.js'
 import { resolveSupervisorEnabled } from './supervisor-flag.js'
-import { resolveEscalationPlan, escalationEnabled } from './layer-policy-wiring.js'
+import { resolveEscalationPlan, escalationEnabled, harnessGatePolicy } from './layer-policy-wiring.js'
 import type { LayerPolicyMode } from '@buildaharness/harness'
 
 /**
@@ -309,6 +309,17 @@ export class HarnessBridge {
         // every already-known fact, once per turn — see factExtractor above.
         factExtractor,
         complexitySignal,
+        // AL8b: the ad hoc harness gates read the executed policy (adaptive only — static/shadow
+        // pass nothing, so today's outcomes are untouched) and re-resolve it each iteration with
+        // fresh run state so an escalate-on-evidence rule can fire within the turn.
+        layerPolicy: harnessGatePolicy(escalationPlan),
+        reevaluateLayerPolicy: this.layerPolicyMode === 'adaptive'
+          ? ({ failures }: { failures: number }) => harnessGatePolicy(resolveEscalationPlan(
+              this.layerPolicyMode,
+              { ...complexitySignal, isTrivial: classification.isTrivial },
+              complexitySignal.runState ? { ...complexitySignal.runState, consecutiveFailures: failures } : undefined,
+            ))
+          : undefined,
         // Forward every layer's fired/skipped report onto the same onTrace channel
         // harness_node/tool_call events already use — no new transport, just a new TraceEvent
         // kind a "Why?" panel can key off of — and also collect it into

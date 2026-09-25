@@ -94,3 +94,51 @@ export function escalationEnabled(
     return true
   }
 }
+
+// ── AL8b ────────────────────────────────────────────────────────────────────────────────────────
+
+/** The policy the harness runtime's ad hoc gates read: only an executed `adaptive` policy differs from today's. */
+export function harnessGatePolicy(plan: EscalationPlan | undefined): LayerPolicy | undefined {
+  return plan !== undefined && plan.mode === 'adaptive' ? plan.policy : undefined
+}
+
+/**
+ * Decomposition reframe (`reframeTaskDescriptionWithLLM`). Precedence: explicit `AUDIT_DECOMPOSITION`
+ * env > the policy's decision > today's ON. `cheap` has no LLM-free form ⇒ off (only `full` reframes).
+ */
+export function decompositionReframeEnabled(plan: EscalationPlan | undefined, env?: Record<string, string | undefined>): boolean {
+  const override = explicitEnvOverride('AUDIT_DECOMPOSITION', env)
+  if (override !== undefined) return override
+  try {
+    const d = plan?.policy.decomposition_reframe
+    return d === undefined ? true : d.decision === 'full'
+  } catch {
+    return true
+  }
+}
+
+/**
+ * LLM injection detection on fetched content (AL-1 security rule). Skippable ONLY on a
+ * non-linguistic proof of safety: no untrusted content in context, or no tool-capable next step.
+ * Anything the policy says short of `full` without such a proof is overridden back to ON — the
+ * check never trusts a message/LLM-derived signal, and the wiring re-verifies what
+ * `resolveLayerPolicy` already clamps so a hand-built plan cannot bypass it.
+ */
+export function injectionDetectionEnabled(
+  plan: EscalationPlan | undefined,
+  proof: { untrustedContentInContext: boolean; toolCapableNextStep: boolean },
+): boolean {
+  try {
+    const d = plan?.policy.injection_detection
+    if (d === undefined || d.decision === 'full') return true
+    return proof.untrustedContentInContext === false || proof.toolCapableNextStep === false ? false : true
+  } catch {
+    return true
+  }
+}
+
+/** One-line reason a layer's decision is worth surfacing (escalated / skipped-with-reason), or `undefined` when routine. */
+export function decisionNote(event: { decision?: string; trigger?: string }): string | undefined {
+  if (event.trigger === undefined || event.trigger === 'static') return undefined
+  return `${event.decision ?? 'decided'}: ${event.trigger}`
+}
