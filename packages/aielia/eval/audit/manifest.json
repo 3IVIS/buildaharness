@@ -400,9 +400,10 @@
       "slice": "probe_criterion_coverage",
       "seeds": 1,
       "maxSpendUsd": 3,
-      "status": "queued",
+      "status": "done",
       "corpusAdequacy": "partial",
-      "corpusNote": "Reuses the AL1 criterion-coverage probe slice (stress tasks plus calm controls) only to exercise the adaptivePolicy arm end to end; not a verdict run."
+      "corpusNote": "Reuses the AL1 criterion-coverage probe slice (stress tasks plus calm controls) only to exercise the adaptivePolicy arm end to end; not a verdict run.",
+      "verdict": "INCONCLUSIVE"
     },
     {
       "id": "ablation-contradiction",

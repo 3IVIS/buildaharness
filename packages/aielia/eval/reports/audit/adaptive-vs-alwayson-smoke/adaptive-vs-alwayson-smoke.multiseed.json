@@ -1,0 +1,104 @@
+{
+  "feature": "adaptive-vs-alwayson-smoke",
+  "title": "Adaptive layer policy v1 vs always-on (AL10 smoke cell)",
+  "hypothesis": "layerPolicyMode=adaptive with the AL10 v1 trigger rules keeps task success non-inferior to the always-on flagOn control while skipping escalation layers on calm turns (fewer LLM calls). Rules encode hypothesised, not yet certified, regimes. AL11a registers the full per-slice matrix; this is a single-slice smoke cell.",
+  "control": "flagOn",
+  "candidate": "adaptivePolicy",
+  "seeds": 1,
+  "verdict": "INCONCLUSIVE",
+  "rationale": "No significant task-success delta at 1 seed(s) — underpowered. Expand the corpus or seeds and re-run before deciding.",
+  "modelId": "claude-sonnet-5",
+  "judgeModelId": "claude-sonnet-5",
+  "generatedAt": "2026-09-25T14:17:35.703Z",
+  "metrics": [
+    {
+      "metric": "taskSuccessRate",
+      "control": 1,
+      "candidate": 1,
+      "deltaMean": 0,
+      "deltaCi95": 0,
+      "positive": false,
+      "regressed": false
+    },
+    {
+      "metric": "hallucinationRate",
+      "control": 0,
+      "candidate": 0,
+      "deltaMean": 0,
+      "deltaCi95": 0,
+      "positive": false,
+      "regressed": false
+    },
+    {
+      "metric": "unauthorizedEffectRate",
+      "control": 0,
+      "candidate": 0,
+      "deltaMean": 0,
+      "deltaCi95": 0,
+      "positive": false,
+      "regressed": false
+    },
+    {
+      "metric": "recoveryRate",
+      "control": null,
+      "candidate": null,
+      "deltaMean": null,
+      "deltaCi95": null,
+      "positive": false,
+      "regressed": false
+    },
+    {
+      "metric": "overconfidentWrongRate",
+      "control": 0,
+      "candidate": 0,
+      "deltaMean": 0,
+      "deltaCi95": 0,
+      "positive": false,
+      "regressed": false
+    },
+    {
+      "metric": "supervisorConsultsMean",
+      "control": 0,
+      "candidate": 0,
+      "deltaMean": 0,
+      "deltaCi95": 0,
+      "positive": false,
+      "regressed": false
+    },
+    {
+      "metric": "meanLatencyMs",
+      "control": 6956,
+      "candidate": 6689,
+      "deltaMean": -267,
+      "deltaCi95": 0,
+      "positive": true,
+      "regressed": false
+    },
+    {
+      "metric": "meanCostUsd",
+      "control": 0.009502277777777778,
+      "candidate": 0.005017233333333334,
+      "deltaMean": -0.004485044444444444,
+      "deltaCi95": 0,
+      "positive": true,
+      "regressed": false
+    },
+    {
+      "metric": "totalTokens",
+      "control": 6408,
+      "candidate": 5994,
+      "deltaMean": -414,
+      "deltaCi95": 0,
+      "positive": true,
+      "regressed": false
+    }
+  ],
+  "costDeltaPct": -0.47199677270362067,
+  "latencyDeltaPct": -0.038384128809660724,
+  "tokenDeltaPct": -0.06460674157303371,
+  "targetMetric": null,
+  "controlHeadroom": 0,
+  "engagement": null,
+  "injectionSignals": null,
+  "nextStepSignals": null
+}

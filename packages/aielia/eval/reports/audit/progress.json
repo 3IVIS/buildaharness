@@ -148,7 +148,7 @@
     },
     "adaptive-vs-alwayson-smoke": {
       "seedsDone": 1,
-      "finalized": false,
+      "finalized": true,
       "spendUsd": 0.261351,
       "blocked": false
     }
