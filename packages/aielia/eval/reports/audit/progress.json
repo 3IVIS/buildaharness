@@ -106,7 +106,7 @@
     },
     "probe-reviewer-pass": {
       "seedsDone": 1,
-      "finalized": false,
+      "finalized": true,
       "spendUsd": 0.287816,
       "blocked": false
     }

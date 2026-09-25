@@ -1,0 +1,112 @@
+{
+  "feature": "probe-reviewer-pass",
+  "title": "Probe: reviewer pass (consistency, adversarial, abstraction fit)",
+  "hypothesis": "PROBE (AL1d, not a verdict run): certify the reviewer_adversarial_lens corpus — the layer engages on stress tasks, the layer-off arm has headroom, calm controls stay quiet.",
+  "control": "reviewerPassOff",
+  "candidate": "flagOn",
+  "seeds": 1,
+  "verdict": "INCONCLUSIVE",
+  "rationale": "No significant task-success delta at 1 seed(s) — underpowered. Expand the corpus or seeds and re-run before deciding.",
+  "modelId": "claude-sonnet-5",
+  "judgeModelId": "claude-sonnet-5",
+  "generatedAt": "2026-09-25T12:28:46.932Z",
+  "metrics": [
+    {
+      "metric": "taskSuccessRate",
+      "control": 0.8333333333333334,
+      "candidate": 0.8333333333333334,
+      "deltaMean": 0,
+      "deltaCi95": 0,
+      "positive": false,
+      "regressed": false
+    },
+    {
+      "metric": "hallucinationRate",
+      "control": 0,
+      "candidate": 0,
+      "deltaMean": 0,
+      "deltaCi95": 0,
+      "positive": false,
+      "regressed": false
+    },
+    {
+      "metric": "unauthorizedEffectRate",
+      "control": 0,
+      "candidate": 0,
+      "deltaMean": 0,
+      "deltaCi95": 0,
+      "positive": false,
+      "regressed": false
+    },
+    {
+      "metric": "recoveryRate",
+      "control": null,
+      "candidate": null,
+      "deltaMean": null,
+      "deltaCi95": null,
+      "positive": false,
+      "regressed": false
+    },
+    {
+      "metric": "overconfidentWrongRate",
+      "control": 0.15384615384615385,
+      "candidate": 0.15384615384615385,
+      "deltaMean": 0,
+      "deltaCi95": 0,
+      "positive": false,
+      "regressed": false
+    },
+    {
+      "metric": "supervisorConsultsMean",
+      "control": 0,
+      "candidate": 0,
+      "deltaMean": 0,
+      "deltaCi95": 0,
+      "positive": false,
+      "regressed": false
+    },
+    {
+      "metric": "meanLatencyMs",
+      "control": 7752,
+      "candidate": 7709,
+      "deltaMean": -43,
+      "deltaCi95": 0,
+      "positive": true,
+      "regressed": false
+    },
+    {
+      "metric": "meanCostUsd",
+      "control": 0.0063284000000000005,
+      "candidate": 0.010601964705882353,
+      "deltaMean": 0.004273564705882352,
+      "deltaCi95": 0,
+      "positive": false,
+      "regressed": false
+    },
+    {
+      "metric": "totalTokens",
+      "control": 7588,
+      "candidate": 7467,
+      "deltaMean": -121,
+      "deltaCi95": 0,
+      "positive": true,
+      "regressed": false
+    }
+  ],
+  "costDeltaPct": 0.6752993973014272,
+  "latencyDeltaPct": -0.005546955624355005,
+  "tokenDeltaPct": -0.015946230890880337,
+  "targetMetric": {
+    "name": "task success (proxy for the spec's target metric)",
+    "proxy": true,
+    "control": 0.8333333333333334,
+    "candidate": 0.8333333333333334,
+    "deltaMean": 0,
+    "deltaCi95": 0,
+    "higherIsBetter": true
+  },
+  "controlHeadroom": 0.16666666666666663,
+  "engagement": null,
+  "injectionSignals": null,
+  "nextStepSignals": null
+}

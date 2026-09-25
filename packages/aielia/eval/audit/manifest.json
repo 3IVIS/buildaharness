@@ -282,9 +282,10 @@
       "seeds": 1,
       "fullPages": "all",
       "maxSpendUsd": 4,
-      "status": "queued",
+      "status": "done",
       "corpusAdequacy": "partial",
-      "corpusNote": "18 tasks: source-disagreement, abstraction-fit and embedded-instruction families (4 stress each) plus 6 clean-draft calm controls. Not yet run."
+      "corpusNote": "18 tasks: source-disagreement, abstraction-fit and embedded-instruction families (4 stress each) plus 6 clean-draft calm controls. Not yet run.",
+      "verdict": "INCONCLUSIVE"
     },
     {
       "id": "probe-criterion-coverage",
