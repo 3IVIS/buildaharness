@@ -24,6 +24,10 @@ import {
   type UserQuestionData,
   type UpdateChannel,
   Budget,
+  LAYER_CALL_COST,
+  buildLayerOutcomeRow,
+  buildShadowRow,
+  buildFeedbackRow,
 } from '@buildaharness/harness'
 import { decideSupervisorDirective } from './supervisor-decider.js'
 import type { ILLMClient, MemoryAdapter, TokenUsage } from '@buildaharness/runtime'
@@ -44,7 +48,8 @@ import type { AssistantSource } from './assistant-source.js'
 import type { AssistantProgress } from './assistant-types.js'
 import type { TraceEvent } from './trace-events.js'
 import { resolveSupervisorEnabled } from './supervisor-flag.js'
-import { resolveEscalationPlan, escalationEnabled, harnessGatePolicy, turnPolicyBudget } from './layer-policy-wiring.js'
+import { recordLayerTelemetry } from './layer-telemetry.js'
+import { resolveEscalationPlan, escalationEnabled, harnessGatePolicy, turnPolicyBudget, type EscalationPlan } from './layer-policy-wiring.js'
 import type { LayerPolicyMode } from '@buildaharness/harness'
 
 /**
@@ -180,6 +185,51 @@ export class HarnessBridge {
     private readonly layerPolicyMode: LayerPolicyMode = 'static',
   ) {}
 
+  /** AL9b: runId of the previous turn's outcome row, so this turn's `pushbackOnPriorTurn` can be recorded against it. */
+  private lastOutcomeRunId: string | undefined
+  private outcomeSeq = 0
+
+  /** AL9b: persist the per-layer outcome row (and, under shadow, the shadow-vs-executed row). Never throws, never affects the turn. */
+  private recordTurnTelemetry(
+    runId: string,
+    plan: EscalationPlan,
+    activity: readonly LayerActivityEvent[],
+    verification: VerificationResult | null,
+    completed: boolean,
+  ): void {
+    try {
+      const verificationFailed = verification?.has_critical_failure === true
+      // runId is per-session (the checkpoint key), so it repeats every turn — make the row id unique per turn.
+      const turnId = `${runId}:${Date.now().toString(36)}${(this.outcomeSeq++).toString(36)}`
+      const row = buildLayerOutcomeRow({
+        runId: turnId,
+        mode: plan.mode,
+        tier: plan.tier,
+        activity,
+        // `fired` on these layers means a finding was produced (see harness-runtime's reportLayer reasons).
+        changedLayers: ['contradiction', 'reviewer_pass', 'recovery', ...(verificationFailed ? ['verification'] : [])],
+        completed,
+      })
+      if (row === undefined) return
+      recordLayerTelemetry(this.experienceStore, row, `layer_outcome:${turnId}`)
+      this.lastOutcomeRunId = turnId
+      if (plan.shadow !== undefined) {
+        const observedCalls = row.layers.reduce((n, l) => n + l.calls, 0)
+        recordLayerTelemetry(this.experienceStore, buildShadowRow({
+          runId: turnId,
+          executed: plan.policy,
+          executedTier: plan.tier,
+          shadow: { policy: plan.shadow.policy, tier: plan.shadow.tier },
+          layerCosts: LAYER_CALL_COST,
+          observedCalls,
+          verificationFailed,
+        }), `shadow_turn:${turnId}`)
+      }
+    } catch {
+      // telemetry is observational only
+    }
+  }
+
   async run(params: HarnessRunParams): Promise<HarnessOutcome> {
     const { sessionId, userMessage, facts, currentTurnFacts = [], draftReply, classification, initialTasks, activePlan, sources, onProgress, onUsage, oneLoopProposer, runInvestigation, askModeEnabled = false, updateChannel } = params
     const runtime = new HarnessRuntime()
@@ -213,6 +263,10 @@ export class HarnessBridge {
     // AL8a: one policy per turn; the semantic escalation hooks below are gated through it.
     const escalationSignals = { ...complexitySignal, isTrivial: classification.isTrivial }
     const escalationPlan = resolveEscalationPlan(this.layerPolicyMode, escalationSignals, complexitySignal.runState, {}, turnPolicyBudget(escalationSignals))
+    // AL9b: this turn's pushback tells us whether the PREVIOUS turn needed correcting.
+    if (this.lastOutcomeRunId !== undefined) {
+      recordLayerTelemetry(this.experienceStore, buildFeedbackRow(this.lastOutcomeRunId, classification.pushbackOnPriorTurn === true), `layer_outcome_feedback:${this.lastOutcomeRunId}`)
+    }
 
     // Pace a durable plan one MEDIUM/HIGH-risk step at a time across turns instead of running
     // its whole unblocked frontier in a single turn — shouldPause below reads
@@ -509,9 +563,11 @@ export class HarnessBridge {
         // An intentional plan-pacing stop — not a bug. Keep the checkpoint (resume() picks it up
         // via the priorCheckpoint branch above on the next turn() call).
         pausedThisTurn = true
+        this.recordTurnTelemetry(runId, escalationPlan, layerActivityThisTurn, lastVerification, false)
         return { status: 'paused', checkpoint: outcome.checkpoint, lastVerification, layerActivity: layerActivityThisTurn }
       }
 
+      this.recordTurnTelemetry(runId, escalationPlan, layerActivityThisTurn, lastVerification, true)
       return { status: 'completed', result: outcome.result, lastVerification, layerActivity: layerActivityThisTurn }
     } catch (err) {
       // Q2 — inspected only to decide checkpoint retention below, never transformed or
