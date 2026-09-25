@@ -98,7 +98,11 @@
       "decides": "whether a web_search/fetch_url result is a dead end (DEAD_END_MARKERS), feeding tool reliability and recovery",
       "inputs": "tool result text",
       "batch": 2,
-      "class": "B"
+      "class": "B",
+      "status": "deferred",
+      "deferredReason": "Dead-end detection runs synchronously on every web_search/fetch_url result inside the tool loop; the semantic alternative is a per-result LLM judgement, i.e. a new per-call LLM call (AL-7). No existing call sees the raw result text before reliability is recorded.",
+      "deferredCost": "+1 LLM call per web_search/fetch_url result (batched per turn ~ +1 call/turn); 0 only if the yield classifier is folded into the proposer call, which needs an AgentLoop schema change",
+      "recommendedDefault": "legacy"
     },
     {
       "id": "injection-tagging",
@@ -108,7 +112,11 @@
       "inputs": "tool/web content",
       "batch": 2,
       "patterns": "aielia/src/lexical/patterns/injection-patterns.json",
-      "class": "B"
+      "class": "B",
+      "status": "deferred",
+      "deferredReason": "Safety property: injection flagging is a defence on untrusted content and must stay deterministic and fail-safe. A semantic replacement needs a per-content LLM call (AL-7) and would let a model-compromised judgement clear injected text; the event condition (untrusted-origin) already gates the tag, the pattern match only picks the flag. Weakening it is not permitted without owner sign-off.",
+      "deferredCost": "+1 LLM call per untrusted content block; plus weaker guarantee against adversarial content that also targets the judge",
+      "recommendedDefault": "legacy"
     },
     {
       "id": "injection-tagging-mcp",
@@ -118,7 +126,11 @@
       "inputs": "tool/web content",
       "batch": 2,
       "patterns": "aielia/src/lexical/patterns/injection-patterns.json",
-      "class": "B"
+      "class": "B",
+      "status": "deferred",
+      "deferredReason": "Mirror of injection-tagging inside the claude-cli MCP subprocess, which has no LLM client and reads the same patterns JSON; must stay in lockstep with injection-tagging, so it is deferred with it.",
+      "deferredCost": "same as injection-tagging; additionally needs an LLM client in the MCP subprocess",
+      "recommendedDefault": "legacy"
     },
     {
       "id": "failure-symptom-match",
@@ -127,7 +139,11 @@
       "decides": "substring overlap between observed symptoms and curated failure-mode symptom phrases, selecting a recovery strategy",
       "inputs": "symptom strings",
       "batch": 2,
-      "class": "B"
+      "class": "B",
+      "status": "deferred",
+      "deferredReason": "Substring overlap selects a recovery strategy in packages/harness, which has a Python twin (failure_diagnostics); a semantic matcher needs an LLM call inside the harness recovery layer (harness is LLM-free here) and twin conformance changes. Curated symptom phrases are closer to a controlled vocabulary than free-language judgement.",
+      "deferredCost": "+1 LLM call per recovery diagnosis event (event-gated, not per turn) plus Python-twin and conformance-fixture changes",
+      "recommendedDefault": "legacy"
     },
     {
       "id": "review-negation",
@@ -137,7 +153,11 @@
       "inputs": "change description, statements",
       "batch": 2,
       "patterns": "harness/src/lexical/patterns/negation.json",
-      "class": "B"
+      "class": "B",
+      "status": "deferred",
+      "deferredReason": "Sibling of the batch-1 negation-opposition site: the reviewer consistency lens uses NEGATION_TRIGGERS on change description vs statements. A semantic version needs one more batched LLM call in the reviewer pass or folding into the existing reviewer lens call, which changes reviewer.py/ts twin behaviour and weakens the deterministic consistency lens if the model misses a negation.",
+      "deferredCost": "+1 batched LLM call per reviewed change (~+1/turn on turns that propose a change), plus Python-twin conformance impact",
+      "recommendedDefault": "legacy"
     },
     {
       "id": "risk-classification",
