@@ -98,4 +98,16 @@ describe('envOverridesFromImportMetaEnv', () => {
   it('advertises VITE_ASSISTANT_GOAL_GRAPH_SUGGEST as the pinning var for goalGraphSuggestMode', () => {
     expect(ENV_VAR_FOR_CONFIG_KEY.goalGraphSuggestMode).toBe('VITE_ASSISTANT_GOAL_GRAPH_SUGGEST')
   })
+
+  it('resolves VITE_ASSISTANT_LAYER_POLICY into layerPolicyMode; unset/empty leaves it absent (static)', () => {
+    const warn = vi.spyOn(console, 'error').mockImplementation(() => {})
+    expect(envOverridesFromImportMetaEnv(env({ VITE_ASSISTANT_LAYER_POLICY: 'shadow' }))).toEqual({ layerPolicyMode: 'shadow' })
+    expect(envOverridesFromImportMetaEnv(env({ VITE_ASSISTANT_LAYER_POLICY: 'adaptive' }))).toEqual({ layerPolicyMode: 'adaptive' })
+    expect(envOverridesFromImportMetaEnv(env({}))).not.toHaveProperty('layerPolicyMode')
+    expect(envOverridesFromImportMetaEnv(env({ VITE_ASSISTANT_LAYER_POLICY: '' }))).not.toHaveProperty('layerPolicyMode')
+    expect(envOverridesFromImportMetaEnv(env({ VITE_ASSISTANT_LAYER_POLICY: 'on' }))).toEqual({ layerPolicyMode: 'static' })
+    expect(warn.mock.calls[0][0]).toContain('VITE_ASSISTANT_LAYER_POLICY')
+    warn.mockRestore()
+    expect(ENV_VAR_FOR_CONFIG_KEY.layerPolicyMode).toBe('VITE_ASSISTANT_LAYER_POLICY')
+  })
 })

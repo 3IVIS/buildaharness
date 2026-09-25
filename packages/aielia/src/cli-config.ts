@@ -7,6 +7,7 @@ import { resolvePlanMode } from './plan-mode-flag.js'
 import { resolveTuiMode } from './tui-mode-flag.js'
 import { resolveUpdateCheckMode } from './update-check-flag.js'
 import { resolveGoalGraphMode } from './goal-graph-flag.js'
+import { resolveLayerPolicyMode, isLayerPolicyMode } from './layer-policy-flag.js'
 import { resolveGoalGraphSuggestMode } from './goal-graph-suggest-flag.js'
 
 /**
@@ -53,6 +54,7 @@ export const ENV_VAR_FOR_CONFIG_KEY: Partial<Record<keyof AssistantConfig, strin
   updateCheck: 'ASSISTANT_UPDATE_CHECK',
   activeProject: 'ASSISTANT_ACTIVE_PROJECT',
   goalGraphMode: 'ASSISTANT_GOAL_GRAPH',
+  layerPolicyMode: 'ASSISTANT_LAYER_POLICY',
   goalGraphSuggestMode: 'ASSISTANT_GOAL_GRAPH_SUGGEST',
 }
 
@@ -133,6 +135,8 @@ export function envOverridesFromProcessEnv(env: NodeJS.ProcessEnv): Partial<Assi
   // 'enabled'/'disabled' override here — same pattern as ASSISTANT_ONE_LOOP/ASSISTANT_ASK_MODE above.
   if (env.ASSISTANT_GOAL_GRAPH !== undefined) overrides.goalGraphMode = resolveGoalGraphMode(env)
   if (env.ASSISTANT_GOAL_GRAPH_SUGGEST !== undefined) overrides.goalGraphSuggestMode = resolveGoalGraphSuggestMode(env)
+  // resolveLayerPolicyMode warns-and-defaults on an unrecognized value (AL7b).
+  if (env.ASSISTANT_LAYER_POLICY !== undefined) overrides.layerPolicyMode = resolveLayerPolicyMode(env)
   return overrides
 }
 
@@ -198,6 +202,9 @@ export function parseConfigValue(key: keyof AssistantConfig, raw: string): unkno
       return raw
     case 'goalGraphMode':
       if (raw !== 'enabled' && raw !== 'disabled') throw new ConfigValueParseError('goalGraphMode must be "enabled" or "disabled"')
+      return raw
+    case 'layerPolicyMode':
+      if (!isLayerPolicyMode(raw)) throw new ConfigValueParseError('layerPolicyMode must be "static", "shadow" or "adaptive"')
       return raw
     case 'goalGraphSuggestMode':
       if (raw !== 'enabled' && raw !== 'disabled') throw new ConfigValueParseError('goalGraphSuggestMode must be "enabled" or "disabled"')

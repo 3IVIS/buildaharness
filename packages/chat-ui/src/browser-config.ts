@@ -1,5 +1,5 @@
 import type { AssistantConfig } from '@buildaharness/aielia'
-import { normalizeOneLoopMode, normalizeAskMode, normalizePlanMode, normalizeGoalGraphMode, normalizeGoalGraphSuggestMode } from '@buildaharness/aielia'
+import { normalizeOneLoopMode, normalizeAskMode, normalizePlanMode, normalizeGoalGraphMode, normalizeGoalGraphSuggestMode, normalizeLayerPolicyMode } from '@buildaharness/aielia'
 
 /**
  * Browser-side companion to aielia's cli-config.ts — same idea (env-var-name map
@@ -19,6 +19,7 @@ export const ENV_VAR_FOR_CONFIG_KEY: Partial<Record<keyof AssistantConfig, strin
   enableWeb: 'VITE_ASSISTANT_ENABLE_WEB',
   webBackend: 'VITE_ASSISTANT_WEB_BACKEND',
   goalGraphMode: 'VITE_ASSISTANT_GOAL_GRAPH',
+  layerPolicyMode: 'VITE_ASSISTANT_LAYER_POLICY',
   goalGraphSuggestMode: 'VITE_ASSISTANT_GOAL_GRAPH_SUGGEST',
 }
 
@@ -62,5 +63,7 @@ export function envOverridesFromImportMetaEnv(env: ImportMetaEnv): Partial<Assis
   if (env.VITE_ASSISTANT_GOAL_GRAPH_SUGGEST) {
     overrides.goalGraphSuggestMode = normalizeGoalGraphSuggestMode(env.VITE_ASSISTANT_GOAL_GRAPH_SUGGEST, 'VITE_ASSISTANT_GOAL_GRAPH_SUGGEST')
   }
+  // AL7b — normalizeLayerPolicyMode warns-and-defaults on a typo, so a build that sets it always resolves to a concrete mode.
+  if (env.VITE_ASSISTANT_LAYER_POLICY) overrides.layerPolicyMode = normalizeLayerPolicyMode(env.VITE_ASSISTANT_LAYER_POLICY, 'VITE_ASSISTANT_LAYER_POLICY')
   return overrides
 }

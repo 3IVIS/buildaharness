@@ -33,6 +33,8 @@ export interface RunState {
 export interface TurnSignals extends TurnComplexitySignal {
   /** Tools actually exercised this turn — the pre-AL5a meaning of `consequentialTools`, still what drives the evidence-escalation gate. */
   exercisedTools?: Set<string>
+  /** The turn classifier's conservative triviality verdict — the input to today's FAST / full split (AL7b). */
+  isTrivial?: boolean
   needsGrounding?: boolean
   ambiguity?: TurnAmbiguity
   userPosture?: TurnUserPosture

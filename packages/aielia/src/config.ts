@@ -13,6 +13,7 @@ import type { PlanRolloutMode } from './plan-mode-flag.js'
 import type { TuiMode } from './tui-mode-flag.js'
 import type { UpdateCheckMode } from './update-check-flag.js'
 import type { GoalGraphMode } from './goal-graph-flag.js'
+import type { LayerPolicyMode } from './layer-policy-flag.js'
 import type { GoalGraphSuggestMode } from './goal-graph-suggest-flag.js'
 
 export interface AssistantConfig {
@@ -183,6 +184,13 @@ export interface AssistantConfig {
    */
   goalGraphMode?: GoalGraphMode
   /**
+   * AL7b of plans/adaptive_layer_selection_plan.html — 'static' (default; also the kill switch) |
+   * 'shadow' (record what adaptive would decide, execute static) | 'adaptive'. Undefined falls back
+   * to `DEFAULT_LAYER_POLICY_MODE`. Chain: `ASSISTANT_LAYER_POLICY`, `VITE_ASSISTANT_LAYER_POLICY`,
+   * `/config set layerPolicyMode`; consumed via `isAdaptivePolicyEnabled()`.
+   */
+  layerPolicyMode?: LayerPolicyMode
+  /**
    * Phase 8 — the same shared config seam as `goalGraphMode` above, for the next-step proposer's
    * (Tier 1.5) independent gate (Q8: a regression there shouldn't block Tier 0/1). Undefined
    * falls back to `DEFAULT_GOAL_GRAPH_SUGGEST_MODE` ('disabled'). Same env/build-time/`/config
@@ -224,6 +232,7 @@ export const CONFIG_KEYS: readonly (keyof AssistantConfig)[] = [
   'updateCheck',
   'activeProject',
   'goalGraphMode',
+  'layerPolicyMode',
   'goalGraphSuggestMode',
 ]
 
