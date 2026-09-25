@@ -450,6 +450,72 @@
       "batch": null,
       "rationale": "config values",
       "class": "A"
+    },
+    {
+      "id": "pattern-loader",
+      "file": "packages/aielia/src/lexical/patterns.ts",
+      "line": 48,
+      "decides": "compiles the language-keyed JSON pattern data into RegExp objects (fact markers, risk, injection, task-cancel, ...)",
+      "inputs": "pattern JSON files",
+      "batch": null,
+      "rationale": "Loader only: the linguistic content lives in patterns/*.json and is tracked by the class-B sites' `patterns` field; the `new RegExp` calls here contain no natural-language keywords of their own.",
+      "class": "A"
+    },
+    {
+      "id": "markdown-approval-badge",
+      "file": "packages/aielia/src/markdown-line.tsx",
+      "line": 71,
+      "decides": "styles the '[needs approval …]' marker line in the terminal renderer",
+      "inputs": "assistant-emitted status line",
+      "batch": null,
+      "rationale": "Renders a fixed marker string the product itself emits; presentation only, no branch on user language.",
+      "class": "A"
+    },
+    {
+      "id": "release-asset-name",
+      "file": "packages/aielia/src/self-update.ts",
+      "line": 170,
+      "decides": "parses platform triple out of a release asset filename",
+      "inputs": "GitHub release asset name",
+      "batch": null,
+      "rationale": "Machine-generated filename grammar, not natural language.",
+      "class": "A"
+    },
+    {
+      "id": "task-failed-prefix-strip",
+      "file": "packages/harness/src/harness-runtime.ts",
+      "line": 594,
+      "decides": "strips the harness's own 'Task failed:' prefix before quoting the failure",
+      "inputs": "harness-generated failure string",
+      "batch": null,
+      "rationale": "Strips a constant prefix the harness itself writes; no linguistic judgment.",
+      "class": "A"
+    },
+    {
+      "id": "tool-call-markup-parse",
+      "file": "packages/runtime/src/openai-compatible-client.ts",
+      "line": 82,
+      "decides": "parses/strips provider-specific tool-call markup (invoke/parameter/tool_calls tags) from model output",
+      "inputs": "raw model content",
+      "batch": null,
+      "rationale": "Structured wire-format markup, not natural language (D5).",
+      "class": "A"
     }
-  ]
+  ],
+  "scanBaseline": {
+    "packages/aielia/src/action-snapshot.ts": 1,
+    "packages/aielia/src/agent-loop.ts": 1,
+    "packages/aielia/src/assistant-session.ts": 1,
+    "packages/aielia/src/contradiction-checker.ts": 1,
+    "packages/aielia/src/fact-extraction.ts": 3,
+    "packages/aielia/src/file-tools-mcp-server.mjs": 3,
+    "packages/aielia/src/lexical/patterns.ts": 25,
+    "packages/aielia/src/markdown-line.tsx": 1,
+    "packages/aielia/src/network-containment.ts": 3,
+    "packages/aielia/src/self-update.ts": 1,
+    "packages/aielia/src/shell-tools.ts": 1,
+    "packages/aielia/src/tui-app.tsx": 2,
+    "packages/harness/src/harness-runtime.ts": 1,
+    "packages/runtime/src/openai-compatible-client.ts": 3
+  }
 }
