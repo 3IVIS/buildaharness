@@ -236,7 +236,11 @@
       "inputs": "user message",
       "batch": 4,
       "patterns": "aielia/src/lexical/patterns/batch-list-markers.json",
-      "class": "B"
+      "class": "B",
+      "status": "deferred",
+      "deferredReason": "Zero-LLM-call structural gate (line-shape: numbered/bulleted/newline runs of ≥3 name-shaped lines, capitalization ratio) that fails closed; the file's own contract is that a false positive should be essentially impossible. A semantic version needs a per-turn call on every multi-line message (AL-7) or a certified TurnSignals field for batch-list shape (none exists in AL5a), and it would put the model in front of the batch-research budget path where a false positive multiplies tool calls.",
+      "deferredCost": "+1 LLM call per multi-line turn, or a classifier schema addition (+0 calls, uncertified accuracy)",
+      "recommendedDefault": "legacy"
     },
     {
       "id": "decomposition-need",
@@ -246,7 +250,11 @@
       "inputs": "user message",
       "batch": 4,
       "patterns": "aielia/src/lexical/patterns/enumeration-markers.json",
-      "class": "B"
+      "class": "B",
+      "status": "deferred",
+      "deferredReason": "Sequencing/enumeration markers decide whether a turn is decomposed. classifyTurnIntent already makes one call and returns decomposedTasks, but the lexical result also gates bulk-reminder confirmation in risk-classifier.ts (safety floor when the classifier errs), so it cannot simply be replaced by the model's judgement without weakening that; a TurnSignals decomposition field has no AL5b-certified accuracy.",
+      "deferredCost": "0 extra calls if it trusted classifier decomposedTasks, but weakens the bulk-reminder approval floor and has no certified accuracy; otherwise +1 call per turn",
+      "recommendedDefault": "legacy"
     },
     {
       "id": "reminder-vs-fact",
@@ -256,7 +264,11 @@
       "inputs": "tool args, source user message",
       "batch": 4,
       "patterns": "aielia/src/lexical/patterns/risk-patterns.json",
-      "class": "B"
+      "class": "B",
+      "status": "deferred",
+      "deferredReason": "Backstop that refuses a create_reminder call that is really a durable fact. It is a deterministic post-condition on a model tool call precisely because the model already got it wrong; replacing it with a model judgement is circular. The semantic alternative is +1 call per create_reminder (event-gated on the tool call) and it shares risk-patterns.json with the deferred risk-classification site.",
+      "deferredCost": "+1 LLM call per create_reminder call (event-gated), no certified accuracy",
+      "recommendedDefault": "legacy"
     },
     {
       "id": "reminder-vs-fact-mcp",
@@ -266,7 +278,11 @@
       "inputs": "tool args, CURRENT_USER_MESSAGE",
       "batch": 4,
       "patterns": "aielia/src/lexical/patterns/risk-patterns.json",
-      "class": "B"
+      "class": "B",
+      "status": "deferred",
+      "deferredReason": "Mirror of reminder-vs-fact inside the claude-cli MCP subprocess; must stay in lockstep with the aielia copy, and the subprocess has no LLM client of its own, so a semantic path would need a new round trip over the tool-gate channel.",
+      "deferredCost": "+1 LLM call per create_reminder call plus a new subprocess-to-host request path",
+      "recommendedDefault": "legacy"
     },
     {
       "id": "constraint-negation",
