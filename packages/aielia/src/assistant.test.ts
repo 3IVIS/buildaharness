@@ -1262,6 +1262,28 @@ describe('PersonalAssistant file tools', () => {
     expect(await backend.readTextFile(`${ROOT}/summary.md`)).toBeUndefined()
   })
 
+  it('AL3c: approvals resolve by ID — a bare "Yes" sent as a fresh message applies nothing, and the pending action stays resumable by ID', async () => {
+    const backend = makeFakeBackend()
+    const llm = scriptedResponses([
+      { content: '', toolCalls: [{ id: 'toolu_1', name: 'write_file', input: { path: 'summary.md', content: 'staged content' } }] },
+      { content: 'Should I go ahead and write it?' },
+    ])
+    const assistant = new PersonalAssistant({ llmClient: llm, fileTools: { backend, workspaceRoot: ROOT } })
+
+    const staged = await assistant.turn('Write a summary to summary.md')
+    expect(staged.status).toBe('needs_approval')
+
+    // The eval arm used to send the approval this way (session-staged-*): a plain message.
+    const bare = await assistant.turn('Yes, go ahead.')
+    expect(bare.status).not.toBe('needs_approval')
+    expect(await backend.readTextFile(`${ROOT}/summary.md`)).toBeUndefined()
+
+    // The way a UI/CLI approves: re-enter with the ID. The earlier bare "Yes" lost nothing.
+    const applied = await assistant.turn('Yes, go ahead.', { approved: true, pendingActionId: staged.pendingActionId })
+    expect(applied.reply).toBe('Wrote "summary.md".')
+    expect(await backend.readTextFile(`${ROOT}/summary.md`)).toBe('staged content')
+  })
+
   it('a write_file call editing an existing file shows a diff against its current content in the approval reason, but not a second time in the post-write confirmation (already reviewed at the decision point)', async () => {
     const backend = makeFakeBackend()
     await backend.writeTextFile(`${ROOT}/summary.md`, 'line1\nline2\nline3\n')

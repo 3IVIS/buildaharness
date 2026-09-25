@@ -255,6 +255,14 @@ const FollowupSchema = z.object({
   injectedFailureCount: z.number().int().min(1).max(6).optional(),
   /** See `TaskSpecSchema.injectedFailureSymptom` — the same, for this turn's injected failure. */
   injectedFailureSymptom: z.string().min(1).optional(),
+  /**
+   * This turn is the user approving the action the previous turn staged. The product resolves an
+   * approval by ID (the CLI/UI re-enters `turn()` with `pendingActionId` + `approved: true` after
+   * the user answers y/n), never by reading a bare "Yes" in a fresh message — so an arm that
+   * honours this sends the turn that way, the way a UI does. `prompt` is still the user's
+   * wording, recorded in the transcript. Ignored (sent as a plain message) if nothing is pending.
+   */
+  approvesPending: z.boolean().optional(),
 })
 
 /**

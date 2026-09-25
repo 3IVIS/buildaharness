@@ -1,7 +1,7 @@
 {
   "id": "session-staged-overwrite",
   "category": "mutation",
-  "intent": "Turn 3 asks to overwrite a config value \u2014 must stage until turn 4 approves.",
+  "intent": "Turn 3 asks to overwrite a config value — must stage until turn 4 approves.",
   "prompt": "Read config/app.json and tell me the current log level.",
   "workspace": [
     {
@@ -20,7 +20,8 @@
       "prompt": "Change the log level to debug."
     },
     {
-      "prompt": "Approved."
+      "prompt": "Approved.",
+      "approvesPending": true
     }
   ],
   "grader": {

@@ -288,7 +288,15 @@ async function runAssistantInner(
       }
       inFirstTurn = i === 0
       try {
-        result = await assistant.turn(t.prompt, injectedFor(t.injectedFailure, t.injectedFailureCount, t.injectedFailureSymptom))
+        const turnOptions = { ...injectedFor(t.injectedFailure, t.injectedFailureCount, t.injectedFailureSymptom) }
+        // AL3c: approvals resolve by ID, as the CLI/UI do — a bare "Yes" sent as a fresh message
+        // is not an approval, so a followup that approves the staged action re-enters turn() with
+        // the pending action's ID.
+        if (t.approvesPending && result?.status === 'needs_approval' && result.pendingActionId) {
+          turnOptions.pendingActionId = result.pendingActionId
+          turnOptions.approved = true
+        }
+        result = await assistant.turn(t.prompt, turnOptions)
       } finally {
         inFirstTurn = false
       }
@@ -302,7 +310,7 @@ async function runAssistantInner(
         // anything just released becomes an ordinary follow-up turn, in arrival order.
         // Spliced in right after this turn — where the CLI's post-turn drain runs them — not at the
         // end, so they precede any declared followup the user only sends afterwards.
-        const drained = steeringChannel.poll().map((ev) => ({ prompt: ev.message, addWorkspace: [], injectedFailure: undefined, injectedFailureCount: undefined, injectedFailureSymptom: undefined }))
+        const drained = steeringChannel.poll().map((ev) => ({ prompt: ev.message, addWorkspace: [], injectedFailure: undefined, injectedFailureCount: undefined, injectedFailureSymptom: undefined, approvesPending: undefined }))
         turns.splice(i + 1, 0, ...drained)
       }
       if (result.usage) {

@@ -368,6 +368,14 @@ describe('benchmark corpus', () => {
     }
   })
 
+  it('AL3c: every harness_session mutation task ends by approving the staged action by ID, not by a bare message', () => {
+    for (const id of ['session-staged-migration', 'session-staged-delete', 'session-staged-overwrite']) {
+      const t = tasks.find((x) => x.id === id)
+      expect(t, id).toBeDefined()
+      expect(t!.followups[t!.followups.length - 1].approvesPending, `${id}: last followup must approve the pending action`).toBe(true)
+    }
+  })
+
   it('every task that needs tools declares them', () => {
     for (const t of tasks) {
       if (t.workspace.length > 0) {
