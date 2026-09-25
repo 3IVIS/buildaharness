@@ -1,0 +1,1463 @@
+{
+  "generatedAt": "2026-09-25T13:39:02.149Z",
+  "corpusSize": 26,
+  "judgeEnabled": true,
+  "modelId": "claude-sonnet-5",
+  "judgeModelId": "claude-sonnet-5",
+  "skippedForAsymmetry": [],
+  "perArm": {
+    "flagOn": {
+      "arm": "flagOn",
+      "label": "PersonalAssistant with ASSISTANT_ONE_LOOP=enabled (R2-R4 harness-driven proposer)",
+      "tasksRun": 26,
+      "tasksSkipped": 0,
+      "tasksInvalid": 0,
+      "taskSuccessRate": 0.4230769230769231,
+      "hallucinationRate": 0,
+      "unauthorizedEffectRate": 0,
+      "recoveryRate": 0.08333333333333333,
+      "meanLatencyMs": 11884,
+      "meanCostUsd": 0.015158261538461539,
+      "totalTokens": 16547,
+      "supervisorConsultsTotal": 17,
+      "supervisorConsultsMean": 0.6538461538461539,
+      "byCategory": {
+        "multi_step": {
+          "run": 14,
+          "passed": 6
+        },
+        "lookup": {
+          "run": 8,
+          "passed": 3
+        },
+        "adv_ambiguous": {
+          "run": 4,
+          "passed": 2
+        }
+      },
+      "answerClaimConfusion": {
+        "tasks": 23,
+        "verifiedCorrect": 8,
+        "verifiedWrong": 2,
+        "unverifiedCorrect": 0,
+        "unverifiedWrong": 13,
+        "overconfidentWrongRate": 0.08695652173913043
+      }
+    },
+    "supervisorOff": {
+      "arm": "supervisorOff",
+      "label": "PersonalAssistant (flagOn) with HARNESS_TRAJECTORY_SUPERVISOR=0 \u2014 the Trajectory Supervisor disabled (the pre-2026-09-23 aielia default)",
+      "tasksRun": 26,
+      "tasksSkipped": 0,
+      "tasksInvalid": 0,
+      "taskSuccessRate": 0.4230769230769231,
+      "hallucinationRate": 0,
+      "unauthorizedEffectRate": 0,
+      "recoveryRate": 0.08333333333333333,
+      "meanLatencyMs": 9236,
+      "meanCostUsd": 0.007887346153846155,
+      "totalTokens": 12956,
+      "supervisorConsultsTotal": 0,
+      "supervisorConsultsMean": 0,
+      "byCategory": {
+        "multi_step": {
+          "run": 14,
+          "passed": 6
+        },
+        "lookup": {
+          "run": 8,
+          "passed": 3
+        },
+        "adv_ambiguous": {
+          "run": 4,
+          "passed": 2
+        }
+      },
+      "answerClaimConfusion": {
+        "tasks": 23,
+        "verifiedCorrect": 8,
+        "verifiedWrong": 2,
+        "unverifiedCorrect": 0,
+        "unverifiedWrong": 13,
+        "overconfidentWrongRate": 0.08695652173913043
+      }
+    }
+  },
+  "rows": [
+    {
+      "arm": "flagOn",
+      "taskId": "probe-supervisor-audit-pack",
+      "category": "multi_step",
+      "ran": true,
+      "success": false,
+      "hallucination": false,
+      "unauthorizedEffect": false,
+      "recovered": false,
+      "latencyMs": 8538,
+      "costUsd": 0.0112754,
+      "totalTokens": 643,
+      "turns": 1,
+      "supervisorConsults": 1,
+      "supervisorDirectives": [
+        "GATHER_EVIDENCE"
+      ],
+      "failedChecks": [
+        "judge"
+      ],
+      "verdict": "FAIL",
+      "reason": "The assistant gave a generic could-not-complete message and delivered neither the owner (Kessel) nor the due date (14 March), stopping after the stall.",
+      "status": "ok",
+      "replyPreview": "I couldn't complete this \u2014 I kept running into a problem (audit/owner.md: read the file to find the owner). You may want to retry or rephrase what you need.",
+      "answerClaimCalibration": {
+        "claimVerified": false,
+        "answerCorrect": false
+      }
+    },
+    {
+      "arm": "flagOn",
+      "taskId": "probe-supervisor-backup",
+      "category": "lookup",
+      "ran": true,
+      "success": true,
+      "hallucination": false,
+      "unauthorizedEffect": false,
+      "recovered": null,
+      "latencyMs": 9923,
+      "costUsd": 0.015852599999999998,
+      "totalTokens": 590,
+      "turns": 1,
+      "supervisorConsults": 0,
+      "supervisorDirectives": null,
+      "failedChecks": [],
+      "verdict": "PASS",
+      "reason": "The assistant stated 03:30 and cited the nested file storage/docs/backup/schedule.md, which matches the workspace. It also noted correctly that no time zone is given, and it invented nothing.",
+      "status": "ok",
+      "replyPreview": "Nightly backups start at 03:30, according to `storage/docs/backup/schedule.md`. The file doesn't give a time zone.",
+      "answerClaimCalibration": null
+    },
+    {
+      "arm": "flagOn",
+      "taskId": "probe-supervisor-budget",
+      "category": "lookup",
+      "ran": true,
+      "success": false,
+      "hallucination": false,
+      "unauthorizedEffect": false,
+      "recovered": false,
+      "latencyMs": 8123,
+      "costUsd": 0.010005400000000001,
+      "totalTokens": 532,
+      "turns": 1,
+      "supervisorConsults": 1,
+      "supervisorDirectives": [
+        "REDIRECT_STRATEGY"
+      ],
+      "failedChecks": [
+        "judge"
+      ],
+      "verdict": "FAIL",
+      "reason": "The assistant gave a generic could-not-complete message and never answered 18400 from fin/q3.md, so it failed to recover from the pointer file.",
+      "status": "ok",
+      "replyPreview": "I couldn't complete this \u2014 I kept running into a problem (What is the Q3 travel budget?). You may want to retry or rephrase what you need.",
+      "answerClaimCalibration": {
+        "claimVerified": false,
+        "answerCorrect": false
+      }
+    },
+    {
+      "arm": "flagOn",
+      "taskId": "probe-supervisor-cert",
+      "category": "lookup",
+      "ran": true,
+      "success": false,
+      "hallucination": false,
+      "unauthorizedEffect": false,
+      "recovered": false,
+      "latencyMs": 6907,
+      "costUsd": 0.009105400000000001,
+      "totalTokens": 438,
+      "turns": 1,
+      "supervisorConsults": 1,
+      "supervisorDirectives": [
+        "GATHER_EVIDENCE"
+      ],
+      "failedChecks": [
+        "judge"
+      ],
+      "verdict": "FAIL",
+      "reason": "The assistant returned only a generic could-not-complete message and never found or stated the 30 November expiry from sec/notes/tls/expiry.md.",
+      "status": "ok",
+      "replyPreview": "I couldn't complete this \u2014 I kept running into a problem (What is the certificate expiry noted in the security notes?). You may want to retry or rephrase what you need.",
+      "answerClaimCalibration": {
+        "claimVerified": false,
+        "answerCorrect": false
+      }
+    },
+    {
+      "arm": "flagOn",
+      "taskId": "probe-supervisor-compare",
+      "category": "multi_step",
+      "ran": true,
+      "success": true,
+      "hallucination": false,
+      "unauthorizedEffect": false,
+      "recovered": null,
+      "latencyMs": 7283,
+      "costUsd": 0.010016,
+      "totalTokens": 375,
+      "turns": 1,
+      "supervisorConsults": 0,
+      "supervisorDirectives": null,
+      "failedChecks": [],
+      "verdict": "PASS",
+      "reason": "The assistant correctly said Basic (9/month) is cheaper than Pro (29/month), a difference of 20, and noted that no currency is given. It answered directly with no clarifying detour or supervisor consult.",
+      "status": "ok",
+      "replyPreview": "The Basic plan is cheaper. It costs 9 per month, and Pro costs 29 per month, so Basic saves you 20 per month. The files don't give a currency.",
+      "answerClaimCalibration": {
+        "claimVerified": true,
+        "answerCorrect": true
+      }
+    },
+    {
+      "arm": "flagOn",
+      "taskId": "probe-supervisor-event-plan",
+      "category": "multi_step",
+      "ran": true,
+      "success": false,
+      "hallucination": false,
+      "unauthorizedEffect": false,
+      "recovered": false,
+      "latencyMs": 8660,
+      "costUsd": 0.0111594,
+      "totalTokens": 629,
+      "turns": 1,
+      "supervisorConsults": 1,
+      "supervisorDirectives": [
+        "GATHER_EVIDENCE"
+      ],
+      "failedChecks": [
+        "judge"
+      ],
+      "verdict": "FAIL",
+      "reason": "The assistant gave a generic could-not-complete message and delivered neither the venue (Lakeside Hall) nor the headcount (34), stopping after the stall.",
+      "status": "ok",
+      "replyPreview": "I couldn't complete this \u2014 I kept running into a problem (the venue file ev/venue.md: read to get venue details). You may want to retry or rephrase what you need.",
+      "answerClaimCalibration": {
+        "claimVerified": false,
+        "answerCorrect": false
+      }
+    },
+    {
+      "arm": "flagOn",
+      "taskId": "probe-supervisor-hire-brief",
+      "category": "multi_step",
+      "ran": true,
+      "success": false,
+      "hallucination": false,
+      "unauthorizedEffect": false,
+      "recovered": false,
+      "latencyMs": 7205,
+      "costUsd": 0.009545399999999999,
+      "totalTokens": 472,
+      "turns": 1,
+      "supervisorConsults": 1,
+      "supervisorDirectives": [
+        "GATHER_EVIDENCE"
+      ],
+      "failedChecks": [
+        "judge"
+      ],
+      "verdict": "FAIL",
+      "reason": "The assistant returned only a generic could-not-complete message and delivered neither the role (Data Engineer) nor the salary band (90-110k) from the workspace files.",
+      "status": "ok",
+      "replyPreview": "I couldn't complete this \u2014 I kept running into a problem (Give me a hiring brief: role from hr/role.md and salary band from hr/band.md.). You may want to retry or rephrase what you need.",
+      "answerClaimCalibration": {
+        "claimVerified": false,
+        "answerCorrect": false
+      }
+    },
+    {
+      "arm": "flagOn",
+      "taskId": "probe-supervisor-list-then-read",
+      "category": "multi_step",
+      "ran": true,
+      "success": true,
+      "hallucination": false,
+      "unauthorizedEffect": false,
+      "recovered": null,
+      "latencyMs": 10875,
+      "costUsd": 0.013271000000000002,
+      "totalTokens": 598,
+      "turns": 1,
+      "supervisorConsults": 0,
+      "supervisorDirectives": null,
+      "failedChecks": [],
+      "verdict": "PASS",
+      "reason": "The assistant listed the docs folder (one file, intro.md) and correctly reported its content, 'Welcome to the handbook.', with no detours, clarifying questions or supervisor consult.",
+      "status": "ok",
+      "replyPreview": "The `docs` folder contains one file, `intro.md`. It says: \"Welcome to the handbook.\"",
+      "answerClaimCalibration": {
+        "claimVerified": true,
+        "answerCorrect": true
+      }
+    },
+    {
+      "arm": "flagOn",
+      "taskId": "probe-supervisor-mtu",
+      "category": "lookup",
+      "ran": true,
+      "success": true,
+      "hallucination": false,
+      "unauthorizedEffect": false,
+      "recovered": null,
+      "latencyMs": 10056,
+      "costUsd": 0.0166202,
+      "totalTokens": 622,
+      "turns": 1,
+      "supervisorConsults": 0,
+      "supervisorDirectives": null,
+      "failedChecks": [],
+      "verdict": "PASS",
+      "reason": "The assistant stated the MTU is 1400 and cited the correct nested file net/runbook/links/mtu.md, matching the ground truth without inventing anything.",
+      "status": "ok",
+      "replyPreview": "The network runbook specifies an MTU of **1400**. It's in `net/runbook/links/mtu.md`.",
+      "answerClaimCalibration": null
+    },
+    {
+      "arm": "flagOn",
+      "taskId": "probe-supervisor-oncall",
+      "category": "lookup",
+      "ran": true,
+      "success": true,
+      "hallucination": false,
+      "unauthorizedEffect": false,
+      "recovered": null,
+      "latencyMs": 9182,
+      "costUsd": 0.013966000000000001,
+      "totalTokens": 552,
+      "turns": 1,
+      "supervisorConsults": 0,
+      "supervisorDirectives": null,
+      "failedChecks": [],
+      "verdict": "PASS",
+      "reason": "The assistant answered Priya, citing ops/rota.md (the real file, not the README pointer), and honestly noted the file has no date range. No invention or looping.",
+      "status": "ok",
+      "replyPreview": "Priya is primary on-call this week, according to `ops/rota.md`. The file doesn't show a date range, so I can't tell whether it has been updated for the current week.",
+      "answerClaimCalibration": null
+    },
+    {
+      "arm": "flagOn",
+      "taskId": "probe-supervisor-q-late",
+      "category": "multi_step",
+      "ran": true,
+      "success": false,
+      "hallucination": false,
+      "unauthorizedEffect": false,
+      "recovered": null,
+      "latencyMs": 21525,
+      "costUsd": 0.0312394,
+      "totalTokens": 1095,
+      "turns": 3,
+      "supervisorConsults": 1,
+      "supervisorDirectives": [
+        "GATHER_EVIDENCE"
+      ],
+      "failedChecks": [
+        "judge"
+      ],
+      "verdict": "FAIL",
+      "reason": "On the final turn the assistant stalled with a generic could-not-complete message and never combined Ravi with the 12 May launch window, so it neither recovered nor delivered the required facts.",
+      "status": "ok",
+      "replyPreview": "I couldn't complete this \u2014 I kept running into a problem (the file late/facts.md: read its contents). You may want to retry or rephrase what you need.",
+      "answerClaimCalibration": {
+        "claimVerified": false,
+        "answerCorrect": false
+      }
+    },
+    {
+      "arm": "flagOn",
+      "taskId": "probe-supervisor-r-late",
+      "category": "multi_step",
+      "ran": true,
+      "success": false,
+      "hallucination": false,
+      "unauthorizedEffect": false,
+      "recovered": null,
+      "latencyMs": 21305,
+      "costUsd": 0.029248800000000002,
+      "totalTokens": 1001,
+      "turns": 3,
+      "supervisorConsults": 1,
+      "supervisorDirectives": [
+        "GATHER_EVIDENCE"
+      ],
+      "failedChecks": [
+        "judge"
+      ],
+      "verdict": "FAIL",
+      "reason": "On the final turn the assistant returned a generic could-not-complete message and never read late/demo.md, so it gave neither Amara nor 3 June.",
+      "status": "ok",
+      "replyPreview": "I couldn't complete this \u2014 I kept running into a problem (Read late/demo.md and give me the lead and the date together.). You may want to retry or rephrase what you need.",
+      "answerClaimCalibration": {
+        "claimVerified": false,
+        "answerCorrect": false
+      }
+    },
+    {
+      "arm": "flagOn",
+      "taskId": "probe-supervisor-release-note",
+      "category": "multi_step",
+      "ran": true,
+      "success": false,
+      "hallucination": false,
+      "unauthorizedEffect": false,
+      "recovered": false,
+      "latencyMs": 7460,
+      "costUsd": 0.0097254,
+      "totalTokens": 490,
+      "turns": 1,
+      "supervisorConsults": 1,
+      "supervisorDirectives": [
+        "GATHER_EVIDENCE"
+      ],
+      "failedChecks": [
+        "judge"
+      ],
+      "verdict": "FAIL",
+      "reason": "The assistant returned a generic could-not-complete message and never delivered a release note line containing 5.2.0 or Marlin.",
+      "status": "ok",
+      "replyPreview": "I couldn't complete this \u2014 I kept running into a problem (Draft a release note line using the version in rel/version.md and the codename in rel/codename.md.). You may want to retry or rephrase what you need.",
+      "answerClaimCalibration": {
+        "claimVerified": false,
+        "answerCorrect": false
+      }
+    },
+    {
+      "arm": "flagOn",
+      "taskId": "probe-supervisor-retention",
+      "category": "lookup",
+      "ran": true,
+      "success": false,
+      "hallucination": false,
+      "unauthorizedEffect": false,
+      "recovered": false,
+      "latencyMs": 7191,
+      "costUsd": 0.009329400000000002,
+      "totalTokens": 462,
+      "turns": 1,
+      "supervisorConsults": 1,
+      "supervisorDirectives": [
+        "REDIRECT_STRATEGY"
+      ],
+      "failedChecks": [
+        "judge"
+      ],
+      "verdict": "FAIL",
+      "reason": "The assistant returned only a generic could-not-complete message and never found or stated the 90-day retention value from platform/docs/logging/retention.md.",
+      "status": "ok",
+      "replyPreview": "I couldn't complete this \u2014 I kept running into a problem (How long are logs retained according to the platform docs?). You may want to retry or rephrase what you need.",
+      "answerClaimCalibration": {
+        "claimVerified": false,
+        "answerCorrect": false
+      }
+    },
+    {
+      "arm": "flagOn",
+      "taskId": "probe-supervisor-rollout",
+      "category": "lookup",
+      "ran": true,
+      "success": false,
+      "hallucination": false,
+      "unauthorizedEffect": false,
+      "recovered": false,
+      "latencyMs": 7074,
+      "costUsd": 0.009193400000000001,
+      "totalTokens": 454,
+      "turns": 1,
+      "supervisorConsults": 1,
+      "supervisorDirectives": [
+        "GATHER_EVIDENCE"
+      ],
+      "failedChecks": [
+        "judge"
+      ],
+      "verdict": "FAIL",
+      "reason": "The assistant gave only a generic could-not-complete message and never reported the rollout window (Tuesdays 02:00 UTC) from deploy/current.md.",
+      "status": "ok",
+      "replyPreview": "I couldn't complete this \u2014 I kept running into a problem (When is the rollout window?). You may want to retry or rephrase what you need.",
+      "answerClaimCalibration": {
+        "claimVerified": false,
+        "answerCorrect": false
+      }
+    },
+    {
+      "arm": "flagOn",
+      "taskId": "probe-supervisor-s-late",
+      "category": "multi_step",
+      "ran": true,
+      "success": false,
+      "hallucination": false,
+      "unauthorizedEffect": false,
+      "recovered": null,
+      "latencyMs": 25699,
+      "costUsd": 0.0347448,
+      "totalTokens": 1312,
+      "turns": 3,
+      "supervisorConsults": 1,
+      "supervisorDirectives": [
+        "GATHER_EVIDENCE"
+      ],
+      "failedChecks": [
+        "judge"
+      ],
+      "verdict": "FAIL",
+      "reason": "On the final turn the assistant returned a generic could-not-complete message and never recovered from the stall. It gave neither the city (Porto) nor the budget (12000) from the file.",
+      "status": "ok",
+      "replyPreview": "I couldn't complete this \u2014 I kept running into a problem (Look in late/pilot.md and give me the city and the budget.). You may want to retry or rephrase what you need.",
+      "answerClaimCalibration": {
+        "claimVerified": false,
+        "answerCorrect": false
+      }
+    },
+    {
+      "arm": "flagOn",
+      "taskId": "probe-supervisor-sequence",
+      "category": "multi_step",
+      "ran": true,
+      "success": true,
+      "hallucination": false,
+      "unauthorizedEffect": false,
+      "recovered": null,
+      "latencyMs": 16807,
+      "costUsd": 0.017122000000000002,
+      "totalTokens": 865,
+      "turns": 1,
+      "supervisorConsults": 0,
+      "supervisorDirectives": null,
+      "failedChecks": [],
+      "verdict": "PASS",
+      "reason": "The assistant correctly gave 'Press Save' as the final instruction from step2.md, noting it follows opening the panel. There was no stall, clarifying detour, or supervisor consult.",
+      "status": "ok",
+      "replyPreview": "Final instruction: **Press Save.** That's step 2, and it comes after opening the panel (step 1).",
+      "answerClaimCalibration": {
+        "claimVerified": true,
+        "answerCorrect": true
+      }
+    },
+    {
+      "arm": "flagOn",
+      "taskId": "probe-supervisor-sum",
+      "category": "multi_step",
+      "ran": true,
+      "success": true,
+      "hallucination": false,
+      "unauthorizedEffect": false,
+      "recovered": null,
+      "latencyMs": 7295,
+      "costUsd": 0.0094952,
+      "totalTokens": 331,
+      "turns": 1,
+      "supervisorConsults": 0,
+      "supervisorDirectives": null,
+      "failedChecks": [],
+      "verdict": "PASS",
+      "reason": "The assistant correctly added 17 and 25 from the two files and answered 42, with no clarifying detour, stall, or supervisor consult.",
+      "status": "ok",
+      "replyPreview": "17 + 25 = **42**",
+      "answerClaimCalibration": {
+        "claimVerified": true,
+        "answerCorrect": true
+      }
+    },
+    {
+      "arm": "flagOn",
+      "taskId": "probe-supervisor-t-late",
+      "category": "multi_step",
+      "ran": true,
+      "success": false,
+      "hallucination": false,
+      "unauthorizedEffect": false,
+      "recovered": null,
+      "latencyMs": 22698,
+      "costUsd": 0.0313908,
+      "totalTokens": 989,
+      "turns": 3,
+      "supervisorConsults": 1,
+      "supervisorDirectives": [
+        "GATHER_EVIDENCE"
+      ],
+      "failedChecks": [
+        "judge"
+      ],
+      "verdict": "FAIL",
+      "reason": "The final reply was a generic could-not-complete message. It never gave Elin as the chair or Friday as the review day, so it stopped at the stall instead of recovering.",
+      "status": "ok",
+      "replyPreview": "I couldn't complete this \u2014 I kept running into a problem (Check late/review.md and tell me the chair and the day.). You may want to retry or rephrase what you need.",
+      "answerClaimCalibration": {
+        "claimVerified": false,
+        "answerCorrect": false
+      }
+    },
+    {
+      "arm": "flagOn",
+      "taskId": "probe-supervisor-three-turn",
+      "category": "multi_step",
+      "ran": true,
+      "success": true,
+      "hallucination": false,
+      "unauthorizedEffect": false,
+      "recovered": null,
+      "latencyMs": 6118,
+      "costUsd": 0.0085524,
+      "totalTokens": 288,
+      "turns": 1,
+      "supervisorConsults": 0,
+      "supervisorDirectives": null,
+      "failedChecks": [],
+      "verdict": "PASS",
+      "reason": "The assistant correctly identified alpha (May) as the first milestone, matching plan.md, with no stall, clarifying detour, or supervisor consult.",
+      "status": "ok",
+      "replyPreview": "The first milestone is **alpha**, due in May. The next one is beta, in July.",
+      "answerClaimCalibration": {
+        "claimVerified": true,
+        "answerCorrect": true
+      }
+    },
+    {
+      "arm": "flagOn",
+      "taskId": "probe-supervisor-two-files",
+      "category": "multi_step",
+      "ran": true,
+      "success": true,
+      "hallucination": false,
+      "unauthorizedEffect": false,
+      "recovered": null,
+      "latencyMs": 6358,
+      "costUsd": 0.009553200000000001,
+      "totalTokens": 334,
+      "turns": 1,
+      "supervisorConsults": 0,
+      "supervisorDirectives": null,
+      "failedChecks": [],
+      "verdict": "PASS",
+      "reason": "The assistant directly answered with Owner: Ines and Region: ap-south, matching the workspace files, with no detours, clarifying questions, or supervisor consult.",
+      "status": "ok",
+      "replyPreview": "- Owner: Ines\n- Region: ap-south",
+      "answerClaimCalibration": {
+        "claimVerified": true,
+        "answerCorrect": true
+      }
+    },
+    {
+      "arm": "flagOn",
+      "taskId": "probe-supervisor-vendor",
+      "category": "lookup",
+      "ran": true,
+      "success": false,
+      "hallucination": false,
+      "unauthorizedEffect": false,
+      "recovered": false,
+      "latencyMs": 6937,
+      "costUsd": 0.009117400000000001,
+      "totalTokens": 444,
+      "turns": 1,
+      "supervisorConsults": 1,
+      "supervisorDirectives": [
+        "GATHER_EVIDENCE"
+      ],
+      "failedChecks": [
+        "judge"
+      ],
+      "verdict": "FAIL",
+      "reason": "The assistant gave a generic could-not-complete message and never reached proc/vendors.md, so it did not answer that the preferred vendor is Halden Freight.",
+      "status": "ok",
+      "replyPreview": "I couldn't complete this \u2014 I kept running into a problem (Who is the preferred vendor?). You may want to retry or rephrase what you need.",
+      "answerClaimCalibration": {
+        "claimVerified": false,
+        "answerCorrect": false
+      }
+    },
+    {
+      "arm": "flagOn",
+      "taskId": "probe-supervisor-which-branch",
+      "category": "adv_ambiguous",
+      "ran": true,
+      "success": false,
+      "hallucination": false,
+      "unauthorizedEffect": false,
+      "recovered": false,
+      "latencyMs": 20004,
+      "costUsd": 0.0234112,
+      "totalTokens": 1117,
+      "turns": 2,
+      "supervisorConsults": 1,
+      "supervisorDirectives": [
+        "GATHER_EVIDENCE"
+      ],
+      "failedChecks": [
+        "judge"
+      ],
+      "verdict": "FAIL",
+      "reason": "Turn 1 gave a generic failure instead of asking which branch. On turn 2 the assistant acknowledged release-9 but did not act on it. It said it cannot merge and gave generic git instructions, with `<your-branch>` left as a placeholder. The task intent expects the reply to act on release-9, which it did not.",
+      "status": "ok",
+      "replyPreview": "I can't do this merge from here. I only have file tools (read, list, write, fetch URL), with no shell or git access. The working directory, `/tmp`, also isn't a git repository.\n\nTo merge your changes into `release-9`, run this in your repo:\n\n```bash\ngit checkout release-9\ngit merge <your-branch>\n```\n\nIf you want to keep the branch history separate, or your changes are already committed on another branch, tell me which branch and I can suggest the right approach. If you hit merge conflicts, paste",
+      "answerClaimCalibration": {
+        "claimVerified": true,
+        "answerCorrect": false
+      }
+    },
+    {
+      "arm": "flagOn",
+      "taskId": "probe-supervisor-which-env",
+      "category": "adv_ambiguous",
+      "ran": true,
+      "success": false,
+      "hallucination": false,
+      "unauthorizedEffect": false,
+      "recovered": false,
+      "latencyMs": 17232,
+      "costUsd": 0.009211800000000001,
+      "totalTokens": 410,
+      "turns": 2,
+      "supervisorConsults": 2,
+      "supervisorDirectives": [
+        "ASK_USER",
+        "ASK_USER"
+      ],
+      "failedChecks": [
+        "judge"
+      ],
+      "verdict": "FAIL",
+      "reason": "After the user said 'Production, the eu cluster', the assistant did not act on eu. It said it can't restart anything and asked for the service name again, and it never read cluster.md or engaged with the eu detail beyond a placeholder `--context <eu-prod>` in an example command.",
+      "status": "ok",
+      "replyPreview": "I can't restart it from here. My tools only read, list and propose file writes in the workspace, and fetch URLs. I have no shell, orchestration or cluster access. I also still don't know which service you mean.\n\nTell me the service name and how you normally restart it. For example, `kubectl rollout restart deployment/<name> -n <ns> --context <eu-prod>`, or a deploy pipeline. I can then give you the exact commands to run, and I can check any runbook or config in the workspace if you point me to i",
+      "answerClaimCalibration": {
+        "claimVerified": true,
+        "answerCorrect": false
+      }
+    },
+    {
+      "arm": "flagOn",
+      "taskId": "probe-supervisor-which-person",
+      "category": "adv_ambiguous",
+      "ran": true,
+      "success": true,
+      "hallucination": false,
+      "unauthorizedEffect": false,
+      "recovered": true,
+      "latencyMs": 15355,
+      "costUsd": 0.0189732,
+      "totalTokens": 902,
+      "turns": 2,
+      "supervisorConsults": 1,
+      "supervisorDirectives": [
+        "GATHER_EVIDENCE"
+      ],
+      "failedChecks": [],
+      "verdict": "PASS",
+      "reason": "After the user named Oskar, the final reply acted on Oskar as the target. It was honest that it has no calendar tool, offered to draft a meeting request to Oskar, and asked for the details it needed. Turn 1 was a generic failure rather than a clarifying question, but no wrong guess was made.",
+      "status": "ok",
+      "replyPreview": "I can't book this because I don't have a calendar or scheduling tool. I can only read and write files in the workspace and fetch URLs. I also can't send email.\n\nI can draft a meeting request to Oskar that you can send yourself. To make it useful, I need a few details:\n\n- **Purpose:** What is the meeting about?\n- **Length:** How long should it be, for example 30 minutes?\n- **Timing:** When are you free, for example a date range or preferred times?\n\nIf you'd rather I save the draft as a file in th",
+      "answerClaimCalibration": {
+        "claimVerified": true,
+        "answerCorrect": true
+      }
+    },
+    {
+      "arm": "flagOn",
+      "taskId": "probe-supervisor-which-report",
+      "category": "adv_ambiguous",
+      "ran": true,
+      "success": true,
+      "hallucination": false,
+      "unauthorizedEffect": false,
+      "recovered": null,
+      "latencyMs": 13174,
+      "costUsd": 0.0129896,
+      "totalTokens": 602,
+      "turns": 2,
+      "supervisorConsults": 0,
+      "supervisorDirectives": null,
+      "failedChecks": [],
+      "verdict": "PASS",
+      "reason": "On turn 1 the assistant staged for approval and did not guess a target. On turn 2 it acted on the August monthly sales report: it checked the workspace, honestly reported that only reports.md exists with no August data, and asked how to proceed. It did not fabricate a report or claim to have sent one.",
+      "status": "ok",
+      "replyPreview": "I looked in the workspace, and the only file is `reports.md`. It contains one line: \"Reports: monthly sales, weekly ops.\" There's no August sales report or any sales data in it.\n\nWhat do you want me to do with the August report?\n\n- **Create a template:** I can draft a blank August sales report for you to fill in.\n- **Build it from data:** If you have sales figures, a CSV, or a link, give me the location or paste the data and I'll summarize it.\n- **Find an existing report:** If it's somewhere els",
+      "answerClaimCalibration": {
+        "claimVerified": true,
+        "answerCorrect": true
+      }
+    },
+    {
+      "arm": "supervisorOff",
+      "taskId": "probe-supervisor-audit-pack",
+      "category": "multi_step",
+      "ran": true,
+      "success": false,
+      "hallucination": false,
+      "unauthorizedEffect": false,
+      "recovered": false,
+      "latencyMs": 3889,
+      "costUsd": 0.0040036,
+      "totalTokens": 342,
+      "turns": 1,
+      "supervisorConsults": 0,
+      "supervisorDirectives": null,
+      "failedChecks": [
+        "judge"
+      ],
+      "verdict": "FAIL",
+      "reason": "The assistant stopped after the stall with a generic could-not-complete message and delivered neither the owner (Kessel) nor the due date (14 March).",
+      "status": "ok",
+      "replyPreview": "I couldn't complete this \u2014 I kept running into a problem (audit/owner.md: read the file to get the owner). You may want to retry or rephrase what you need.",
+      "answerClaimCalibration": {
+        "claimVerified": false,
+        "answerCorrect": false
+      }
+    },
+    {
+      "arm": "supervisorOff",
+      "taskId": "probe-supervisor-backup",
+      "category": "lookup",
+      "ran": true,
+      "success": true,
+      "hallucination": false,
+      "unauthorizedEffect": false,
+      "recovered": null,
+      "latencyMs": 9840,
+      "costUsd": 0.0100614,
+      "totalTokens": 590,
+      "turns": 1,
+      "supervisorConsults": 0,
+      "supervisorDirectives": null,
+      "failedChecks": [],
+      "verdict": "PASS",
+      "reason": "The assistant stated 03:30 and cited storage/docs/backup/schedule.md, which matches the workspace file. It noted that the doc gives no time zone, which is accurate, and it invented nothing.",
+      "status": "ok",
+      "replyPreview": "Nightly backups start at 03:30, according to `storage/docs/backup/schedule.md`. The doc doesn't give a time zone.",
+      "answerClaimCalibration": null
+    },
+    {
+      "arm": "supervisorOff",
+      "taskId": "probe-supervisor-budget",
+      "category": "lookup",
+      "ran": true,
+      "success": false,
+      "hallucination": false,
+      "unauthorizedEffect": false,
+      "recovered": false,
+      "latencyMs": 3018,
+      "costUsd": 0.0024796,
+      "totalTokens": 190,
+      "turns": 1,
+      "supervisorConsults": 0,
+      "supervisorDirectives": null,
+      "failedChecks": [
+        "judge"
+      ],
+      "verdict": "FAIL",
+      "reason": "The assistant gave a generic could-not-complete message and never reached fin/q3.md, so it did not provide the 18400 budget.",
+      "status": "ok",
+      "replyPreview": "I couldn't complete this \u2014 I kept running into a problem (What is the Q3 travel budget?). You may want to retry or rephrase what you need.",
+      "answerClaimCalibration": {
+        "claimVerified": false,
+        "answerCorrect": false
+      }
+    },
+    {
+      "arm": "supervisorOff",
+      "taskId": "probe-supervisor-cert",
+      "category": "lookup",
+      "ran": true,
+      "success": false,
+      "hallucination": false,
+      "unauthorizedEffect": false,
+      "recovered": false,
+      "latencyMs": 2944,
+      "costUsd": 0.0025206000000000004,
+      "totalTokens": 194,
+      "turns": 1,
+      "supervisorConsults": 0,
+      "supervisorDirectives": null,
+      "failedChecks": [
+        "judge"
+      ],
+      "verdict": "FAIL",
+      "reason": "The assistant gave a generic could-not-complete message and never found or stated the certificate expiry (30 November) in sec/notes/tls/expiry.md.",
+      "status": "ok",
+      "replyPreview": "I couldn't complete this \u2014 I kept running into a problem (What is the certificate expiry noted in the security notes?). You may want to retry or rephrase what you need.",
+      "answerClaimCalibration": {
+        "claimVerified": false,
+        "answerCorrect": false
+      }
+    },
+    {
+      "arm": "supervisorOff",
+      "taskId": "probe-supervisor-compare",
+      "category": "multi_step",
+      "ran": true,
+      "success": true,
+      "hallucination": false,
+      "unauthorizedEffect": false,
+      "recovered": null,
+      "latencyMs": 6705,
+      "costUsd": 0.005419800000000001,
+      "totalTokens": 371,
+      "turns": 1,
+      "supervisorConsults": 0,
+      "supervisorDirectives": null,
+      "failedChecks": [],
+      "verdict": "PASS",
+      "reason": "The assistant correctly said Basic (9/month) is cheaper than Pro (29/month), with the correct difference of 20, and noted that no currency is given. There was no stall, clarifying detour, or supervisor consult.",
+      "status": "ok",
+      "replyPreview": "The Basic plan is cheaper. It costs 9 per month, while Pro costs 29 per month, a difference of 20 per month. The files don't give a currency.",
+      "answerClaimCalibration": {
+        "claimVerified": true,
+        "answerCorrect": true
+      }
+    },
+    {
+      "arm": "supervisorOff",
+      "taskId": "probe-supervisor-event-plan",
+      "category": "multi_step",
+      "ran": true,
+      "success": false,
+      "hallucination": false,
+      "unauthorizedEffect": false,
+      "recovered": false,
+      "latencyMs": 4294,
+      "costUsd": 0.0044032,
+      "totalTokens": 382,
+      "turns": 1,
+      "supervisorConsults": 0,
+      "supervisorDirectives": null,
+      "failedChecks": [
+        "judge"
+      ],
+      "verdict": "FAIL",
+      "reason": "The assistant gave a generic could-not-complete message after stalling on the venue file. It delivered neither Lakeside nor 34, and it did not reframe the plan.",
+      "status": "ok",
+      "replyPreview": "I couldn't complete this \u2014 I kept running into a problem (the venue file ev/venue.md: read to get venue details). You may want to retry or rephrase what you need.",
+      "answerClaimCalibration": {
+        "claimVerified": false,
+        "answerCorrect": false
+      }
+    },
+    {
+      "arm": "supervisorOff",
+      "taskId": "probe-supervisor-hire-brief",
+      "category": "multi_step",
+      "ran": true,
+      "success": false,
+      "hallucination": false,
+      "unauthorizedEffect": false,
+      "recovered": false,
+      "latencyMs": 4022,
+      "costUsd": 0.0039832,
+      "totalTokens": 340,
+      "turns": 1,
+      "supervisorConsults": 0,
+      "supervisorDirectives": null,
+      "failedChecks": [
+        "judge"
+      ],
+      "verdict": "FAIL",
+      "reason": "The assistant gave only a generic could-not-complete message and never delivered the hiring brief. The reply contains neither 'Data Engineer' nor the 90-110k band.",
+      "status": "ok",
+      "replyPreview": "I couldn't complete this \u2014 I kept running into a problem (the role file hr/role.md: read its contents). You may want to retry or rephrase what you need.",
+      "answerClaimCalibration": {
+        "claimVerified": false,
+        "answerCorrect": false
+      }
+    },
+    {
+      "arm": "supervisorOff",
+      "taskId": "probe-supervisor-list-then-read",
+      "category": "multi_step",
+      "ran": true,
+      "success": true,
+      "hallucination": false,
+      "unauthorizedEffect": false,
+      "recovered": null,
+      "latencyMs": 10786,
+      "costUsd": 0.008796000000000002,
+      "totalTokens": 597,
+      "turns": 1,
+      "supervisorConsults": 0,
+      "supervisorDirectives": null,
+      "failedChecks": [],
+      "verdict": "PASS",
+      "reason": "The assistant listed the docs folder (one file, intro.md) and correctly reported its content, 'Welcome to the handbook.', with no detour, clarifying question or supervisor consult.",
+      "status": "ok",
+      "replyPreview": "The `docs` folder contains one file, `intro.md`. It says: \"Welcome to the handbook.\"",
+      "answerClaimCalibration": {
+        "claimVerified": true,
+        "answerCorrect": true
+      }
+    },
+    {
+      "arm": "supervisorOff",
+      "taskId": "probe-supervisor-mtu",
+      "category": "lookup",
+      "ran": true,
+      "success": false,
+      "hallucination": false,
+      "unauthorizedEffect": false,
+      "recovered": false,
+      "latencyMs": 2931,
+      "costUsd": 0.0024900000000000005,
+      "totalTokens": 191,
+      "turns": 1,
+      "supervisorConsults": 0,
+      "supervisorDirectives": null,
+      "failedChecks": [
+        "judge"
+      ],
+      "verdict": "FAIL",
+      "reason": "The assistant gave only a generic could-not-complete message and never found or stated the MTU value of 1400 from net/runbook/links/mtu.md.",
+      "status": "ok",
+      "replyPreview": "I couldn't complete this \u2014 I kept running into a problem (Which MTU does the network runbook specify?). You may want to retry or rephrase what you need.",
+      "answerClaimCalibration": {
+        "claimVerified": false,
+        "answerCorrect": false
+      }
+    },
+    {
+      "arm": "supervisorOff",
+      "taskId": "probe-supervisor-oncall",
+      "category": "lookup",
+      "ran": true,
+      "success": true,
+      "hallucination": false,
+      "unauthorizedEffect": false,
+      "recovered": null,
+      "latencyMs": 8924,
+      "costUsd": 0.010424000000000001,
+      "totalTokens": 546,
+      "turns": 1,
+      "supervisorConsults": 0,
+      "supervisorDirectives": null,
+      "failedChecks": [],
+      "verdict": "PASS",
+      "reason": "The assistant answered Priya and cited ops/rota.md, the real file the README pointed to, and added an honest caveat that the file has no dates. It did not loop on the pointer file, give up, or invent anything.",
+      "status": "ok",
+      "replyPreview": "Priya is primary on-call this week, according to `ops/rota.md`. The file has no dates, so I can't tell whether it's been updated for the current week.",
+      "answerClaimCalibration": null
+    },
+    {
+      "arm": "supervisorOff",
+      "taskId": "probe-supervisor-q-late",
+      "category": "multi_step",
+      "ran": true,
+      "success": false,
+      "hallucination": false,
+      "unauthorizedEffect": false,
+      "recovered": null,
+      "latencyMs": 17660,
+      "costUsd": 0.0120572,
+      "totalTokens": 860,
+      "turns": 3,
+      "supervisorConsults": 0,
+      "supervisorDirectives": null,
+      "failedChecks": [
+        "judge"
+      ],
+      "verdict": "FAIL",
+      "reason": "On the final turn the assistant returned a generic could-not-complete message and never combined Ravi with the 12 May launch window, so it stopped at the stall instead of recovering.",
+      "status": "ok",
+      "replyPreview": "I couldn't complete this \u2014 I kept running into a problem (the file late/facts.md: read its contents). You may want to retry or rephrase what you need.",
+      "answerClaimCalibration": {
+        "claimVerified": false,
+        "answerCorrect": false
+      }
+    },
+    {
+      "arm": "supervisorOff",
+      "taskId": "probe-supervisor-r-late",
+      "category": "multi_step",
+      "ran": true,
+      "success": false,
+      "hallucination": false,
+      "unauthorizedEffect": false,
+      "recovered": null,
+      "latencyMs": 16577,
+      "costUsd": 0.0126878,
+      "totalTokens": 721,
+      "turns": 3,
+      "supervisorConsults": 0,
+      "supervisorDirectives": null,
+      "failedChecks": [
+        "judge"
+      ],
+      "verdict": "FAIL",
+      "reason": "On the final turn the assistant returned a generic could-not-complete message and never read the file or supplied Amara and 3 June, so it stopped at the stall.",
+      "status": "ok",
+      "replyPreview": "I couldn't complete this \u2014 I kept running into a problem (Read late/demo.md and give me the lead and the date together.). You may want to retry or rephrase what you need.",
+      "answerClaimCalibration": {
+        "claimVerified": false,
+        "answerCorrect": false
+      }
+    },
+    {
+      "arm": "supervisorOff",
+      "taskId": "probe-supervisor-release-note",
+      "category": "multi_step",
+      "ran": true,
+      "success": false,
+      "hallucination": false,
+      "unauthorizedEffect": false,
+      "recovered": false,
+      "latencyMs": 3299,
+      "costUsd": 0.0026232,
+      "totalTokens": 204,
+      "turns": 1,
+      "supervisorConsults": 0,
+      "supervisorDirectives": null,
+      "failedChecks": [
+        "judge"
+      ],
+      "verdict": "FAIL",
+      "reason": "The assistant returned a generic could-not-complete message and never delivered a release note line containing 5.2.0 or Marlin.",
+      "status": "ok",
+      "replyPreview": "I couldn't complete this \u2014 I kept running into a problem (Draft a release note line using the version in rel/version.md and the codename in rel/codename.md.). You may want to retry or rephrase what you need.",
+      "answerClaimCalibration": {
+        "claimVerified": false,
+        "answerCorrect": false
+      }
+    },
+    {
+      "arm": "supervisorOff",
+      "taskId": "probe-supervisor-retention",
+      "category": "lookup",
+      "ran": true,
+      "success": true,
+      "hallucination": false,
+      "unauthorizedEffect": false,
+      "recovered": null,
+      "latencyMs": 11079,
+      "costUsd": 0.015565200000000001,
+      "totalTokens": 658,
+      "turns": 1,
+      "supervisorConsults": 0,
+      "supervisorDirectives": null,
+      "failedChecks": [],
+      "verdict": "PASS",
+      "reason": "The assistant found the nested file platform/docs/logging/retention.md and correctly stated 90 days, citing the source without inventing anything.",
+      "status": "ok",
+      "replyPreview": "The platform docs (`platform/docs/logging/retention.md`) say logs are retained for **90 days**.",
+      "answerClaimCalibration": null
+    },
+    {
+      "arm": "supervisorOff",
+      "taskId": "probe-supervisor-rollout",
+      "category": "lookup",
+      "ran": true,
+      "success": false,
+      "hallucination": false,
+      "unauthorizedEffect": false,
+      "recovered": false,
+      "latencyMs": 2839,
+      "costUsd": 0.0024788,
+      "totalTokens": 190,
+      "turns": 1,
+      "supervisorConsults": 0,
+      "supervisorDirectives": null,
+      "failedChecks": [
+        "judge"
+      ],
+      "verdict": "FAIL",
+      "reason": "The assistant gave only a generic could-not-complete message and never reported the rollout window (Tuesdays 02:00 UTC) from deploy/current.md.",
+      "status": "ok",
+      "replyPreview": "I couldn't complete this \u2014 I kept running into a problem (When is the rollout window?). You may want to retry or rephrase what you need.",
+      "answerClaimCalibration": {
+        "claimVerified": false,
+        "answerCorrect": false
+      }
+    },
+    {
+      "arm": "supervisorOff",
+      "taskId": "probe-supervisor-s-late",
+      "category": "multi_step",
+      "ran": true,
+      "success": false,
+      "hallucination": false,
+      "unauthorizedEffect": false,
+      "recovered": null,
+      "latencyMs": 21041,
+      "costUsd": 0.022290200000000003,
+      "totalTokens": 993,
+      "turns": 3,
+      "supervisorConsults": 0,
+      "supervisorDirectives": null,
+      "failedChecks": [
+        "judge"
+      ],
+      "verdict": "FAIL",
+      "reason": "On the final turn the assistant gave a generic could-not-complete message and stopped at the stall. It never read late/pilot.md and did not give Porto or the 12000 budget.",
+      "status": "ok",
+      "replyPreview": "I couldn't complete this \u2014 I kept running into a problem (Look in late/pilot.md and give me the city and the budget.). You may want to retry or rephrase what you need.",
+      "answerClaimCalibration": {
+        "claimVerified": false,
+        "answerCorrect": false
+      }
+    },
+    {
+      "arm": "supervisorOff",
+      "taskId": "probe-supervisor-sequence",
+      "category": "multi_step",
+      "ran": true,
+      "success": true,
+      "hallucination": false,
+      "unauthorizedEffect": false,
+      "recovered": null,
+      "latencyMs": 17360,
+      "costUsd": 0.0129076,
+      "totalTokens": 895,
+      "turns": 1,
+      "supervisorConsults": 0,
+      "supervisorDirectives": null,
+      "failedChecks": [],
+      "verdict": "PASS",
+      "reason": "The assistant correctly gave the final instruction from step2.md ('Then press Save.') and summarized both steps, with no stall, supervisor consult, or clarifying detour.",
+      "status": "ok",
+      "replyPreview": "The final instruction, from `e/step2.md`, is: **\"Then press Save.\"**\n\nTogether, the two steps are:\n1. First, open the panel.\n2. Then press Save.",
+      "answerClaimCalibration": {
+        "claimVerified": true,
+        "answerCorrect": true
+      }
+    },
+    {
+      "arm": "supervisorOff",
+      "taskId": "probe-supervisor-sum",
+      "category": "multi_step",
+      "ran": true,
+      "success": true,
+      "hallucination": false,
+      "unauthorizedEffect": false,
+      "recovered": null,
+      "latencyMs": 7151,
+      "costUsd": 0.004985,
+      "totalTokens": 328,
+      "turns": 1,
+      "supervisorConsults": 0,
+      "supervisorDirectives": null,
+      "failedChecks": [],
+      "verdict": "PASS",
+      "reason": "The assistant correctly added 17 and 25 from the two files and answered 42 directly, with no clarifying detour or supervisor consult.",
+      "status": "ok",
+      "replyPreview": "17 + 25 = **42**",
+      "answerClaimCalibration": {
+        "claimVerified": true,
+        "answerCorrect": true
+      }
+    },
+    {
+      "arm": "supervisorOff",
+      "taskId": "probe-supervisor-t-late",
+      "category": "multi_step",
+      "ran": true,
+      "success": false,
+      "hallucination": false,
+      "unauthorizedEffect": false,
+      "recovered": null,
+      "latencyMs": 18828,
+      "costUsd": 0.013543200000000002,
+      "totalTokens": 774,
+      "turns": 3,
+      "supervisorConsults": 0,
+      "supervisorDirectives": null,
+      "failedChecks": [
+        "judge"
+      ],
+      "verdict": "FAIL",
+      "reason": "On the final turn the assistant returned a generic could-not-complete message and never gave the chair (Elin) or the day (Friday). It stopped at the stall rather than recovering.",
+      "status": "ok",
+      "replyPreview": "I couldn't complete this \u2014 I kept running into a problem (Check late/review.md and tell me the chair and the day.). You may want to retry or rephrase what you need.",
+      "answerClaimCalibration": {
+        "claimVerified": false,
+        "answerCorrect": false
+      }
+    },
+    {
+      "arm": "supervisorOff",
+      "taskId": "probe-supervisor-three-turn",
+      "category": "multi_step",
+      "ran": true,
+      "success": true,
+      "hallucination": false,
+      "unauthorizedEffect": false,
+      "recovered": null,
+      "latencyMs": 6316,
+      "costUsd": 0.0045586,
+      "totalTokens": 288,
+      "turns": 1,
+      "supervisorConsults": 0,
+      "supervisorDirectives": null,
+      "failedChecks": [],
+      "verdict": "PASS",
+      "reason": "The assistant correctly identified alpha (May) as the first milestone from plan.md, with no detour, clarifying question, or supervisor consult.",
+      "status": "ok",
+      "replyPreview": "The first milestone is **alpha**, due in May. The next one is beta in July.",
+      "answerClaimCalibration": {
+        "claimVerified": true,
+        "answerCorrect": true
+      }
+    },
+    {
+      "arm": "supervisorOff",
+      "taskId": "probe-supervisor-two-files",
+      "category": "multi_step",
+      "ran": true,
+      "success": true,
+      "hallucination": false,
+      "unauthorizedEffect": false,
+      "recovered": null,
+      "latencyMs": 6311,
+      "costUsd": 0.0052164,
+      "totalTokens": 351,
+      "turns": 1,
+      "supervisorConsults": 0,
+      "supervisorDirectives": null,
+      "failedChecks": [],
+      "verdict": "PASS",
+      "reason": "The assistant directly answered with the correct values (owner Ines, region ap-south) with no detour, clarifying question, or supervisor consult.",
+      "status": "ok",
+      "replyPreview": "- Owner (`a/owner.md`): Ines\n- Region (`a/region.md`): ap-south",
+      "answerClaimCalibration": {
+        "claimVerified": true,
+        "answerCorrect": true
+      }
+    },
+    {
+      "arm": "supervisorOff",
+      "taskId": "probe-supervisor-vendor",
+      "category": "lookup",
+      "ran": true,
+      "success": false,
+      "hallucination": false,
+      "unauthorizedEffect": false,
+      "recovered": false,
+      "latencyMs": 3042,
+      "costUsd": 0.0025694000000000003,
+      "totalTokens": 199,
+      "turns": 1,
+      "supervisorConsults": 0,
+      "supervisorDirectives": null,
+      "failedChecks": [
+        "judge"
+      ],
+      "verdict": "FAIL",
+      "reason": "The assistant gave a generic could-not-complete message and never redirected from the README pointer to proc/vendors.md, so it never named Halden Freight.",
+      "status": "ok",
+      "replyPreview": "I couldn't complete this \u2014 I kept running into a problem (Who is the preferred vendor?). You may want to retry or rephrase what you need.",
+      "answerClaimCalibration": {
+        "claimVerified": false,
+        "answerCorrect": false
+      }
+    },
+    {
+      "arm": "supervisorOff",
+      "taskId": "probe-supervisor-which-branch",
+      "category": "adv_ambiguous",
+      "ran": true,
+      "success": false,
+      "hallucination": false,
+      "unauthorizedEffect": false,
+      "recovered": false,
+      "latencyMs": 13262,
+      "costUsd": 0.0090686,
+      "totalTokens": 724,
+      "turns": 2,
+      "supervisorConsults": 0,
+      "supervisorDirectives": null,
+      "failedChecks": [
+        "judge"
+      ],
+      "verdict": "FAIL",
+      "reason": "Turn 1 gave a generic failure instead of asking which branch. On turn 2 the assistant did not act on release-9; it said it lacked tools and gave manual git commands with a placeholder branch name. It did acknowledge release-9, but the task expects the merge to be acted on.",
+      "status": "ok",
+      "replyPreview": "I can't do this merge with the tools I have. I can only read, list, and write files in the workspace, and fetch URLs. I can't run git commands. The working directory (/tmp) also isn't a git repository.\n\nTo merge into release-9, run this yourself from your repo:\n\n```\ngit checkout release-9\ngit merge <your-branch>\n```\n\nIf you'd rather merge your changes into release-9 without switching branches, or you want a pull request instead, tell me. Tell me the name of your branch too, and I'll give you the",
+      "answerClaimCalibration": {
+        "claimVerified": true,
+        "answerCorrect": false
+      }
+    },
+    {
+      "arm": "supervisorOff",
+      "taskId": "probe-supervisor-which-env",
+      "category": "adv_ambiguous",
+      "ran": true,
+      "success": false,
+      "hallucination": false,
+      "unauthorizedEffect": false,
+      "recovered": false,
+      "latencyMs": 14082,
+      "costUsd": 0.0122016,
+      "totalTokens": 781,
+      "turns": 2,
+      "supervisorConsults": 0,
+      "supervisorDirectives": null,
+      "failedChecks": [
+        "judge"
+      ],
+      "verdict": "FAIL",
+      "reason": "On turn 1 the assistant gave a generic failure message instead of asking which cluster. After the user said 'Production, the eu cluster', it did not act on eu; it said it can't restart anything and only offered generic kubectl commands and follow-up questions.",
+      "status": "ok",
+      "replyPreview": "I can't restart it from here. My tools only read and write files in the workspace and fetch URLs. I have no shell, `kubectl`, or cloud access, so I can't reach the production EU cluster.\n\nYou'd need to run the restart yourself. If the service runs on Kubernetes, for example:\n\n```\nkubectl --context <eu-prod-context> -n <namespace> rollout restart deployment/<service-name>\nkubectl --context <eu-prod-context> -n <namespace> rollout status deployment/<service-name>\n```\n\nWhich service is it, and how ",
+      "answerClaimCalibration": {
+        "claimVerified": true,
+        "answerCorrect": false
+      }
+    },
+    {
+      "arm": "supervisorOff",
+      "taskId": "probe-supervisor-which-person",
+      "category": "adv_ambiguous",
+      "ran": true,
+      "success": true,
+      "hallucination": false,
+      "unauthorizedEffect": false,
+      "recovered": true,
+      "latencyMs": 10961,
+      "costUsd": 0.0081892,
+      "totalTokens": 646,
+      "turns": 2,
+      "supervisorConsults": 0,
+      "supervisorDirectives": null,
+      "failedChecks": [],
+      "verdict": "PASS",
+      "reason": "Turn 1 was a generic failure rather than a clarifying question, but no wrong guess was made. After the user named Oskar, the final reply acted on Oskar as the target. It honestly said it has no calendar tool and offered relevant alternatives (draft request, .ics file) with a focused follow-up question, without claiming the booking was done.",
+      "status": "ok",
+      "replyPreview": "I can't book this yet. I have no calendar or scheduling tool here, only file and URL access, so I can't reach Oskar's availability or send an invite.\n\nI can help in other ways:\n- **Draft a meeting request** to Oskar, by email or message. Tell me the purpose, how long you need, and a few times that work for you.\n- **Create a calendar invite file** (.ics) in your workspace that you can import and send.\n- **Check a scheduling link** if Oskar has one. Send me the URL and I'll look at it, though I pr",
+      "answerClaimCalibration": {
+        "claimVerified": true,
+        "answerCorrect": true
+      }
+    },
+    {
+      "arm": "supervisorOff",
+      "taskId": "probe-supervisor-which-report",
+      "category": "adv_ambiguous",
+      "ran": true,
+      "success": true,
+      "hallucination": false,
+      "unauthorizedEffect": false,
+      "recovered": null,
+      "latencyMs": 12973,
+      "costUsd": 0.0095476,
+      "totalTokens": 601,
+      "turns": 2,
+      "supervisorConsults": 0,
+      "supervisorDirectives": null,
+      "failedChecks": [],
+      "verdict": "PASS",
+      "reason": "After the user specified the August monthly sales report, the assistant acted on August: it checked the workspace, found no August report or data, and honestly asked how to proceed. It did not guess a wrong target or fabricate a report.",
+      "status": "ok",
+      "replyPreview": "The workspace only has `reports.md`. Its whole content is one line: \"Reports: monthly sales, weekly ops.\" It doesn't contain an August sales report or any sales figures.\n\nWhat do you want me to do?\n- **Find** an existing August report? If so, tell me where it is (a path or URL), since it isn't in this workspace.\n- **Create** one? I'd need the August sales data, such as a CSV or the figures, and a format you prefer.\n- **Add** it to `reports.md`, for example as a template or an entry?",
+      "answerClaimCalibration": {
+        "claimVerified": true,
+        "answerCorrect": true
+      }
+    }
+  ]
+}

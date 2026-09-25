@@ -127,6 +127,12 @@
       "finalized": true,
       "spendUsd": 0.289143,
       "blocked": false
+    },
+    "probe-supervisor": {
+      "seedsDone": 1,
+      "finalized": false,
+      "spendUsd": 0.599186,
+      "blocked": false
     }
   }
 }
