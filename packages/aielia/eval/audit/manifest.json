@@ -333,9 +333,10 @@
       "seeds": 1,
       "fullPages": "all",
       "maxSpendUsd": 4,
-      "status": "queued",
+      "status": "done",
       "corpusAdequacy": "partial",
-      "corpusNote": "18 tasks: timeout, missing-resource and rate-limit paraphrase families (4 stress each, injected via injectedFailureSymptom) plus 6 no-failure calm controls. Target metric is recovery rate. The symptom is pinned to the injected failure class by the stall wrapper, so whether the semantic match is even consulted is what the probe measures. Not yet run."
+      "corpusNote": "18 tasks: timeout, missing-resource and rate-limit paraphrase families (4 stress each, injected via injectedFailureSymptom) plus 6 no-failure calm controls. Target metric is recovery rate. The symptom is pinned to the injected failure class by the stall wrapper, so whether the semantic match is even consulted is what the probe measures. Not yet run.",
+      "verdict": "INCONCLUSIVE"
     },
     {
       "id": "probe-supervisor",
