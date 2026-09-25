@@ -31,6 +31,7 @@ import { SYSTEM_PROMPT } from './system-prompt.js'
 import type { TraceEvent } from './trace-events.js'
 import type { AssistantToolStep } from './tool-step.js'
 
+import type { LayerPolicyMode } from '@buildaharness/harness'
 import { MemoryService, buildTurnFacts, type MemorySummary, type MemoryExport, type PendingFact } from './memory-service.js'
 import type { UserFact } from './fact-extraction.js'
 import { AssistantSession, type IndexedMessage, type TranscriptSearchHit } from './assistant-session.js'
@@ -284,6 +285,8 @@ export interface PersonalAssistantOptions {
    * call resolveOneLoopMode(process.env) and pass the result here.
    */
   oneLoopMode?: OneLoopMode
+  /** AL8a — layer policy mode ('static' default = today's behaviour). Resolved by the surface via resolveLayerPolicyMode; PersonalAssistant never reads process.env for it. */
+  layerPolicyMode?: LayerPolicyMode
   /**
    * R7 (Tier 1.5) — next-step suggestions, one bounded LLM call each: after every full
    * (non-trivial, `ok`) turn, up to three options are attached to the result as `nextSteps` for
@@ -448,7 +451,7 @@ export class PersonalAssistant {
     this.turnInterpreter = new TurnInterpreter(this.llmClient, model, this.planService, reminderStore, options.ambiguityGuardMode ?? DEFAULT_AMBIGUITY_GUARD_MODE)
     this.harnessBridge = new HarnessBridge(
       this.memory, experienceStore, checkpointStore, this.llmClient, model, maxSteps,
-      this.planService, this.session, this.onTrace, this.oneLoopMode,
+      this.planService, this.session, this.onTrace, this.oneLoopMode, options.layerPolicyMode ?? 'static',
     )
     this.goalGraphSuggestMode = options.goalGraphSuggestMode ?? 'disabled'
     const goalGraphSuggestMode = this.goalGraphSuggestMode

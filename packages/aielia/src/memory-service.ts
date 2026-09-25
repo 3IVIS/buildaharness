@@ -1,5 +1,6 @@
 import type { ExperienceStore, StrategyWeightKey, DecompositionEntry, RecoverySequenceEntry, ExperienceStoreData, ExternalContradictionInput } from '@buildaharness/harness'
 import type { MemoryAdapter, ReminderStore, ReminderRecord, ILLMClient, TokenUsage } from '@buildaharness/runtime'
+import { explicitEnvOverride } from './layer-policy-wiring.js'
 import { extractFactsFromTurn, migrateFact, tierForFact, isKnowledgeTier, type UserFact } from './fact-extraction.js'
 import { checkForContradictions, type BeliefCandidate, type Corroboration } from './contradiction-checker.js'
 import type { StatedFact, FactCategory, FactConfidence } from './turn-intent-classifier.js'
@@ -154,13 +155,15 @@ function mergeTurnFacts(lexicalFacts: UserFact[], llmFacts: UserFact[]): UserFac
  * it) each stamp their own `extractedAt` — harmless, since neither call's result is compared
  * against the other's by identity.
  */
-export function buildTurnFacts(sessionId: string, userMessage: string, statedFacts: StatedFact[]): UserFact[] {
+export function buildTurnFacts(sessionId: string, userMessage: string, statedFacts: StatedFact[], policyEnabled: boolean = true): UserFact[] {
   const lexicalFacts = extractFactsFromTurn(userMessage, `turn:${sessionId}`)
   // The single AUDIT_MODEL_INFERRED_FACTS read: every path a `model_inferred` fact takes into the
   // session store, durable store, pending-confirmation queue, prompt or the harness's
   // currentTurnFacts goes through this function, so dropping them here (and only here) leaves the
   // classifier call itself and the lexical `user_asserted` pass untouched.
-  const llmFacts: UserFact[] = modelInferredFactsEnabled()
+  // AL8a: `policyEnabled` is the layer policy's verdict for model_inferred_facts (default true =
+  // today's behaviour); an explicit AUDIT_MODEL_INFERRED_FACTS value still wins over it.
+  const llmFacts: UserFact[] = (explicitEnvOverride('AUDIT_MODEL_INFERRED_FACTS') ?? policyEnabled) && modelInferredFactsEnabled()
     ? statedFacts.map((fact) => ({
         text: fact.text,
         extractedAt: new Date().toISOString(),

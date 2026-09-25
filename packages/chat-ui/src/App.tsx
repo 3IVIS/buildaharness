@@ -325,6 +325,7 @@ async function createTauriBackedAssistant(config: AssistantConfig): Promise<Pers
     // seam the CLI uses (here from the build-time VITE_ASSISTANT_ONE_LOOP via browser-config.ts, or
     // a persisted oneLoopMode). Undefined → PersonalAssistant falls back to DEFAULT_ONE_LOOP_MODE.
     oneLoopMode: config.oneLoopMode,
+    layerPolicyMode: config.layerPolicyMode,
     // R7: turn-end next-step options + DONE-thread suggestions. Undefined config means the package
     // default (enabled); PersonalAssistant itself defaults to disabled, so the front end opts in here.
     goalGraphSuggestMode: isGoalGraphSuggestEnabled(config.goalGraphSuggestMode) ? 'enabled' : 'disabled',
@@ -352,6 +353,7 @@ async function buildAssistant(config: AssistantConfig): Promise<PersonalAssistan
     // R5 of the internal plan — same AssistantConfig seam as the desktop
     // path above and the CLI. Undefined → PersonalAssistant falls back to DEFAULT_ONE_LOOP_MODE.
     oneLoopMode: config.oneLoopMode,
+    layerPolicyMode: config.layerPolicyMode,
     // R7: turn-end next-step options + DONE-thread suggestions. Undefined config means the package
     // default (enabled); PersonalAssistant itself defaults to disabled, so the front end opts in here.
     goalGraphSuggestMode: isGoalGraphSuggestEnabled(config.goalGraphSuggestMode) ? 'enabled' : 'disabled',

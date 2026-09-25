@@ -96,6 +96,7 @@ export { resolveGoalGraphSuggestMode, normalizeGoalGraphSuggestMode, isGoalGraph
 export type { GoalGraphSuggestMode } from './goal-graph-suggest-flag.js'
 export { resolveLayerPolicyMode, normalizeLayerPolicyMode, isAdaptivePolicyEnabled, isPolicyRecordingEnabled, isLayerPolicyMode, resolveLayerPolicyModeFromConfig, DEFAULT_LAYER_POLICY_MODE } from './layer-policy-flag.js'
 export type { LayerPolicyMode } from './layer-policy-flag.js'
+export { resolveEscalationPlan, escalationEnabled, explicitEnvOverride, SEMANTIC_ESCALATIONS } from './layer-policy-wiring.js'
 export { LiveSteeringChannel } from './live-steering-channel.js'
 export type { SteeringEvent } from './live-steering-channel.js'
 export { AskClarificationService } from './ask-clarification-service.js'

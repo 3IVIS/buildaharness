@@ -195,6 +195,7 @@ async function buildAssistant(config: AssistantConfig, { backend, dataDir, remin
     // chat-ui, and the Tauri desktop build all decide this the same way. Undefined here means
     // PersonalAssistant falls back to DEFAULT_ONE_LOOP_MODE.
     oneLoopMode: config.oneLoopMode,
+    layerPolicyMode: config.layerPolicyMode,
     // R7: turn-end next-step options and DONE-thread suggestions. Undefined config means the
     // package default (enabled); PersonalAssistant itself defaults to disabled, so this is where
     // the front end opts in.

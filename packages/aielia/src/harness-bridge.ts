@@ -29,10 +29,10 @@ import { decideSupervisorDirective } from './supervisor-decider.js'
 import type { ILLMClient, MemoryAdapter, TokenUsage } from '@buildaharness/runtime'
 import { DEFAULT_ONE_LOOP_MODE, type OneLoopMode } from './one-loop-flag.js'
 import { tierForFact, isKnowledgeTier, type UserFact } from './fact-extraction.js'
-import { checkForContradictions, semanticContradictionEnabled, type BeliefCandidate } from './contradiction-checker.js'
-import { checkSemanticReviewConflict, semanticChangeReviewEnabled } from './review-checker.js'
-import { checkSemanticFailureMatch, semanticFailureMatchEnabled } from './failure-mode-matcher.js'
-import { checkSemanticCriterionCoverage, semanticCriterionCoverageEnabled, NON_CHECKABLE_DEFAULT_CRITERION } from './semantic-criterion-coverage.js'
+import { checkForContradictions, type BeliefCandidate } from './contradiction-checker.js'
+import { checkSemanticReviewConflict } from './review-checker.js'
+import { checkSemanticFailureMatch } from './failure-mode-matcher.js'
+import { checkSemanticCriterionCoverage, NON_CHECKABLE_DEFAULT_CRITERION } from './semantic-criterion-coverage.js'
 import { toTaskRiskLevel } from './task-mapping.js'
 import { TOOL_EFFECT_CLASS } from './tool-effect-class.js'
 import { FACT_CAP } from './memory-service.js'
@@ -44,6 +44,8 @@ import type { AssistantSource } from './assistant-source.js'
 import type { AssistantProgress } from './assistant-types.js'
 import type { TraceEvent } from './trace-events.js'
 import { resolveSupervisorEnabled } from './supervisor-flag.js'
+import { resolveEscalationPlan, escalationEnabled } from './layer-policy-wiring.js'
+import type { LayerPolicyMode } from '@buildaharness/harness'
 
 /**
  * `AUDIT_VERIFICATION` gate — feature-value audit (Phase C5 of the internal plan). EVAL-ONLY:
@@ -173,6 +175,9 @@ export class HarnessBridge {
     // equivalent surface entry point) is expected to call resolveOneLoopMode(process.env) and
     // pass the result down; PersonalAssistant itself never touches process.env directly.
     private readonly oneLoopMode: OneLoopMode = DEFAULT_ONE_LOOP_MODE,
+    // AL8a: static (default) executes today's behaviour byte-for-byte; shadow does too but records
+    // what adaptive would decide; adaptive executes the resolved policy. See layer-policy-wiring.ts.
+    private readonly layerPolicyMode: LayerPolicyMode = 'static',
   ) {}
 
   async run(params: HarnessRunParams): Promise<HarnessOutcome> {
@@ -204,6 +209,9 @@ export class HarnessBridge {
         untrustedContentInContext: (sources?.length ?? 0) > 0,
       }),
     }
+
+    // AL8a: one policy per turn; the semantic escalation hooks below are gated through it.
+    const escalationPlan = resolveEscalationPlan(this.layerPolicyMode, { ...complexitySignal, isTrivial: classification.isTrivial }, complexitySignal.runState)
 
     // Pace a durable plan one MEDIUM/HIGH-risk step at a time across turns instead of running
     // its whole unblocked frontier in a single turn — shouldPause below reads
@@ -255,7 +263,10 @@ export class HarnessBridge {
     // detection immediately, not just written to the session store and left for a later turn's
     // re-seed. Deliberately unfiltered by tier here, same as before this phase: these are new
     // candidate statements to check against Knowledge, not Knowledge themselves.
-    const currentTurnFactStatements = currentTurnFacts.map(f => ({ statement: f.text, isNew: true }))
+    // AL8a: model_inferred_facts policy — a T1/off decision drops the LLM-derived seeds (lexical
+    // user_asserted facts stay); env override and static default keep today's list.
+    const seedFacts = escalationEnabled('model_inferred_facts', escalationPlan) ? currentTurnFacts : currentTurnFacts.filter(f => f.source !== 'model_inferred')
+    const currentTurnFactStatements = seedFacts.map(f => ({ statement: f.text, isNew: true }))
     let priorFactsSeeded = false
     const factExtractor = (_objective: string): Array<{ statement: string; isNew?: boolean }> => {
       // Prior facts are re-seeded so the contradiction checker has something to compare against,
@@ -348,7 +359,7 @@ export class HarnessBridge {
         // AUDIT_SEMANTIC_CONTRADICTION (feature-value audit, Phase A4) gates the whole hook: OFF
         // → no host contradictionChecker is wired at all, so the harness runs its always-on
         // lexical / negation-pair check only. Default ON — unchanged shipped behaviour.
-        contradictionChecker: semanticContradictionEnabled()
+        contradictionChecker: escalationEnabled('semantic_contradiction', escalationPlan)
           ? async (newBeliefs: BeliefCandidate[], existingBeliefs: BeliefCandidate[]) => {
               const { contradictions } = await checkForContradictions(newBeliefs, existingBeliefs, this.llmClient, this.model(), onUsage)
               const statementById = new Map([...newBeliefs, ...existingBeliefs].map((b) => [b.id, b.statement]))
@@ -370,7 +381,7 @@ export class HarnessBridge {
         // no host semanticChangeReviewer is wired at all, so the harness's mechanical
         // reviewProposedChange (lexical isNegation) is the only conflict check. Default ON —
         // unchanged shipped behaviour.
-        semanticChangeReviewer: semanticChangeReviewEnabled()
+        semanticChangeReviewer: escalationEnabled('change_review', escalationPlan)
           ? (input: { changeDescription: string; highConfidenceBeliefs: BeliefCandidate[]; hypothesisPredictions: string[] }) =>
               checkSemanticReviewConflict(input.changeDescription, input.highConfidenceBeliefs, input.hypothesisPredictions, this.llmClient, this.model(), onUsage)
           : undefined,
@@ -380,7 +391,7 @@ export class HarnessBridge {
         // AUDIT_SEMANTIC_FAILURE_MATCH (feature-value audit, Phase A6) gates the whole hook: OFF →
         // no host semanticFailureMatcher is wired at all, so the harness runs its exact-match
         // FailureModeLibrary.match() only. Default ON — unchanged shipped behaviour.
-        semanticFailureMatcher: semanticFailureMatchEnabled()
+        semanticFailureMatcher: escalationEnabled('failure_match', escalationPlan)
           ? (symptoms: string[], libraryEntries: readonly FailureModeEntry[]) =>
               checkSemanticFailureMatch(symptoms, libraryEntries, this.llmClient, this.model(), onUsage)
           : undefined,
@@ -390,7 +401,7 @@ export class HarnessBridge {
         // AUDIT_SEMANTIC_CRITERION_COVERAGE (feature-value audit, Phase C1) gates the whole hook:
         // OFF → no host semanticCriterionCoverage is wired at all, so the reviewer's implementer
         // lens runs its `.includes()` substring check alone. Default ON — unchanged shipped behaviour.
-        semanticCriterionCoverage: semanticCriterionCoverageEnabled()
+        semanticCriterionCoverage: escalationEnabled('criterion_coverage', escalationPlan)
           ? (criterion: string, beliefs: Belief[]) =>
               checkSemanticCriterionCoverage(criterion, beliefs, this.llmClient, this.model(), onUsage)
           : undefined,
