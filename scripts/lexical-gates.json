@@ -167,7 +167,11 @@
       "inputs": "user message",
       "batch": 3,
       "patterns": "aielia/src/lexical/patterns/risk-patterns.json",
-      "class": "B"
+      "class": "B",
+      "status": "deferred",
+      "deferredReason": "Safety property: this decides the approval requirement for staged actions. The turn-intent classifier's own riskLevel already exists, but the clause-scoped lexical patterns are the deterministic floor that catches actions when the classifier errs or fails; replacing them with the model's judgement removes the floor (AL-2/AL-7 safety carve-out, same reasoning as injection-tagging). It also has AL3b routing coupling and no AL5b-certified risk field on TurnSignals.",
+      "deferredCost": "0 extra calls if it only trusted the classifier's riskLevel, but that weakens a safety property and needs owner sign-off; no certified accuracy exists",
+      "recommendedDefault": "legacy"
     },
     {
       "id": "task-cancel",
@@ -177,7 +181,11 @@
       "inputs": "user message, plan tasks",
       "batch": 3,
       "patterns": "aielia/src/lexical/patterns/task-cancel-markers.json",
-      "class": "B"
+      "class": "B",
+      "status": "deferred",
+      "deferredReason": "Runs only when an active plan exists. The semantic alternative is a new per-turn call (+1 when a plan is open) or a TurnSignals field for cancel-a-task with task identity, which needs a classifier schema addition, plan-task context in the classifier prompt and AL5b-certified accuracy (none exists). The both-markers rule is deliberately conservative to avoid cancelling on an unrelated 'cancel my flight'.",
+      "deferredCost": "+1 LLM call per turn while a plan is open, or a classifier schema addition (+0 calls, but uncertified accuracy)",
+      "recommendedDefault": "legacy"
     },
     {
       "id": "plan-mode-cancel",
@@ -187,7 +195,11 @@
       "inputs": "user message",
       "batch": 3,
       "patterns": "aielia/src/lexical/patterns/plan-mode-markers.json",
-      "class": "B"
+      "class": "B",
+      "status": "deferred",
+      "deferredReason": "Runs only during plan drafting. The drafting LLM call (draftPlanRevision) could return a cancel decision, but that changes its structured output schema and prompt for a rarely-exercised exit path, with no certified accuracy; a false positive would silently drop a draft.",
+      "deferredCost": "0 extra calls if folded into draftPlanRevision's schema, but needs a schema change and an eval set; otherwise +1 call per drafting turn",
+      "recommendedDefault": "legacy"
     },
     {
       "id": "plan-template-match",
@@ -197,7 +209,11 @@
       "inputs": "plan description",
       "batch": 3,
       "patterns": "aielia/src/lexical/patterns/template-keywords.json",
-      "class": "B"
+      "class": "B",
+      "status": "deferred",
+      "deferredReason": "Keyword scoring picks a template for a plan description. A semantic pick is either +1 call at plan creation or folding template choice into the drafting call; the template is a cheap free seed, and the drafting call already revises it freely, so a wrong pick is low-impact while the extra call is not free. No labelled eval set exists.",
+      "deferredCost": "+1 LLM call per plan creation, or 0 if folded into the first drafting call via a schema change",
+      "recommendedDefault": "legacy"
     },
     {
       "id": "preference-signal",
@@ -206,7 +222,11 @@
       "decides": "whether feedback text carries a preference signal",
       "inputs": "feedback text",
       "batch": 3,
-      "class": "B"
+      "class": "B",
+      "status": "deferred",
+      "deferredReason": "Lives in packages/harness (LLM-free by design) with a Python twin, so a semantic replacement needs an LLM call inside the harness primitive and twin conformance changes; the caller could pass a signal from TurnSignals instead, but no TurnSignals field covers preference-in-feedback and none is AL5b-certified.",
+      "deferredCost": "+1 LLM call per feedback event (event-gated) plus Python-twin and conformance-fixture changes, or a new certified TurnSignals field",
+      "recommendedDefault": "legacy"
     },
     {
       "id": "batch-list-shape",
