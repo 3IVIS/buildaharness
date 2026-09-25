@@ -384,9 +384,10 @@
       "seeds": 1,
       "fullPages": "all",
       "maxSpendUsd": 4,
-      "status": "queued",
+      "status": "done",
       "corpusAdequacy": "partial",
-      "corpusNote": "18 tasks: single-weak-source (fixture page), zero-observations (missing file) and conflicting-observations (two fixture pages) families, 4 stress each, plus 6 ample-evidence calm controls. Target metric is overconfident-wrong. Tool-reliability escalation has no dedicated arm, so the verification-off arm is the comparator. Not yet run."
+      "corpusNote": "18 tasks: single-weak-source (fixture page), zero-observations (missing file) and conflicting-observations (two fixture pages) families, 4 stress each, plus 6 ample-evidence calm controls. Target metric is overconfident-wrong. Tool-reliability escalation has no dedicated arm, so the verification-off arm is the comparator. Not yet run.",
+      "verdict": "INCONCLUSIVE"
     },
     {
       "id": "adaptive-vs-alwayson-smoke",

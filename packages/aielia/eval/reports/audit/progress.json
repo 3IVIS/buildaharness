@@ -142,7 +142,7 @@
     },
     "probe-evidence": {
       "seedsDone": 1,
-      "finalized": false,
+      "finalized": true,
       "spendUsd": 0.181276,
       "blocked": false
     }
