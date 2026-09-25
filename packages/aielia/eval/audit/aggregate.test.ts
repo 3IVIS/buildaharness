@@ -85,6 +85,69 @@ describe('auditVerdict', () => {
   })
 })
 
+describe('auditVerdict adequacy gates (AL2b, F9): never CUT on an inadequate test', () => {
+  const costlier = { taskSuccessRate: 0.72, meanCostUsd: 0.013 }
+  const base = { taskSuccessRate: 0.72, meanCostUsd: 0.009 }
+
+  it('a costlier flat candidate is INCONCLUSIVE, not CUT, when the layer engaged in < 30% of runs', () => {
+    const r = auditVerdict(seeds(3, base, costlier), 'bare', 'flagOn', 'demo', { engagement: 0.1 })
+    expect(r.verdict).toBe('INCONCLUSIVE')
+    expect(r.rationale).toMatch(/engaged in only 10%/)
+    expect(r.engagement).toBe(0.1)
+  })
+
+  it('a costlier flat candidate is INCONCLUSIVE, not CUT, when the control has < 10% headroom', () => {
+    const r = auditVerdict(seeds(3, { ...base, taskSuccessRate: 0.95 }, { ...costlier, taskSuccessRate: 0.95 }), 'bare', 'flagOn', 'demo')
+    expect(r.verdict).toBe('INCONCLUSIVE')
+    expect(r.rationale).toMatch(/headroom/)
+    expect(r.controlHeadroom).toBeCloseTo(0.05)
+  })
+
+  it('a regression is not a CUT when the layer did not engage', () => {
+    const reports = [
+      report(arm({ arm: 'bare', taskSuccessRate: 0.72 }), arm({ arm: 'flagOn', taskSuccessRate: 0.72 })),
+      report(arm({ arm: 'bare', taskSuccessRate: 0.72 }), arm({ arm: 'flagOn', taskSuccessRate: 0.66 })),
+      report(arm({ arm: 'bare', taskSuccessRate: 0.72 }), arm({ arm: 'flagOn', taskSuccessRate: 0.66 })),
+    ]
+    expect(auditVerdict(reports, 'bare', 'flagOn', 'demo').verdict).toBe('CUT')
+    const r = auditVerdict(reports, 'bare', 'flagOn', 'demo', { engagement: 0 })
+    expect(r.verdict).toBe('INCONCLUSIVE')
+    expect(r.rationale).toMatch(/cannot be attributed/)
+  })
+
+  it('a noisy null is INCONCLUSIVE, not CUT, when the CI still includes a justifying effect', () => {
+    const reports = [
+      report(arm({ arm: 'bare', taskSuccessRate: 0.5, meanCostUsd: 0.009 }), arm({ arm: 'flagOn', taskSuccessRate: 0.7, meanCostUsd: 0.013 })),
+      report(arm({ arm: 'bare', taskSuccessRate: 0.7, meanCostUsd: 0.009 }), arm({ arm: 'flagOn', taskSuccessRate: 0.5, meanCostUsd: 0.013 })),
+      report(arm({ arm: 'bare', taskSuccessRate: 0.6, meanCostUsd: 0.009 }), arm({ arm: 'flagOn', taskSuccessRate: 0.6, meanCostUsd: 0.013 })),
+    ]
+    const r = auditVerdict(reports, 'bare', 'flagOn', 'demo')
+    expect(r.verdict).toBe('INCONCLUSIVE')
+    expect(r.rationale).toMatch(/underpowered, not null/)
+  })
+
+  it('unknown engagement is not treated as zero — an adequate costly null is still CUT', () => {
+    const r = auditVerdict(seeds(3, base, costlier), 'bare', 'flagOn', 'demo')
+    expect(r.engagement).toBeNull()
+    expect(r.verdict).toBe('CUT')
+  })
+
+  it('reports the layer target metric next to task success', () => {
+    const rep = (ctl: Partial<ArmAggregate>, cand: Partial<ArmAggregate>) => seeds(3, ctl, cand)
+    const r = auditVerdict(rep({ recoveryRate: 0.2 }, { recoveryRate: 0.6 }), 'bare', 'flagOn', 'trajectory-supervisor-midtask')
+    expect(r.targetMetric).toMatchObject({ name: expect.stringMatching(/recovery rate/), proxy: false, candidate: 0.6, higherIsBetter: true })
+    expect(r.targetMetric?.control).toBeCloseTo(0.2)
+    expect(r.targetMetric?.deltaMean).toBeCloseTo(0.4)
+    const ms = buildMultiSeedReport(rep({}, {}), { id: 'trajectory-supervisor-midtask', title: 't', hypothesis: 'h' }, 'bare', 'flagOn')
+    expect(ms.targetMetric?.name).toMatch(/recovery rate/)
+    expect(ms.metrics.find((m) => m.metric === 'taskSuccessRate')).toBeDefined()
+    // A layer whose target is not a grade field is labelled as a proxy for task success.
+    expect(auditVerdict(rep({}, {}), 'bare', 'flagOn', 'verification-layer').targetMetric?.proxy).toBe(true)
+    // A feature with no mapped layer carries none.
+    expect(auditVerdict(rep({}, {}), 'bare', 'flagOn', 'demo').targetMetric).toBeNull()
+  })
+})
+
 function row(partial: Partial<BenchmarkRow> & { arm: string; taskId: string }): BenchmarkRow {
   return {
     category: 'adv_injection' as TaskCategory,

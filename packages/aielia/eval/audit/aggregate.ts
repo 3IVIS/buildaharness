@@ -12,6 +12,7 @@
 import type { BenchmarkReport, BenchmarkRow } from '../runner.js'
 import { aggregateSeeds, diffSeeds, type SeedDiff } from '../report.js'
 import type { AuditVerdict } from './types.js'
+import { JUSTIFYING_EFFECT, STATE_MIN_ENGAGEMENT, STATE_MIN_HEADROOM, LAYER_SOURCES, targetMetricFor, type GradeField } from '../regrade/layer-value.js'
 
 export interface AuditResult {
   feature: string
@@ -26,6 +27,53 @@ export interface AuditResult {
   costDeltaPct: number | null
   latencyDeltaPct: number | null
   tokenDeltaPct: number | null
+  /** The layer's target metric next to task success (AL2b, F9); `null` for a feature with no mapped layer. */
+  targetMetric: AuditTargetMetric | null
+  /** Control arm's failure rate — how much room the layer had to help. `null` when the control has no success rate. */
+  controlHeadroom: number | null
+  /** Share of candidate runs in which the layer engaged; `null` when the caller did not supply it (unknown ≠ zero). */
+  engagement: number | null
+}
+
+/** What the audit was given beyond the seed reports: the layer's measured engagement, when known. */
+export interface AuditAdequacyInput {
+  engagement?: number | null
+}
+
+export interface AuditTargetMetric {
+  name: string
+  /** True when the layer's real target metric is not a grade field, so task success stands in for it. */
+  proxy: boolean
+  control: number | null
+  candidate: number | null
+  deltaMean: number | null
+  deltaCi95: number | null
+  /** Direction that counts as better for this metric. */
+  higherIsBetter: boolean
+}
+
+const TARGET_SEED_METRIC: Record<GradeField, string> = {
+  success: 'taskSuccessRate',
+  hallucination: 'hallucinationRate',
+  unauthorizedEffect: 'unauthorizedEffectRate',
+  recovered: 'recoveryRate',
+}
+
+/** The target metric for a feature (via its layer in `LAYER_SOURCES`), read off the seed diff. */
+export function targetMetricFromDiff(diff: SeedDiff, feature: string): AuditTargetMetric | null {
+  const source = LAYER_SOURCES.find((s) => s.feature === feature)
+  if (!source) return null
+  const tm = targetMetricFor(source.mechanism)
+  const d = diff.deltas.find((x) => x.metric === TARGET_SEED_METRIC[tm.field])
+  return {
+    name: tm.name,
+    proxy: tm.proxy,
+    control: d?.meanA ?? null,
+    candidate: d?.meanB ?? null,
+    deltaMean: d?.deltaMean ?? null,
+    deltaCi95: d?.deltaCi95 ?? null,
+    higherIsBetter: tm.good,
+  }
 }
 
 function deltaPct(diff: SeedDiff, metric: string): number | null {
@@ -37,7 +85,13 @@ function deltaPct(diff: SeedDiff, metric: string): number | null {
 /** A candidate that costs materially more than the control — the bar "neutral with real cost" clears. */
 const MATERIAL_COST_INCREASE = 0.1 // +10% on any of cost / latency / tokens
 
-export function auditVerdict(seedReports: BenchmarkReport[], control: string, candidate: string, feature: string): AuditResult {
+export function auditVerdict(
+  seedReports: BenchmarkReport[],
+  control: string,
+  candidate: string,
+  feature: string,
+  adequacy: AuditAdequacyInput = {},
+): AuditResult {
   const seeds = seedReports.length
   const a = aggregateSeeds(seedReports, control)
   const b = aggregateSeeds(seedReports, candidate)
@@ -51,10 +105,22 @@ export function auditVerdict(seedReports: BenchmarkReport[], control: string, ca
   const successStat = b.stats['taskSuccessRate']
   const underpowered = seeds < 3 || (successStat?.n ?? 0) < 2
 
+  const successDelta = diff.deltas.find((d) => d.metric === 'taskSuccessRate')
+  const controlSuccess = a.stats['taskSuccessRate']?.mean ?? null
+  const controlHeadroom = controlSuccess === null ? null : 1 - controlSuccess
+  const engagement = adequacy.engagement ?? null
+  // A CUT needs an adequate test. These are the ways a test says nothing about the layer (AL2b, F9):
+  const inadequate = auditInadequacy({ engagement, controlHeadroom })
+  // A null result is only a null if the CI is tight enough to rule out an effect worth the layer's cost.
+  const ciTooWide = successDelta?.deltaMean != null && successDelta.deltaCi95 != null && successDelta.deltaMean + successDelta.deltaCi95 >= JUSTIFYING_EFFECT
+
   let verdict: AuditVerdict
   let rationale: string
 
-  if (diff.verdict === 'regressed') {
+  if (diff.verdict === 'regressed' && inadequate) {
+    verdict = 'INCONCLUSIVE'
+    rationale = `A gating metric regressed, but the test cannot be attributed to the layer: ${inadequate}. Re-probe before deciding.`
+  } else if (diff.verdict === 'regressed') {
     verdict = 'CUT'
     const worse = diff.deltas.filter((d) => d.regressed).map((d) => d.metric).join(', ')
     rationale = `The candidate regressed a gating metric (${worse}) beyond its CI band — the feature makes outcomes worse on its own stress slice.`
@@ -66,6 +132,12 @@ export function auditVerdict(seedReports: BenchmarkReport[], control: string, ca
   } else if (underpowered) {
     verdict = 'INCONCLUSIVE'
     rationale = `No significant task-success delta at ${seeds} seed(s) — underpowered. Expand the corpus or seeds and re-run before deciding.`
+  } else if (inadequate) {
+    verdict = 'INCONCLUSIVE'
+    rationale = `No task-success delta, but the test was not adequate: ${inadequate}. This is not evidence the layer is useless.`
+  } else if (ciTooWide) {
+    verdict = 'INCONCLUSIVE'
+    rationale = `No significant task-success delta, but the CI (${fmtPts(successDelta?.deltaMean)} ± ${fmtPts(successDelta?.deltaCi95)}) still includes a ${fmtPts(JUSTIFYING_EFFECT)} effect — underpowered, not null.`
   } else if (costlier) {
     verdict = 'CUT'
     rationale = `No task-success delta (CI includes 0) but the candidate costs materially more (${fmtPct(costDeltaPct)} $/turn, ${fmtPct(latencyDeltaPct)} latency). Neutral with real cost — it does not earn its keep.`
@@ -85,7 +157,22 @@ export function auditVerdict(seedReports: BenchmarkReport[], control: string, ca
     costDeltaPct,
     latencyDeltaPct,
     tokenDeltaPct,
+    targetMetric: targetMetricFromDiff(diff, feature),
+    controlHeadroom,
+    engagement,
   }
+}
+
+/** Why a test cannot support a CUT, or `null` when it is adequate. Unknown engagement is not treated as zero. */
+export function auditInadequacy(i: { engagement: number | null; controlHeadroom: number | null }): string | null {
+  const reasons: string[] = []
+  if (i.engagement !== null && i.engagement < STATE_MIN_ENGAGEMENT) reasons.push(`the layer engaged in only ${(i.engagement * 100).toFixed(0)}% of runs (< ${STATE_MIN_ENGAGEMENT * 100}%)`)
+  if (i.controlHeadroom !== null && i.controlHeadroom < STATE_MIN_HEADROOM) reasons.push(`the control had ${(i.controlHeadroom * 100).toFixed(0)}% headroom (< ${STATE_MIN_HEADROOM * 100}%)`)
+  return reasons.length ? reasons.join(' and ') : null
+}
+
+function fmtPts(x: number | null | undefined): string {
+  return x == null ? 'n/a' : `${(x * 100).toFixed(0)}pt`
 }
 
 /**
@@ -231,6 +318,10 @@ export interface AuditMultiSeedReport {
   costDeltaPct: number | null
   latencyDeltaPct: number | null
   tokenDeltaPct: number | null
+  /** The layer's target metric beside task success (AL2b); absent for a feature with no mapped layer. */
+  targetMetric?: AuditTargetMetric | null
+  controlHeadroom?: number | null
+  engagement?: number | null
   /**
    * Only for the `llm-injection-detect` feature (Phase A5) — catch-rate / false-positive-rate /
    * per-output latency, which task success alone doesn't separate. `null` for every other feature.
@@ -245,8 +336,9 @@ export function buildMultiSeedReport(
   feature: { id: string; title: string; hypothesis: string },
   control: string,
   candidate: string,
+  adequacy: AuditAdequacyInput = {},
 ): AuditMultiSeedReport {
-  const result = auditVerdict(seedReports, control, candidate, feature.id)
+  const result = auditVerdict(seedReports, control, candidate, feature.id, adequacy)
   const nextStepSignals = feature.id === 'next-step-options' ? nextStepAuditSignals(seedReports, candidate, control) : null
   if (nextStepSignals) {
     const v = nextStepVerdict(nextStepSignals)
@@ -280,6 +372,9 @@ export function buildMultiSeedReport(
     costDeltaPct: result.costDeltaPct,
     latencyDeltaPct: result.latencyDeltaPct,
     tokenDeltaPct: result.tokenDeltaPct,
+    targetMetric: result.targetMetric,
+    controlHeadroom: result.controlHeadroom,
+    engagement: result.engagement,
     injectionSignals: feature.id === 'llm-injection-detect' ? injectionAuditSignals(seedReports, candidate) : null,
     nextStepSignals,
   }
