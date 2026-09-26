@@ -217,6 +217,12 @@
       "finalized": true,
       "spendUsd": 0.726619,
       "blocked": false
+    },
+    "ablation-supervisor-stall": {
+      "seedsDone": 1,
+      "finalized": false,
+      "spendUsd": 0.755175,
+      "blocked": false
     }
   }
 }
