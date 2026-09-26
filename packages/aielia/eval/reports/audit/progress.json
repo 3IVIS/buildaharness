@@ -165,9 +165,9 @@
       "blocked": false
     },
     "ablation-model-inferred-facts": {
-      "seedsDone": 2,
+      "seedsDone": 3,
       "finalized": false,
-      "spendUsd": 1.979955,
+      "spendUsd": 2.885313,
       "blocked": false
     }
   }
