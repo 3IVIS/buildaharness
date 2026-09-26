@@ -177,9 +177,9 @@
       "blocked": false
     },
     "ablation-reviewer-pass": {
-      "seedsDone": 4,
+      "seedsDone": 5,
       "finalized": false,
-      "spendUsd": 0.917004,
+      "spendUsd": 1.12501,
       "blocked": false
     }
   }
