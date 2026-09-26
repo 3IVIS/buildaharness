@@ -197,12 +197,24 @@ const EVAL = dirname(HERE)
 interface ManifestFeature {
   id: string
   arms: [string, string]
+  slice?: string | null
 }
 
-/** Mechanisms an AL11a adaptive cell depends on: an all-probes cell every probed layer; a full-corpus or smoke cell none. */
-export function mechanismsForCell(id: string): string[] {
-  if (!id.startsWith('adaptive-vs-') || !id.endsWith('-probes')) return []
-  return [...new Set(LAYER_SOURCES.filter((s) => s.feature.startsWith('probe-')).map((s) => s.mechanism))].sort()
+/**
+ * Mechanisms an AL11a adaptive cell depends on: an all-probes cell (or one part `-a`/`-b` of a split all-probes cell)
+ * needs every probed layer it actually runs; a full-corpus or smoke cell none. With `cellSlice` + `probeSlices`
+ * (probe feature id → its slice) a split part is limited to the layers whose probe slices it covers, so it isn't
+ * held UNTESTED on a layer belonging to the other part. Without them, every probed layer (the unsplit behaviour).
+ */
+export function mechanismsForCell(id: string, cellSlice?: string | null, probeSlices?: ReadonlyMap<string, string | null | undefined>): string[] {
+  if (!id.startsWith('adaptive-vs-') || !/-probes(-[a-z])?$/.test(id)) return []
+  const covered = cellSlice ? new Set(cellSlice.split(',').map((x) => x.trim())) : null
+  const runs = (feature: string): boolean => {
+    if (!covered || !probeSlices) return true
+    const sl = probeSlices.get(feature)
+    return !!sl && sl.split(',').every((x) => covered.has(x.trim()))
+  }
+  return [...new Set(LAYER_SOURCES.filter((s) => s.feature.startsWith('probe-') && runs(s.feature)).map((s) => s.mechanism))].sort()
 }
 
 async function main(): Promise<void> {
@@ -210,6 +222,7 @@ async function main(): Promise<void> {
   const tasks = new Map<string, TaskSpec>(loadCorpus().map((t) => [t.id, t]))
   const manifest = JSON.parse(readFileSync(join(EVAL, 'audit', 'manifest.json'), 'utf8')) as { features: ManifestFeature[] }
   const only = process.argv.find((a) => a.startsWith('--feature='))?.slice('--feature='.length)
+  const probeSlices = new Map(manifest.features.map((f) => [f.id, f.slice] as const))
   const certificates = loadCertificates(join(HERE, 'certificates.json'))
   const activityLayers = Object.fromEntries(LAYER_SOURCES.map((s) => [s.mechanism, s.activityLayer]))
   const results: CellAnalysis[] = []
@@ -217,7 +230,7 @@ async function main(): Promise<void> {
     if (only ? f.id !== only : !f.id.startsWith('adaptive-vs-')) continue
     const runs = loadFeatureRuns(join(EVAL, 'reports', 'audit'), f.id, tasks)
     if (!runs || runs.length === 0) continue // cell has not finalized yet
-    results.push(analyzeCell({ feature: f.id, onArm: f.arms[1], offArm: f.arms[0], mechanisms: mechanismsForCell(f.id) }, runs, certificates, activityLayers))
+    results.push(analyzeCell({ feature: f.id, onArm: f.arms[1], offArm: f.arms[0], mechanisms: mechanismsForCell(f.id, f.slice, probeSlices) }, runs, certificates, activityLayers))
   }
   console.log(process.argv.includes('--json') ? JSON.stringify(results, null, 2) : renderAnalysisMarkdown(results))
   if (results.some((r) => r.status === 'REFUSED_INVALID_ROWS')) process.exitCode = 1

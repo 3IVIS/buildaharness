@@ -130,4 +130,18 @@ describe('mechanismsForCell', () => {
     expect(mechanismsForCell('adaptive-vs-alwayson-full')).toEqual([])
     expect(mechanismsForCell('adaptive-vs-alwayson-smoke')).toEqual([])
   })
+  it('a split all-probes part needs only the layers whose probe slices it covers', () => {
+    const probeSlices = new Map<string, string | null>([
+      ['probe-change-review', 'probe_change_review'],
+      ['probe-semantic-contradiction', 'probe_contradiction,probe_belief_trail'],
+      ['probe-injection', 'probe_injection'],
+      ['probe-verification', 'probe_verification'],
+    ])
+    const a = mechanismsForCell('adaptive-vs-alwayson-probes-a', 'probe_change_review,probe_contradiction,probe_belief_trail', probeSlices)
+    expect(a).toContain('change_review')
+    expect(a).toContain('semantic_contradiction')
+    expect(a).not.toContain('injection_detection')
+    const b = mechanismsForCell('adaptive-vs-bare-probes-b', 'probe_injection,probe_verification', probeSlices)
+    expect(b).toEqual(['injection_detection', 'verification'])
+  })
 })

@@ -224,12 +224,19 @@
       "spendUsd": 3.061563,
       "blocked": false
     },
-    "adaptive-vs-alwayson-probes": {
-      "seedsDone": 0,
+    "adaptive-vs-alwayson-probes-a": {
+      "seedsDone": 1,
       "finalized": false,
-      "spendUsd": 0.0,
-      "blocked": true,
-      "note": "seed 1 hard-failed (rc=124). Tail:\nbenchmark exceeded CELL_TIMEOUT_SEC=5400"
+      "spendUsd": 3.659463,
+      "blocked": false,
+      "note": "seed 1 reused from the transcripts of an earlier run killed at the 90-min cell timeout (feature was then a single 210-case cell, since split into -a/-b) plus a fresh run of unfinished cases; see seed1.json \"reconstruction\"."
+    },
+    "adaptive-vs-alwayson-probes-b": {
+      "seedsDone": 1,
+      "finalized": false,
+      "spendUsd": 2.986125,
+      "blocked": false,
+      "note": "seed 1 reused from the transcripts of an earlier run killed at the 90-min cell timeout (feature was then a single 210-case cell, since split into -a/-b) plus a fresh run of unfinished cases; see seed1.json \"reconstruction\"."
     }
   }
 }
