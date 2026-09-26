@@ -225,9 +225,9 @@
       "blocked": false
     },
     "adaptive-vs-alwayson-probes-a": {
-      "seedsDone": 1,
+      "seedsDone": 2,
       "finalized": false,
-      "spendUsd": 3.659463,
+      "spendUsd": 7.282983,
       "blocked": false,
       "note": "seed 1 reused from the transcripts of an earlier run killed at the 90-min cell timeout (feature was then a single 210-case cell, since split into -a/-b) plus a fresh run of unfinished cases; see seed1.json \"reconstruction\"."
     },
