@@ -214,7 +214,7 @@
     },
     "ablation-evidence": {
       "seedsDone": 5,
-      "finalized": false,
+      "finalized": true,
       "spendUsd": 0.726619,
       "blocked": false
     }

@@ -587,9 +587,10 @@
       "seeds": 5,
       "fullPages": "all",
       "maxSpendUsd": 30,
-      "status": "queued",
+      "status": "done",
       "corpusAdequacy": "partial",
-      "corpusNote": "AL11a ablation over the AL1 probe slice(s) probe_evidence (stress tasks plus calm controls), 5 seeds, judge claude-opus-5-5, transcripts on. Per-turn TurnSignals kept for regime discovery (AL11b). Read only after the AL11b certificate re-check."
+      "corpusNote": "AL11a ablation over the AL1 probe slice(s) probe_evidence (stress tasks plus calm controls), 5 seeds, judge claude-opus-5-5, transcripts on. Per-turn TurnSignals kept for regime discovery (AL11b). Read only after the AL11b certificate re-check.",
+      "verdict": "CUT"
     },
     {
       "id": "ablation-supervisor-stall",
