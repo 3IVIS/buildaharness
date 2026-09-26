@@ -213,9 +213,9 @@
       "blocked": false
     },
     "ablation-evidence": {
-      "seedsDone": 2,
+      "seedsDone": 3,
       "finalized": false,
-      "spendUsd": 0.319641,
+      "spendUsd": 0.455645,
       "blocked": false
     }
   }
