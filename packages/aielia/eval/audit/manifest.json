@@ -604,9 +604,10 @@
       "seeds": 5,
       "fullPages": "all",
       "maxSpendUsd": 40,
-      "status": "queued",
+      "status": "done",
       "corpusAdequacy": "acceptable",
-      "corpusNote": "Existing stall slices (single-turn pivot/lookup, ASK_USER conversation, mid-task stall). Rebuild packages/harness/dist before running and record the commit in the report header."
+      "corpusNote": "Existing stall slices (single-turn pivot/lookup, ASK_USER conversation, mid-task stall). Rebuild packages/harness/dist before running and record the commit in the report header.",
+      "verdict": "KEEP"
     },
     {
       "id": "adaptive-vs-alwayson-probes",

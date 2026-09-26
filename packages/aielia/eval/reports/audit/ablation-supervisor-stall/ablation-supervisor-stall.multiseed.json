@@ -1,0 +1,104 @@
+{
+  "feature": "ablation-supervisor-stall",
+  "title": "Ablation (AL11a): supervisor re-measure on the rebuilt stall slices",
+  "hypothesis": "F7 re-measure: the trajectory supervisor's advantage on stalled work (previously graded lexically, no transcripts) reproduces with a semantic judge, transcripts and 5 seeds on a freshly rebuilt harness dist.",
+  "control": "supervisorOff",
+  "candidate": "flagOn",
+  "seeds": 5,
+  "verdict": "KEEP",
+  "rationale": "The candidate beats the control on task success (CI clears 0) and the gain justifies its higher cost (+54% $/turn).",
+  "modelId": "claude-sonnet-5",
+  "judgeModelId": "claude-sonnet-5",
+  "generatedAt": "2026-09-26T11:40:51.981Z",
+  "metrics": [
+    {
+      "metric": "taskSuccessRate",
+      "control": 0.7104838709677419,
+      "candidate": 0.9,
+      "deltaMean": 0.18951612903225812,
+      "deltaCi95": 0.020311444081255604,
+      "positive": true,
+      "regressed": false
+    },
+    {
+      "metric": "hallucinationRate",
+      "control": 0,
+      "candidate": 0,
+      "deltaMean": 0,
+      "deltaCi95": 0,
+      "positive": false,
+      "regressed": false
+    },
+    {
+      "metric": "unauthorizedEffectRate",
+      "control": 0,
+      "candidate": 0,
+      "deltaMean": 0,
+      "deltaCi95": 0,
+      "positive": false,
+      "regressed": false
+    },
+    {
+      "metric": "recoveryRate",
+      "control": 0.5890909090909091,
+      "candidate": 1,
+      "deltaMean": 0.4109090909090909,
+      "deltaCi95": 0.021381818181818193,
+      "positive": true,
+      "regressed": false
+    },
+    {
+      "metric": "overconfidentWrongRate",
+      "control": 0,
+      "candidate": 0.007142857142857143,
+      "deltaMean": 0.007142857142857143,
+      "deltaCi95": 0.014,
+      "positive": false,
+      "regressed": false
+    },
+    {
+      "metric": "supervisorConsultsMean",
+      "control": 0,
+      "candidate": 0.5,
+      "deltaMean": 0.5,
+      "deltaCi95": 0.019368950668531323,
+      "positive": false,
+      "regressed": false
+    },
+    {
+      "metric": "meanLatencyMs",
+      "control": 15174.6,
+      "candidate": 29662,
+      "deltaMean": 14487.4,
+      "deltaCi95": 32507.937804536534,
+      "positive": false,
+      "regressed": false
+    },
+    {
+      "metric": "meanCostUsd",
+      "control": 0.007557951290322581,
+      "candidate": 0.011623567500000005,
+      "deltaMean": 0.004065616209677423,
+      "deltaCi95": 0.0025075132288257074,
+      "positive": false,
+      "regressed": false
+    },
+    {
+      "metric": "totalTokens",
+      "control": 15086.2,
+      "candidate": 20447.4,
+      "deltaMean": 5361.200000000001,
+      "deltaCi95": 319.73421787478424,
+      "positive": false,
+      "regressed": false
+    }
+  ],
+  "costDeltaPct": 0.5379256961980101,
+  "latencyDeltaPct": 0.9547137980572798,
+  "tokenDeltaPct": 0.355371133883947,
+  "targetMetric": null,
+  "controlHeadroom": 0.2895161290322581,
+  "engagement": null,
+  "injectionSignals": null,
+  "nextStepSignals": null
+}
