@@ -171,9 +171,9 @@
       "blocked": false
     },
     "ablation-verification": {
-      "seedsDone": 4,
+      "seedsDone": 5,
       "finalized": false,
-      "spendUsd": 0.866185,
+      "spendUsd": 1.061595,
       "blocked": false
     }
   }
