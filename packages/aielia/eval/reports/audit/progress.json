@@ -195,9 +195,9 @@
       "blocked": false
     },
     "ablation-failure-match": {
-      "seedsDone": 2,
+      "seedsDone": 3,
       "finalized": false,
-      "spendUsd": 0.480595,
+      "spendUsd": 0.670722,
       "blocked": false
     }
   }
