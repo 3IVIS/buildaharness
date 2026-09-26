@@ -193,6 +193,12 @@
       "finalized": true,
       "spendUsd": 3.25352,
       "blocked": false
+    },
+    "ablation-failure-match": {
+      "seedsDone": 1,
+      "finalized": false,
+      "spendUsd": 0.282729,
+      "blocked": false
     }
   }
 }
