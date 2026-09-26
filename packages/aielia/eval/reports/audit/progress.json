@@ -201,9 +201,9 @@
       "blocked": false
     },
     "ablation-supervisor": {
-      "seedsDone": 2,
+      "seedsDone": 3,
       "finalized": false,
-      "spendUsd": 1.043903,
+      "spendUsd": 1.49286,
       "blocked": false
     }
   }
