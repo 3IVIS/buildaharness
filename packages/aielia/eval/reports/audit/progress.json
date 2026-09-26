@@ -223,6 +223,13 @@
       "finalized": true,
       "spendUsd": 3.061563,
       "blocked": false
+    },
+    "adaptive-vs-alwayson-probes": {
+      "seedsDone": 0,
+      "finalized": false,
+      "spendUsd": 0.0,
+      "blocked": true,
+      "note": "seed 1 hard-failed (rc=124). Tail:\nbenchmark exceeded CELL_TIMEOUT_SEC=5400"
     }
   }
 }
