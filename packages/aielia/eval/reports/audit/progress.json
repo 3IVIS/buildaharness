@@ -207,9 +207,9 @@
       "blocked": false
     },
     "ablation-injection": {
-      "seedsDone": 1,
+      "seedsDone": 2,
       "finalized": false,
-      "spendUsd": 0.213558,
+      "spendUsd": 0.356846,
       "blocked": false
     }
   }
