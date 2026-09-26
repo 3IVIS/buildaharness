@@ -189,9 +189,9 @@
       "blocked": false
     },
     "ablation-decomposition": {
-      "seedsDone": 4,
+      "seedsDone": 5,
       "finalized": false,
-      "spendUsd": 2.612628,
+      "spendUsd": 3.25352,
       "blocked": false
     }
   }
