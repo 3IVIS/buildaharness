@@ -183,9 +183,9 @@
       "blocked": false
     },
     "ablation-criterion-coverage": {
-      "seedsDone": 4,
+      "seedsDone": 5,
       "finalized": false,
-      "spendUsd": 0.807181,
+      "spendUsd": 0.990848,
       "blocked": false
     }
   }
