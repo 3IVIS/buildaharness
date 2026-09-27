@@ -232,9 +232,9 @@
       "note": "seed 1 reused from the transcripts of an earlier run killed at the 90-min cell timeout (feature was then a single 210-case cell, since split into -a/-b) plus a fresh run of unfinished cases; see seed1.json \"reconstruction\"."
     },
     "adaptive-vs-alwayson-probes-b": {
-      "seedsDone": 3,
+      "seedsDone": 4,
       "finalized": false,
-      "spendUsd": 7.508879,
+      "spendUsd": 9.4767,
       "blocked": false,
       "note": "seed 1 reused from the transcripts of an earlier run killed at the 90-min cell timeout (feature was then a single 210-case cell, since split into -a/-b) plus a fresh run of unfinished cases; see seed1.json \"reconstruction\"."
     }
