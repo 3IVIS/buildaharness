@@ -240,7 +240,7 @@
       "note": "seed 1 reused from the transcripts of an earlier run killed at the 90-min cell timeout (feature was then a single 210-case cell, since split into -a/-b) plus a fresh run of unfinished cases; see seed1.json \"reconstruction\"."
     },
     "adaptive-vs-alwayson-full": {
-      "seedsDone": 1,
+      "seedsDone": 2,
       "finalized": false,
       "spendUsd": 13.014608,
       "blocked": false,
