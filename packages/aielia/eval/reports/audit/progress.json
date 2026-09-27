@@ -241,7 +241,7 @@
     },
     "adaptive-vs-alwayson-full": {
       "seedsDone": 5,
-      "finalized": false,
+      "finalized": true,
       "spendUsd": 13.014608,
       "blocked": false,
       "note": "seed 1 hard-failed (rc=124, 2026-09-27 09:05-10:35). Tail:\nbenchmark exceeded CELL_TIMEOUT_SEC=5400. Unblocked to let the rest of the matrix run; feature stays parked at needs_manual_review (picker skips it) pending investigation of the timeout."
