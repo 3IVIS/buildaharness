@@ -621,9 +621,10 @@
       "seeds": 5,
       "fullPages": "all",
       "maxSpendUsd": 60,
-      "status": "queued",
+      "status": "done",
       "corpusAdequacy": "partial",
-      "corpusNote": "AL1c-AL1e probe slices, part 1/2 (112 cases) (stress plus calm controls); 5 seeds, judge claude-opus-5-5, transcripts on. Slices without a passing AL1f certificate are reported UNTESTED by AL11b, not scored. Split in two on 2026-09-26 because the single 210-case cell needed ~113 min against the 90 min cell timeout."
+      "corpusNote": "AL1c-AL1e probe slices, part 1/2 (112 cases) (stress plus calm controls); 5 seeds, judge claude-opus-5-5, transcripts on. Slices without a passing AL1f certificate are reported UNTESTED by AL11b, not scored. Split in two on 2026-09-26 because the single 210-case cell needed ~113 min against the 90 min cell timeout.",
+      "verdict": "INCONCLUSIVE"
     },
     {
       "id": "adaptive-vs-alwayson-probes-b",

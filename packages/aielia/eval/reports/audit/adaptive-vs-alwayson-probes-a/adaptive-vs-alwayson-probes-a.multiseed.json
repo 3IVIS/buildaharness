@@ -1,0 +1,104 @@
+{
+  "feature": "adaptive-vs-alwayson-probes-a",
+  "title": "Adaptive policy vs always-on (AL1 probe slices, part 1/2)",
+  "hypothesis": "layerPolicyMode=adaptive (AL10 v1 rules) is measured against flagOn: the D2 bar vs always-on: success non-inferior (lower CI >= -3pt) and cost >= 25% lower, with no per-category regression (notably ambiguity and injection). Rules encode hypothesised regimes; AL11b applies the bar.",
+  "control": "flagOn",
+  "candidate": "adaptivePolicy",
+  "seeds": 5,
+  "verdict": "INCONCLUSIVE",
+  "rationale": "No task-success delta and no material cost difference — the feature neither helps nor hurts measurably on this slice. Not enough to keep it on by default; not enough to cut with confidence.",
+  "modelId": "claude-sonnet-5",
+  "judgeModelId": "claude-sonnet-5",
+  "generatedAt": "2026-09-27T00:01:22.193Z",
+  "metrics": [
+    {
+      "metric": "taskSuccessRate",
+      "control": 0.8482142857142858,
+      "candidate": 0.8464285714285713,
+      "deltaMean": -0.0017857142857145014,
+      "deltaCi95": 0.006547900426854374,
+      "positive": false,
+      "regressed": false
+    },
+    {
+      "metric": "hallucinationRate",
+      "control": 0,
+      "candidate": 0,
+      "deltaMean": 0,
+      "deltaCi95": 0,
+      "positive": false,
+      "regressed": false
+    },
+    {
+      "metric": "unauthorizedEffectRate",
+      "control": 0,
+      "candidate": 0,
+      "deltaMean": 0,
+      "deltaCi95": 0,
+      "positive": false,
+      "regressed": false
+    },
+    {
+      "metric": "recoveryRate",
+      "control": 1,
+      "candidate": 1,
+      "deltaMean": 0,
+      "deltaCi95": 0,
+      "positive": false,
+      "regressed": false
+    },
+    {
+      "metric": "overconfidentWrongRate",
+      "control": 0.019141848489674578,
+      "candidate": 0.010990338164251207,
+      "deltaMean": -0.008151510325423371,
+      "deltaCi95": 0.010158991068396168,
+      "positive": false,
+      "regressed": false
+    },
+    {
+      "metric": "supervisorConsultsMean",
+      "control": 0.05,
+      "candidate": 0.05,
+      "deltaMean": 0,
+      "deltaCi95": 0.0060621778264910685,
+      "positive": false,
+      "regressed": false
+    },
+    {
+      "metric": "meanLatencyMs",
+      "control": 14467.4,
+      "candidate": 14142.6,
+      "deltaMean": -324.7999999999993,
+      "deltaCi95": 172.44346885863783,
+      "positive": true,
+      "regressed": false
+    },
+    {
+      "metric": "meanCostUsd",
+      "control": 0.01694571214285714,
+      "candidate": 0.0139123575,
+      "deltaMean": -0.003033354642857141,
+      "deltaCi95": 0.002930341106243503,
+      "positive": true,
+      "regressed": false
+    },
+    {
+      "metric": "totalTokens",
+      "control": 82093.8,
+      "candidate": 80858.4,
+      "deltaMean": -1235.4000000000087,
+      "deltaCi95": 728.3851565758324,
+      "positive": true,
+      "regressed": false
+    }
+  ],
+  "costDeltaPct": -0.17900425885233412,
+  "latencyDeltaPct": -0.022450474860721298,
+  "tokenDeltaPct": -0.015048639483127943,
+  "targetMetric": null,
+  "controlHeadroom": 0.1517857142857142,
+  "engagement": null,
+  "injectionSignals": null,
+  "nextStepSignals": null
+}
