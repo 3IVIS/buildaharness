@@ -25,6 +25,8 @@
  *   npx tsx scripts/run-harness-benchmark.ts --transcripts=<dir> --seed-tag=1    # Plan A1 / AL-6: transcripts are ALWAYS written (default: <report>.transcripts/); write <arm>__<task>__seed<n>.json full-conversation captures
  *   npx tsx scripts/run-harness-benchmark.ts --arms=flagOn,supervisorOn --slice=supervisor_pivot --seeds=3
  *   npx tsx scripts/run-harness-benchmark.ts ... --no-md --out=<path.json>   # parallel-safe: skip the shared docs/*.md prepend, write the report to <path.json> (scripts/run-audit-parallel.mjs uses this)
+ *   npx tsx scripts/run-harness-benchmark.ts ... --transcripts=<dir> --resume   # skip any (arm, task) whose transcript file already exists in <dir> — reconstructs that row instead of re-running it. For resuming a run a timeout killed partway through; see eval/runner.ts readResumedRow for what's lossy about it.
+ *   npx tsx scripts/run-harness-benchmark.ts ... --resume --transcripts=<dir> --deadline-sec=N   # voluntarily stop and exit(75) once N seconds have passed, instead of running to completion or getting SIGKILLed by an external timeout — no report is written; combine with a driver loop that re-invokes with the same flags until it exits 0. Requires --resume (else a re-run repeats the same work and hits the same deadline).
  *       # S7 Rule 6: N independent repeats of the whole matrix (claude-cli has no seed param),
  *       # writes <stamp>.seedK.json per run + <stamp>.multiseed.json with per-metric
  *       # mean/stddev/CI95 and, for exactly two arms, a diffSeeds verdict (positive/neutral/regressed).
@@ -87,9 +89,16 @@ async function main(): Promise<void> {
     process.exit(2)
   }
   const seedTagArg = arg('seed-tag')
+  const resume = process.argv.includes('--resume')
+  const deadlineSecArg = arg('deadline-sec')
+  const deadlineAt = deadlineSecArg !== undefined ? Date.now() + Number.parseInt(deadlineSecArg, 10) * 1000 : undefined
 
   if (sliceFilter && excludeSliceFilter) {
     console.error('--slice and --exclude-slice are mutually exclusive')
+    process.exit(2)
+  }
+  if (deadlineAt !== undefined && (!resume || !transcriptDir)) {
+    console.error('--deadline-sec requires --resume and --transcripts= — otherwise a re-run redoes the same partial work and hits the same deadline with no progress.')
     process.exit(2)
   }
 
@@ -146,6 +155,8 @@ async function main(): Promise<void> {
       judge,
       transcriptDir,
       seedTag,
+      resume,
+      deadlineAt,
       modelId: canonicalModelId(modelAlias),
       judgeModelId: canonicalModelId(judgeModelAlias),
       // The claude-cli backend resolves tool calls out of process via its own MCP server, which
@@ -159,8 +170,8 @@ async function main(): Promise<void> {
         })
         return lastArmClient
       },
-      onProgress: ({ arm, taskId, success, skipped }) => {
-        console.log(`  ${skipped ? 'SKIP' : success ? 'PASS' : 'FAIL'}  ${arm} · ${taskId}`)
+      onProgress: ({ arm, taskId, success, skipped, resumed }) => {
+        console.log(`  ${resumed ? 'RESUME' : skipped ? 'SKIP' : success ? 'PASS' : 'FAIL'}  ${arm} · ${taskId}`)
       },
     })
 
@@ -169,6 +180,10 @@ async function main(): Promise<void> {
     if (seeds > 1) console.log(`\n── seed ${s + 1}/${seeds} ──`)
     const seedTag = seedTagArg ?? (seeds > 1 ? s + 1 : 1)
     const r = await runOnce(seedTag)
+    if (r.incomplete) {
+      console.log(`INCOMPLETE: deadline reached — ${r.rows.length} row(s) done this invocation. Re-run with --resume to continue; no report was written.`)
+      process.exit(75)
+    }
     // Prefer the model id the CLI actually reported; fall back to the canonical alias mapping.
     r.modelId = lastArmClient?.resolvedModelId ?? canonicalModelId(modelAlias)
     r.judgeModelId = judgeClient.resolvedModelId ?? canonicalModelId(judgeModelAlias)

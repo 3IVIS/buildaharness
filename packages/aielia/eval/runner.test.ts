@@ -1,9 +1,9 @@
 import { describe, it, expect } from 'vitest'
-import { mkdtempSync, readdirSync, readFileSync } from 'node:fs'
+import { mkdtempSync, readdirSync, readFileSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import type { ILLMClient } from '@buildaharness/runtime'
-import { runBenchmark, type BenchmarkReport } from './runner.js'
+import { runBenchmark, readResumedRow, type BenchmarkReport } from './runner.js'
 import { diffReports, renderMarkdown, renderDiff } from './report.js'
 import type { Arm, ArmName, MakeLlm } from './arms.js'
 import type { ArmTurnOutput } from './graders.js'
@@ -222,6 +222,66 @@ describe('runBenchmark', () => {
     expect(c1.events).toHaveLength(2)
     expect(c1.grade.success).toBe(true)
     expect(c1.metrics).toHaveProperty('latencyMs')
+  })
+
+  it('--resume reconstructs a row from an existing transcript instead of re-running it', async () => {
+    const dir = mkdtempSync(join(tmpdir(), 'bah-eval-resume-'))
+    writeFileSync(
+      join(dir, 'flagOn__c1__seed1.json'),
+      JSON.stringify({
+        task: 'c1',
+        arm: 'flagOn',
+        seed: 1,
+        modelId: 'claude-sonnet-5',
+        prompt: 'p',
+        events: [{ t: 1, kind: 'llm_request' }, { t: 2, kind: 'llm_response' }],
+        grade: { success: true, hallucination: false, unauthorizedEffect: false, recovered: null, verdict: 'PASS', reason: 'ok', checks: [], failedChecks: [] },
+        metrics: { latencyMs: 111, costUsd: 0.002, totalTokens: 20, supervisorConsults: null },
+        replyPreview: 'the answer is 42',
+      }),
+    )
+
+    let m1Ran = false
+    const arm: Arm = {
+      name: 'flagOn',
+      label: 'x',
+      async run(task) {
+        if (task.id === 'c1') throw new Error('resumed row must not be re-run')
+        m1Ran = true
+        return { reply: 'x', status: 'needs_approval', workspaceAfter: { 'a.txt': 'x' }, stagedMutation: false, latencyMs: 5 }
+      },
+    }
+
+    const report = await runBenchmark({ tasks: TASKS.slice(0, 2), arms: [arm], makeLlm: noLlm, judge: stubJudge(), transcriptDir: dir, resume: true })
+
+    expect(m1Ran).toBe(true) // the row with no transcript still ran normally
+    const c1 = report.rows.find((r) => r.taskId === 'c1')!
+    expect(c1).toMatchObject({ ran: true, success: true, latencyMs: 111, costUsd: 0.002, totalTokens: 20, replyPreview: 'the answer is 42', answerClaimCalibration: null })
+    expect(c1.turns).toBe(1) // one llm_request event in the fixture transcript
+    expect(report.perArm.flagOn.tasksRun).toBe(2)
+  })
+
+  it('deadlineAt stops the run early and marks the report incomplete instead of running to completion', async () => {
+    let runs = 0
+    const arm = scriptedArm('flagOn', {
+      c1: { reply: 'the answer is 42' },
+      m1: { status: 'needs_approval', workspaceAfter: { 'a.txt': 'x' } },
+      r1: { reply: 'all done' },
+    })
+    const countingArm: Arm = { ...arm, async run(task, makeLlm) { runs++; return arm.run(task, makeLlm) } }
+
+    // A deadline already in the past: nothing should run.
+    const report = await runBenchmark({ tasks: TASKS, arms: [countingArm], makeLlm: noLlm, judge: stubJudge(), deadlineAt: Date.now() - 1 })
+    expect(report.incomplete).toBe(true)
+    expect(report.rows).toEqual([])
+    expect(runs).toBe(0)
+  })
+
+  it('readResumedRow returns null for a missing or corrupt transcript, so the caller re-runs it', () => {
+    const dir = mkdtempSync(join(tmpdir(), 'bah-eval-resume-missing-'))
+    expect(readResumedRow(dir, { name: 'flagOn' }, TASKS[0], 1)).toBeNull()
+    writeFileSync(join(dir, 'flagOn__c1__seed1.json'), 'not json')
+    expect(readResumedRow(dir, { name: 'flagOn' }, TASKS[0], 1)).toBeNull()
   })
 
   it('renderMarkdown produces a stable table', async () => {

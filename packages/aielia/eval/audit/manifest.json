@@ -655,7 +655,7 @@
       "seeds": 5,
       "fullPages": "adv,injected",
       "maxSpendUsd": 60,
-      "status": "needs_manual_review",
+      "status": "queued",
       "corpusAdequacy": "partial",
       "corpusNote": "Full corpus, so per-category regressions hidden in an average are visible; 5 seeds, judge claude-opus-5-5, transcripts on. Slices without a passing AL1f certificate are reported UNTESTED by AL11b, not scored."
     },

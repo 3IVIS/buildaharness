@@ -5,7 +5,7 @@
  * drives this with fake arms returning canned outputs; the CLI (`scripts/run-harness-benchmark.ts`)
  * drives it with the real `baselineArm` against a real model.
  */
-import { mkdirSync, writeFileSync } from 'node:fs'
+import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
 import type { TaskSpec, TaskCategory } from './corpus/schema.js'
 import { gradeTask, type ArmTurnOutput, type GradedTask, type JudgeModel, type AnswerClaimCalibration } from './graders.js'
@@ -119,6 +119,13 @@ export interface BenchmarkReport {
   skippedForAsymmetry?: string[]
   perArm: Record<string, ArmAggregate>
   rows: BenchmarkRow[]
+  /**
+   * Set when `deadlineAt` cut the run short — some (arm, task) pairs were never attempted this
+   * invocation. `perArm` / `rows` cover only what ran; the caller (the CLI) must not treat this as a
+   * finished report — no file should be written for it. Re-running with `resume: true` and the same
+   * `transcriptDir` picks up exactly where this left off.
+   */
+  incomplete?: boolean
 }
 
 export interface RunOptions {
@@ -128,12 +135,28 @@ export interface RunOptions {
   makeLlm: MakeLlm
   judge?: JudgeModel
   /** Called after each (arm, task) — for CLI progress output. */
-  onProgress?: (info: { arm: ArmName; taskId: string; success: boolean; skipped: boolean }) => void
+  onProgress?: (info: { arm: ArmName; taskId: string; success: boolean; skipped: boolean; resumed?: boolean }) => void
   /**
    * Plan A1 — when set, write one `<arm>__<taskId>__seed<tag>.json` transcript file per ran row
    * into this directory (created if absent). The row must carry an `out.transcript`.
    */
   transcriptDir?: string
+  /**
+   * When set alongside `transcriptDir`, an (arm, task) pair whose transcript file already exists
+   * there is reconstructed from that file instead of re-run — no LLM call, no judge call. For a cell
+   * killed by `CELL_TIMEOUT_SEC` partway through (the audit driver's hard_fail path commits whatever
+   * transcripts landed), a retry then only pays for the work that didn't finish last time. See
+   * `readResumedRow` for exactly which BenchmarkRow fields survive the round-trip.
+   */
+  resume?: boolean
+  /**
+   * Epoch ms after which `runBenchmark` stops starting new (arm, task) pairs and returns with
+   * `incomplete: true` instead of running to completion — a voluntary checkpoint made well before
+   * `CELL_TIMEOUT_SEC` would otherwise SIGKILL the process mid-row. Only useful paired with `resume`
+   * and `transcriptDir`: without them, a re-run repeats the same partial work and hits the same
+   * deadline with no progress. The CLI enforces that pairing (`--deadline-sec` requires `--resume`).
+   */
+  deadlineAt?: number
   /** Names the transcript files when `--seeds=1` is driven externally per-seed. Default `1`. */
   seedTag?: string | number
   /** Resolved model / judge-model ids, recorded verbatim into the report. */
@@ -316,9 +339,63 @@ function asymmetricInjectedFailureTasks(tasks: TaskSpec[], arms: Arm[]): Set<str
   return skip
 }
 
+/**
+ * Reconstructs a completed row from a previously-written transcript file, so `--resume` can skip
+ * work that already made a real LLM call instead of redoing it. Reads only `grade` / `metrics` /
+ * `replyPreview` / `events` — the fields every transcript has always carried — rather than trusting a
+ * cached copy of the row itself, so a row picked up after `eval/regrade/apply.ts` has rewritten
+ * `grade` in place is never stale.
+ *
+ * Lossy: `answerClaimCalibration`, `supervisorDirectives` and the original `errorMessage` were never
+ * persisted to the transcript, so resumed rows carry `null`/`undefined` for those — a resumed run's
+ * AnswerClaim confusion matrix and `overconfidentWrongRate` undercount whatever fraction of rows was
+ * resumed. `turns` is approximated by counting `llm_request` events. Returns `null` (re-run the row
+ * normally) when there is no file yet, or it can't be parsed as a transcript.
+ */
+export function readResumedRow(dir: string, arm: Pick<Arm, 'name'>, task: TaskSpec, seedTag: string | number): BenchmarkRow | null {
+  const file = join(dir, `${arm.name}__${task.id}__seed${seedTag}.json`)
+  if (!existsSync(file)) return null
+  let payload: {
+    grade?: { success: boolean; hallucination: boolean; unauthorizedEffect: boolean; recovered: boolean | null; verdict: GradedTask['verdict']; reason: string; invalid?: boolean; failedChecks: string[] }
+    metrics?: { latencyMs: number | null; costUsd: number | null; totalTokens: number | null; supervisorConsults: number | null }
+    replyPreview?: string
+    events?: { kind?: string }[]
+  }
+  try {
+    payload = JSON.parse(readFileSync(file, 'utf8'))
+  } catch {
+    return null // corrupt / partially-written file — safer to re-run than to trust it
+  }
+  if (!payload.grade || !payload.metrics) return null
+  const turns = Array.isArray(payload.events) ? payload.events.filter((e) => e?.kind === 'llm_request').length || 1 : 1
+  return {
+    arm: arm.name as ArmName,
+    taskId: task.id,
+    category: task.category,
+    ran: true,
+    success: payload.grade.success,
+    hallucination: payload.grade.hallucination,
+    unauthorizedEffect: payload.grade.unauthorizedEffect,
+    recovered: payload.grade.recovered,
+    latencyMs: payload.metrics.latencyMs,
+    costUsd: payload.metrics.costUsd,
+    totalTokens: payload.metrics.totalTokens,
+    turns,
+    supervisorConsults: payload.metrics.supervisorConsults,
+    supervisorDirectives: null,
+    failedChecks: payload.grade.failedChecks,
+    verdict: payload.grade.verdict,
+    reason: payload.grade.reason,
+    ...(payload.grade.invalid ? { invalid: true as const, status: 'error' as const } : {}),
+    replyPreview: payload.replyPreview ?? '',
+    answerClaimCalibration: null,
+  }
+}
+
 export async function runBenchmark(opts: RunOptions): Promise<BenchmarkReport> {
   const rows: BenchmarkRow[] = []
   const perArm: Record<string, ArmAggregate> = {}
+  let resumedCount = 0
 
   const skipForAsymmetry = asymmetricInjectedFailureTasks(opts.tasks, opts.arms)
   if (skipForAsymmetry.size > 0) {
@@ -329,15 +406,31 @@ export async function runBenchmark(opts: RunOptions): Promise<BenchmarkReport> {
     )
   }
 
-  for (const arm of opts.arms) {
+  let incomplete = false
+  armLoop: for (const arm of opts.arms) {
     const armRows: BenchmarkRow[] = []
     for (const task of opts.tasks) {
+      if (opts.deadlineAt !== undefined && Date.now() >= opts.deadlineAt) {
+        incomplete = true
+        perArm[arm.name] = aggregate(arm, armRows)
+        break armLoop
+      }
       if (skipForAsymmetry.has(task.id)) {
         const row = toRow(arm, task, null, null)
         armRows.push(row)
         rows.push(row)
         opts.onProgress?.({ arm: arm.name, taskId: task.id, success: false, skipped: true })
         continue
+      }
+      if (opts.resume && opts.transcriptDir) {
+        const resumed = readResumedRow(opts.transcriptDir, arm, task, opts.seedTag ?? 1)
+        if (resumed) {
+          resumedCount++
+          armRows.push(resumed)
+          rows.push(resumed)
+          opts.onProgress?.({ arm: arm.name, taskId: task.id, success: resumed.success, skipped: false, resumed: true })
+          continue
+        }
       }
       let out: ArmTurnOutput | null = null
       let graded: GradedTask | null = null
@@ -375,6 +468,16 @@ export async function runBenchmark(opts: RunOptions): Promise<BenchmarkReport> {
     }
   }
 
+  if (resumedCount > 0) {
+    console.log(
+      `runner: resumed ${resumedCount} row(s) from existing transcripts (--resume) — skipped re-running them. ` +
+        `Their answerClaimCalibration is null (not persisted pre-resume), so overconfidentWrongRate undercounts this run.`,
+    )
+  }
+  if (incomplete) {
+    console.log(`runner: deadline reached — ${rows.length} row(s) done this invocation, rest left for a resumed re-run.`)
+  }
+
   return {
     generatedAt: new Date().toISOString(),
     corpusSize: opts.tasks.length,
@@ -384,6 +487,7 @@ export async function runBenchmark(opts: RunOptions): Promise<BenchmarkReport> {
     skippedForAsymmetry: [...skipForAsymmetry],
     perArm,
     rows,
+    ...(incomplete ? { incomplete: true as const } : {}),
   }
 }
 
