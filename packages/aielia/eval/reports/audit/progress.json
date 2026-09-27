@@ -78,7 +78,8 @@
       "seedsDone": 1,
       "finalized": false,
       "spendUsd": 0.516348,
-      "blocked": false
+      "blocked": true,
+      "note": "blocked 2026-09-27: pending human review of remaining matrix scope/budget (seed 2/3 not yet resumed)."
     },
     "probe-semantic-contradiction": {
       "seedsDone": 1,
@@ -239,11 +240,60 @@
       "note": "seed 1 reused from the transcripts of an earlier run killed at the 90-min cell timeout (feature was then a single 210-case cell, since split into -a/-b) plus a fresh run of unfinished cases; see seed1.json \"reconstruction\"."
     },
     "adaptive-vs-alwayson-full": {
+      "seedsDone": 1,
+      "finalized": false,
+      "spendUsd": 13.014608,
+      "blocked": false,
+      "note": "seed 1 hard-failed (rc=124, 2026-09-27 09:05-10:35). Tail:\nbenchmark exceeded CELL_TIMEOUT_SEC=5400. Unblocked to let the rest of the matrix run; feature stays parked at needs_manual_review (picker skips it) pending investigation of the timeout."
+    },
+    "adaptive-vs-bare-probes-a": {
       "seedsDone": 0,
       "finalized": false,
       "spendUsd": 0.0,
-      "blocked": false,
-      "note": "seed 1 hard-failed (rc=124, 2026-09-27 09:05-10:35). Tail:\nbenchmark exceeded CELL_TIMEOUT_SEC=5400. Unblocked to let the rest of the matrix run; feature stays parked at needs_manual_review (picker skips it) pending investigation of the timeout."
+      "blocked": true,
+      "note": "blocked 2026-09-27: pending decision on adaptive-vs-bare cells given adaptive-vs-alwayson is trending CUT/INCONCLUSIVE."
+    },
+    "adaptive-vs-bare-probes-b": {
+      "seedsDone": 0,
+      "finalized": false,
+      "spendUsd": 0.0,
+      "blocked": true,
+      "note": "blocked 2026-09-27: pending decision on adaptive-vs-bare cells given adaptive-vs-alwayson is trending CUT/INCONCLUSIVE."
+    },
+    "adaptive-vs-bare-full": {
+      "seedsDone": 0,
+      "finalized": false,
+      "spendUsd": 0.0,
+      "blocked": true,
+      "note": "blocked 2026-09-27: pending decision on adaptive-vs-bare cells given adaptive-vs-alwayson is trending CUT/INCONCLUSIVE."
+    },
+    "steering-live": {
+      "seedsDone": 0,
+      "finalized": false,
+      "spendUsd": 0.0,
+      "blocked": true,
+      "note": "blocked 2026-09-27: pending human review of remaining matrix scope/budget."
+    },
+    "trajectory-supervisor-midtask": {
+      "seedsDone": 0,
+      "finalized": false,
+      "spendUsd": 0.0,
+      "blocked": true,
+      "note": "blocked 2026-09-27: pending human review of remaining matrix scope/budget."
+    },
+    "next-step-options": {
+      "seedsDone": 0,
+      "finalized": false,
+      "spendUsd": 0.0,
+      "blocked": true,
+      "note": "blocked 2026-09-27: pending human review of remaining matrix scope/budget."
+    },
+    "goal-graph-threads": {
+      "seedsDone": 0,
+      "finalized": false,
+      "spendUsd": 0.0,
+      "blocked": true,
+      "note": "blocked 2026-09-27: pending human review of remaining matrix scope/budget."
     }
   }
 }
