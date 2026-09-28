@@ -26,13 +26,23 @@ export function semanticChangeReviewEnabled(env?: Record<string, string | undefi
   return !['0', 'false', 'off', 'no', 'disabled'].includes(raw)
 }
 
+/** Marks a steering note as coming from the change reviewer rather than from the user — agent-loop.ts gives it its own header so the proposer isn't told the user said it. */
+export const REVIEW_NOTE_PREFIX = '[review] '
+
+/** The user-facing line for a conflict the reviewer found — see AssistantTurnResult.reviewNotice. */
+export function reviewNoticeText(reasons: string[]): string {
+  const unique = [...new Set(reasons.map((r) => r.trim()).filter((r) => r.length > 0))]
+  return `Heads up — this may conflict with something you told me earlier: ${unique.join(' ')}`
+}
+
 const SYSTEM_PROMPT =
   'You check whether a proposed action genuinely conflicts with something already known to be ' +
   'true (a high-confidence belief) or predicted (an active hypothesis\'s predicted observation) ' +
   '— a real logical conflict, not just a superficially related topic (e.g. proposing to remove ' +
   'something a belief says is required, or an action that presumes the opposite of what\'s ' +
-  'predicted). You are given "changeDescription", "highConfidenceBeliefs", and ' +
-  '"hypothesisPredictions" as JSON. Respond with JSON only: {"conflict": boolean, "reason": ' +
+  'predicted). A user correcting a fact they stated earlier about themselves ("actually I ' +
+  'moved to Berlin") is not a conflict — the new statement supersedes the old one. You are ' +
+  'given "changeDescription", "highConfidenceBeliefs", and "hypothesisPredictions" as JSON. Respond with JSON only: {"conflict": boolean, "reason": ' +
   'string}. reason only needs to be set when conflict is true.'
 
 /**

@@ -32,7 +32,7 @@ import {
 import { decideSupervisorDirective } from './supervisor-decider.js'
 import type { ILLMClient, MemoryAdapter, TokenUsage } from '@buildaharness/runtime'
 import { DEFAULT_ONE_LOOP_MODE, type OneLoopMode } from './one-loop-flag.js'
-import { tierForFact, isKnowledgeTier, type UserFact } from './fact-extraction.js'
+import { tierForFact, isKnowledgeTier, factReliability, type UserFact } from './fact-extraction.js'
 import { checkForContradictions, type BeliefCandidate } from './contradiction-checker.js'
 import { syncHarnessLexicalEnv } from './lexical/lexical-mode.js'
 import { checkSemanticReviewConflict } from './review-checker.js'
@@ -128,6 +128,8 @@ export interface HarnessRunParams {
    * flag is on is R3's scope.
    */
   oneLoopProposer?: (toolCtx: ToolExecutorContext) => unknown | Promise<unknown>
+  /** Semantic change reviewer found a conflict — advisory (see HarnessRunOptions.onReviewConflict). The caller decides how to surface it. */
+  onReviewConflict?: (event: { taskId: string; reason: string }) => void
   /**
    * Trajectory Supervisor GATHER_EVIDENCE host (S5 of
    * the internal plan) — AgentLoop.runSupervisorInvestigation bound
@@ -232,7 +234,7 @@ export class HarnessBridge {
   }
 
   async run(params: HarnessRunParams): Promise<HarnessOutcome> {
-    const { sessionId, userMessage, facts, currentTurnFacts = [], draftReply, classification, initialTasks, activePlan, sources, onProgress, onUsage, oneLoopProposer, runInvestigation, askModeEnabled = false, updateChannel } = params
+    const { sessionId, userMessage, facts, currentTurnFacts = [], draftReply, classification, initialTasks, activePlan, sources, onProgress, onUsage, oneLoopProposer, runInvestigation, askModeEnabled = false, updateChannel, onReviewConflict } = params
     const runtime = new HarnessRuntime()
     // One harness run per (session, turn) — a run_id a resumed run can be found under if this
     // turn's process died mid-run before reaching the `finally` cleanup below.
@@ -323,6 +325,22 @@ export class HarnessBridge {
     // user_asserted facts stay); env override and static default keep today's list.
     const seedFacts = escalationEnabled('model_inferred_facts', escalationPlan) ? currentTurnFacts : currentTurnFacts.filter(f => f.source !== 'model_inferred')
     const currentTurnFactStatements = seedFacts.map(f => ({ statement: f.text, isNew: true }))
+    // Facts the semantic change reviewer checks a proposed change against (see the harness's
+    // changeReviewFacts): Knowledge-tier facts from EARLIER turns, and only the ones the user
+    // stated directly / that earned HIGH trust (factReliability) — an unconfirmed model_inferred
+    // guess is not something to hold a change up against. This turn's own facts are deliberately
+    // left out: the reviewer would compare a message with the statement it just made (a wasted
+    // call, and a candidate false positive), and a same-turn fact plus request is already in front
+    // of the model. Computed once per run; deliberately not routed through the world model (see
+    // changeReviewFacts' doc comment).
+    const changeReviewFactList = (() => {
+      const seen = new Set<string>()
+      return facts
+        .filter(f => isKnowledgeTier(tierForFact(f)) && factReliability(f) === 'HIGH')
+        .slice(-FACT_CAP)
+        .map(f => ({ statement: f.text }))
+        .filter(f => (seen.has(f.statement) ? false : (seen.add(f.statement), true)))
+    })()
     let priorFactsSeeded = false
     const factExtractor = (_objective: string): Array<{ statement: string; isNew?: boolean }> => {
       // Prior facts are re-seeded so the contradiction checker has something to compare against,
@@ -452,6 +470,8 @@ export class HarnessBridge {
         // no host semanticChangeReviewer is wired at all, so the harness's mechanical
         // reviewProposedChange (lexical isNegation) is the only conflict check. Default ON —
         // unchanged shipped behaviour.
+        changeReviewFacts: () => changeReviewFactList,
+        onReviewConflict,
         semanticChangeReviewer: escalationEnabled('change_review', escalationPlan)
           ? (input: { changeDescription: string; highConfidenceBeliefs: BeliefCandidate[]; hypothesisPredictions: string[] }) =>
               checkSemanticReviewConflict(input.changeDescription, input.highConfidenceBeliefs, input.hypothesisPredictions, this.llmClient, this.model(), onUsage)

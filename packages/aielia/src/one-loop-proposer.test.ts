@@ -3,6 +3,7 @@ import { ControlState } from '@buildaharness/harness'
 import { InMemoryAdapter, InMemoryReminderStore } from '@buildaharness/runtime'
 import type { ChatMessage, ChatOptions, ILLMClient, LLMStructuredResponse, ToolDefinition } from '@buildaharness/runtime'
 import { AgentLoop, OneLoopPause } from './agent-loop.js'
+import { REVIEW_NOTE_PREFIX } from './review-checker.js'
 import type { FileToolsContext } from './file-tools.js'
 import type { FsBackend } from '@buildaharness/runtime'
 
@@ -214,6 +215,30 @@ describe('AgentLoop.createHarnessProposer (R2 of the D2 one-loop-rewire follow-u
     const spliced = llmClient.seenMessages[0].find((m) => m.content.includes('while you were working'))
     expect(spliced?.role).toBe('user')
     expect(spliced?.content).toContain('- use the audited figure, not the draft one')
+  })
+
+  it('splices a change-review note under its own header — never as something the user said', async () => {
+    const llmClient = new ScriptedLLMClient([{ content: 'ok' }])
+    const agentLoop = buildAgentLoop(llmClient)
+    const notes = [[`${REVIEW_NOTE_PREFIX}a three-year agreement exceeds the twelve-month cap`]]
+    const proposer = agentLoop.createHarnessProposer({
+      messages: [{ role: 'user', content: 'build the catering plan' }],
+      tools: [],
+      sessionId: 'session-1',
+      userMessage: 'build the catering plan',
+      maxIterations: 5,
+      sources: [],
+      takeSteeringNotes: () => notes.shift() ?? [],
+    })
+
+    await proposer({ worldModel: undefined as never, evidenceStore: undefined as never })
+
+    const sent = llmClient.seenMessages[0]
+    const review = sent.find((m) => m.content.includes('a pre-check found'))
+    expect(review?.role).toBe('user')
+    expect(review?.content).toContain('- a three-year agreement exceeds the twelve-month cap')
+    expect(review?.content).not.toContain(REVIEW_NOTE_PREFIX)
+    expect(sent.some((m) => m.content.includes('the user sent the following'))).toBe(false)
   })
 
   it('adds nothing when there are no steering notes (flag-off stays byte-identical, INV-43)', async () => {

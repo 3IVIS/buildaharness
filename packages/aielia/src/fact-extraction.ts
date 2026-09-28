@@ -180,6 +180,18 @@ export function tierForFact(fact: UserFact): MemoryTier {
   return 'semantic'
 }
 
+/**
+ * The reliability the harness's world model should give this fact's belief — 'HIGH' (confidence
+ * 1.0, the >= 0.8 bar the change reviewer and contradiction severity read) for a fact the user
+ * stated directly or that has been externally verified, and for a `model_inferred` one that
+ * cleared the same durable + high-confidence bar `tierForFact` uses to treat it as Knowledge;
+ * everything else stays 'MEDIUM' (0.5), so an unconfirmed guess never reads as an established fact.
+ */
+export function factReliability(fact: UserFact): 'HIGH' | 'MEDIUM' {
+  if (fact.source === 'model_inferred') return fact.durable && fact.confidence === 'high' ? 'HIGH' : 'MEDIUM'
+  return fact.source === 'user_asserted' || fact.source === 'externally_verified' ? 'HIGH' : 'MEDIUM'
+}
+
 /** Whether `tier` counts as the Knowledge tier for contradiction-detection purposes — see harness-bridge.ts's factExtractor and TIER_RULES.*.contradictionChecked. */
 export function isKnowledgeTier(tier: MemoryTier): boolean {
   return TIER_RULES[tier].contradictionChecked

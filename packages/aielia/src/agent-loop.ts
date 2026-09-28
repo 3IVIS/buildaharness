@@ -30,6 +30,7 @@ import { formatEmailApprovalReason } from './email.js'
 import { REMINDER_TOOLS, executeReminderTool } from './reminder-tools.js'
 import { wrapUntrusted, detectInjectionLikelyWithLLM } from './trust-tagging.js'
 import { summarizeToolStep, type AssistantToolStep } from './tool-step.js'
+import { REVIEW_NOTE_PREFIX } from './review-checker.js'
 
 export type ToolLoopResult =
   | { kind: 'final'; content: string; sources: AssistantSource[]; batchBudget?: BatchBudgetTrace }
@@ -330,11 +331,19 @@ export class AgentLoop {
         })
       }
 
-      const steeringNotes = input.takeSteeringNotes?.() ?? []
+      const allNotes = input.takeSteeringNotes?.() ?? []
+      const reviewNotes = allNotes.filter((n) => n.startsWith(REVIEW_NOTE_PREFIX)).map((n) => n.slice(REVIEW_NOTE_PREFIX.length))
+      const steeringNotes = allNotes.filter((n) => !n.startsWith(REVIEW_NOTE_PREFIX))
       if (steeringNotes.length > 0) {
         input.messages.push({
           role: 'user',
           content: `[the user sent the following while you were working on the request above — apply it to your answer]\n${steeringNotes.map((n) => `- ${n}`).join('\n')}`,
+        })
+      }
+      if (reviewNotes.length > 0) {
+        input.messages.push({
+          role: 'user',
+          content: `[a pre-check found the request above may conflict with something the user told you earlier — say so plainly in your answer (flag it, or ask how to proceed) rather than silently going along with it]\n${reviewNotes.map((n) => `- ${n}`).join('\n')}`,
         })
       }
 

@@ -37,6 +37,7 @@ import type { AssistantToolStep } from './tool-step.js'
 import type { LayerPolicyMode } from '@buildaharness/harness'
 import { MemoryService, buildTurnFacts, type MemorySummary, type MemoryExport, type PendingFact } from './memory-service.js'
 import type { UserFact } from './fact-extraction.js'
+import { REVIEW_NOTE_PREFIX, reviewNoticeText } from './review-checker.js'
 import { AssistantSession, type IndexedMessage, type TranscriptSearchHit } from './assistant-session.js'
 import { AgentLoop, OneLoopPause, type BatchBudgetState, type BatchBudgetTrace, type ToolLoopResult, trimmedAverage, nextItemBudget } from './agent-loop.js'
 import type { TurnIntentClassification, FactCategory } from './turn-intent-classifier.js'
@@ -1020,6 +1021,13 @@ export class PersonalAssistant {
         })
       : undefined
 
+    // The semantic change reviewer is advisory (see HarnessRunOptions.onReviewConflict): a conflict
+    // it finds becomes (a) a note the one-loop proposer reads on its next call, which drains
+    // `reviewNotes`, and (b) — only if no proposer ever read it (a tool-less turn's draft already
+    // exists) — a `reviewNotice` shown to the user after the reply.
+    const reviewReasons: string[] = []
+    const reviewNotes: string[] = []
+    const takeProposerNotes = (): string[] => [...(steeringAdapter?.takeNotes() ?? []), ...reviewNotes.splice(0)]
     // R3 of the internal plan: set only on the flag-ON, non-batch,
     // non-trivial path below — passed to harnessBridge.run() as the toolExecutors 'default' entry
     // instead of precomputing draftReply via AgentLoop.runToolLoop up front, so the harness's own
@@ -1063,7 +1071,7 @@ export class PersonalAssistant {
         this.lastProposerKind = 'flat-oneloop'
         const built = this.agentLoop.createOneLoopProposer(
           sessionId, transcript, userMessage, systemPrompt, options.onToken, options.onToolStep, accumulateUsage, classification.riskLevel,
-          steeringAdapter?.takeNotes,
+          takeProposerNotes,
         )
         oneLoopProposer = built.proposer
         oneLoopSources = built.sources
@@ -1185,7 +1193,15 @@ export class PersonalAssistant {
           ? (req) => this.agentLoop.runSupervisorInvestigation(req, { riskHint: classification.riskLevel })
           : undefined,
         updateChannel: steeringAdapter?.channel,
+        onReviewConflict: (e) => {
+          reviewReasons.push(e.reason)
+          reviewNotes.push(`${REVIEW_NOTE_PREFIX}${e.reason}`)
+        },
       })
+
+      // Only a note no proposer drained needs to reach the user directly — see reviewNotes above.
+      const withReviewNotice = <T extends AssistantTurnResult>(built: T): T =>
+        reviewNotes.length > 0 ? { ...built, reviewNotice: reviewNoticeText(reviewReasons) } : built
 
       // R3: oneLoopSources is only set on the flag-ON path above, and only gets pushed to once
       // the harness run just awaited has actually dispatched tool calls through the proposer — so
@@ -1197,7 +1213,7 @@ export class PersonalAssistant {
       if (oneLoopBatchBudget) batchBudgetTrace = oneLoopBatchBudget()
 
       if (outcome.status === 'paused') {
-        return this.responseService.buildPausedResult({
+        return withReviewNotice(await this.responseService.buildPausedResult({
           sessionId,
           transcriptKey,
           userMessage,
@@ -1212,10 +1228,10 @@ export class PersonalAssistant {
           usageTotal,
           onUsage: accumulateUsage,
           goalThreadId,
-        })
+        }))
       }
 
-      return this.responseService.buildSuccessResult({
+      return withReviewNotice(await this.responseService.buildSuccessResult({
         sessionId,
         transcriptKey,
         userMessage,
@@ -1230,7 +1246,7 @@ export class PersonalAssistant {
         usageTotal,
         onUsage: accumulateUsage,
         goalThreadId,
-      })
+      }))
     } catch (err) {
       if (err instanceof EscalationHalt) {
         // Q2 — a populated `blocker.questions` (Q0) with the effective askMode enabled promotes

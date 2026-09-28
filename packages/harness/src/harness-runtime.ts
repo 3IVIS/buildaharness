@@ -16,7 +16,6 @@ import { estimateRisk, type RiskableAction } from './nodes/estimate-risk.js'
 import { estimateVOI } from './nodes/estimate-voi.js'
 import {
   reviewProposedChange,
-  applyReviewOutcome,
   diagnoseReviewFailureOptions,
   buildReviewFailureQuestion,
 } from './nodes/review-proposed-change.js'
@@ -228,6 +227,22 @@ export interface HarnessRunOptions extends HarnessInitOptions {
     hypothesisPredictions: string[]
   }) => Promise<{ conflict: boolean; reason?: string }>
   /**
+   * Optional: facts the caller already trusts (e.g. things the user stated in earlier turns) for
+   * the semantic change reviewer to check the proposed change against, alongside the world
+   * model's own >= 0.8 beliefs. Deliberately NOT written into the world model: beliefs are only
+   * created after a task executes, so on a single-task turn the reviewer would otherwise see an
+   * empty world model — and seeding them earlier would also pull contradiction detection ahead
+   * of the first answer, blocking a turn in which the user is merely correcting a fact.
+   */
+  changeReviewFacts?: () => Array<{ statement: string }>
+  /**
+   * Called when the semantic change reviewer finds a conflict between the task and something the
+   * caller/world model holds as true. The review is ADVISORY: the task is not failed or retried
+   * (a retry would see identical input and get the identical verdict), it proceeds, and the host
+   * decides how to surface the reason — e.g. as a note the proposer reads and a notice to the user.
+   */
+  onReviewConflict?: (event: { taskId: string; reason: string }) => void
+  /**
    * Optional semantic escalation layered on top of FailureModeLibrary's own exact-string-
    * overlap `match()` — called only when the exact match found nothing (matched_pattern is
    * still null) and there are both symptoms and library entries to check. Assigning a real
@@ -372,6 +387,8 @@ interface LoopContext {
     highConfidenceBeliefs: Array<{ id: string; statement: string }>
     hypothesisPredictions: string[]
   }) => Promise<{ conflict: boolean; reason?: string }>
+  changeReviewFacts?: () => Array<{ statement: string }>
+  onReviewConflict?: (event: { taskId: string; reason: string }) => void
   semanticFailureMatcher?: (
     symptoms: string[],
     libraryEntries: readonly FailureModeEntry[],
@@ -449,6 +466,8 @@ function buildInitialContext(
     contradictionChecker: options.contradictionChecker,
     lastContradictionCheckCount: 0,
     semanticChangeReviewer: options.semanticChangeReviewer,
+    changeReviewFacts: options.changeReviewFacts,
+    onReviewConflict: options.onReviewConflict,
     semanticFailureMatcher: options.semanticFailureMatcher,
     semanticCriterionCoverage: options.semanticCriterionCoverage,
     supervisorDecider: options.supervisorDecider,
@@ -526,6 +545,8 @@ function buildResumedContext(rawCheckpoint: HarnessCheckpoint, options: HarnessR
     // just costs one slightly larger delta on the first post-resume check, never a duplicate.
     lastContradictionCheckCount: 0,
     semanticChangeReviewer: options.semanticChangeReviewer,
+    changeReviewFacts: options.changeReviewFacts,
+    onReviewConflict: options.onReviewConflict,
     semanticFailureMatcher: options.semanticFailureMatcher,
     semanticCriterionCoverage: options.semanticCriterionCoverage,
     supervisorDecider: options.supervisorDecider,
@@ -911,6 +932,13 @@ async function* driveMainLoop(ctx: LoopContext): AsyncGenerator<HarnessCheckpoin
       const highConfidenceBeliefs = ctx.worldModel.beliefs
         .filter(b => b.confidence >= 0.8)
         .map(b => ({ id: b.id, statement: b.statement }))
+      // Caller-trusted facts (see changeReviewFacts) — same shape, deduped against the beliefs above.
+      const known = new Set(highConfidenceBeliefs.map(b => b.statement))
+      ;(ctx.changeReviewFacts?.() ?? []).forEach((f, i) => {
+        if (known.has(f.statement)) return
+        known.add(f.statement)
+        highConfidenceBeliefs.push({ id: `known-fact-${i}`, statement: f.statement })
+      })
       const hypothesisPredictions = ctx.hypothesisSet.active.flatMap(h => h.predicted_observations)
       if (highConfidenceBeliefs.length > 0 || hypothesisPredictions.length > 0) {
         const semanticResult = await ctx.semanticChangeReviewer({
@@ -919,9 +947,12 @@ async function* driveMainLoop(ctx: LoopContext): AsyncGenerator<HarnessCheckpoin
           hypothesisPredictions,
         })
         if (semanticResult.conflict) {
-          reviewResult = applyReviewOutcome(currentTask.id, false, ctx.consecutiveReviewFailures, {
-            dimension: 'world_model_consistency',
-            passed: false,
+          // Advisory, not a gate: failing the review here would re-run the identical task against
+          // the identical beliefs (same verdict every time) until the step budget ran out — and
+          // would throw away a draft that may already address the conflict. The host decides how
+          // to surface the reason instead (see onReviewConflict).
+          ctx.onReviewConflict?.({
+            taskId: currentTask.id,
             reason: semanticResult.reason ?? 'Semantic review found a conflict with known context',
           })
         }

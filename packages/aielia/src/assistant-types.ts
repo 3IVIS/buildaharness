@@ -110,6 +110,8 @@ export interface AssistantTurnResult {
   usage?: TokenUsage
   /** Set when the Contradiction layer flagged a conflict with an existing belief this turn — see assistant-session.ts's findContradictionNotice doc comment for why this is a separate field instead of folded into `reply`. */
   contradictionNotice?: string
+  /** Set when the semantic change reviewer found the request conflicts with something the user stated earlier AND the answer could not be told so directly (a tool-less turn's draft already exists, so the proposer never reads the review note). Advisory only — the turn still completed. Mirrors `contradictionNotice`: a separate field, not folded into `reply`, because the CLI streams `reply` before the check runs. */
+  reviewNotice?: string
   /**
    * An epistemic-honesty signal for replies that went through the harness loop (absent on the
    * triviality fast path, same "absent when unused" convention as trace/sources — a

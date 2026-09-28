@@ -676,6 +676,7 @@ export function App(): React.JSX.Element {
             nextSteps: result.nextSteps,
             answerClaim: result.answerClaim,
             proposerKind: result.proposerKind,
+            reviewNotice: result.reviewNotice,
           },
         ])
         setActivePlanStatus(result.planStatus)
@@ -1002,6 +1003,7 @@ export function App(): React.JSX.Element {
                   answerClaim={entry.answerClaim}
                   proposerKind={entry.proposerKind}
                 />
+                {entry.reviewNotice && <p className="review-notice" role="note">{entry.reviewNotice}</p>}
                 {/* R7: next-step options only under the newest reply, and only while nothing is in flight — picking one fills the composer as an editable draft, it never sends. */}
                 {entryIndex === entries.length - 1 && !busy && entry.nextSteps && entry.nextSteps.length > 0 && (
                   <NextStepChips

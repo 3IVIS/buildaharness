@@ -1420,3 +1420,6 @@ body {
   background: rgba(240, 160, 75, 0.08);
 }
 .setup__safety summary { cursor: pointer; font-weight: 600; }
+
+/* Advisory heads-up from the semantic change reviewer, shown under the assistant reply it belongs to. */
+.review-notice { margin: 4px 0 8px; padding: 0 14px; color: var(--muted); font-size: 13.5px; }

@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { extractFactsFromTurn, migrateFact, tierForFact, type UserFact } from './fact-extraction.js'
+import { extractFactsFromTurn, migrateFact, tierForFact, factReliability, type UserFact } from './fact-extraction.js'
 
 describe('extractFactsFromTurn', () => {
   it('captures a message stating the user\'s name', () => {
@@ -507,5 +507,31 @@ describe('tierForFact — Phase 4 confidence-aware model_inferred routing', () =
 
   it('keeps an observed fact episodic regardless of durable/confidence', () => {
     expect(tierForFact({ text: 'build succeeded', extractedAt: '2026-01-01T00:00:00.000Z', sourceTurn: 'turn:1', durable: true, source: 'observed' })).toBe('episodic')
+  })
+})
+
+describe('factReliability — what confidence the harness world model gives a fact', () => {
+  const fact = (overrides: Partial<UserFact> = {}): UserFact => ({
+    text: 'we have a three-year agreement with the caterer',
+    extractedAt: '2026-01-01T00:00:00.000Z',
+    sourceTurn: 'turn:1',
+    durable: true,
+    source: 'user_asserted',
+    ...overrides,
+  })
+
+  it('rates user_asserted and externally_verified facts HIGH', () => {
+    expect(factReliability(fact())).toBe('HIGH')
+    expect(factReliability(fact({ source: 'externally_verified' }))).toBe('HIGH')
+  })
+
+  it('rates a model_inferred fact HIGH only when durable and high-confidence', () => {
+    expect(factReliability(fact({ source: 'model_inferred', confidence: 'high' }))).toBe('HIGH')
+    expect(factReliability(fact({ source: 'model_inferred', confidence: 'medium' }))).toBe('MEDIUM')
+    expect(factReliability(fact({ source: 'model_inferred', confidence: 'high', durable: false }))).toBe('MEDIUM')
+  })
+
+  it('keeps an observed fact MEDIUM', () => {
+    expect(factReliability(fact({ source: 'observed' }))).toBe('MEDIUM')
   })
 })
