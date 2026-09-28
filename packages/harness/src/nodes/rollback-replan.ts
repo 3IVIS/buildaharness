@@ -197,6 +197,9 @@ function rebuildTaskGraph(worldModel: WorldModel, callerState: CallerState, plan
   return new TaskGraph({ tasks: [...newTasks, ...beliefTasks], changed: true })
 }
 
+/** Mirrors adapter/harness/recovery.py's apply_failure_mode_bias() threshold. */
+const FAILURE_MODE_BIAS_MIN_CONFIDENCE = 0.7
+
 export function rollbackAndReplan(
   currentTask: Task,
   strategyState: StrategyState,
@@ -237,6 +240,20 @@ export function rollbackAndReplan(
       ? (supervisorDirective.strategy_hint as StrategyType)
       : null
 
+  // Failure-mode bias — mirrors adapter/harness/recovery.py's apply_failure_mode_bias(): a
+  // confident match (>= 0.7, same threshold as Python) whose curated entry names a preferred
+  // strategy (strategy_affinity) jumps straight to it instead of walking the ordering one step
+  // at a time. Advisory, same as the supervisor's redirect — and lower precedence than it: the
+  // supervisor already reasoned about this specific stall with an LLM call, where this is a
+  // static lookup from a curated pattern.
+  const failureModeHint =
+    !redirectHint && !isReframe && failureDiagnostics.matched_pattern &&
+    failureDiagnostics.matched_pattern.confidence >= FAILURE_MODE_BIAS_MIN_CONFIDENCE &&
+    failureDiagnostics.matched_pattern.strategy_affinity &&
+    (DEFAULT_STRATEGY_ORDER as readonly string[]).includes(failureDiagnostics.matched_pattern.strategy_affinity)
+      ? failureDiagnostics.matched_pattern.strategy_affinity
+      : null
+
   let ordering: StrategyType[]
   if (experienceStore !== null && experienceStore.available) {
     ordering = buildStrategyOrdering(failureClass, experienceStore, strategyState.current_strategy)
@@ -257,14 +274,18 @@ export function rollbackAndReplan(
       risk_state_history: [...strategyState.risk_state_history],
     })
   } else {
-    const nextStrategy = redirectHint ?? getNextStrategy(strategyState.current_strategy, ordering)
+    const nextStrategy = redirectHint ?? failureModeHint ?? getNextStrategy(strategyState.current_strategy, ordering)
     newStrategyState = new StrategyState({
       ...strategyState.toJSON(),
       current_strategy: nextStrategy,
       switch_count: strategyState.switch_count + 1,
       switch_triggers: [
         ...strategyState.switch_triggers,
-        redirectHint ? supTrigger('REDIRECT_STRATEGY') : `task_failed: ${currentTask.id}`,
+        redirectHint
+          ? supTrigger('REDIRECT_STRATEGY')
+          : failureModeHint
+            ? `failure_mode:${failureDiagnostics.matched_pattern?.failure_class} -> ${failureModeHint}`
+            : `task_failed: ${currentTask.id}`,
       ],
       stall_reason: strategyState.stall_reason,
       completion_history: [...strategyState.completion_history],

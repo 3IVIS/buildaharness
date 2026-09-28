@@ -19,6 +19,7 @@ import {
   diagnoseReviewFailureOptions,
   buildReviewFailureQuestion,
 } from './nodes/review-proposed-change.js'
+import { resolveSemanticMatchStrategy } from './state/failure-diagnostics.js'
 import { actionGate, postExecGate } from './nodes/policy-gates.js'
 import { execute, type ProposedExecutionChange, type ToolExecutorContext } from './nodes/execute.js'
 import { verify, type VerificationResult } from './nodes/verify.js'
@@ -1280,9 +1281,14 @@ async function* driveMainLoop(ctx: LoopContext): AsyncGenerator<HarnessCheckpoin
 
     // Semantic escalation layered on top of FailureModeLibrary's own exact-string-overlap
     // match() above — only when the exact match found nothing, there are symptoms and library
-    // entries to check, and the symptom set actually changed since the last attempt (avoids
-    // re-asking the same question every iteration when nothing new happened).
-    if (ctx.semanticFailureMatcher && ctx.failureDiagnostics.matched_pattern === null) {
+    // entries to check, the symptom set actually changed since the last attempt (avoids
+    // re-asking the same question every iteration when nothing new happened), AND a real failure
+    // has actually been recorded this run. That last condition didn't exist before the library
+    // gained default seed entries (see initialize.ts): with an always-empty library,
+    // `libraryEntries.length > 0` alone was already a de facto kill switch, so it went
+    // unnoticed that "there's at least one observation" is true on almost any turn with a tool
+    // call, seeded library or not — this is FAILURE match, not observation match.
+    if (ctx.semanticFailureMatcher && ctx.failureDiagnostics.matched_pattern === null && ctx.failureDiagnostics.failure_history.length > 0) {
       const libraryEntries = ctx.failureDiagnostics.failure_mode_library.getEntries()
       const symptoms = ctx.worldModel.observations.map(o => o.content)
       if (symptoms.length > 0 && libraryEntries.length > 0 && symptoms.length !== ctx.lastFailureMatchSymptomCount) {
@@ -1292,6 +1298,7 @@ async function* driveMainLoop(ctx: LoopContext): AsyncGenerator<HarnessCheckpoin
           ctx.failureDiagnostics.matched_pattern = {
             ...semanticMatch,
             confidence: normalise(semanticMatch.confidence, DimensionType.match_confidence),
+            strategy_affinity: resolveSemanticMatchStrategy(semanticMatch, libraryEntries),
           }
         }
       }
