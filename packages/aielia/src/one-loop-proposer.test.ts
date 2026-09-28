@@ -4,6 +4,7 @@ import { InMemoryAdapter, InMemoryReminderStore } from '@buildaharness/runtime'
 import type { ChatMessage, ChatOptions, ILLMClient, LLMStructuredResponse, ToolDefinition } from '@buildaharness/runtime'
 import { AgentLoop, OneLoopPause } from './agent-loop.js'
 import { REVIEW_NOTE_PREFIX } from './review-checker.js'
+import { RECOVERY_NOTE_PREFIX } from './recovery-note.js'
 import type { FileToolsContext } from './file-tools.js'
 import type { FsBackend } from '@buildaharness/runtime'
 
@@ -238,6 +239,34 @@ describe('AgentLoop.createHarnessProposer (R2 of the D2 one-loop-rewire follow-u
     expect(review?.role).toBe('user')
     expect(review?.content).toContain('- a three-year agreement exceeds the twelve-month cap')
     expect(review?.content).not.toContain(REVIEW_NOTE_PREFIX)
+    expect(sent.some((m) => m.content.includes('the user sent the following'))).toBe(false)
+  })
+
+  it('splices a recovery note under its own header, distinct from a review note in the same batch', async () => {
+    const llmClient = new ScriptedLLMClient([{ content: 'ok' }])
+    const agentLoop = buildAgentLoop(llmClient)
+    const notes = [[
+      `${RECOVERY_NOTE_PREFIX}That failed with a recognized pattern (TOOL_UNAVAILABLE_CASCADE) — try a genuinely different approach rather than repeating the same call.`,
+      `${REVIEW_NOTE_PREFIX}a three-year agreement exceeds the twelve-month cap`,
+    ]]
+    const proposer = agentLoop.createHarnessProposer({
+      messages: [{ role: 'user', content: 'read the config again' }],
+      tools: [],
+      sessionId: 'session-1',
+      userMessage: 'read the config again',
+      maxIterations: 5,
+      sources: [],
+      takeSteeringNotes: () => notes.shift() ?? [],
+    })
+
+    await proposer({ worldModel: undefined as never, evidenceStore: undefined as never })
+
+    const sent = llmClient.seenMessages[0]
+    const recovery = sent.find((m) => m.content.includes('the previous attempt just failed'))
+    const review = sent.find((m) => m.content.includes('a pre-check found'))
+    expect(recovery?.content).toContain('- That failed with a recognized pattern (TOOL_UNAVAILABLE_CASCADE)')
+    expect(recovery?.content).not.toContain(RECOVERY_NOTE_PREFIX)
+    expect(review?.content).toContain('- a three-year agreement exceeds the twelve-month cap')
     expect(sent.some((m) => m.content.includes('the user sent the following'))).toBe(false)
   })
 

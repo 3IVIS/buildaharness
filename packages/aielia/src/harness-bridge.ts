@@ -130,6 +130,8 @@ export interface HarnessRunParams {
   oneLoopProposer?: (toolCtx: ToolExecutorContext) => unknown | Promise<unknown>
   /** Semantic change reviewer found a conflict — advisory (see HarnessRunOptions.onReviewConflict). The caller decides how to surface it. */
   onReviewConflict?: (event: { taskId: string; reason: string }) => void
+  /** A confident failure-mode match picked the recovery strategy — advisory (see HarnessRunOptions.onFailureModeSwitch). The caller decides how to surface it. */
+  onFailureModeSwitch?: (event: { taskId: string; failure_class: string; strategy: string }) => void
   /**
    * Trajectory Supervisor GATHER_EVIDENCE host (S5 of
    * the internal plan) — AgentLoop.runSupervisorInvestigation bound
@@ -234,7 +236,7 @@ export class HarnessBridge {
   }
 
   async run(params: HarnessRunParams): Promise<HarnessOutcome> {
-    const { sessionId, userMessage, facts, currentTurnFacts = [], draftReply, classification, initialTasks, activePlan, sources, onProgress, onUsage, oneLoopProposer, runInvestigation, askModeEnabled = false, updateChannel, onReviewConflict } = params
+    const { sessionId, userMessage, facts, currentTurnFacts = [], draftReply, classification, initialTasks, activePlan, sources, onProgress, onUsage, oneLoopProposer, runInvestigation, askModeEnabled = false, updateChannel, onReviewConflict, onFailureModeSwitch } = params
     const runtime = new HarnessRuntime()
     // One harness run per (session, turn) — a run_id a resumed run can be found under if this
     // turn's process died mid-run before reaching the `finally` cleanup below.
@@ -472,6 +474,7 @@ export class HarnessBridge {
         // unchanged shipped behaviour.
         changeReviewFacts: () => changeReviewFactList,
         onReviewConflict,
+        onFailureModeSwitch,
         semanticChangeReviewer: escalationEnabled('change_review', escalationPlan)
           ? (input: { changeDescription: string; highConfidenceBeliefs: BeliefCandidate[]; hypothesisPredictions: string[] }) =>
               checkSemanticReviewConflict(input.changeDescription, input.highConfidenceBeliefs, input.hypothesisPredictions, this.llmClient, this.model(), onUsage)

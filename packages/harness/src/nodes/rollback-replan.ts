@@ -15,6 +15,14 @@ export interface RollbackReplanResult {
   newStrategyState: StrategyState
   newTaskGraph: TaskGraph
   replanScope: ReplanScope | null
+  /**
+   * Set only when failureModeHint (not the supervisor's redirectHint) picked the next strategy —
+   * see harness-runtime.ts's onFailureModeSwitch. The bias alone changes bookkeeping only
+   * (current_strategy, switch_triggers); nothing in this harness reads a task's chosen strategy
+   * during execution, so this is what lets a host surface the classification to the proposer as
+   * something to actually act on.
+   */
+  failureModeSwitch?: { failure_class: string; strategy: StrategyType }
 }
 
 export const STALL_WINDOW = 5
@@ -265,6 +273,7 @@ export function rollbackAndReplan(
     `supervisor:${tag} ${supervisorDirective?.rationale ?? ''}`.trim().slice(0, 200)
 
   let newStrategyState: StrategyState
+  let failureModeSwitch: RollbackReplanResult['failureModeSwitch']
   if (isReframe) {
     // REFRAME does not advance the strategy ladder (parity with loop.py's S1 behaviour).
     newStrategyState = new StrategyState({
@@ -275,6 +284,10 @@ export function rollbackAndReplan(
     })
   } else {
     const nextStrategy = redirectHint ?? failureModeHint ?? getNextStrategy(strategyState.current_strategy, ordering)
+    failureModeSwitch =
+      !redirectHint && failureModeHint && failureDiagnostics.matched_pattern
+        ? { failure_class: failureDiagnostics.matched_pattern.failure_class, strategy: failureModeHint }
+        : undefined
     newStrategyState = new StrategyState({
       ...strategyState.toJSON(),
       current_strategy: nextStrategy,
@@ -333,5 +346,6 @@ export function rollbackAndReplan(
     newStrategyState,
     newTaskGraph,
     replanScope,
+    failureModeSwitch,
   }
 }

@@ -31,6 +31,7 @@ import { REMINDER_TOOLS, executeReminderTool } from './reminder-tools.js'
 import { wrapUntrusted, detectInjectionLikelyWithLLM } from './trust-tagging.js'
 import { summarizeToolStep, type AssistantToolStep } from './tool-step.js'
 import { REVIEW_NOTE_PREFIX } from './review-checker.js'
+import { RECOVERY_NOTE_PREFIX } from './recovery-note.js'
 
 export type ToolLoopResult =
   | { kind: 'final'; content: string; sources: AssistantSource[]; batchBudget?: BatchBudgetTrace }
@@ -333,7 +334,8 @@ export class AgentLoop {
 
       const allNotes = input.takeSteeringNotes?.() ?? []
       const reviewNotes = allNotes.filter((n) => n.startsWith(REVIEW_NOTE_PREFIX)).map((n) => n.slice(REVIEW_NOTE_PREFIX.length))
-      const steeringNotes = allNotes.filter((n) => !n.startsWith(REVIEW_NOTE_PREFIX))
+      const recoveryNotes = allNotes.filter((n) => n.startsWith(RECOVERY_NOTE_PREFIX)).map((n) => n.slice(RECOVERY_NOTE_PREFIX.length))
+      const steeringNotes = allNotes.filter((n) => !n.startsWith(REVIEW_NOTE_PREFIX) && !n.startsWith(RECOVERY_NOTE_PREFIX))
       if (steeringNotes.length > 0) {
         input.messages.push({
           role: 'user',
@@ -344,6 +346,12 @@ export class AgentLoop {
         input.messages.push({
           role: 'user',
           content: `[a pre-check found the request above may conflict with something the user told you earlier — say so plainly in your answer (flag it, or ask how to proceed) rather than silently going along with it]\n${reviewNotes.map((n) => `- ${n}`).join('\n')}`,
+        })
+      }
+      if (recoveryNotes.length > 0) {
+        input.messages.push({
+          role: 'user',
+          content: `[the previous attempt just failed]\n${recoveryNotes.map((n) => `- ${n}`).join('\n')}`,
         })
       }
 

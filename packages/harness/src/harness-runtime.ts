@@ -243,6 +243,8 @@ export interface HarnessRunOptions extends HarnessInitOptions {
    * decides how to surface the reason — e.g. as a note the proposer reads and a notice to the user.
    */
   onReviewConflict?: (event: { taskId: string; reason: string }) => void
+  /** A confident failure-mode match picked the next recovery strategy — see nodes/rollback-replan.ts's RollbackReplanResult.failureModeSwitch. Bookkeeping only unless the host surfaces this to the proposer. */
+  onFailureModeSwitch?: (event: { taskId: string; failure_class: string; strategy: string }) => void
   /**
    * Optional semantic escalation layered on top of FailureModeLibrary's own exact-string-
    * overlap `match()` — called only when the exact match found nothing (matched_pattern is
@@ -390,6 +392,8 @@ interface LoopContext {
   }) => Promise<{ conflict: boolean; reason?: string }>
   changeReviewFacts?: () => Array<{ statement: string }>
   onReviewConflict?: (event: { taskId: string; reason: string }) => void
+  /** A confident failure-mode match picked the next recovery strategy — see nodes/rollback-replan.ts's RollbackReplanResult.failureModeSwitch. Bookkeeping only unless the host surfaces this to the proposer. */
+  onFailureModeSwitch?: (event: { taskId: string; failure_class: string; strategy: string }) => void
   semanticFailureMatcher?: (
     symptoms: string[],
     libraryEntries: readonly FailureModeEntry[],
@@ -469,6 +473,7 @@ function buildInitialContext(
     semanticChangeReviewer: options.semanticChangeReviewer,
     changeReviewFacts: options.changeReviewFacts,
     onReviewConflict: options.onReviewConflict,
+    onFailureModeSwitch: options.onFailureModeSwitch,
     semanticFailureMatcher: options.semanticFailureMatcher,
     semanticCriterionCoverage: options.semanticCriterionCoverage,
     supervisorDecider: options.supervisorDecider,
@@ -548,6 +553,7 @@ function buildResumedContext(rawCheckpoint: HarnessCheckpoint, options: HarnessR
     semanticChangeReviewer: options.semanticChangeReviewer,
     changeReviewFacts: options.changeReviewFacts,
     onReviewConflict: options.onReviewConflict,
+    onFailureModeSwitch: options.onFailureModeSwitch,
     semanticFailureMatcher: options.semanticFailureMatcher,
     semanticCriterionCoverage: options.semanticCriterionCoverage,
     supervisorDecider: options.supervisorDecider,
@@ -1484,6 +1490,9 @@ async function* driveMainLoop(ctx: LoopContext): AsyncGenerator<HarnessCheckpoin
       ctx.strategyState = rollbackResult.newStrategyState
       if (rollbackResult.replanScope === 'GLOBAL') ctx.taskGraph = rollbackResult.newTaskGraph
       reportLayer(ctx, 'recovery', true, `Trying a different approach — switched to "${rollbackResult.newStrategyState.current_strategy}" (${rollbackResult.replanScope ?? 'local'} replan)`)
+      if (rollbackResult.failureModeSwitch) {
+        ctx.onFailureModeSwitch?.({ taskId: currentTask.id, ...rollbackResult.failureModeSwitch })
+      }
     }
 
     // Reconcile the concurrent-task branch forked off above (layer 7) — done after this

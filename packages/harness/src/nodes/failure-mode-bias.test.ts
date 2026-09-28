@@ -86,3 +86,63 @@ describe('resolveSemanticMatchStrategy — semantic matches get the same bias ex
     expect(resolveSemanticMatchStrategy({ matched_pattern: 'diagnostic-only' }, entries)).toBeUndefined()
   })
 })
+
+describe('rollbackAndReplan — failureModeSwitch (what a host would surface to the proposer)', () => {
+  const run = (matched: FailureDiagnostics['matched_pattern']) => {
+    const fd = new FailureDiagnostics()
+    fd.matched_pattern = matched
+    return rollbackAndReplan(task(), new StrategyState(), fd, new TaskGraph({ tasks: [task()] }), new WorldModel(), new CallerState({ success_criteria: ['ship it'] }), new UnavailableExperienceStore())
+  }
+
+  it('is set when the failure-mode bias picked the strategy', () => {
+    const result = run({ failure_class: 'TOOL_UNAVAILABLE_CASCADE', confidence: 0.9, matched_pattern: 'tool-unavailable-cascade', strategy_affinity: 'REIMPLEMENT' })
+    expect(result.failureModeSwitch).toEqual({ failure_class: 'TOOL_UNAVAILABLE_CASCADE', strategy: 'REIMPLEMENT' })
+  })
+
+  it('is absent for the plain ladder walk (no match)', () => {
+    expect(run(null).failureModeSwitch).toBeUndefined()
+  })
+
+  it('is absent below the confidence threshold', () => {
+    const result = run({ failure_class: 'TOOL_UNAVAILABLE_CASCADE', confidence: 0.5, matched_pattern: 'tool-unavailable-cascade', strategy_affinity: 'REIMPLEMENT' })
+    expect(result.failureModeSwitch).toBeUndefined()
+  })
+})
+
+describe('HarnessRuntime — onFailureModeSwitch fires end to end through a real run', () => {
+  it('fires when a confident, strategy_affinity-bearing match is on record at the moment a task fails', async () => {
+    const { HarnessRuntime } = await import('../harness-runtime.js')
+    // Realistic shape: the exact match can't fire (the error text is a paraphrase, matching no
+    // curated phrase, same as a real injected-failure benchmark symptom) — only the stubbed
+    // semantic matcher can classify it. The semantic gate also requires failure_history.length >
+    // 0, so — same technique harness-runtime-stall.test.ts's seedThenFail uses — the toolExecutor
+    // seeds a prior failure_history entry directly before returning FAILED, rather than relying
+    // on a second natural retry (a single-task graph's first failure ends the run; it is not
+    // auto-requeued without a supervisor directive — see requeueLeafOnLocal).
+    const seen: Array<{ taskId: string; failure_class: string; strategy: string }> = []
+    await new HarnessRuntime().run('objective', ['produce the answer'], {
+      initialTasks: [{
+        id: 'respond', description: 'respond', status: 'PENDING', risk_level: 'LOW',
+        depends_on: [], parallel_write_domains: [], abstraction_level: 1, assigned_strategy: null,
+      }],
+      max_steps: 8,
+      toolExecutors: {
+        default: (toolCtx) => {
+          toolCtx.failureDiagnostics!.failure_history.push({
+            id: 'prior-1', timestamp: new Date().toISOString(),
+            failure_class: 'unknown', description: 'a prior attempt at this also failed', context: {},
+          })
+          return { __harnessExecutionStatus: 'failed', error: 'injected: the remote peer never responded' }
+        },
+      },
+      semanticFailureMatcher: async () => ({
+        failure_class: 'TOOL_UNAVAILABLE_CASCADE', confidence: 0.9, matched_pattern: 'tool-unavailable-cascade',
+      }),
+      onFailureModeSwitch: (e) => seen.push(e),
+    }).catch(() => {
+      // The run may still end in escalation once the (now-classified) failure exhausts the
+      // single-task graph's retry — the callback firing before that is what this test asserts.
+    })
+    expect(seen).toEqual([{ taskId: 'respond', failure_class: 'TOOL_UNAVAILABLE_CASCADE', strategy: 'REIMPLEMENT' }])
+  })
+})
