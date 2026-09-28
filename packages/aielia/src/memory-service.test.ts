@@ -166,6 +166,16 @@ describe('MemoryService.recordFacts', () => {
 // Phase 4: exposed so a caller (harness-bridge.ts, via HarnessRunParams.currentTurnFacts) can
 // seed the World Model with the exact same merged list recordFacts() itself writes from.
 describe('buildTurnFacts', () => {
+  // Both tests below need the lexical pass genuinely active to distinguish it from the LLM
+  // list (that distinction is exactly what buildTurnFacts's merge is tested against) — this
+  // isn't a lexicalMode-rollback test, so scoped to 'enabled' independent of the runtime default.
+  const priorMode = process.env.ASSISTANT_LEXICAL_MODE
+  beforeEach(() => { process.env.ASSISTANT_LEXICAL_MODE = 'enabled' })
+  afterEach(() => {
+    if (priorMode === undefined) delete process.env.ASSISTANT_LEXICAL_MODE
+    else process.env.ASSISTANT_LEXICAL_MODE = priorMode
+  })
+
   it('merges the lexical pass and the LLM list, deduping near-identical text (the same merge recordFacts uses)', () => {
     const facts = buildTurnFacts('s1', 'My name is Priya.', [statedFact({ text: 'My name is Priya', confidence: 'high', category: 'identity' })])
     expect(facts).toHaveLength(1)
@@ -360,12 +370,19 @@ describe('modelInferredFactsEnabled (AUDIT_MODEL_INFERRED_FACTS gate — Phase C
 
   describe('when OFF (process.env)', () => {
     const prior = process.env.AUDIT_MODEL_INFERRED_FACTS
+    // 'buildTurnFacts drops model_inferred facts but keeps the lexical user_asserted pass' needs
+    // the lexical pass genuinely active to have something to keep — the other test in this block
+    // uses a message no lexical marker matches either way, so this is safe file-wide here too.
+    const priorMode = process.env.ASSISTANT_LEXICAL_MODE
     beforeEach(() => {
       process.env.AUDIT_MODEL_INFERRED_FACTS = '0'
+      process.env.ASSISTANT_LEXICAL_MODE = 'enabled'
     })
     afterEach(() => {
       if (prior === undefined) delete process.env.AUDIT_MODEL_INFERRED_FACTS
       else process.env.AUDIT_MODEL_INFERRED_FACTS = prior
+      if (priorMode === undefined) delete process.env.ASSISTANT_LEXICAL_MODE
+      else process.env.ASSISTANT_LEXICAL_MODE = priorMode
     })
 
     it('buildTurnFacts drops model_inferred facts but keeps the lexical user_asserted pass', () => {

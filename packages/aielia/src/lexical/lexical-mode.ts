@@ -51,7 +51,7 @@ export const LEXICAL_CHECK_FAMILIES: readonly LexicalFamily[] = ['fact-markers',
 
 export type LexicalMode = 'enabled' | 'disabled'
 
-export const DEFAULT_LEXICAL_MODE: LexicalMode = 'enabled'
+export const DEFAULT_LEXICAL_MODE: LexicalMode = 'disabled'
 
 type EnvLike = Record<string, string | undefined>
 
@@ -96,8 +96,12 @@ export function resolveLexicalOff(env?: EnvLike): ReadonlySet<LexicalFamily> {
 /** True unless this family is switched off. Cheap enough to call on every check. */
 export function lexicalActive(family: LexicalFamily, env?: EnvLike): boolean {
   const source = envSource(env)
-  // Fast path: nothing set ⇒ everything active, no allocation.
-  if (!source.ASSISTANT_LEXICAL_MODE && !source.ASSISTANT_LEXICAL_OFF) return true
+  // Fast path, nothing set: falls through to the real default rather than hardcoding "active" —
+  // that hardcoding was only ever correct while DEFAULT_LEXICAL_MODE was 'enabled' (nothing off).
+  // Still cheap: no resolveLexicalOff() allocation for a family the mode default doesn't touch.
+  if (!source.ASSISTANT_LEXICAL_MODE && !source.ASSISTANT_LEXICAL_OFF) {
+    return DEFAULT_LEXICAL_MODE === 'enabled' || !(LEXICAL_CHECK_FAMILIES as readonly string[]).includes(family)
+  }
   return !resolveLexicalOff(source).has(family)
 }
 

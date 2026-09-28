@@ -1,4 +1,4 @@
-import { describe, it, expect, vi } from 'vitest'
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 import type { ChatMessage, ChatOptions, ILLMClient, ToolDefinition, LLMStructuredResponse, FsBackend, TokenUsage, MemoryAdapter } from '@buildaharness/runtime'
 import type { TraceEvent } from './trace-events.js'
 import { InMemoryAdapter, InMemoryReminderStore } from '@buildaharness/runtime'
@@ -12,6 +12,22 @@ import { listUndoLogEntries } from './action-snapshot.js'
 import { SCHOOL_DATES_BATCH_FIXTURE, fixtureUserMessage, fixtureStructuredResponses, fixtureWebSearch } from './batch-research-fixtures.js'
 import { classifyRisk } from './risk-classifier.js'
 import { decompositionEnabled } from './turn-interpreter.js'
+
+// This file predates the lexicalMode rollback (lexical-mode.ts's DEFAULT_LEXICAL_MODE) and its
+// many fixtures/dumb FakeLLMClients rely throughout on the lexical fact/negation-pair passes to
+// seed beliefs and flag injections without needing a real classifying LLM — forced 'enabled'
+// file-wide so this file keeps testing what it was written to test. The lexicalMode mechanism
+// itself is lexical-mode.test.ts's job; semantic-only (lexical off) behavior has its own
+// dedicated files (assistant-review-advisory.test.ts, one-loop-proposer.test.ts's recovery-note
+// tests, ...).
+const PRIOR_LEXICAL_MODE = process.env.ASSISTANT_LEXICAL_MODE
+beforeEach(() => {
+  process.env.ASSISTANT_LEXICAL_MODE = 'enabled'
+})
+afterEach(() => {
+  if (PRIOR_LEXICAL_MODE === undefined) delete process.env.ASSISTANT_LEXICAL_MODE
+  else process.env.ASSISTANT_LEXICAL_MODE = PRIOR_LEXICAL_MODE
+})
 
 // Every turn now spends exactly one classifyTurnIntent call up front (see
 // turn-intent-classifier.ts) — a distinctive phrase from its system prompt lets every fake

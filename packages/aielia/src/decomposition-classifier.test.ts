@@ -1,4 +1,18 @@
-import { describe, it, expect } from 'vitest'
+import { describe, it, expect, beforeEach, afterEach } from 'vitest'
+// This file tests the LEXICAL mechanism's own regex/pattern behavior directly — its correctness
+// is independent of whatever the runtime default happens to be (lexicalMode's own default/
+// rollback behavior is lexical-mode.test.ts's job). Forced enabled file-wide so these ~100+
+// pattern-coverage cases (including the native-speaker-reviewed Chinese fixtures) keep testing
+// what they were written to test.
+const PRIOR_LEXICAL_MODE = process.env.ASSISTANT_LEXICAL_MODE
+beforeEach(() => {
+  process.env.ASSISTANT_LEXICAL_MODE = 'enabled'
+})
+afterEach(() => {
+  if (PRIOR_LEXICAL_MODE === undefined) delete process.env.ASSISTANT_LEXICAL_MODE
+  else process.env.ASSISTANT_LEXICAL_MODE = PRIOR_LEXICAL_MODE
+})
+
 import type { ChatMessage, ChatOptions, ILLMClient, LLMStructuredResponse, ToolDefinition } from '@buildaharness/runtime'
 import { looksLikeEnumeratedItems, reframeTaskDescriptionWithLLM } from './decomposition-classifier.js'
 

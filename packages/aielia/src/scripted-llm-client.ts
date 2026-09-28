@@ -19,9 +19,20 @@ import { classifyRisk } from './risk-classifier.js'
  * answers on its own from a lightweight, deterministic default — so `responses` only has to
  * script the *tool loop / one-loop proposer's* own calls, not that bookkeeping call.
  *
- * `responses` entries are consumed in order, one per non-classifier `callChatStructured` call:
+ * `responses` entries are consumed in order, one per non-classifier, non-side-call
+ * `callChatStructured` call:
  *   - a plain `string` → `{ content: string }` (a final answer, no tool calls)
  *   - an `LLMStructuredResponse` → use as-is (set `toolCalls` to simulate the model calling a tool)
+ *
+ * A handful of other calls are auxiliary semantic escalations (the change reviewer, the failure
+ * matcher, the LLM injection classifier) that a tool-using turn can trigger without any script
+ * author asking for them — with lexicalMode's default now `disabled`, the lexical checks these
+ * sit on top of never short-circuit them, so they fire on every qualifying call, not just ones a
+ * scenario is specifically testing. Answered from a safe, inert default (see SIDE_CALL_MARKERS)
+ * so they never silently consume a `responses` slot meant for the real tool loop — the exact
+ * silent-consumption bug that broke chat-ui's W5 proxy e2e test when the default flipped. Override
+ * or add to this list via `sideResponses` for a test that specifically wants one of these calls to
+ * answer something else (e.g. a genuine injection flag).
  *
  * `callChat`/`callChatSync` (the no-tools reply path, and post-approval synthesis) stream
  * `streamChunks` (default: `['']`).
@@ -37,7 +48,26 @@ export interface ScriptedLLMClientScript {
    * `undefined` to keep the derived default for that message.
    */
   classify?: (userMessage: string) => Record<string, unknown> | undefined
+  /**
+   * Overrides/extends SIDE_CALL_MARKERS' default answers for a system-prompt substring — checked
+   * before the built-in defaults, so a test can make the change reviewer/failure matcher/injection
+   * classifier answer something other than "nothing to see here" without it consuming a
+   * `responses` slot either way. `[marker, rawJsonContent]` pairs, same shape as the built-ins.
+   */
+  sideResponses?: Array<[string, string]>
 }
+
+/**
+ * Known auxiliary semantic-escalation system prompts and their safe, inert default answer — see
+ * ScriptedLLMClientScript's doc comment. Kept in sync by hand with each check's own system prompt
+ * (review-checker.ts, failure-mode-matcher.ts, trust-tagging.ts) since there's no shared constant
+ * to import without a circular dependency back into this package's own public surface.
+ */
+export const SIDE_CALL_MARKERS: Array<[string, string]> = [
+  ['You check whether a proposed action genuinely conflicts', '{"conflict":false}'],
+  ['You match a set of observed symptoms against a curated library', 'null'],
+  ['You are a security classifier analyzing untrusted external content', '{"flagged":false}'],
+]
 
 /** The phrase that opens `turn-intent-classifier.ts`'s system prompt — stable, and how every scripted client tells that mandatory call apart from a real tool-loop call. */
 const TURN_INTENT_MARKER = ' independent judgments'
@@ -99,6 +129,9 @@ class ScriptedLLMClient implements ILLMClient {
       const userContent = messages.find((m) => m.role === 'user')?.content ?? ''
       return { content: deriveTurnIntentJSON(messages, this.script.classify?.(userContent)) }
     }
+    const system = messages.find((m) => m.role === 'system')?.content ?? ''
+    const side = [...(this.script.sideResponses ?? []), ...SIDE_CALL_MARKERS].find(([marker]) => system.includes(marker))
+    if (side) return { content: side[1] }
     this.toolCalls++
     const responses = this.script.responses ?? []
     if (this.responseIndex >= responses.length) {

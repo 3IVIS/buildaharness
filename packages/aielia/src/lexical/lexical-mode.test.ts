@@ -1,5 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import {
+  DEFAULT_LEXICAL_MODE,
   LEXICAL_CHECK_FAMILIES,
   LEXICAL_FAMILIES,
   lexicalActive,
@@ -37,10 +38,17 @@ const FACT = 'My name is Priya and I always take the night shift.'
 const CODING = 'The build passed and the deploy service is running.'
 
 describe('resolution', () => {
-  it('defaults to enabled with nothing off', () => {
-    expect(resolveLexicalMode({})).toBe('enabled')
-    expect(resolveLexicalOff({}).size).toBe(0)
-    for (const f of LEXICAL_FAMILIES) expect(lexicalActive(f, {})).toBe(true)
+  it('defaults to disabled with the 4 check families off, routers/safety-floor on', () => {
+    expect(resolveLexicalMode({})).toBe('disabled')
+    expect([...resolveLexicalOff({})].sort()).toEqual([...LEXICAL_CHECK_FAMILIES].sort())
+    for (const f of LEXICAL_FAMILIES) {
+      expect(lexicalActive(f, {})).toBe(!(LEXICAL_CHECK_FAMILIES as readonly string[]).includes(f))
+    }
+  })
+
+  it('an explicit "enabled" restores byte-for-byte pre-rollback behavior — nothing off', () => {
+    expect(resolveLexicalOff({ ASSISTANT_LEXICAL_MODE: 'enabled' }).size).toBe(0)
+    for (const f of LEXICAL_FAMILIES) expect(lexicalActive(f, { ASSISTANT_LEXICAL_MODE: 'enabled' })).toBe(true)
   })
 
   it('disabled switches off exactly the check families, and leaves routers and the safety floor on', () => {
@@ -51,7 +59,9 @@ describe('resolution', () => {
   })
 
   it('ASSISTANT_LEXICAL_OFF names individual families, including ones disabled leaves on', () => {
-    const env = { ASSISTANT_LEXICAL_OFF: 'injection, RISK ,plan-mode' }
+    // Isolates per-family OFF composition against a stable ENABLED baseline — without this,
+    // the mode default (now disabled) would also turn fact-markers off, testing nothing new.
+    const env = { ASSISTANT_LEXICAL_MODE: 'enabled', ASSISTANT_LEXICAL_OFF: 'injection, RISK ,plan-mode' }
     expect(lexicalActive('injection', env)).toBe(false)
     expect(lexicalActive('risk', env)).toBe(false)
     expect(lexicalActive('plan-mode', env)).toBe(false)
@@ -60,18 +70,34 @@ describe('resolution', () => {
 
   it('warns once and ignores an unknown mode or family', () => {
     const err = vi.spyOn(console, 'error').mockImplementation(() => {})
-    expect(resolveLexicalMode({ ASSISTANT_LEXICAL_MODE: 'sideways' })).toBe('enabled')
-    expect(resolveLexicalOff({ ASSISTANT_LEXICAL_OFF: 'not-a-family-zzz' }).size).toBe(0)
+    expect(resolveLexicalMode({ ASSISTANT_LEXICAL_MODE: 'sideways' })).toBe(DEFAULT_LEXICAL_MODE)
+    // An unknown OFF-family name is ignored, on top of whatever the (now-disabled) default
+    // already turns off — 'not-a-family-zzz' contributes nothing, not an empty result.
+    expect([...resolveLexicalOff({ ASSISTANT_LEXICAL_MODE: 'enabled', ASSISTANT_LEXICAL_OFF: 'not-a-family-zzz' })].length).toBe(0)
     expect(err).toHaveBeenCalled()
   })
 
   it('serialises the off set for the MCP subprocess', () => {
-    expect(lexicalOffEnvValue({})).toBe('')
+    expect(lexicalOffEnvValue({ ASSISTANT_LEXICAL_MODE: 'enabled' })).toBe('')
+    expect(lexicalOffEnvValue({}).split(',').sort()).toEqual([...LEXICAL_CHECK_FAMILIES].sort())
     expect(lexicalOffEnvValue({ ASSISTANT_LEXICAL_MODE: 'disabled' }).split(',').sort()).toEqual([...LEXICAL_CHECK_FAMILIES].sort())
   })
 })
 
-describe('default is byte-identical (nothing set)', () => {
+describe('default (nothing set) — the 4 check families are off', () => {
+  it('every check family the rollback covers is already off with nothing set', () => {
+    expect(extractFactsFromTurn(FACT, 't')).toEqual([])
+    expect(looksLikeCodingFact(CODING)).toBe(false)
+    expect(detectInjectionLikely(INJECTION).flagged).toBe(false)
+    expect(looksLikeEnumeratedItems(ENUMERATED)).toBe(false)
+  })
+})
+
+describe('ASSISTANT_LEXICAL_MODE=enabled is still byte-identical to the pre-rollback behavior', () => {
+  beforeEach(() => {
+    process.env.ASSISTANT_LEXICAL_MODE = 'enabled'
+  })
+
   it('every lexical check still fires', () => {
     expect(extractFactsFromTurn(FACT, 't').length).toBe(1)
     expect(looksLikeCodingFact(CODING)).toBe(true)
@@ -119,6 +145,8 @@ describe('lexicalMode=disabled', () => {
 
 describe('per-family override', () => {
   it('turning off one family leaves the others active', () => {
+    // Explicit 'enabled' baseline — see the resolution-block test above for why.
+    process.env.ASSISTANT_LEXICAL_MODE = 'enabled'
     process.env.ASSISTANT_LEXICAL_OFF = 'injection'
     expect(detectInjectionLikely(INJECTION).flagged).toBe(false)
     expect(looksLikeCodingFact(CODING)).toBe(true)
@@ -132,7 +160,9 @@ describe('syncHarnessLexicalEnv', () => {
     const env: Record<string, string | undefined> = { ASSISTANT_LEXICAL_MODE: 'disabled' }
     syncHarnessLexicalEnv(env)
     expect(env.HARNESS_LEXICAL_OFF).toBe('all')
-    env.ASSISTANT_LEXICAL_MODE = undefined
+    // Explicit 'enabled', not undefined — undefined now means disabled (the new default), so it
+    // would no longer represent "back to enabled" the way it did before the rollback.
+    env.ASSISTANT_LEXICAL_MODE = 'enabled'
     syncHarnessLexicalEnv(env)
     expect(env.HARNESS_LEXICAL_OFF).toBeUndefined()
   })
