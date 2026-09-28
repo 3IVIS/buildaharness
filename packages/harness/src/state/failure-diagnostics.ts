@@ -1,3 +1,4 @@
+import { harnessLexicalActive } from '../lexical/lexical-off.js'
 import { z } from 'zod'
 
 export const MatchResultSchema = z.object({
@@ -44,6 +45,7 @@ export class FailureModeLibrary {
   // Mirrors adapter/harness/failure_modes.py's FailureModeLibrary.match(), which does the same via
   // substring containment against a joined free-text context blob.
   match(symptoms: string[]): MatchResult | null {
+    if (!harnessLexicalActive('failure-exact-match')) return null // HARNESS_LEXICAL_OFF: only a semantic matcher can classify
     let best: MatchResult | null = null
     let bestScore = -1
     for (const entry of this.entries) {

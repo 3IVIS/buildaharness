@@ -3,6 +3,8 @@ export type { AssistantTurnResult, ProposerKind, PersonalAssistantOptions, Assis
 export type { GoalGraphState, GoalThreadView, GoalThreadVisibility, GoalTaskSummary } from './goal-graph-service.js'
 export type { AnswerClaim, AnswerClaimSourceType, AnswerClaimVerificationStatus } from './answer-claim.js'
 export { classifyRisk } from './risk-classifier.js'
+export { LEXICAL_FAMILIES, LEXICAL_CHECK_FAMILIES, DEFAULT_LEXICAL_MODE, lexicalActive, resolveLexicalMode, resolveLexicalOff, lexicalOffEnvValue, syncHarnessLexicalEnv } from './lexical/lexical-mode.js'
+export type { LexicalFamily, LexicalMode } from './lexical/lexical-mode.js'
 export type { RiskClassification } from './risk-classifier.js'
 export { classifyTurnIntent } from './turn-intent-classifier.js'
 // The publicly-exported `RiskLevel` deliberately comes from turn-intent-classifier.js, not

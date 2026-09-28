@@ -1,4 +1,4 @@
-import { looksLikeEnumeratedItems } from './decomposition-classifier.js'
+import { looksLikeEnumeratedItemsLexical } from './decomposition-classifier.js'
 import { getRiskPatterns, testAny, splitOnAny } from './lexical/patterns.js'
 
 export type RiskLevel = 'LOW' | 'MEDIUM' | 'HIGH'
@@ -476,7 +476,7 @@ function isExemptClause(clause: string): boolean {
 export function classifyRisk(message: string): RiskClassification {
   const isReminderRecallQuestion = testAny(risk.reminderRecallQuestion, message)
   if (risk.reminderPattern.pattern.test(message) && !isReminderRecallQuestion) {
-    if (looksLikeEnumeratedItems(message)) {
+    if (looksLikeEnumeratedItemsLexical(message)) {
       return { riskLevel: 'MEDIUM', requiresApproval: true, reason: `Request ${risk.bulkReminderReason}.` }
     }
     return { riskLevel: 'MEDIUM', requiresApproval: false, reason: `Request ${risk.reminderPattern.reason}.` }

@@ -1,6 +1,7 @@
 import type { ILLMClient, TokenUsage } from '@buildaharness/runtime'
 import type { ExternalContradictionInput } from '@buildaharness/harness'
 import { getCodingFactMarkerPatterns, testAny } from './lexical/patterns.js'
+import { lexicalActive } from './lexical/lexical-mode.js'
 
 export interface BeliefCandidate {
   id: string
@@ -136,6 +137,9 @@ const CODING_FACT_MARKERS = getCodingFactMarkerPatterns()
 // plan-builder.ts prompt task descriptions to be phrased subject-first.
 /** Zero-LLM-call gate: true when a belief statement reads like a structured/technical (build, test, service, file) claim rather than a natural-language personal fact. */
 export function looksLikeCodingFact(statement: string): boolean {
+  // lexicalMode: with the coding-fact family off this is always false, so the "the lexical check
+  // already covers it — skip the LLM" gates never skip and every semantic hook they guard runs.
+  if (!lexicalActive('coding-fact')) return false
   return testAny(CODING_FACT_MARKERS, statement)
 }
 

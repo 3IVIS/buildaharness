@@ -34,6 +34,7 @@ import type { ILLMClient, MemoryAdapter, TokenUsage } from '@buildaharness/runti
 import { DEFAULT_ONE_LOOP_MODE, type OneLoopMode } from './one-loop-flag.js'
 import { tierForFact, isKnowledgeTier, type UserFact } from './fact-extraction.js'
 import { checkForContradictions, type BeliefCandidate } from './contradiction-checker.js'
+import { syncHarnessLexicalEnv } from './lexical/lexical-mode.js'
 import { checkSemanticReviewConflict } from './review-checker.js'
 import { checkSemanticFailureMatch } from './failure-mode-matcher.js'
 import { checkSemanticCriterionCoverage, NON_CHECKABLE_DEFAULT_CRITERION } from './semantic-criterion-coverage.js'
@@ -337,6 +338,8 @@ export class HarnessBridge {
       return [...priorFacts, ...currentTurnFactStatements]
     }
 
+    // lexicalMode → HARNESS_LEXICAL_OFF, so the harness's own lexical floors follow the same switch.
+    syncHarnessLexicalEnv()
     try {
       const runOptions = {
         initialTasks,

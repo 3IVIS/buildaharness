@@ -7,6 +7,7 @@ import type { PendingActionRecord } from './file-tools.js'
 import { buildClaudePrompt, parseClaudeCliOutput, stripJsonCodeFence, ALREADY_STAGED_ACTION_TOOL, stagedActionInput, type ParsedClaudeCliOutput } from './claude-cli-prompt.js'
 import { stripMcpToolPrefix } from './tool-step.js'
 import { resolveMcpServerPath } from './mcp-server-asset.js'
+import { lexicalOffEnvValue } from './lexical/lexical-mode.js'
 
 /**
  * `--tools ""` only disables Claude Code's own built-in tools (Read/Write/Bash/etc.) — it
@@ -377,6 +378,7 @@ export class ClaudeCliLLMClient implements ILLMClient {
               ...(this.shellTools ? { ENABLE_SHELL_TOOLS: '1' } : {}),
               ...(this.webTools?.braveApiKey ? { BRAVE_SEARCH_API_KEY: this.webTools.braveApiKey } : {}),
               ...(this.actionTools ? { ENABLE_EMAIL_TOOL: '1' } : {}),
+              ...(lexicalOffEnvValue() ? { ASSISTANT_LEXICAL_OFF: lexicalOffEnvValue() } : {}),
             },
           },
         },

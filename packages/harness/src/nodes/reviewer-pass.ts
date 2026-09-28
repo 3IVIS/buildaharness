@@ -5,6 +5,7 @@ import type { Diagnostics } from '../state/diagnostics.js'
 import type { FailureDiagnostics } from '../state/failure-diagnostics.js'
 import { propagateBeliefs } from './update-world-model.js'
 import { detectContradictions } from './detect-contradictions.js'
+import { harnessLexicalActive } from '../lexical/lexical-off.js'
 import { generateUpdateHypotheses } from './generate-update-hypotheses.js'
 import type { EvidenceStore } from '../state/evidence-store.js'
 import { MemoryState } from '../state/memory-state.js'
@@ -172,7 +173,8 @@ async function implementerLens(
 
   // "Did I do what I intended?" — check beliefs cover success criteria
   for (const criterion of successCriteria) {
-    const covered = worldModel.beliefs.some(b =>
+    // HARNESS_LEXICAL_OFF=criterion-substring: no substring shortcut, the semantic hook decides alone.
+    const covered = harnessLexicalActive('criterion-substring') && worldModel.beliefs.some(b =>
       b.statement.toLowerCase().includes(criterion.toLowerCase()),
     )
     if (!covered) {

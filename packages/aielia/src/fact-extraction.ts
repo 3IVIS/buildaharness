@@ -1,5 +1,6 @@
 import { looksLikeCodingFact } from './contradiction-checker.js'
 import { getFactMarkerPatterns, testAny, splitOnAny } from './lexical/patterns.js'
+import { lexicalActive } from './lexical/lexical-mode.js'
 import type { FactConfidence, FactCategory } from './turn-intent-classifier.js'
 
 const factPatterns = getFactMarkerPatterns()
@@ -420,6 +421,9 @@ function splitClauses(text: string): string[] {
  * and thus zero contradiction detection at any layer, lexical or LLM.
  */
 export function extractFactsFromTurn(userMessage: string, sourceTurn: string): UserFact[] {
+  // lexicalMode: with the fact-marker family off, this lexical pass admits nothing — only the LLM
+  // `statesDurableFacts` path (classifyTurnIntent) forms beliefs. See lexical/lexical-mode.ts.
+  if (!lexicalActive('fact-markers')) return []
   const trimmed = userMessage.trim()
   const admit = (): UserFact[] => [{ text: trimmed, extractedAt: new Date().toISOString(), sourceTurn, durable: isDurable(trimmed), source: 'user_asserted' }]
   // FACT_MARKERS' phrases are declarative by construction and matched against the whole message,

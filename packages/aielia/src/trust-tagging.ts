@@ -1,6 +1,7 @@
 import type { ILLMClient, TokenUsage } from '@buildaharness/runtime'
 import { containsCJK } from '@buildaharness/harness'
 import { getInjectionPatterns } from './lexical/patterns.js'
+import { lexicalActive } from './lexical/lexical-mode.js'
 
 /**
  * Wraps content fetched from the web before it enters the model's context —
@@ -27,6 +28,9 @@ export interface InjectionDetection {
 
 /** Content is always still returned to the model, flagged or not — this only decides whether a warning gets prepended. */
 export function detectInjectionLikely(text: string): InjectionDetection {
+  // lexicalMode: with the injection family off the regex pass never flags (the LLM escalation, when
+  // enabled, is then the only check). See lexical/lexical-mode.ts.
+  if (!lexicalActive('injection')) return { flagged: false }
   for (const { pattern, reason } of INJECTION_PATTERNS) {
     if (pattern.test(text)) return { flagged: true, reason }
   }
@@ -114,7 +118,9 @@ export async function detectInjectionLikelyWithLLM(
   // AUDIT_LLM_INJECTION_DETECT (feature-value audit, Phase A5) gates the semantic escalation only —
   // the deterministic regex pass above always runs. OFF → pattern pass only, no LLM call.
   if (!llmInjectionDetectEnabled()) return { flagged: false }
-  if (effectiveLengthForLLMCheck(text.trim()) < MIN_LENGTH_FOR_LLM_CHECK) return { flagged: false }
+  // The length gate is a lexical-era shortcut ("the regex is enough for short output"): with the
+  // injection family off there is no regex to lean on, so the LLM sees every output.
+  if (lexicalActive('injection') && effectiveLengthForLLMCheck(text.trim()) < MIN_LENGTH_FOR_LLM_CHECK) return { flagged: false }
 
   try {
     const response = await llmClient.callChatStructured(

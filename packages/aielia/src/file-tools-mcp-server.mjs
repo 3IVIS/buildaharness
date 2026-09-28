@@ -539,7 +539,14 @@ const REMINDER_REQUEST_MARKER = new RegExp(
   'i',
 )
 
+// lexicalMode: the parent hands the resolved off-families in as ASSISTANT_LEXICAL_OFF (see
+// lexical/lexical-mode.ts). Only the fact-marker family is honoured here — this script's injection
+// regex deliberately stays on, because for fetched pages under the claude-cli backend it is the only
+// injection check they get (the LLM check never sees these results).
+const LEXICAL_OFF_FAMILIES = new Set(String(process.env.ASSISTANT_LEXICAL_OFF ?? '').split(',').map((s) => s.trim().toLowerCase()).filter(Boolean))
+
 function looksLikeDurableFact(text) {
+  if (LEXICAL_OFF_FAMILIES.has('fact-markers')) return false
   return testAny(FACT_MARKERS, text) || testAny(HEALTH_OR_DIETARY_MARKERS, text)
 }
 

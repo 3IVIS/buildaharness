@@ -4,6 +4,7 @@ import type { HypothesisSet } from '../state/hypothesis-set.js'
 import type { EvidenceStore } from '../state/evidence-store.js'
 import type { Task } from '../state/task-graph.js'
 import { getReviewNegationTriggers } from '../lexical/patterns.js'
+import { harnessLexicalActive } from '../lexical/lexical-off.js'
 import { tokenize, containsCJK } from '../lexical/script-utils.js'
 import { MAX_OPTIONS_PER_QUESTION, type AskQuestion, type AskQuestionOption } from './escalate.js'
 
@@ -66,6 +67,7 @@ const { triggers: NEGATION_TRIGGERS, stopwords: NEGATION_STOPWORDS } = getReview
  */
 function isNegation(changeDesc: string, stmt: string): boolean {
   if (!changeDesc || !stmt) return false
+  if (!harnessLexicalActive('review-negation')) return false // HARNESS_LEXICAL_OFF: the semantic reviewer runs alone
   const patterns = NEGATION_TRIGGERS.map((trigger) => `${trigger}${stmt}`)
   if (patterns.some(p => changeDesc.includes(p))) return true
 
