@@ -22,9 +22,6 @@ PYTHONPATH=adapter python3.12 -m pytest adapter/tests/test_harness_integration_*
 # Adapter — harness benchmarks (50 runs per operation)
 PYTHONPATH=adapter python3.12 adapter/tests/benchmark_harness.py
 
-# Adapter — eval suite (structural tests always run; LLM metrics need EVAL_USE_REAL_LLM=true)
-pytest adapter/eval/ -v
-
 # Single file
 pytest adapter/tests/test_maf_adapter.py -v
 pytest adapter/tests/test_debate_agent_a2a_flow.py -v
@@ -148,29 +145,6 @@ Harness adds negligible overhead relative to any LLM inference call. See `docs/h
 
 ---
 
-## Adapter — eval suite (`adapter/eval/`)
-
-34 tests total. Structural tests always run; LLM-metric tests require `EVAL_USE_REAL_LLM=true` and `OPENAI_API_KEY`.
-
-```bash
-# Structural tests only (default — no LLM)
-pytest adapter/eval/ -v
-
-# Full metric tests
-EVAL_USE_REAL_LLM=true pytest adapter/eval/ -v
-```
-
-| File | Tests | What it covers |
-|---|---|---|
-| `test_spec_validation.py` | 9 | All five reference flows parse the schema without errors and compile to all four adapters without syntax errors — a compile-gate that must pass before metric tests run |
-| `test_debate_quality.py` | 17 | Debate flow (flow 05) structural checks (node types, AgentGroupChat termination keyword) + LLM-gated metrics: `ArgumentCoherenceMetric` (threshold 0.7), `VerdictQualityMetric` (threshold 0.7), `TranscriptStructureMetric` |
-| `test_moderation_quality.py` | 4 | Content moderation flow structural checks + LLM-gated metrics: `TaskCompletionMetric` (threshold 0.8), `HallucinationMetric` (max 0.2) |
-| `test_rag_quality.py` | 4 | RAG flow structural checks + LLM-gated metrics: `AnswerRelevancyMetric` (0.7), `FaithfulnessMetric` (0.7), `ContextualRecallMetric` (0.6) |
-
-Thresholds are configurable via environment variables — see each file's header for the variable names.
-
----
-
 ## Frontend tests (`src/spec/schema.test.ts`, `packages/canvas/src/store/create.test.ts`)
 
 Run with `npm test` (Vitest).
@@ -232,5 +206,3 @@ The adapter test suite is configured in `adapter/tests/conftest.py`:
 - Uses an **in-memory SQLite database** (not Postgres) — no Docker or running DB needed
 - Sets `TESTING=true` which disables Redis checks, skips real Langfuse SDK calls, and uses per-call unique rate-limit keys
 - Provides `client` (async HTTPX test client), `auth_headers`, and `db_engine` fixtures shared across all test files
-
-The eval suite has its own `adapter/eval/conftest.py` with a `needs_real_llm` fixture that gates LLM-dependent tests behind `EVAL_USE_REAL_LLM=true`.

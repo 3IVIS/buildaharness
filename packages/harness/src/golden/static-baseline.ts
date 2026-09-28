@@ -2,8 +2,7 @@
 //
 // Drives `HarnessRuntime` directly with scripted tool executors and records, per run, the ordered
 // layer-activity events, `nodeExecutionOrder`, per-purpose call counts (executor invocations per
-// task, supervisor consults) and the final result. It is the harness-only twin of
-// `packages/aielia/eval/golden/static-baseline.ts`: any later change that alters what the
+// task, supervisor consults) and the final result. Any later change that alters what the
 // harness does with layer selection *off* must show up as a diff against
 // `static-baseline.json`. Nothing here records ids, timestamps or freshness.
 import { HarnessRuntime, type HarnessRunOptions } from '../harness-runtime.js'

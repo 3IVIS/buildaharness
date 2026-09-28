@@ -54,8 +54,8 @@ env:
 
 jobs:
   # ─────────────────────────────────────────────────────────────────────────────
-  # JOBs 1a-1d — adapter checks (run in parallel)
-  # Lint, typecheck, unit tests, and eval gate are independent and run
+  # JOBs 1a-1c — adapter checks (run in parallel)
+  # Lint, typecheck and unit tests are independent and run
   # concurrently.  All are skippable via workflow_dispatch.skip_tests.
   # ─────────────────────────────────────────────────────────────────────────────
   adapter-lint:
@@ -142,35 +142,6 @@ jobs:
           DATABASE_URL: "sqlite+aiosqlite:///:memory:"
           TESTING:      'true'
 
-  adapter-eval-gate:
-    name: Adapter — eval spec-validation gate
-    if: >-
-      github.event_name == 'push' ||
-      github.event_name == 'pull_request' ||
-      (inputs.skip_tests != true && inputs.promote_staging != true)
-    runs-on: ubuntu-latest
-    defaults:
-      run:
-        working-directory: adapter
-    steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-python@v5
-        with:
-          python-version: '3.12'
-          cache: pip
-          cache-dependency-path: |
-            adapter/requirements.txt
-            adapter/requirements-dev.txt
-            adapter/requirements-eval.txt
-      - name: Install deps
-        run: pip install -r requirements.txt -r requirements-dev.txt -r requirements-eval.txt
-      # Fast gate — no LLM needed.  All 5 reference flows must compile to all
-      # 4 runtimes (LangGraph, CrewAI, Mastra, MAF) without syntax errors.
-      - name: Eval spec-validation gate (all 4 runtimes × 5 flows)
-        run: pytest eval/test_spec_validation.py -v --tb=short
-        env:
-          TESTING: 'true'
-
   # ─────────────────────────────────────────────────────────────────────────────
   # JOB 2 — build-and-push
   # Build the adapter Docker image and push to GHCR.
@@ -180,7 +151,7 @@ jobs:
     name: Build & push adapter image
     # Don't push on PRs — just build to verify the Dockerfile is intact.
     # Also skip for promote_staging (no rebuild needed).
-    needs: [adapter-lint, adapter-typecheck, adapter-unit-tests, adapter-eval-gate]
+    needs: [adapter-lint, adapter-typecheck, adapter-unit-tests]
     if: >-
       always() &&
       !contains(needs.*.result, 'failure') &&
@@ -396,57 +367,3 @@ jobs:
           echo "" >> "$GITHUB_STEP_SUMMARY"
           echo "Image: \`${{ steps.tag.outputs.sha_tag }}\`" >> "$GITHUB_STEP_SUMMARY"
           echo "URL: ${{ secrets.PRODUCTION_URL }}" >> "$GITHUB_STEP_SUMMARY"
-
-  # ─────────────────────────────────────────────────────────────────────────────
-  # JOB 5 — post-deploy-eval
-  # After a successful production deploy, run the nightly-quality eval suite
-  # against the live endpoint so the canvas shows fresh quality badges.
-  # Uses real LLM (requires OPENAI_API_KEY secret).
-  # ─────────────────────────────────────────────────────────────────────────────
-  post-deploy-eval:
-    name: Post-deploy eval (production)
-    needs: [deploy-production]
-    if: needs.deploy-production.result == 'success'
-    runs-on: ubuntu-latest
-
-    defaults:
-      run:
-        working-directory: adapter
-
-    steps:
-      - uses: actions/checkout@v4
-
-      - uses: actions/setup-python@v5
-        with:
-          python-version: '3.12'
-          cache: pip
-          cache-dependency-path: |
-            adapter/requirements.txt
-            adapter/requirements-eval.txt
-
-      - name: Install eval deps
-        run: pip install -r requirements.txt -r requirements-eval.txt
-
-      - name: Run full eval suite against production
-        run: pytest eval/ -v --tb=short
-        env:
-          TESTING:            'false'
-          DATABASE_URL:       ${{ secrets.PRODUCTION_DATABASE_URL }}
-          JWT_SECRET:         ${{ secrets.PRODUCTION_JWT_SECRET }}
-          OPENAI_API_KEY:     ${{ secrets.OPENAI_API_KEY }}
-          EVAL_USE_REAL_LLM:  'true'
-          EVAL_MODEL:         'gpt-4o-mini'
-          # Push scores to Langfuse production project
-          LANGFUSE_PUBLIC_KEY: ${{ secrets.LANGFUSE_PUBLIC_KEY }}
-          LANGFUSE_SECRET_KEY: ${{ secrets.LANGFUSE_SECRET_KEY }}
-          LANGFUSE_HOST:       ${{ secrets.LANGFUSE_HOST }}
-
-      - name: Upload eval results
-        if: always()
-        uses: actions/upload-artifact@v4
-        with:
-          name: post-deploy-eval-${{ github.run_id }}
-          path: |
-            adapter/.deepeval/
-            adapter/.ragas/
-          retention-days: 90

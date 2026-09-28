@@ -797,9 +797,6 @@ All harness nodes share the base fields (`id`, `type`, `label`, `description`, `
 # Canvas (Vitest)
 npm test                          # runs schema.test.ts
 
-# Eval gate — validates all reference flows compile on all 4 adapters
-pytest adapter/eval/test_spec_validation.py -v
-
 # Manual parse
 node -e "const {assertFlowSpec}=require('./spec/dist/schema.js'); assertFlowSpec(require('./flows/01-rag-agent-flow.json'))"
 ```

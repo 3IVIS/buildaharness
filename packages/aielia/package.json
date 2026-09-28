@@ -44,10 +44,6 @@
     "test": "vitest run",
     "typecheck": "tsc --noEmit",
     "cli": "tsx src/cli.ts",
-    "eval:turn-intent": "tsx scripts/eval-turn-intent.ts",
-    "eval:label-turn-signals": "tsx scripts/label-turn-signals.ts",
-    "eval:contradiction-checker": "tsx scripts/eval-contradiction-checker.ts",
-    "eval:harness-benchmark": "tsx scripts/run-harness-benchmark.ts",
     "layer-yield": "tsx scripts/layer-yield.ts",
     "shadow-report": "tsx scripts/shadow-report.ts"
   },
