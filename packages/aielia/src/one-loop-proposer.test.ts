@@ -69,6 +69,44 @@ function buildAgentLoop(llmClient: ILLMClient): AgentLoop {
   return new AgentLoop(memory, llmClient, () => undefined, fakeFileTools, undefined, undefined, undefined, reminderStore, 5, undefined, undefined)
 }
 
+function buildAgentLoopWithMaxSteps(llmClient: ILLMClient, maxSteps: number): AgentLoop {
+  const memory = new InMemoryAdapter()
+  const reminderStore = new InMemoryReminderStore(memory)
+  return new AgentLoop(memory, llmClient, () => undefined, fakeFileTools, undefined, undefined, undefined, reminderStore, maxSteps, undefined, undefined)
+}
+
+describe('AgentLoop.createOneLoopProposer — per-attempt budget (RECOVERY_HEADROOM)', () => {
+  it('reserves a fixed headroom under maxSteps rather than a fraction — maxSteps=15 gives an 11-call budget, not half (8)', async () => {
+    const responses = Array.from({ length: 12 }, () => ({ content: '<tool_call>' }))
+    const llmClient = new ScriptedLLMClient(responses)
+    const agentLoop = buildAgentLoopWithMaxSteps(llmClient, 15)
+    const { proposer } = agentLoop.createOneLoopProposer('session-1', [], 'hi', 'system')
+
+    const outcomes: unknown[] = []
+    for (let i = 0; i < 12; i++) {
+      outcomes.push(await proposer({ worldModel: undefined as never, evidenceStore: undefined as never }))
+    }
+    // Calls 1-11 (indices 0-10) dispatch a real tool call each — 'continue'. Call 12 (index 11)
+    // is the 11th real LLM call already made by then; the 12th invocation is where iteration
+    // (now 11) >= maxIterations (11) trips, reporting 'failed' instead of making a 12th call.
+    expect(outcomes.slice(0, 11)).toEqual(Array(11).fill({ __harnessExecutionStatus: 'continue' }))
+    expect(outcomes[11]).toMatchObject({ __harnessExecutionStatus: 'failed' })
+    expect(llmClient.seenMessages).toHaveLength(11) // the 12th invocation made no LLM call
+  })
+
+  it('floors at 3 for a very small maxSteps (maxSteps=4 would go negative under maxSteps-4)', async () => {
+    const llmClient = new ScriptedLLMClient([{ content: '<tool_call>' }, { content: '<tool_call>' }, { content: '<tool_call>' }])
+    const agentLoop = buildAgentLoopWithMaxSteps(llmClient, 4)
+    const { proposer } = agentLoop.createOneLoopProposer('session-1', [], 'hi', 'system')
+
+    await proposer({ worldModel: undefined as never, evidenceStore: undefined as never })
+    await proposer({ worldModel: undefined as never, evidenceStore: undefined as never })
+    await proposer({ worldModel: undefined as never, evidenceStore: undefined as never })
+    const exhausted = await proposer({ worldModel: undefined as never, evidenceStore: undefined as never })
+    expect(exhausted).toMatchObject({ __harnessExecutionStatus: 'failed' })
+  })
+})
+
 describe('AgentLoop.createHarnessProposer (R2 of the D2 one-loop-rewire follow-up plan)', () => {
   it('a plain final answer resolves to a complete ContinuableExecutionOutcome with the real text as output', async () => {
     const llmClient = new ScriptedLLMClient([{ content: 'the final answer' }])
@@ -312,8 +350,15 @@ describe('AgentLoop.createHarnessProposer (R2 of the D2 one-loop-rewire follow-u
     expect(splicedInLast).toBe(1)
   })
 
-  it('never dispatches more than maxIterations calls — the final one throws an escalated OneLoopPause instead of hanging', async () => {
+  it('never dispatches more than maxIterations calls — the budget-exhausted call reports a real harness failure instead of hanging or throwing', async () => {
+    // Changed from throwing an escalated OneLoopPause: that throw was special-cased in
+    // execute.ts (isHarnessPauseSignal) to bypass recordFailure()/rollbackAndReplan() entirely,
+    // leaving failure_match's whole classification+bias+retry-hint chain structurally
+    // unreachable from a real turn (see the layer_conversations audit). Budget exhaustion is a
+    // genuine failure, not a pause/approval, so it's now a normal 'failed' execution status —
+    // needs_approval (the other OneLoopPause use) is unaffected.
     const llmClient = new ScriptedLLMClient([
+      { content: '<tool_call>' },
       { content: '<tool_call>' },
       { content: '<tool_call>' },
     ])
@@ -329,15 +374,17 @@ describe('AgentLoop.createHarnessProposer (R2 of the D2 one-loop-rewire follow-u
 
     const first = await proposer({ worldModel: undefined as never, evidenceStore: undefined as never })
     expect(first).toEqual({ __harnessExecutionStatus: 'continue' })
+    await proposer({ worldModel: undefined as never, evidenceStore: undefined as never })
 
-    let caught: unknown
-    try {
-      await proposer({ worldModel: undefined as never, evidenceStore: undefined as never })
-      await proposer({ worldModel: undefined as never, evidenceStore: undefined as never })
-    } catch (err) {
-      caught = err
-    }
-    expect(caught).toBeInstanceOf(OneLoopPause)
-    expect((caught as OneLoopPause).result.kind).toBe('escalated')
+    const exhausted = await proposer({ worldModel: undefined as never, evidenceStore: undefined as never })
+    expect(exhausted).toMatchObject({
+      __harnessExecutionStatus: 'failed',
+      error: 'Tool loop exceeded 2 iterations without producing a final answer.',
+    })
+
+    // The counter resets on exhaustion (see agent-loop.ts's doc comment) — a requeued retry
+    // gets a fresh per-attempt budget rather than immediately re-tripping the same check.
+    const afterReset = await proposer({ worldModel: undefined as never, evidenceStore: undefined as never })
+    expect(afterReset).toEqual({ __harnessExecutionStatus: 'continue' })
   })
 })

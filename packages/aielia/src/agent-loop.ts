@@ -225,6 +225,9 @@ function shellApprovalReason(command: string, cwd: string): string {
  * per Phase 4's design: a deterministic, harness-state-informed check before each call executes,
  * not just advisory classification checked after the fact.
  */
+/** See createOneLoopProposer's maxIterations doc comment. */
+const RECOVERY_HEADROOM = 4
+
 export class AgentLoop {
   constructor(
     private readonly memory: MemoryAdapter,
@@ -312,7 +315,18 @@ export class AgentLoop {
 
     return async (toolCtx: ToolExecutorContext): Promise<unknown> => {
       if (iteration >= input.maxIterations) {
-        throw new OneLoopPause({ kind: 'escalated', reason: `Tool loop exceeded ${input.maxIterations} iterations without producing a final answer.` })
+        // A genuine harness-level failure (not a pause/approval) — see execute.ts's
+        // isHarnessPauseSignal special-case, which used to make this throw bypass
+        // recordFailure()/rollbackAndReplan() entirely, leaving failure_match structurally
+        // unreachable from a real turn (the layer_conversations audit's finding). Reset to 0
+        // (not left at the ceiling) so a requeued retry (see rollback-replan.ts's
+        // failureModeSwitch requeue) gets a genuine fresh per-attempt budget instead of
+        // immediately re-tripping this same check on its very first call.
+        iteration = 0
+        return {
+          __harnessExecutionStatus: 'failed',
+          error: `Tool loop exceeded ${input.maxIterations} iterations without producing a final answer.`,
+        }
       }
       iteration++
 
@@ -419,7 +433,22 @@ export class AgentLoop {
     ]
     const sources: AssistantSource[] = []
     const proposer = this.createHarnessProposer({
-      messages, tools, sessionId, userMessage, maxIterations: this.maxSteps, sources, onToken, onToolStep, onUsage, riskHint, takeSteeringNotes,
+      messages, tools, sessionId, userMessage,
+      // Per-attempt budget, smaller than the harness's own outer step ceiling
+      // (harness-bridge.ts's max_steps) on purpose — see rollback-replan.ts's
+      // requeueLeafOnLocal/failureModeSwitch. A normal turn (1-4 tool calls) never gets close,
+      // so this changes nothing for the common case; it exists to give a genuinely stuck
+      // attempt real headroom under the outer ceiling for one recovery-driven retry.
+      //
+      // Reserves a fixed RECOVERY_HEADROOM (not a fraction of this.maxSteps): tool-control-
+      // plane.ts's own same-turn DENY (repeated same-tool failures within ~9-10 calls, an
+      // independently-tuned fixed-count threshold, not scaled to maxSteps) must get a genuine
+      // chance to fire first — a fractional split (half of maxSteps=15 -> 8) sat BELOW that
+      // threshold and silently preempted it before it ever ran. A fixed, small reservation
+      // stays out of that mechanism's way for any maxSteps large enough for it to matter, at
+      // the cost of a genuinely small maxSteps (e.g. 6) leaving little room for either.
+      maxIterations: Math.max(3, this.maxSteps - RECOVERY_HEADROOM),
+      sources, onToken, onToolStep, onUsage, riskHint, takeSteeringNotes,
     })
     return { proposer, sources }
   }

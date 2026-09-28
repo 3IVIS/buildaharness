@@ -119,8 +119,13 @@ describe('HarnessRuntime — onFailureModeSwitch fires end to end through a real
     // seeds a prior failure_history entry directly before returning FAILED, rather than relying
     // on a second natural retry (a single-task graph's first failure ends the run; it is not
     // auto-requeued without a supervisor directive — see requeueLeafOnLocal).
+    // Also exercises the requeue extension (rollback-replan.ts: failureModeSwitch requeues a
+    // one-node graph's failed leaf, same as a supervisor directive already did) — without it,
+    // this single-task graph would end after the first failure with nothing PENDING, and the
+    // classification would never get a real second attempt to apply itself to.
     const seen: Array<{ taskId: string; failure_class: string; strategy: string }> = []
-    await new HarnessRuntime().run('objective', ['produce the answer'], {
+    let calls = 0
+    const outcome = await new HarnessRuntime().run('objective', ['produce the answer'], {
       initialTasks: [{
         id: 'respond', description: 'respond', status: 'PENDING', risk_level: 'LOW',
         depends_on: [], parallel_write_domains: [], abstraction_level: 1, assigned_strategy: null,
@@ -128,21 +133,53 @@ describe('HarnessRuntime — onFailureModeSwitch fires end to end through a real
       max_steps: 8,
       toolExecutors: {
         default: (toolCtx) => {
-          toolCtx.failureDiagnostics!.failure_history.push({
-            id: 'prior-1', timestamp: new Date().toISOString(),
-            failure_class: 'unknown', description: 'a prior attempt at this also failed', context: {},
-          })
-          return { __harnessExecutionStatus: 'failed', error: 'injected: the remote peer never responded' }
+          calls += 1
+          if (calls === 1) {
+            toolCtx.failureDiagnostics!.failure_history.push({
+              id: 'prior-1', timestamp: new Date().toISOString(),
+              failure_class: 'unknown', description: 'a prior attempt at this also failed', context: {},
+            })
+            return { __harnessExecutionStatus: 'failed', error: 'injected: the remote peer never responded' }
+          }
+          // The requeued (second) attempt succeeds — a genuinely different call reaching this
+          // toolExecutor at all is only possible once the task was actually requeued.
+          return { __harnessExecutionStatus: 'complete', output: 'recovered answer' }
         },
       },
       semanticFailureMatcher: async () => ({
         failure_class: 'TOOL_UNAVAILABLE_CASCADE', confidence: 0.9, matched_pattern: 'tool-unavailable-cascade',
       }),
       onFailureModeSwitch: (e) => seen.push(e),
-    }).catch(() => {
-      // The run may still end in escalation once the (now-classified) failure exhausts the
-      // single-task graph's retry — the callback firing before that is what this test asserts.
     })
     expect(seen).toEqual([{ taskId: 'respond', failure_class: 'TOOL_UNAVAILABLE_CASCADE', strategy: 'REIMPLEMENT' }])
+    expect(calls).toBe(2)
+    expect(outcome.status).toBe('complete')
+  })
+})
+
+describe('rollbackAndReplan — failureModeSwitch requeues a one-node graph the same way a supervisor directive does', () => {
+  // requeueFailedLeaves() only requeues a task whose graph status is already FAILED — a real
+  // caller (execute.ts's recordFailure) transitions it there before calling rollbackAndReplan;
+  // this test does the same so the graph is in the shape rollbackAndReplan actually receives it.
+  const failedTask = () => ({ ...task(), status: 'FAILED' as const })
+  const run = (matched: FailureDiagnostics['matched_pattern']) => {
+    const fd = new FailureDiagnostics()
+    fd.matched_pattern = matched
+    return rollbackAndReplan(failedTask(), new StrategyState(), fd, new TaskGraph({ tasks: [failedTask()] }), new WorldModel(), new CallerState({ success_criteria: ['ship it'] }), new UnavailableExperienceStore())
+  }
+
+  it('requeues the failed leaf when a confident match with strategy_affinity picked the strategy', () => {
+    const result = run({ failure_class: 'TOOL_UNAVAILABLE_CASCADE', confidence: 0.9, matched_pattern: 'tool-unavailable-cascade', strategy_affinity: 'REIMPLEMENT' })
+    expect(result.newTaskGraph.tasks.find((t) => t.id === 't1')?.status).toBe('PENDING')
+  })
+
+  it('does NOT requeue on the plain ladder walk (no match) — unchanged pre-existing behavior', () => {
+    const result = run(null)
+    expect(result.newTaskGraph.tasks.find((t) => t.id === 't1')?.status).not.toBe('PENDING')
+  })
+
+  it('does NOT requeue below the confidence threshold — unchanged pre-existing behavior', () => {
+    const result = run({ failure_class: 'TOOL_UNAVAILABLE_CASCADE', confidence: 0.5, matched_pattern: 'tool-unavailable-cascade', strategy_affinity: 'REIMPLEMENT' })
+    expect(result.newTaskGraph.tasks.find((t) => t.id === 't1')?.status).not.toBe('PENDING')
   })
 })

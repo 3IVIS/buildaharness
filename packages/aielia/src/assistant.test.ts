@@ -1576,7 +1576,14 @@ describe('PersonalAssistant file tools', () => {
     expect(llm.streamCalls).toBe(0)
   })
 
-  it('exhausting the tool-loop iteration cap escalates instead of looping forever or returning a partial answer', async () => {
+  it('exhausting the tool-loop iteration cap terminates with an honest reply instead of looping forever or returning a fabricated answer', async () => {
+    // Changed from an 'escalated' status with reply: null: iteration exhaustion is now a real
+    // harness-level task failure (see agent-loop.ts's createHarnessProposer), not a thrown
+    // OneLoopPause bypassing the harness's own recovery — with nothing left to retry into (no
+    // failure-mode match, no supervisor redirect, for this scripted client's fixed response),
+    // the harness's own pre-existing stalled-turn fallback takes over and the RUN completes
+    // (status 'ok') with an honest "couldn't complete" reply and a real trace, rather than
+    // throwing past the harness with no reply at all.
     const backend = makeFakeBackend()
     const llm = new ScriptedToolLLMClient(() => ({
       content: '',
@@ -1588,8 +1595,9 @@ describe('PersonalAssistant file tools', () => {
 
     const result = await assistant.turn('Keep listing files forever')
 
-    expect(result.status).toBe('escalated')
-    expect(llm.calls).toBe(6)
+    expect(result.status).toBe('ok')
+    expect(result.reply).toContain("I couldn't complete this")
+    expect(result.trace?.layerActivity.some((e) => e.layer === 'recovery' && e.fired)).toBe(true)
   })
 })
 

@@ -331,7 +331,11 @@ export function rollbackAndReplan(
     // (REDIRECT_STRATEGY, or a completed GATHER_EVIDENCE investigation). diagnoseAndReplan
     // only re-queued dependents, so if that left nothing runnable (one-node turn graph),
     // re-queue the failed leaf so the redirect / new evidence actually gets an attempt.
-    if (requeueLeafOnLocal && !newTaskGraph.tasks.some(t => t.status === 'PENDING')) {
+    // A confident failure-mode-biased switch (failureModeSwitch, computed above) earns the
+    // same requeue on its own — a curated pattern match is as good a reason to give this leaf
+    // one more attempt as a supervisor directive is, and without it the classification + bias
+    // + retry-hint chain has a real decision but nothing left PENDING to apply it to.
+    if ((requeueLeafOnLocal || failureModeSwitch) && !newTaskGraph.tasks.some(t => t.status === 'PENDING')) {
       if (requeueFailedLeaves(newTaskGraph)) {
         newStrategyState.switch_triggers.push(
           `supervisor:requeue_leaf ${supervisorDirective?.rationale ?? ''}`.trim().slice(0, 200),
