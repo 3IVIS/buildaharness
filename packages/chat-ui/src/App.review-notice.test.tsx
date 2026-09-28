@@ -3,16 +3,16 @@ import { render, screen } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 
 /**
- * The semantic change reviewer's advisory notice. The CLI prints `AssistantTurnResult.reviewNotice`
- * under the reply, so the browser surface must show it too — the same mechanism on both surfaces.
+ * The turn notices. The CLI prints `AssistantTurnResult.reviewNotice` (the semantic change reviewer's
+ * advisory) and `contradictionNotice` under the reply, so the browser surface must show it too — the same mechanism on both surfaces.
  */
-function fakeAssistant(reviewNotice: string | undefined) {
+function fakeAssistant(notices: { reviewNotice?: string; contradictionNotice?: string }) {
   const transcript: { role: 'user' | 'assistant'; content: string }[] = []
   return {
     turn: vi.fn(async (message: string) => {
       transcript.push({ role: 'user', content: message })
       transcript.push({ role: 'assistant', content: 'a catering plan' })
-      return { status: 'ok', reply: 'a catering plan', riskLevel: 'LOW', usage: { inputTokens: 1, outputTokens: 1 }, reviewNotice }
+      return { status: 'ok', reply: 'a catering plan', riskLevel: 'LOW', usage: { inputTokens: 1, outputTokens: 1 }, ...notices }
     }),
     getTranscript: vi.fn(async () => transcript),
     getPlanState: vi.fn(async () => null),
@@ -23,7 +23,7 @@ function fakeAssistant(reviewNotice: string | undefined) {
   }
 }
 
-describe('App — change-review notice', () => {
+describe('App — turn notices (change review, contradiction)', () => {
   beforeEach(() => {
     localStorage.setItem('buildaharness.personal-assistant.config', JSON.stringify({ llmBackend: 'proxy' }))
     vi.stubGlobal('fetch', vi.fn().mockRejectedValue(new Error('no network in tests')))
@@ -35,9 +35,9 @@ describe('App — change-review notice', () => {
     vi.resetModules()
   })
 
-  async function send(reviewNotice: string | undefined) {
+  async function send(notices: { reviewNotice?: string; contradictionNotice?: string }) {
     vi.resetModules()
-    const assistant = fakeAssistant(reviewNotice)
+    const assistant = fakeAssistant(notices)
     vi.doMock('@buildaharness/aielia', async () => {
       const actual = await vi.importActual<typeof import('@buildaharness/aielia')>('@buildaharness/aielia')
       return { ...actual, PersonalAssistant: { create: vi.fn(async () => assistant) } }
@@ -50,14 +50,19 @@ describe('App — change-review notice', () => {
   }
 
   it('shows the notice under the reply', async () => {
-    await send('Heads up — this may conflict with something you told me earlier: three years exceeds the twelve-month cap')
+    await send({ reviewNotice: 'Heads up — this may conflict with something you told me earlier: three years exceeds the twelve-month cap' })
     expect(await screen.findByRole('note')).toHaveTextContent('three years exceeds the twelve-month cap')
     expect(screen.getByText('a catering plan')).toBeInTheDocument()
   })
 
   it('shows nothing extra when the turn has no notice', async () => {
-    await send(undefined)
+    await send({})
     await screen.findByText('a catering plan')
     expect(screen.queryByRole('note')).toBeNull()
+  })
+
+  it('shows the contradiction notice under the reply too — the CLI prints it, so the browser must', async () => {
+    await send({ contradictionNotice: 'Heads up — this seems to conflict with something you told me earlier.' })
+    expect(await screen.findByRole('note')).toHaveTextContent('conflict with something you told me earlier')
   })
 })

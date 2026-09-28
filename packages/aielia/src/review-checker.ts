@@ -1,5 +1,5 @@
 import type { ILLMClient, TokenUsage } from '@buildaharness/runtime'
-import { looksLikeCodingFact, type BeliefCandidate } from './contradiction-checker.js'
+import type { BeliefCandidate } from './contradiction-checker.js'
 
 const REVIEW_SCHEMA = {
   type: 'object',
@@ -54,10 +54,12 @@ const SYSTEM_PROMPT =
  * which is why decomposition-classifier.ts and plan-builder.ts prompt task descriptions to lead
  * with their subject. A
  * paraphrased conflict ("we're dropping the login feature" vs. a belief that login is required)
- * slips past that phrase list entirely. Skipped when the change description itself reads like a
- * structured/technical (coding) action — see looksLikeCodingFact's doc comment for why that's
- * exactly the domain the lexical check already handles reasonably well; this is worth spending a
- * call on for a natural-language-shaped change instead. Falls back to "no conflict" on any parse
+ * slips past that phrase list entirely. It runs for every change, coding-shaped or not: it used to
+ * skip a description that looked like a coding action on the theory that the lexical check
+ * covers that domain, but that gate was a keyword list ("build", "test"…) that also matched
+ * ordinary requests ("Build the offsite catering plan…"), and the lexical checks are being rolled
+ * back — the semantic check must not depend on them. The host only wires this when there is a
+ * trusted fact or prediction to check against, which is what bounds its cost. Falls back to "no conflict" on any parse
  * failure or LLM error, matching this codebase's other LLM-backed classifiers — a missed conflict
  * costs nothing worse than the lexical-only behavior this is layered on top of.
  */
@@ -69,8 +71,6 @@ export async function checkSemanticReviewConflict(
   model?: string,
   onUsage?: (usage: TokenUsage) => void,
 ): Promise<{ conflict: boolean; reason?: string }> {
-  if (looksLikeCodingFact(changeDescription)) return { conflict: false }
-
   try {
     const response = await llmClient.callChatStructured(
       [

@@ -1421,5 +1421,5 @@ body {
 }
 .setup__safety summary { cursor: pointer; font-weight: 600; }
 
-/* Advisory heads-up from the semantic change reviewer, shown under the assistant reply it belongs to. */
-.review-notice { margin: 4px 0 8px; padding: 0 14px; color: var(--muted); font-size: 13.5px; }
+/* Heads-up notices (contradiction with an earlier fact, change-review conflict), shown under the assistant reply they belong to — the browser counterpart of the CLI's trailing notice lines. */
+.turn-notice { margin: 4px 0 8px; padding: 0 14px; color: var(--muted); font-size: 13.5px; }

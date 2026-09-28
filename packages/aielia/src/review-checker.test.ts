@@ -33,16 +33,22 @@ class ThrowingLLMClient implements ILLMClient {
 }
 
 describe('checkSemanticReviewConflict', () => {
-  it('returns no conflict without calling the LLM when the change reads like a coding action', async () => {
-    const llm = new StructuredOnlyLLMClient('{"conflict":true,"reason":"should never be read"}')
+  it('also checks a coding-shaped change — the lexical check does not stand in for the semantic one', async () => {
+    const llm = new StructuredOnlyLLMClient('{"conflict":true,"reason":"deleting config.yaml breaks the build that requires it"}')
     const result = await checkSemanticReviewConflict(
       'delete the config.yaml file',
       [{ id: 'b1', statement: 'config.yaml is required for the build' }],
       [],
       llm,
     )
-    expect(result).toEqual({ conflict: false })
-    expect(llm.calls).toBe(0)
+    expect(result).toEqual({ conflict: true, reason: 'deleting config.yaml breaks the build that requires it' })
+    expect(llm.calls).toBe(1)
+  })
+
+  it('checks an ordinary request that merely starts with a coding-sounding verb ("Build the catering plan…")', async () => {
+    const llm = new StructuredOnlyLLMClient('{"conflict":false}')
+    await checkSemanticReviewConflict("Build the offsite catering plan around the caterer's three-year agreement.", [{ id: 'b1', statement: 'suppliers are limited to a year' }], [], llm)
+    expect(llm.calls).toBe(1)
   })
 
   it('calls the LLM and surfaces a real conflict for a natural-language-shaped change', async () => {

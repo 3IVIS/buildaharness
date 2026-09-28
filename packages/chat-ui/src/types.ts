@@ -20,6 +20,8 @@ export type ChatEntry =
       proposerKind?: AssistantTurnResult['proposerKind']
       /** Turn-end next-step options — see AssistantTurnResult.nextSteps. Shown as chips under the latest reply only; picking one fills the composer as an editable draft, it never sends. */
       nextSteps?: AssistantTurnResult['nextSteps']
+      /** Set when the Contradiction layer flagged a conflict with something told earlier — see AssistantTurnResult.contradictionNotice. The CLI prints it under the reply; shown the same way here. */
+      contradictionNotice?: string
       /** Advisory heads-up from the semantic change reviewer — see AssistantTurnResult.reviewNotice. Shown under the reply, same as the CLI prints it. */
       reviewNotice?: string
     }
