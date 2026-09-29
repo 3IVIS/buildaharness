@@ -38,7 +38,8 @@ import type { LayerPolicyMode } from '@buildaharness/harness'
 import { MemoryService, buildTurnFacts, type MemorySummary, type MemoryExport, type PendingFact } from './memory-service.js'
 import type { UserFact } from './fact-extraction.js'
 import { REVIEW_NOTE_PREFIX, reviewNoticeText } from './review-checker.js'
-import { renderHypothesisNote } from './semantic-hypotheses.js'
+import { renderHypothesisNote, hypothesisContextMessage, proposeCompetingExplanations, semanticHypothesesEnabled, HYPOTHESIS_NOTE_PREFIX } from './semantic-hypotheses.js'
+import type { SemanticHypothesisProposal } from '@buildaharness/harness'
 import { RECOVERY_NOTE_PREFIX, recoveryNoteText } from './recovery-note.js'
 import { AssistantSession, type IndexedMessage, type TranscriptSearchHit } from './assistant-session.js'
 import { AgentLoop, OneLoopPause, type BatchBudgetState, type BatchBudgetTrace, type ToolLoopResult, trimmedAverage, nextItemBudget } from './agent-loop.js'
@@ -1046,6 +1047,9 @@ export class PersonalAssistant {
     const recoveryNotes: string[] = []
     // Competing explanations for an underdetermined request (AUDIT_SEMANTIC_HYPOTHESES) — proposer-facing too.
     const hypothesisNotes: string[] = []
+    // Set on a tool-less turn, where the reply is drafted BEFORE the harness runs: the explanations are asked for up front so the
+    // draft can see them, and the harness is handed the same answer instead of asking again. undefined = not asked.
+    let precomputedHypotheses: SemanticHypothesisProposal[] | null | undefined
     const takeProposerNotes = (): string[] => [...(steeringAdapter?.takeNotes() ?? []), ...reviewNotes.splice(0), ...recoveryNotes.splice(0), ...hypothesisNotes.splice(0)]
     // R3 of the internal plan: set only on the flag-ON, non-batch,
     // non-trivial path below — passed to harnessBridge.run() as the toolExecutors 'default' entry
@@ -1134,8 +1138,15 @@ export class PersonalAssistant {
       // accumulating here gives the exact same final string callChatSync would have returned
       // when no listener is attached.
       draftReply = ''
+      let draftSystemPrompt = systemPrompt
+      if (semanticHypothesesEnabled() && classification.isUnderdetermined === true && !classification.isTrivial) {
+        precomputedHypotheses = await proposeCompetingExplanations({ request: userMessage, observations: [], beliefs: [] }, this.llmClient, this.model, accumulateUsage)
+        if (precomputedHypotheses) {
+          draftSystemPrompt = `${systemPrompt}\n\n${hypothesisContextMessage(renderHypothesisNote(precomputedHypotheses).slice(HYPOTHESIS_NOTE_PREFIX.length))}`
+        }
+      }
       for await (const token of this.llmClient.callChat(
-        [{ role: 'system', content: systemPrompt }, ...transcript, { role: 'user', content: userMessage }],
+        [{ role: 'system', content: draftSystemPrompt }, ...transcript, { role: 'user', content: userMessage }],
         { model: this.model, onUsage: accumulateUsage },
       )) {
         draftReply += token
@@ -1229,6 +1240,7 @@ export class PersonalAssistant {
           ? (req) => this.agentLoop.runSupervisorInvestigation(req, { riskHint: classification.riskLevel })
           : undefined,
         updateChannel: steeringAdapter?.channel,
+        precomputedHypotheses,
         onSemanticHypothesis: (e) => {
           if (e.kind === 'generated') hypothesisNotes.push(renderHypothesisNote(e.hypotheses))
         },

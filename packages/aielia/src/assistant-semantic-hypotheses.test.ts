@@ -27,15 +27,18 @@ function backend(): FsBackend {
   }
 }
 
-function build(opts: { underdetermined: boolean }) {
+function build(opts: { underdetermined: boolean; tools?: boolean }) {
   const inner = createScriptedLLMClient({
     responses: ['It could be soft-deleted rows or a stale refresh; here is how to tell.'],
     classify: () => ({ isUnderdetermined: opts.underdetermined }),
     sideResponses: [[PROPOSE_MARKER, PROPOSALS], [JUDGE_MARKER, '{"contradicted":[]}']],
   })
-  const seen = { propose: 0, judge: 0, loopMessages: [] as ChatMessage[][] }
+  const seen = { propose: 0, judge: 0, loopMessages: [] as ChatMessage[][], draftSystems: [] as string[] }
   const client: ILLMClient = {
-    callChat: (m: ChatMessage[], o?: ChatOptions) => inner.callChat(m, o),
+    callChat: (m: ChatMessage[], o?: ChatOptions) => {
+      seen.draftSystems.push(m.find((x) => x.role === 'system')?.content ?? '')
+      return inner.callChat(m, o)
+    },
     callChatSync: (m: ChatMessage[], o?: ChatOptions) => inner.callChatSync(m, o),
     async callChatStructured(messages: ChatMessage[], tools?: ToolDefinition[], options?: ChatOptions): Promise<LLMStructuredResponse> {
       const system = messages.find((x) => x.role === 'system')?.content ?? ''
@@ -45,7 +48,7 @@ function build(opts: { underdetermined: boolean }) {
       return inner.callChatStructured(messages, tools, options)
     },
   } as ILLMClient
-  const assistant = new PersonalAssistant({ llmClient: client, fileTools: { backend: backend(), workspaceRoot: '/ws' } })
+  const assistant = new PersonalAssistant({ llmClient: client, ...(opts.tools === false ? {} : { fileTools: { backend: backend(), workspaceRoot: '/ws' } }) })
   return { assistant, seen }
 }
 
@@ -82,5 +85,30 @@ describe('semantic hypotheses through a real turn', () => {
     expect(seen.propose).toBe(0)
     expect(seen.judge).toBe(0)
     expect(contextMessage(seen.loopMessages[0])).toBeUndefined()
+  })
+
+  describe('a tool-less turn (the reply is drafted before the harness runs)', () => {
+    it('asks up front, shows the draft the explanations, and does not ask a second time when the harness registers them', async () => {
+      process.env.AUDIT_SEMANTIC_HYPOTHESES = '1'
+      const { assistant, seen } = build({ underdetermined: true, tools: false })
+      const result = await assistant.turn(QUESTION, { sessionId: 'h4' })
+      expect(result.status).toBe('ok')
+      expect(seen.propose).toBe(1)
+      expect(seen.draftSystems.at(-1)).toContain('can be explained several ways')
+      expect(seen.draftSystems.at(-1)).toContain('The dashboard refreshed before late rows arrived')
+      expect(result.trace?.layerActivity.some((l) => l.layer === 'hypothesis' && l.reason.startsWith('Weighing 2 competing explanations'))).toBe(true)
+    })
+
+    it('flag off, or not underdetermined: the draft prompt is untouched and nothing is asked', async () => {
+      const off = build({ underdetermined: true, tools: false })
+      await off.assistant.turn(QUESTION, { sessionId: 'h5' })
+      expect(off.seen.propose).toBe(0)
+      expect(off.seen.draftSystems.every((sys) => !sys.includes('can be explained several ways'))).toBe(true)
+
+      process.env.AUDIT_SEMANTIC_HYPOTHESES = '1'
+      const notUnder = build({ underdetermined: false, tools: false })
+      await notUnder.assistant.turn(QUESTION, { sessionId: 'h6' })
+      expect(notUnder.seen.propose).toBe(0)
+    })
   })
 })

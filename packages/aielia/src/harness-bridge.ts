@@ -52,7 +52,7 @@ import type { TraceEvent } from './trace-events.js'
 import { resolveSupervisorEnabled } from './supervisor-flag.js'
 import { controlStateGateEnabled } from './tool-control-plane.js'
 import { semanticHypothesesEnabled, proposeCompetingExplanations, judgeHypothesesAgainstEvidence } from './semantic-hypotheses.js'
-import type { SemanticHypothesisEvent } from '@buildaharness/harness'
+import type { SemanticHypothesisEvent, SemanticHypothesisProposal } from '@buildaharness/harness'
 import { recordLayerTelemetry } from './layer-telemetry.js'
 import { resolveEscalationPlan, escalationEnabled, harnessGatePolicy, turnPolicyBudget, type EscalationPlan } from './layer-policy-wiring.js'
 import type { LayerPolicyMode } from '@buildaharness/harness'
@@ -136,6 +136,8 @@ export interface HarnessRunParams {
   onReviewConflict?: (event: { taskId: string; reason: string }) => void
   /** Competing explanations were generated for an underdetermined request, or one was eliminated by evidence (AUDIT_SEMANTIC_HYPOTHESES). The caller decides how to surface it. */
   onSemanticHypothesis?: (event: SemanticHypothesisEvent) => void
+  /** The competing explanations were already asked for (a tool-less turn drafts its reply first): the harness registers this answer instead of making a second call. `null` = asked, none. `undefined` = not asked. */
+  precomputedHypotheses?: SemanticHypothesisProposal[] | null
   /** A confident failure-mode match picked the recovery strategy — advisory (see HarnessRunOptions.onFailureModeSwitch). The caller decides how to surface it. */
   onFailureModeSwitch?: (event: { taskId: string; failure_class: string; strategy: string }) => void
   /**
@@ -242,7 +244,7 @@ export class HarnessBridge {
   }
 
   async run(params: HarnessRunParams): Promise<HarnessOutcome> {
-    const { sessionId, userMessage, facts, currentTurnFacts = [], draftReply, classification, initialTasks, activePlan, sources, onProgress, onUsage, oneLoopProposer, runInvestigation, askModeEnabled = false, updateChannel, onReviewConflict, onFailureModeSwitch, onSemanticHypothesis } = params
+    const { sessionId, userMessage, facts, currentTurnFacts = [], draftReply, classification, initialTasks, activePlan, sources, onProgress, onUsage, oneLoopProposer, runInvestigation, askModeEnabled = false, updateChannel, onReviewConflict, onFailureModeSwitch, onSemanticHypothesis, precomputedHypotheses } = params
     const runtime = new HarnessRuntime()
     // One harness run per (session, turn) — a run_id a resumed run can be found under if this
     // turn's process died mid-run before reaching the `finally` cleanup below.
@@ -492,7 +494,9 @@ export class HarnessBridge {
         ...(semanticHypothesesEnabled() && classification.isUnderdetermined === true
           ? {
               semanticHypotheses: (input: { objective: string; observations: string[]; beliefs: string[] }) =>
-                proposeCompetingExplanations({ request: userMessage, observations: input.observations, beliefs: input.beliefs }, this.llmClient, this.model(), onUsage),
+                precomputedHypotheses !== undefined
+                  ? Promise.resolve(precomputedHypotheses)
+                  : proposeCompetingExplanations({ request: userMessage, observations: input.observations, beliefs: input.beliefs }, this.llmClient, this.model(), onUsage),
               semanticHypothesisJudge: (input: { hypotheses: Array<{ id: string; explanation: string; predicted_observations: string[] }>; observations: string[] }) =>
                 judgeHypothesesAgainstEvidence(input, this.llmClient, this.model(), onUsage),
               onSemanticHypothesis,
