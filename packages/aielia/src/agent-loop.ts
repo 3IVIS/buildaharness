@@ -34,6 +34,7 @@ const GROUNDING_EXCERPT_CHARS = 6000
 import { wrapUntrusted, detectInjectionLikelyWithLLM } from './trust-tagging.js'
 import { summarizeToolStep, type AssistantToolStep } from './tool-step.js'
 import { REVIEW_NOTE_PREFIX } from './review-checker.js'
+import { sourceReliabilityEnabled, assessSourceReliability, recordSourceAssessments, renderSourceNote } from './source-reliability.js'
 import { RECOVERY_NOTE_PREFIX } from './recovery-note.js'
 
 export type ToolLoopResult =
@@ -332,8 +333,12 @@ export class AgentLoop {
     // real createControlPlaneState() object, never a synthetic { controlState }-only wrapper.
     const controlPlaneState = this.createControlPlaneState()
     const seenInvestigationObs = new Set<string>()
+    // AUDIT_SEMANTIC_SOURCE_RELIABILITY: the single read site. The sources are weighed at most once per
+    // turn, and an answer that did not weigh them is revised at most once.
+    const weighSources = sourceReliabilityEnabled()
+    let sourcesWeighed = false
 
-    return async (toolCtx: ToolExecutorContext): Promise<unknown> => {
+    const proposer = async (toolCtx: ToolExecutorContext): Promise<unknown> => {
       const sharing = input.shareAnswer?.() === true && toolCtx.currentTaskId !== undefined
       if (sharing && sharedOutput !== undefined) {
         if (servedTaskIds.has(toolCtx.currentTaskId!)) {
@@ -430,6 +435,30 @@ export class AgentLoop {
         return { __harnessExecutionStatus: 'continue' }
       }
 
+      if (step.result.kind === 'final' && weighSources && !sourcesWeighed) {
+        // Under claude-cli the tool loop runs inside the subprocess, so no source note can be spliced in
+        // before the answer exists; the sources are weighed after it instead, and an answer that leaned on a
+        // less reliable one is asked for again once with the assessment in front of the model.
+        const weighing = await assessSourceReliability(
+          { question: input.userMessage, sources: input.sources, reply: step.result.content },
+          this.llmClient, this.model(), input.onUsage,
+        )
+        if (weighing) {
+          sourcesWeighed = true
+          // Both evidence stores carry the judgment: the harness's (what answerClaim reads) and this
+          // turn's own (what the tool-control plane reasons over).
+          if (weighing.assessments.length > 0) {
+            recordSourceAssessments(controlPlaneState.evidenceStore, weighing.assessments)
+            if (typeof toolCtx.evidenceStore?.addObservation === 'function') recordSourceAssessments(toolCtx.evidenceStore, weighing.assessments)
+          }
+          if (!weighing.weighed) {
+            input.messages.push({ role: 'assistant', content: step.result.content })
+            input.messages.push({ role: 'user', content: renderSourceNote(weighing) })
+            return proposer(toolCtx)
+          }
+        }
+      }
+
       if (step.result.kind === 'final') {
         // A plan step's answer is part of the conversation the next step continues from.
         if (stepInstruction) input.messages.push({ role: 'assistant', content: step.result.content })
@@ -443,6 +472,7 @@ export class AgentLoop {
 
       throw new OneLoopPause(step.result, toolCtx.currentTaskId)
     }
+    return proposer
   }
 
   /**

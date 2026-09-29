@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { ControlState } from '@buildaharness/harness'
+import { ControlState, EvidenceStore } from '@buildaharness/harness'
 import { InMemoryAdapter, InMemoryReminderStore } from '@buildaharness/runtime'
 import type { ChatMessage, ChatOptions, ILLMClient, LLMStructuredResponse, ToolDefinition } from '@buildaharness/runtime'
 import { AgentLoop, OneLoopPause } from './agent-loop.js'
@@ -542,5 +542,94 @@ describe('AgentLoop.createHarnessProposer — control_state tool-policy ablation
     const seen = await readUnderHarnessDeny(true)
     expect(seen).toContain('SECRET-FILE-BODY')
     expect(seen).not.toContain('harness control state denies action this turn')
+  })
+})
+
+describe('AgentLoop.createHarnessProposer — source reliability (AUDIT_SEMANTIC_SOURCE_RELIABILITY)', () => {
+  const twoSources = () => [
+    { tool: 'read_file' as const, path: 'archive/2019/config.yaml', excerpt: 'port: 8080' },
+    { tool: 'read_file' as const, path: 'config/prod.yaml', excerpt: 'port: 9443' },
+  ]
+  const weighing = (weighed: boolean) =>
+    JSON.stringify({
+      assessments: [
+        { path: 'archive/2019/config.yaml', reliability: 'LOW', reason: 'archived copy' },
+        { path: 'config/prod.yaml', reliability: 'HIGH', reason: 'live config' },
+      ],
+      weighed,
+      ...(weighed ? {} : { note: 'Prefer config/prod.yaml.' }),
+    })
+
+  async function run(flag: boolean, responses: LLMStructuredResponse[]) {
+    const prev = process.env.AUDIT_SEMANTIC_SOURCE_RELIABILITY
+    if (flag) process.env.AUDIT_SEMANTIC_SOURCE_RELIABILITY = '1'
+    else delete process.env.AUDIT_SEMANTIC_SOURCE_RELIABILITY
+    try {
+      const llmClient = new ScriptedLLMClient(responses)
+      const agentLoop = buildAgentLoop(llmClient)
+      let turnLocal: EvidenceStore | undefined
+      const original = agentLoop.createControlPlaneState.bind(agentLoop)
+      agentLoop.createControlPlaneState = () => {
+        const state = original()
+        turnLocal = state.evidenceStore
+        return state
+      }
+      const messages: ChatMessage[] = [{ role: 'user', content: 'which port does prod use?' }]
+      const proposer = agentLoop.createHarnessProposer({
+        messages, tools: [], sessionId: 'session-1', userMessage: 'which port does prod use?', maxIterations: 5, sources: twoSources(),
+      })
+      const harnessStore = new EvidenceStore()
+      const outcome = await proposer({ worldModel: undefined as never, evidenceStore: harnessStore })
+      return { outcome, llmClient, messages, harnessStore, turnLocal: turnLocal! }
+    } finally {
+      if (prev === undefined) delete process.env.AUDIT_SEMANTIC_SOURCE_RELIABILITY
+      else process.env.AUDIT_SEMANTIC_SOURCE_RELIABILITY = prev
+    }
+  }
+
+  const ids = (store: EvidenceStore) => store.observations.map((o) => `${o.id}=${o.reliability}`)
+
+  it('flag off: no assessment call, no note, nothing recorded (a second scripted response would throw if consumed)', async () => {
+    const { outcome, llmClient, harnessStore } = await run(false, [{ content: 'port is 8080' }])
+    expect(outcome).toEqual({ __harnessExecutionStatus: 'complete', output: 'port is 8080' })
+    expect(llmClient.seenMessages).toHaveLength(1)
+    expect(harnessStore.observations).toEqual([])
+  })
+
+  it('flag on, answer weighed the sources: returned as-is, assessments recorded in BOTH stores, no revision', async () => {
+    const { outcome, llmClient, harnessStore, turnLocal } = await run(true, [{ content: 'port is 9443' }, { content: weighing(true) }])
+    expect(outcome).toEqual({ __harnessExecutionStatus: 'complete', output: 'port is 9443' })
+    expect(llmClient.seenMessages).toHaveLength(2)
+    const expected = ['source-reliability:archive/2019/config.yaml=LOW', 'source-reliability:config/prod.yaml=HIGH']
+    expect(ids(harnessStore)).toEqual(expected)
+    expect(ids(turnLocal)).toEqual(expected)
+  })
+
+  it('flag on, answer did not weigh them: the assessment is put to the model and the revised answer is what is returned (once)', async () => {
+    const { outcome, llmClient, messages, harnessStore } = await run(true, [
+      { content: 'port is 8080' },
+      { content: weighing(false) },
+      { content: 'prod uses 9443; the archive says 8080 but is an old copy' },
+    ])
+    expect(outcome).toEqual({ __harnessExecutionStatus: 'complete', output: 'prod uses 9443; the archive says 8080 but is an old copy' })
+    expect(llmClient.seenMessages).toHaveLength(3)
+    const last = llmClient.seenMessages[2]
+    expect(last.at(-2)).toMatchObject({ role: 'assistant', content: 'port is 8080' })
+    expect(last.at(-1)?.content).toContain('- archive/2019/config.yaml: low reliability (archived copy)')
+    expect(last.at(-1)?.content).toContain('Prefer config/prod.yaml.')
+    expect(messages.at(-1)?.role).toBe('user')
+    expect(ids(harnessStore)).toHaveLength(2)
+  })
+
+  it('a revised answer is not weighed again (at most one revision, no third call)', async () => {
+    const { llmClient } = await run(true, [{ content: 'a' }, { content: weighing(false) }, { content: 'b' }])
+    expect(llmClient.seenMessages).toHaveLength(3)
+  })
+
+  it('an unusable assessment fails open: the first answer stands and nothing is recorded', async () => {
+    const { outcome, llmClient, harnessStore } = await run(true, [{ content: 'port is 8080' }, { content: 'not json' }])
+    expect(outcome).toEqual({ __harnessExecutionStatus: 'complete', output: 'port is 8080' })
+    expect(llmClient.seenMessages).toHaveLength(2)
+    expect(harnessStore.observations).toEqual([])
   })
 })

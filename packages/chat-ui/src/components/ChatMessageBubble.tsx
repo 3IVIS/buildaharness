@@ -3,6 +3,7 @@ import ReactMarkdown, { type Components } from 'react-markdown'
 import remarkGfm from 'remark-gfm'
 import {
   buildWhyChain,
+  lowerConfidenceSourceLines,
   LAYER_ORDER,
   LAYER_SHORT_CODE,
   LAYER_DISPLAY_NAME,
@@ -202,6 +203,9 @@ export function ChatMessageBubble({ role, content, riskLevel, trace, harnessSkip
                 <>
                   <div className="bubble__why-confidence">{verificationHealthLabel(trace.verificationHealth)}</div>
                   {answerClaim && <div className="bubble__why-confidence">{answerClaimLabel(answerClaim)}</div>}
+                  {answerClaim && lowerConfidenceSourceLines(answerClaim).map((line) => (
+                    <div key={line} className="bubble__why-confidence">{line}</div>
+                  ))}
                   {/* Only layers that actually fired, chained in the order they fired — quiet
                       otherwise (Phase 3.1 of the harness layer activation plan: the common,
                       unremarkable turn stays quiet, matching the "don't badge LOW risk"

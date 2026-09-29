@@ -41,3 +41,26 @@ describe('answerClaimLabel', () => {
     expect(answerClaimLabel(claim('verified'))).not.toBe(answerClaimLabel(claim('unverified_attempted')))
   })
 })
+
+describe('ChatMessageBubble — lower-confidence source line', () => {
+  const trace = { layerActivity: [], verificationHealth: { strength: 1, feasibility: 1 } } as never
+  const withEvidence = (evidence: AnswerClaim['evidence']): AnswerClaim => ({ ...claim('unverified_attempted'), evidence })
+
+  async function whyText(answerClaim: AnswerClaim): Promise<string> {
+    const { render, screen, fireEvent } = await import('@testing-library/react')
+    const { ChatMessageBubble } = await import('./ChatMessageBubble')
+    const { container } = render(<ChatMessageBubble role="assistant" content="hi" trace={trace} answerClaim={answerClaim} />)
+    fireEvent.click(screen.getByText('Why?'))
+    return container.textContent ?? ''
+  }
+
+  it('shows a LOW-assessed source in the Why? panel', async () => {
+    const text = await whyText(withEvidence([{ id: 'source-reliability:notes/old-wiki.md', obs: 'notes/old-wiki.md — archived forum copy', reliability: 'LOW', source: 'notes/old-wiki.md', evidence_type: 'OBSERVATION', freshness: '2026-09-29T00:00:00.000Z' }]))
+    expect(text).toContain('Less reliable source: notes/old-wiki.md — archived forum copy')
+  })
+
+  it('stays quiet when no source was judged LOW', async () => {
+    const text = await whyText(withEvidence([]))
+    expect(text).not.toContain('Less reliable source')
+  })
+})
