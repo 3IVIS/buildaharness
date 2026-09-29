@@ -499,3 +499,48 @@ describe('AgentLoop.createOneLoopProposer — subtasks that share one answer (sh
     }
   })
 })
+
+describe('AgentLoop.createHarnessProposer — control_state tool-policy ablation (AUDIT_CONTROL_STATE_TOOL_POLICY, eval-only)', () => {
+  // A harness ControlState that DENYs, folded into tool policy each iteration (agent-loop.ts's
+  // moreRestrictiveControlState). With the ablation on that fold is skipped, so the read runs.
+  async function readUnderHarnessDeny(pinned: boolean): Promise<string> {
+    const prev = process.env.AUDIT_CONTROL_STATE_TOOL_POLICY
+    if (pinned) process.env.AUDIT_CONTROL_STATE_TOOL_POLICY = '0'
+    else delete process.env.AUDIT_CONTROL_STATE_TOOL_POLICY
+    try {
+      await fakeFileTools.backend.writeTextFile('/workspace/notes.txt', 'SECRET-FILE-BODY')
+      const llmClient = new ScriptedLLMClient([
+        { content: '', toolCalls: [{ id: 'toolu_1', name: 'read_file', input: { path: 'notes.txt' } }] },
+        { content: 'done' },
+      ])
+      const proposer = buildAgentLoop(llmClient).createHarnessProposer({
+        messages: [{ role: 'user', content: 'read notes.txt' }],
+        tools: [],
+        sessionId: 'session-1',
+        userMessage: 'read notes.txt',
+        maxIterations: 5,
+        sources: [],
+      })
+      const deny = new ControlState({ permission: 'DENY', execution_mode: 'RECOVERY' })
+      const toolCtx = { worldModel: undefined as never, evidenceStore: undefined as never, controlState: deny }
+      await proposer(toolCtx)
+      await proposer(toolCtx)
+      return JSON.stringify(llmClient.seenMessages[1])
+    } finally {
+      if (prev === undefined) delete process.env.AUDIT_CONTROL_STATE_TOOL_POLICY
+      else process.env.AUDIT_CONTROL_STATE_TOOL_POLICY = prev
+    }
+  }
+
+  it('default: a harness DENY reaches tool policy — the model sees the denial, not the file', async () => {
+    const seen = await readUnderHarnessDeny(false)
+    expect(seen).toContain('harness control state denies action this turn')
+    expect(seen).not.toContain('SECRET-FILE-BODY')
+  })
+
+  it('ablation on: the same harness DENY is ignored by tool policy — the read executes', async () => {
+    const seen = await readUnderHarnessDeny(true)
+    expect(seen).toContain('SECRET-FILE-BODY')
+    expect(seen).not.toContain('harness control state denies action this turn')
+  })
+})

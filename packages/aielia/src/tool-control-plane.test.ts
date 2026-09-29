@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest'
 import { ControlState } from '@buildaharness/harness'
-import { createTurnControlPlaneState, recordToolOutcome, toolAvailabilityManifest, moreRestrictiveControlState } from './tool-control-plane.js'
+import { createTurnControlPlaneState, recordToolOutcome, toolAvailabilityManifest, moreRestrictiveControlState, controlStateToolPolicyEnabled, controlStateGateEnabled } from './tool-control-plane.js'
 
 describe('toolAvailabilityManifest', () => {
   it('marks every named tool available', () => {
@@ -136,5 +136,44 @@ describe('moreRestrictiveControlState', () => {
     const turnLocalAfterFailures = deny()
     const freshHarnessState = allow()
     expect(moreRestrictiveControlState(turnLocalAfterFailures, freshHarnessState).permission).toBe('DENY')
+  })
+})
+
+describe('control_state ablation — AUDIT_CONTROL_STATE_TOOL_POLICY / _GATE (eval-only)', () => {
+  it('both gates default ON for unset/empty/truthy values and OFF only for falsy ones', () => {
+    for (const [fn, key] of [
+      [controlStateToolPolicyEnabled, 'AUDIT_CONTROL_STATE_TOOL_POLICY'],
+      [controlStateGateEnabled, 'AUDIT_CONTROL_STATE_GATE'],
+    ] as const) {
+      expect(fn({})).toBe(true)
+      expect(fn({ [key]: '' })).toBe(true)
+      for (const v of ['1', 'true', 'on', 'enabled']) expect(fn({ [key]: v }), `${key}=${v}`).toBe(true)
+      for (const v of ['0', 'false', 'off', 'no', 'disabled', ' OFF ']) expect(fn({ [key]: v }), `${key}=${v}`).toBe(false)
+    }
+  })
+
+  it('the two switches are independent', () => {
+    expect(controlStateToolPolicyEnabled({ AUDIT_CONTROL_STATE_GATE: '0' })).toBe(true)
+    expect(controlStateGateEnabled({ AUDIT_CONTROL_STATE_TOOL_POLICY: '0' })).toBe(true)
+  })
+
+  it('pinNormal: 8 failures still record evidence and failures but never leave ALLOW/NORMAL', () => {
+    const state = createTurnControlPlaneState(['read_file'], { pinNormal: true })
+    let cs = state.controlState
+    for (let i = 0; i < 8; i++) {
+      cs = recordToolOutcome(state, { toolName: 'read_file', ok: false, summary: `read_file failed: attempt ${i}` })
+    }
+    expect(state.failureDiagnostics.failure_history).toHaveLength(8)
+    expect(cs.permission).toBe('ALLOW')
+    expect(cs.execution_mode).toBe('NORMAL')
+  })
+
+  it('without pinNormal the identical sequence is DENY (so the pinned case above is not vacuous)', () => {
+    const state = createTurnControlPlaneState(['read_file'])
+    let cs = state.controlState
+    for (let i = 0; i < 8; i++) {
+      cs = recordToolOutcome(state, { toolName: 'read_file', ok: false, summary: `read_file failed: attempt ${i}` })
+    }
+    expect(cs.permission).toBe('DENY')
   })
 })

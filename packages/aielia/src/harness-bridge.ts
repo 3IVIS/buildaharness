@@ -50,6 +50,7 @@ import type { AssistantSource } from './assistant-source.js'
 import type { AssistantProgress } from './assistant-types.js'
 import type { TraceEvent } from './trace-events.js'
 import { resolveSupervisorEnabled } from './supervisor-flag.js'
+import { controlStateGateEnabled } from './tool-control-plane.js'
 import { recordLayerTelemetry } from './layer-telemetry.js'
 import { resolveEscalationPlan, escalationEnabled, harnessGatePolicy, turnPolicyBudget, type EscalationPlan } from './layer-policy-wiring.js'
 import type { LayerPolicyMode } from '@buildaharness/harness'
@@ -421,6 +422,9 @@ export class HarnessBridge {
         // (and any reviewer_pass_2 re-run) entirely, including its C1/C2 sub-mechanisms. Default
         // ON — unchanged shipped behaviour; skipReviewerPass stays undefined.
         skipReviewerPass: reviewerPassEnabled() ? undefined : true,
+        // AUDIT_CONTROL_STATE_GATE (feature-value audit, control_state, eval-only) → the harness's
+        // own ControlState stays ALLOW/NORMAL (no gate BLOCK/ESCALATE). Default ON — unchanged.
+        skipControlState: controlStateGateEnabled() ? undefined : true,
         // Trajectory Supervisor GATHER_EVIDENCE host (S5). Inert unless a supervisorDecider is
         // also wired and returns a GATHER_EVIDENCE directive at a stall edge; absent → the
         // harness degrades GATHER_EVIDENCE to CONTINUE.

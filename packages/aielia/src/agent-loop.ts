@@ -19,7 +19,7 @@ import type { DebugLogEntry } from './debug-log.js'
 import type { TraceEvent } from './trace-events.js'
 import type { TurnIntentClassification, RiskLevel } from './turn-intent-classifier.js'
 import { evaluateToolPolicy } from './tool-policy.js'
-import { createTurnControlPlaneState, recordToolOutcome, moreRestrictiveControlState, type TurnControlPlaneState } from './tool-control-plane.js'
+import { createTurnControlPlaneState, recordToolOutcome, moreRestrictiveControlState, controlStateToolPolicyEnabled, type TurnControlPlaneState } from './tool-control-plane.js'
 import { classifyToolYield, type ToolYield } from './tool-yield-classifier.js'
 import { FILE_TOOLS, executeFileTool, readCurrentFileContent, type FileToolsContext } from './file-tools.js'
 import { formatWriteDiff } from './diff-format.js'
@@ -263,7 +263,8 @@ export class AgentLoop {
       ...(this.actionTools ? ACTION_TOOLS : []),
       ...REMINDER_TOOLS,
     ].map((tool) => tool.name)
-    return createTurnControlPlaneState(toolNames)
+    // AUDIT_CONTROL_STATE_TOOL_POLICY (feature-value audit, eval-only): the one read site.
+    return createTurnControlPlaneState(toolNames, { pinNormal: !controlStateToolPolicyEnabled() })
   }
 
   /**
@@ -415,7 +416,7 @@ export class AgentLoop {
       // restrictive — an overwrite here would let a fresh harness ALLOW silently erase a DENY
       // this turn's own repeated tool failures already earned (Phase 4c's same-turn
       // failure-pattern gate).
-      if (toolCtx.controlState) {
+      if (toolCtx.controlState && !controlPlaneState.pinNormal) {
         controlPlaneState.controlState = moreRestrictiveControlState(controlPlaneState.controlState, toolCtx.controlState)
       }
 

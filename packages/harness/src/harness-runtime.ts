@@ -2,7 +2,8 @@ import { type ExperienceStore, UnavailableExperienceStore } from './state/experi
 import { gatherEvidence } from './nodes/gather-evidence.js'
 import { applyToolReliability } from './nodes/apply-tool-reliability.js'
 import { resolveControlState, CAUTION_THRESHOLD } from './nodes/resolve-control-state.js'
-import { riskSummary } from './state/control-state.js'
+import { riskSummary, ControlState } from './state/control-state.js'
+import type { ControlStateResolverFn } from './generation-id.js'
 import { updateDiagnostics } from './nodes/update-diagnostics.js'
 import { detectContradictions, recordExternalContradiction, type ExternalContradictionInput } from './nodes/detect-contradictions.js'
 import { generateUpdateHypotheses } from './nodes/generate-update-hypotheses.js'
@@ -196,6 +197,16 @@ export interface HarnessRunOptions extends HarnessInitOptions {
    * equivalent — the ablation arm is PA-only.
    */
   skipReviewerPass?: boolean
+  /**
+   * EVAL-ONLY ablation seam (feature-value audit, control_state) — default absent/false = today's
+   * behaviour. When true, `resolveAndStamp()` returns without resolving, so the harness's own
+   * ControlState stays at its initial ALLOW/NORMAL: no gate BLOCK/ESCALATE from a resolver DENY, no
+   * reviewer-verdict CAUTIOUS. The pending reviewer verdict is still consumed so it cannot pile up.
+   * Stall detection (`cannotMakeProgress`) reads strategy/failure state, not ControlState, so it is
+   * unaffected. No product path sets this: the only caller is the benchmark arm's env flag in
+   * aielia's harness-bridge. The Python twin has no equivalent — the ablation arm is PA-only.
+   */
+  skipControlState?: boolean
   /** See GateDecisionEvent — fired when action_gate returns BLOCK or ESCALATE, right before the run either loops or halts. */
   onGateDecision?: (event: GateDecisionEvent) => void
   /**
@@ -401,6 +412,7 @@ interface LoopContext {
   onVerification?: (result: VerificationResult) => void
   skipVerification?: boolean
   skipReviewerPass?: boolean
+  skipControlState?: boolean
   onGateDecision?: (event: GateDecisionEvent) => void
   rollbackExecutors?: Record<string, () => void>
   contradictionChecker?: (
@@ -495,6 +507,7 @@ function buildInitialContext(
     onVerification: options.onVerification,
     skipVerification: options.skipVerification,
     skipReviewerPass: options.skipReviewerPass,
+    skipControlState: options.skipControlState,
     onGateDecision: options.onGateDecision,
     rollbackExecutors: options.rollbackExecutors,
     contradictionChecker: options.contradictionChecker,
@@ -573,6 +586,7 @@ function buildResumedContext(rawCheckpoint: HarnessCheckpoint, options: HarnessR
     onVerification: options.onVerification,
     skipVerification: options.skipVerification,
     skipReviewerPass: options.skipReviewerPass,
+    skipControlState: options.skipControlState,
     onGateDecision: options.onGateDecision,
     rollbackExecutors: options.rollbackExecutors,
     contradictionChecker: options.contradictionChecker,
@@ -714,6 +728,22 @@ function anyDiagnosticSubDimensionCautious(diagnostics: LoopContext['diagnostics
   return healthy.some(v => v < CAUTION_THRESHOLD) || inverted.some(v => v > 1 - CAUTION_THRESHOLD)
 }
 
+/**
+ * Eval-only ablation (control_state): what `skipControlState` substitutes for the resolver — a
+ * default ALLOW/NORMAL state stamped with the WorldModel's current generation_id, so the staleness
+ * check in `_maybeResolve` stays satisfied without any tier ever firing.
+ */
+function pinnedNormalControlState(worldModel: WorldModel): ControlState {
+  const cs = new ControlState()
+  cs.generation_id = worldModel.generation_id
+  return cs
+}
+
+/** The resolver the action/post-exec gates and parallel reconcile re-resolve with when stale. */
+function controlStateResolverFor(ctx: LoopContext): ControlStateResolverFn {
+  return ctx.skipControlState ? (_diagnostics, worldModel) => pinnedNormalControlState(worldModel) : resolveControlState
+}
+
 function resolveAndStamp(ctx: LoopContext): void {
   // Phase I / INV-18: one-shot — whatever pendingReviewerVerdict is currently set (if
   // any) is consumed by this one resolve call and cleared immediately after, so a stale
@@ -721,7 +751,9 @@ function resolveAndStamp(ctx: LoopContext): void {
   // it occurs) sees nothing pending.
   const verdict = ctx.pendingReviewerVerdict
   ctx.pendingReviewerVerdict = undefined
-  const newCS = resolveControlState(ctx.diagnostics, ctx.worldModel, ctx.failureDiagnostics, undefined, verdict)
+  const newCS = ctx.skipControlState
+    ? pinnedNormalControlState(ctx.worldModel)
+    : resolveControlState(ctx.diagnostics, ctx.worldModel, ctx.failureDiagnostics, undefined, verdict)
   ctx.controlState.generation_id = newCS.generation_id
   ctx.controlState.permission = newCS.permission
   ctx.controlState.execution_mode = newCS.execution_mode
@@ -1047,7 +1079,7 @@ async function* driveMainLoop(ctx: LoopContext): AsyncGenerator<HarnessCheckpoin
       ctx.worldModel,
       ctx.diagnostics,
       ctx.failureDiagnostics,
-      resolveControlState,
+      controlStateResolverFor(ctx),
     )
 
     // ─── NEW SUSPEND POINT ──────────────────────────────────────────────
@@ -1425,7 +1457,7 @@ async function* driveMainLoop(ctx: LoopContext): AsyncGenerator<HarnessCheckpoin
       ctx.diagnostics,
       ctx.failureDiagnostics,
       ctx.outputContract,
-      resolveControlState,
+      controlStateResolverFor(ctx),
     )
 
     ctx.nodeExecutionOrder.push('update_task_state')
@@ -1590,7 +1622,7 @@ async function* driveMainLoop(ctx: LoopContext): AsyncGenerator<HarnessCheckpoin
         ctx.failureDiagnostics,
         ctx.evidenceStore,
         ctx.hypothesisSet,
-        resolveControlState,
+        controlStateResolverFor(ctx),
         currentTask.parallel_write_domains.flatMap(
           (da): Array<[string, string]> => (concurrentTask.parallel_write_domains.map(db => [da, db])),
         ),

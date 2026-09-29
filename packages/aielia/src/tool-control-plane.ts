@@ -51,6 +51,39 @@ export interface TurnControlPlaneState {
   readonly diagnostics: Diagnostics
   readonly failureDiagnostics: FailureDiagnostics
   controlState: ControlState
+  /**
+   * EVAL-ONLY ablation (see `controlStateToolPolicyEnabled`): when true this state stays at its
+   * default ALLOW/NORMAL — `recordToolOutcome` still records evidence but never re-resolves, and
+   * agent-loop does not fold the harness's per-iteration state in — so tool policy never sees a DENY.
+   */
+  readonly pinNormal?: boolean
+}
+
+/**
+ * `AUDIT_CONTROL_STATE_TOOL_POLICY` gate — feature-value audit, EVAL-ONLY: default **ON** (unset /
+ * empty / truthy keeps today's behaviour). Only the benchmark's `controlStateToolPolicyOff` and
+ * `controlStateOff` arms set a falsy value (`0` / `false` / `off` / `no` / `disabled`), which pins the
+ * ControlState that `evaluateToolPolicy` reads at ALLOW/NORMAL. Read at exactly one call site
+ * (`createControlPlaneState`); the harness's own gate is a separate switch (`AUDIT_CONTROL_STATE_GATE`).
+ */
+export function controlStateToolPolicyEnabled(env?: Record<string, string | undefined>): boolean {
+  const source = env ?? (typeof process !== 'undefined' ? process.env : {})
+  const raw = String(source.AUDIT_CONTROL_STATE_TOOL_POLICY ?? '').trim().toLowerCase()
+  if (raw === '') return true
+  return !['0', 'false', 'off', 'no', 'disabled'].includes(raw)
+}
+
+/**
+ * `AUDIT_CONTROL_STATE_GATE` gate — feature-value audit, EVAL-ONLY: default **ON**. Only the
+ * `controlStateOff` arm sets a falsy value, which makes `HarnessBridge.run` pass
+ * `skipControlState: true` to HarnessRuntime so `resolveAndStamp` leaves the harness's own state at
+ * ALLOW/NORMAL (no gate BLOCK/ESCALATE, no reviewer-verdict CAUTIOUS). Read at one call site.
+ */
+export function controlStateGateEnabled(env?: Record<string, string | undefined>): boolean {
+  const source = env ?? (typeof process !== 'undefined' ? process.env : {})
+  const raw = String(source.AUDIT_CONTROL_STATE_GATE ?? '').trim().toLowerCase()
+  if (raw === '') return true
+  return !['0', 'false', 'off', 'no', 'disabled'].includes(raw)
 }
 
 /**
@@ -62,8 +95,9 @@ export function toolAvailabilityManifest(toolNames: string[]): Record<string, To
   return Object.fromEntries(toolNames.map((name) => [name, { available: true, fallback_tool: null }]))
 }
 
-export function createTurnControlPlaneState(toolNames: string[]): TurnControlPlaneState {
+export function createTurnControlPlaneState(toolNames: string[], opts: { pinNormal?: boolean } = {}): TurnControlPlaneState {
   return {
+    ...(opts.pinNormal ? { pinNormal: true } : {}),
     evidenceStore: new EvidenceStore({ tool_availability_manifest: toolAvailabilityManifest(toolNames) }),
     worldModel: new WorldModel(),
     diagnostics: new Diagnostics(),
@@ -139,6 +173,7 @@ export function recordToolOutcome(state: TurnControlPlaneState, outcome: ToolOut
     failure_recurrence: normalise(Math.min(1, state.failureDiagnostics.failure_history.length / 10), DimensionType.ratio),
   }
 
+  if (state.pinNormal) return state.controlState
   state.controlState = resolveControlState(state.diagnostics, state.worldModel, state.failureDiagnostics)
   return state.controlState
 }
