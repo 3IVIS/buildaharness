@@ -335,9 +335,11 @@ const TURN_INTENT_SYSTEM_PROMPT =
   'and asks for no new work and gives no go-ahead to continue. False for "go ahead", "continue", ' +
   '"run the plan", "do the next step", an edit to the plan, an approval, or anything that asks the ' +
   'assistant to do work. If told no plan is active, always return false.\n\n' +
-  '15. isUnderdetermined: true only if the message asks WHY something happened, or WHICH of several things is true, ' +
-  'and nothing in the message settles it — a discrepancy, an unexplained result, a symptom with several plausible causes. ' +
-  'False for a request to do something, a factual lookup, a how-to, or a question with one clear answer.\n\n' +
+  '15. isUnderdetermined: true if the message asks WHY something happened, or WHICH of several things is true, ' +
+  'and the facts it gives (if any) are consistent with more than one explanation — a discrepancy, an unexplained ' +
+  'result, a symptom with several plausible causes — even when one explanation seems the most likely. Supplied facts ' +
+  'that fit two different mechanisms do NOT settle it. ' +
+  'False for a request to do something, a factual lookup, a how-to, or a question whose facts leave one clear answer.\n\n' +
   'Respond with JSON only, matching this shape exactly: {"riskLevel": "LOW"|"MEDIUM"|"HIGH", ' +
   '"riskReason": string, "isTrivial": boolean, "decomposedTasks": [{"id": string, "description": ' +
   'string, "depends_on": string[], "riskLevel": "LOW"|"MEDIUM"|"HIGH"}], "isReminderRequest": ' +
