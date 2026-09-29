@@ -4,6 +4,7 @@ import type { TaskGraph } from '../state/task-graph.js'
 import type { FailureDiagnostics } from '../state/failure-diagnostics.js'
 import type { Diagnostics } from '../state/diagnostics.js'
 import { normalise, assertNormalised, DimensionType } from '../normalise.js'
+import { EXECUTION_RATIO_MIN_ATTEMPTS } from '../_core-generated.js'
 import { computeSourceEntropy } from './generate-update-hypotheses.js'
 import { getGranularityMarkers } from '../lexical/patterns.js'
 
@@ -147,8 +148,13 @@ export function updateDiagnostics(
   // BLOCKED and — since action_gate then refuses every further task — deadlock permanently,
   // since the only way to raise the ratio is to complete more tasks. 1.0 until anything has
   // been attempted (matches Python: only updates once the journal is non-empty).
+  //
+  // Below EXECUTION_RATIO_MIN_ATTEMPTS attempted tasks the ratio stays neutral (1.0): with a denominator
+  // of 1 — every ordinary single-task turn — one failed attempt reads 0/1 = 0, past CRITICAL_THRESHOLD,
+  // so Tier 2 DENYs and the gate blocks before the recovery ladder can retry once. The trend is carried
+  // by failure_recurrence and the stall rule (cannotMakeProgress) until there is a real sample.
   const progressRate = normalise(
-    attemptedTasks > 0 ? completedTasks / attemptedTasks : 1.0,
+    attemptedTasks >= EXECUTION_RATIO_MIN_ATTEMPTS ? completedTasks / attemptedTasks : 1.0,
     DimensionType.ratio,
   )
   assertNormalised(progressRate, 'execution_health.progress_rate')
@@ -161,7 +167,8 @@ export function updateDiagnostics(
   assertNormalised(failureRecurrence, 'execution_health.failure_recurrence')
 
   // oscillation_score: 0=healthy (no failed tasks), 1=max — inverted in resolveControlState
-  const oscillationScore = normalise(totalTasks > 0 ? failedTasks / totalTasks : 0, DimensionType.ratio)
+  // Same minimum sample as progress_rate: 1 failed task of 1 is not an oscillation.
+  const oscillationScore = normalise(totalTasks > 0 && attemptedTasks >= EXECUTION_RATIO_MIN_ATTEMPTS ? failedTasks / totalTasks : 0, DimensionType.ratio)
   assertNormalised(oscillationScore, 'execution_health.oscillation_score')
 
   diagnostics.execution_health = { progress_rate: progressRate, failure_recurrence: failureRecurrence, oscillation_score: oscillationScore }
