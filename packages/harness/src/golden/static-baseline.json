@@ -703,6 +703,11 @@
           "reason": "one eligible task — serial execution"
         },
         {
+          "layer": "diagnostics",
+          "fired": true,
+          "reason": "a sub-dimension crossed the caution threshold"
+        },
+        {
           "layer": "verification",
           "fired": true,
           "reason": "verification failed: Result is null — syntax check failed"
@@ -841,6 +846,11 @@
           "layer": "planning",
           "fired": false,
           "reason": "one eligible task — serial execution"
+        },
+        {
+          "layer": "diagnostics",
+          "fired": true,
+          "reason": "a sub-dimension crossed the caution threshold"
         },
         {
           "layer": "verification",
@@ -1400,6 +1410,11 @@
           "layer": "world_model",
           "fired": false,
           "reason": "single LOW-risk task, no durable fact stated — observation only"
+        },
+        {
+          "layer": "diagnostics",
+          "fired": true,
+          "reason": "Health: nominal"
         },
         {
           "layer": "verification",

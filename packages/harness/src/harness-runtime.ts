@@ -431,6 +431,8 @@ interface LoopContext {
   onTaskNotAccomplished?: (event: { taskId: string; reason: string }) => void
   /** The most recent task the completion check judged not done — read only by stalledTurnFallbackResult so the stranded reply can say why. Not checkpointed. */
   lastNotAccomplished?: { taskDescription: string; reason: string }
+  /** What the `diagnostics` layer last told the caller (true = caution, false = nominal) — lets the post-exec pass report only a change. Not persisted. */
+  lastReportedDiagnosticsCautious?: boolean
   changeReviewFacts?: () => Array<{ statement: string }>
   onReviewConflict?: (event: { taskId: string; reason: string }) => void
   /** A confident failure-mode match picked the next recovery strategy — see nodes/rollback-replan.ts's RollbackReplanResult.failureModeSwitch. Bookkeeping only unless the host surfaces this to the proposer. */
@@ -744,6 +746,17 @@ function controlStateResolverFor(ctx: LoopContext): ControlStateResolverFn {
   return ctx.skipControlState ? (_diagnostics, worldModel) => pinnedNormalControlState(worldModel) : resolveControlState
 }
 
+/**
+ * Reports the `diagnostics` layer. `onlyOnChange` (the post-execution pass) reports nothing unless the
+ * verdict differs from what this run last reported, so a quiet iteration adds no second line.
+ */
+function reportDiagnosticsHealth(ctx: LoopContext, onlyOnChange = false): void {
+  const cautious = anyDiagnosticSubDimensionCautious(ctx.diagnostics)
+  if (onlyOnChange && ctx.lastReportedDiagnosticsCautious === cautious) return
+  ctx.lastReportedDiagnosticsCautious = cautious
+  reportLayer(ctx, 'diagnostics', true, cautious ? 'a sub-dimension crossed the caution threshold' : 'Health: nominal')
+}
+
 function resolveAndStamp(ctx: LoopContext): void {
   // Phase I / INV-18: one-shot — whatever pendingReviewerVerdict is currently set (if
   // any) is consumed by this one resolve call and cleared immediately after, so a stale
@@ -931,7 +944,7 @@ async function* driveMainLoop(ctx: LoopContext): AsyncGenerator<HarnessCheckpoin
     ctx.nodeExecutionOrder.push('update_diagnostics')
     updateDiagnostics(ctx.worldModel, ctx.hypothesisSet, ctx.taskGraph, ctx.failureDiagnostics, ctx.beliefDepGraph, ctx.diagnostics)
     reevaluatePolicy(ctx)
-    reportLayer(ctx, 'diagnostics', true, anyDiagnosticSubDimensionCautious(ctx.diagnostics) ? 'a sub-dimension crossed the caution threshold' : 'Health: nominal')
+    reportDiagnosticsHealth(ctx)
 
     ctx.worldModel.incrementGenerationId()
     ctx.nodeExecutionOrder.push('resolve_control_state')
@@ -1395,6 +1408,10 @@ async function* driveMainLoop(ctx: LoopContext): AsyncGenerator<HarnessCheckpoin
     ctx.nodeExecutionOrder.push('update_diagnostics_post_exec')
     updateDiagnostics(ctx.worldModel, ctx.hypothesisSet, ctx.taskGraph, ctx.failureDiagnostics, ctx.beliefDepGraph, ctx.diagnostics)
     reevaluatePolicy(ctx)
+    // The line above the execute step reports health from before this iteration's execution was recorded.
+    // Say so again only if this iteration's execution changed the verdict — a failure that tips a run into
+    // caution is otherwise not reported until the next iteration, if that iteration is ever reached.
+    reportDiagnosticsHealth(ctx, true)
 
     // Semantic escalation layered on top of FailureModeLibrary's own exact-string-overlap
     // match() above — only when the exact match found nothing, there are symptoms and library
