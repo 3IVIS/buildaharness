@@ -9,6 +9,7 @@ import {
 } from '@buildaharness/harness'
 import type { MemoryAdapter, TokenUsage } from '@buildaharness/runtime'
 import { buildAnswerClaim } from './answer-claim.js'
+import type { GroundingResult } from './grounding-check.js'
 import type { TurnIntentClassification } from './turn-intent-classifier.js'
 import type { PlanRecord } from './plan-store.js'
 import { PlanService } from './plan-service.js'
@@ -20,6 +21,11 @@ import type { AssistantSource } from './assistant-source.js'
 import type { BatchBudgetTrace } from './agent-loop.js'
 import type { AssistantTrace, AssistantTurnResult } from './assistant-types.js'
 import type { TraceEvent } from './trace-events.js'
+
+/** Drops the internal `excerpt` (raw tool text, grounding-check input only) so it never reaches a result, transcript or UI. */
+function publicSources(sources: AssistantSource[] | undefined): AssistantSource[] | undefined {
+  return sources?.map(({ excerpt: _excerpt, ...source }) => source)
+}
 
 /**
  * AssistantTurnResult assembly for every return path — the triviality fast path, the
@@ -45,6 +51,10 @@ export class ResponseService {
     // every caller that never opted in, and whenever goalGraphSuggestMode is 'disabled') means no
     // proposal and no extra LLM call. Best-effort by construction: see syncGoalThreadEvidence.
     private readonly nextStepProposer?: (thread: GoalThread, onUsage: ((usage: TokenUsage) => void) | undefined, sessionId: string) => Promise<ThreadSuggestion[]>,
+    // Compares a finished reply to the raw tool results behind it (grounding-check.ts) so
+    // answerClaim can only say `verified` for a reply that matched them. Absent when
+    // AUDIT_SEMANTIC_GROUNDING is off — buildAnswerClaim then keeps its mechanical-only meaning.
+    private readonly groundingChecker?: (input: { question: string; reply: string; sources: AssistantSource[] | undefined }, onUsage: ((usage: TokenUsage) => void) | undefined) => Promise<GroundingResult>,
   ) {}
 
   /**
@@ -110,7 +120,7 @@ export class ResponseService {
     // detail" UI can still render (all 11 layer cells shown, none highlighted) instead of hiding
     // the panel outright, which read as broken rather than "skipped on purpose".
     const skippedTrace: AssistantTrace = { nodeExecutionOrder: [], verificationHealth: { strength: 0, feasibility: 0 }, layerActivity: [], batchBudget: batchBudgetTrace }
-    return { status: 'ok', reply: draftReply, riskLevel: classification.riskLevel, stepsUsed: 0, harnessSkipped: true, trace: skippedTrace, sources, usage: usageTotal, contradictionNotice }
+    return { status: 'ok', reply: draftReply, riskLevel: classification.riskLevel, stepsUsed: 0, harnessSkipped: true, trace: skippedTrace, sources: publicSources(sources), usage: usageTotal, contradictionNotice }
   }
 
   async buildPausedResult(params: {
@@ -196,6 +206,8 @@ export class ResponseService {
       verification: lastVerification,
       contradicted: contradictionNotice !== undefined,
       verificationHealth: trace.verificationHealth,
+      // The substantive answer, not the pacing note appended to it.
+      grounding: await this.groundingChecker?.({ question: userMessage, reply: reportedReply, sources }, onUsage),
     })
 
     return {
@@ -209,7 +221,7 @@ export class ResponseService {
       stepsUsed: checkpoint.progress.stepsUsed,
       harnessSkipped: false,
       trace,
-      sources,
+      sources: publicSources(sources),
       planStatus,
       contradictionNotice,
       answerClaim,
@@ -274,9 +286,10 @@ export class ResponseService {
       verification: lastVerification,
       contradicted: contradictionNotice !== undefined,
       verificationHealth: trace.verificationHealth,
+      grounding: await this.groundingChecker?.({ question: userMessage, reply, sources }, onUsage),
     })
 
-    return { status: 'ok', reply, riskLevel: classification.riskLevel, controlState, stepsUsed, harnessSkipped: false, trace, sources, planStatus, contradictionNotice, answerClaim, usage: usageTotal }
+    return { status: 'ok', reply, riskLevel: classification.riskLevel, controlState, stepsUsed, harnessSkipped: false, trace, sources: publicSources(sources), planStatus, contradictionNotice, answerClaim, usage: usageTotal }
   }
 
   async buildEscalatedResult(params: {

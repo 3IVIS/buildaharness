@@ -28,6 +28,9 @@ import { SHELL_TOOLS, executeShellTool, commandMayLeaveWorkspace, type ShellTool
 import { ACTION_TOOLS, executeActionTool, type ActionToolsContext } from './action-tools.js'
 import { formatEmailApprovalReason } from './email.js'
 import { REMINDER_TOOLS, executeReminderTool } from './reminder-tools.js'
+
+/** How much of each tool result is kept on its AssistantSource for the answer-claim grounding check. */
+const GROUNDING_EXCERPT_CHARS = 6000
 import { wrapUntrusted, detectInjectionLikelyWithLLM } from './trust-tagging.js'
 import { summarizeToolStep, type AssistantToolStep } from './tool-step.js'
 import { REVIEW_NOTE_PREFIX } from './review-checker.js'
@@ -953,9 +956,9 @@ export class AgentLoop {
           // real — a rejected path/URL or tool error below is reported to the
           // model but isn't a source.
           if (call.name === 'read_file' || call.name === 'list_directory') {
-            sources.push({ tool: call.name, path: String(call.input.path) })
+            sources.push({ tool: call.name, path: String(call.input.path), excerpt: resultText.slice(0, GROUNDING_EXCERPT_CHARS) })
           } else if (call.name === 'web_search' || call.name === 'fetch_url') {
-            sources.push({ tool: call.name, path: String(call.input.query ?? call.input.url) })
+            sources.push({ tool: call.name, path: String(call.input.query ?? call.input.url), excerpt: resultText.slice(0, GROUNDING_EXCERPT_CHARS) })
           }
         } catch (err) {
           // A rejected path or tool error is reported back to the model as a

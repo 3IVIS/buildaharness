@@ -68,8 +68,9 @@ function verificationHealthLabel({ strength, feasibility }: AssistantTrace['veri
 export function answerClaimLabel(claim: AnswerClaim): string {
   switch (claim.verification_status) {
     case 'verified':
-      return 'This is true — grounded in evidence that was independently verified.'
+      return 'Checked against the source material I read — the reply matches it.'
     case 'unverified_attempted':
+      if (claim.grounding_note) return `I found evidence for this, but the reply doesn't fully match it: ${claim.grounding_note}`
       return "I found evidence for this, but couldn't independently verify it."
     case 'contradicted':
       return 'This conflicts with something I already believe — worth double-checking.'

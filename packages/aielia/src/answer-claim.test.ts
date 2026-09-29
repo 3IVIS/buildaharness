@@ -101,4 +101,35 @@ describe('buildAnswerClaim', () => {
     })
     expect(claim.verification_status).toBe('unverified_attempted')
   })
+
+  describe('grounding', () => {
+    const passing = () => verification({ layer_results: [{ layer: 'consistency', status: 'PASS', detail: 'no unresolved contradictions' }] })
+    const claimWith = (grounding?: Parameters<typeof buildAnswerClaim>[0]['grounding']) =>
+      buildAnswerClaim({ evidence: [evidence()], verification: passing(), contradicted: false, verificationHealth: HEALTHY, grounding })
+
+    it('keeps the mechanical-only meaning of "verified" when the grounding check is off (undefined)', () => {
+      expect(claimWith(undefined).verification_status).toBe('verified')
+    })
+
+    it('stays "verified" when the reply was grounded in the tool results', () => {
+      expect(claimWith({ verdict: 'grounded' }).verification_status).toBe('verified')
+    })
+
+    it('is never "verified" for a reply the grounding check found ungrounded, and carries the discrepancy', () => {
+      const claim = claimWith({ verdict: 'ungrounded', discrepancy: 'stated total 4058 is not the sum of the items (4508)' })
+      expect(claim.verification_status).toBe('unverified_attempted')
+      expect(claim.grounding_note).toBe('stated total 4058 is not the sum of the items (4508)')
+    })
+
+    it('is never "verified" when nothing could be compared (not_checked)', () => {
+      const claim = claimWith({ verdict: 'not_checked' })
+      expect(claim.verification_status).toBe('unverified_attempted')
+      expect(claim.grounding_note).toBeUndefined()
+    })
+
+    it('does not let a grounded reply override a contradiction or missing evidence', () => {
+      expect(buildAnswerClaim({ evidence: [evidence()], verification: passing(), contradicted: true, verificationHealth: HEALTHY, grounding: { verdict: 'grounded' } }).verification_status).toBe('contradicted')
+      expect(buildAnswerClaim({ evidence: [], verification: passing(), contradicted: false, verificationHealth: HEALTHY, grounding: { verdict: 'grounded' } }).verification_status).toBe('no_evidence')
+    })
+  })
 })

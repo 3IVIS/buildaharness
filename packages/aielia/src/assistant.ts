@@ -60,6 +60,7 @@ import { ResponseService } from './response-service.js'
 import { createSteeringReconcileChannel } from './goal-graph-reconcile.js'
 import { loadGoalGraphRecord, saveGoalGraphRecord, createEmptyGoalGraphRecord } from './goal-graph-store.js'
 import { proposeNextSteps, proposeTurnNextSteps } from './next-step-proposer.js'
+import { checkReplyGrounding, semanticGroundingEnabled } from './grounding-check.js'
 import { buildNextStepContext, type NextStepContext } from './next-step-context.js'
 import type { GoalGraphSuggestMode } from './goal-graph-suggest-flag.js'
 import { selectActiveThread } from './goal-thread-scheduler.js'
@@ -478,6 +479,9 @@ export class PersonalAssistant {
             const bigPicture = await this.nextStepContext(sessionId, { focusThreadId: thread.id })
             return (await proposeNextSteps(thread, this.llmClient, goalGraphSuggestMode, this.model, onUsage, bigPicture)).map(({ goalThreadId: _goalThreadId, ...suggestion }) => suggestion)
           }
+        : undefined,
+      semanticGroundingEnabled()
+        ? (input, onUsage) => checkReplyGrounding(input, this.llmClient, this.model, onUsage)
         : undefined,
     )
     this.askClarification = new AskClarificationService(this.memory, this.session, this.harnessBridge, this.responseService, this.onTrace)
