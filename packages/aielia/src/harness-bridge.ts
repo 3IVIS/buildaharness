@@ -73,6 +73,18 @@ export function verificationEnabled(env?: Record<string, string | undefined>): b
 }
 
 /**
+ * `AUDIT_EXPERIENCE_LEARNING` gate. Default **OFF**: the harness never writes its journal or updates the experience store, so
+ * `warmStart` / the recovery ladder keep reading an empty store, exactly as before. A truthy value (`1` / `true` / `on` / `yes` /
+ * `enabled`) makes HarnessBridge.run pass `experienceLearning: true` — see packages/harness/src/experience-learning.ts. It changes
+ * how a LATER run orders its recovery strategies, so it ships off until a benchmark shows it helps. Read at one site (below).
+ */
+export function experienceLearningEnabled(env?: Record<string, string | undefined>): boolean {
+  const source = env ?? (typeof process !== 'undefined' ? process.env : {})
+  const raw = String(source.AUDIT_EXPERIENCE_LEARNING ?? '').trim().toLowerCase()
+  return ['1', 'true', 'on', 'yes', 'enabled'].includes(raw)
+}
+
+/**
  * `AUDIT_REVIEWER_PASS` gate — feature-value audit (Phase C6 of the internal plan). EVAL-ONLY:
  * default **ON** (an unset / empty / truthy value keeps today's always-on 3-lens reviewer pass).
  * Only the benchmark's `reviewerPassOff` arm sets a falsy value (`0` / `false` / `off` / `no` /
@@ -434,6 +446,8 @@ export class HarnessBridge {
         // AUDIT_CONTROL_STATE_GATE (feature-value audit, control_state, eval-only) → the harness's
         // own ControlState stays ALLOW/NORMAL (no gate BLOCK/ESCALATE). Default ON — unchanged.
         skipControlState: controlStateGateEnabled() ? undefined : true,
+        // AUDIT_EXPERIENCE_LEARNING (default off): journal every executed task and teach the experience store when the run ends.
+        experienceLearning: experienceLearningEnabled() ? true : undefined,
         // Trajectory Supervisor GATHER_EVIDENCE host (S5). Inert unless a supervisorDecider is
         // also wired and returns a GATHER_EVIDENCE directive at a stall edge; absent → the
         // harness degrades GATHER_EVIDENCE to CONTINUE.

@@ -50,6 +50,7 @@ import { askQuestion, buildBudgetExhaustedQuestion, resolveAskMode } from './ask
 import { checkCallerUpdates, NoOpUpdateChannel, type UpdateChannel, RESTART_ITERATION } from './nodes/check-caller-updates.js'
 import { contextCompression } from './nodes/context-compression.js'
 import { warmStart } from './nodes/warm-start.js'
+import { journalEntryFor, learnFromJournal } from './experience-learning.js'
 import { reviewerPass, type PropagationQueue, type SemanticCriterionCoverage, type ReviewerVerdict, type CriterionCheckable } from './nodes/reviewer-pass.js'
 import { outputValidation, type OutputValidationResult } from './nodes/output-validation.js'
 import { initializeHarness, type HarnessInitOptions, type HarnessInitResult } from './nodes/initialize.js'
@@ -251,6 +252,13 @@ export interface HarnessRunOptions extends HarnessInitOptions {
    * aielia's harness-bridge. The Python twin has no equivalent — the ablation arm is PA-only.
    */
   skipControlState?: boolean
+  /**
+   * Opt-in cross-run learning (the feed for `warmStart` / `buildStrategyOrdering`): every executed task appends a journal entry,
+   * and when the run ends (completes, or halts) the journal updates the experience store's strategy weights and failure-class
+   * priors — see experience-learning.ts. A paused run does not learn (it resumes and would count its earlier entries twice).
+   * Absent/false ⇒ the journal is never written and the store is never updated, exactly as before.
+   */
+  experienceLearning?: boolean
   /** See `ReviewerRevision`. */
   reviewerRevision?: ReviewerRevision
   /** Fired when a reviewer revision reopens a task, with the task id and the text `reviewerRevision` returned. A throwing handler never breaks the run. */
@@ -469,6 +477,7 @@ interface LoopContext {
   skipVerification?: boolean
   skipReviewerPass?: boolean
   skipControlState?: boolean
+  experienceLearning?: boolean
   reviewerRevision?: ReviewerRevision
   onReviewerRevision?: (event: { taskId: string; note: string }) => void
   isCheckableCriterion?: CriterionCheckable
@@ -580,6 +589,7 @@ function buildInitialContext(
     skipVerification: options.skipVerification,
     skipReviewerPass: options.skipReviewerPass,
     skipControlState: options.skipControlState,
+    experienceLearning: options.experienceLearning,
     reviewerRevision: options.reviewerRevision,
     onReviewerRevision: options.onReviewerRevision,
     isCheckableCriterion: options.isCheckableCriterion,
@@ -665,6 +675,7 @@ function buildResumedContext(rawCheckpoint: HarnessCheckpoint, options: HarnessR
     skipVerification: options.skipVerification,
     skipReviewerPass: options.skipReviewerPass,
     skipControlState: options.skipControlState,
+    experienceLearning: options.experienceLearning,
     reviewerRevision: options.reviewerRevision,
     onReviewerRevision: options.onReviewerRevision,
     isCheckableCriterion: options.isCheckableCriterion,
@@ -1672,6 +1683,17 @@ async function* driveMainLoop(ctx: LoopContext): AsyncGenerator<HarnessCheckpoin
     )
 
     ctx.nodeExecutionOrder.push('update_task_state')
+    if (ctx.experienceLearning) {
+      const taskSucceeded = postGatePassed && execResult.success && taskAccomplished
+      ctx.memoryState.journal.push(journalEntryFor({
+        step: ctx.stepsUsed,
+        strategy: ctx.strategyState.current_strategy,
+        success: taskSucceeded,
+        // '' for an unmatched failure — the same class buildStrategyOrdering looks up for it.
+        failureClass: taskSucceeded ? undefined : (ctx.failureDiagnostics.matched_pattern?.failure_class ?? ''),
+        output: execResult.output,
+      }))
+    }
     if (postGatePassed && execResult.success && taskAccomplished) {
       applyTaskOutcome(ctx.taskGraph, currentTask.id, { status: 'COMPLETE', fromExecutionLayer: true })
       ctx.lastCompletedTaskId = currentTask.id
@@ -1906,6 +1928,29 @@ async function runMainLoopWithCheckpoints(
 }
 
 async function drive(ctx: LoopContext, options: HarnessRunOptions): Promise<HarnessRunOutcome> {
+  let outcome: HarnessRunOutcome
+  try {
+    outcome = await driveToCompletion(ctx, options)
+  } catch (err) {
+    // A halted run is the most informative one — learn from it, then let the halt propagate.
+    learnFromRun(ctx)
+    throw err
+  }
+  if (outcome.status !== 'paused') learnFromRun(ctx)
+  return outcome
+}
+
+/** Cross-run learning from this run's journal (HarnessRunOptions.experienceLearning). Never throws: learning must not break a run. */
+function learnFromRun(ctx: LoopContext): void {
+  if (!ctx.experienceLearning || !ctx.experienceStore.available) return
+  try {
+    learnFromJournal(ctx.memoryState.journal, ctx.experienceStore)
+  } catch {
+    /* a failing store must not turn a finished run into a failed one */
+  }
+}
+
+async function driveToCompletion(ctx: LoopContext, options: HarnessRunOptions): Promise<HarnessRunOutcome> {
   const first = await runMainLoopWithCheckpoints(ctx, options)
   if (first.status === 'paused') return first
 
