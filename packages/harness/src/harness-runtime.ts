@@ -50,7 +50,7 @@ import { askQuestion, buildBudgetExhaustedQuestion, resolveAskMode } from './ask
 import { checkCallerUpdates, NoOpUpdateChannel, type UpdateChannel, RESTART_ITERATION } from './nodes/check-caller-updates.js'
 import { contextCompression } from './nodes/context-compression.js'
 import { warmStart } from './nodes/warm-start.js'
-import { reviewerPass, type PropagationQueue, type SemanticCriterionCoverage, type ReviewerVerdict } from './nodes/reviewer-pass.js'
+import { reviewerPass, type PropagationQueue, type SemanticCriterionCoverage, type ReviewerVerdict, type CriterionCheckable } from './nodes/reviewer-pass.js'
 import { outputValidation, type OutputValidationResult } from './nodes/output-validation.js'
 import { initializeHarness, type HarnessInitOptions, type HarnessInitResult } from './nodes/initialize.js'
 import { HarnessRunState } from './harness-run-state.js'
@@ -119,6 +119,14 @@ export type SemanticHypothesisJudge = (input: {
 export type SemanticHypothesisEvent =
   | { kind: 'generated'; hypotheses: Array<{ id: string; explanation: string; predicted_observations: string[]; separating_check?: string }> }
   | { kind: 'eliminated'; id: string; explanation: string; reason?: string }
+
+/**
+ * Optional host hook: given the reviewer pass's pending verdict at the END of a run (every task done, nothing already
+ * reopened), return the text to put in front of the proposer, or null to leave the answer alone. Returning text reopens
+ * the last task to complete so it runs once more — at most once per run — and fires `onReviewerRevision` with that text
+ * so the host can deliver it. Absent ⇒ today's behaviour: the verdict only feeds the next resolver call.
+ */
+export type ReviewerRevision = (verdict: ReviewerVerdict) => string | null
 
 export interface TurnComplexitySignal {
   riskLevel: 'LOW' | 'MEDIUM' | 'HIGH'
@@ -243,6 +251,12 @@ export interface HarnessRunOptions extends HarnessInitOptions {
    * aielia's harness-bridge. The Python twin has no equivalent — the ablation arm is PA-only.
    */
   skipControlState?: boolean
+  /** See `ReviewerRevision`. */
+  reviewerRevision?: ReviewerRevision
+  /** Fired when a reviewer revision reopens a task, with the task id and the text `reviewerRevision` returned. A throwing handler never breaks the run. */
+  onReviewerRevision?: (event: { taskId: string; note: string }) => void
+  /** See `CriterionCheckable`: a success criterion this says is not checkable is skipped by the implementer lens instead of being reported as uncovered. */
+  isCheckableCriterion?: CriterionCheckable
   /** See `SemanticHypothesesHook`. Absent ⇒ hypotheses are exactly the template seeds. */
   semanticHypotheses?: SemanticHypothesesHook
   /** See `SemanticHypothesisJudge`. Only consulted when semantic hypotheses exist. */
@@ -455,6 +469,13 @@ interface LoopContext {
   skipVerification?: boolean
   skipReviewerPass?: boolean
   skipControlState?: boolean
+  reviewerRevision?: ReviewerRevision
+  onReviewerRevision?: (event: { taskId: string; note: string }) => void
+  isCheckableCriterion?: CriterionCheckable
+  /** The last task to reach COMPLETE — the one a reviewer revision reopens. Not persisted. */
+  lastCompletedTaskId?: string
+  /** True once a reviewer revision has reopened a task this run (it happens at most once). */
+  reviewerRevisionDone?: boolean
   semanticHypotheses?: SemanticHypothesesHook
   semanticHypothesisJudge?: SemanticHypothesisJudge
   onSemanticHypothesis?: (event: SemanticHypothesisEvent) => void
@@ -559,6 +580,9 @@ function buildInitialContext(
     skipVerification: options.skipVerification,
     skipReviewerPass: options.skipReviewerPass,
     skipControlState: options.skipControlState,
+    reviewerRevision: options.reviewerRevision,
+    onReviewerRevision: options.onReviewerRevision,
+    isCheckableCriterion: options.isCheckableCriterion,
     semanticHypotheses: options.semanticHypotheses,
     semanticHypothesisJudge: options.semanticHypothesisJudge,
     onSemanticHypothesis: options.onSemanticHypothesis,
@@ -641,6 +665,9 @@ function buildResumedContext(rawCheckpoint: HarnessCheckpoint, options: HarnessR
     skipVerification: options.skipVerification,
     skipReviewerPass: options.skipReviewerPass,
     skipControlState: options.skipControlState,
+    reviewerRevision: options.reviewerRevision,
+    onReviewerRevision: options.onReviewerRevision,
+    isCheckableCriterion: options.isCheckableCriterion,
     semanticHypotheses: options.semanticHypotheses,
     semanticHypothesisJudge: options.semanticHypothesisJudge,
     onSemanticHypothesis: options.onSemanticHypothesis,
@@ -878,6 +905,32 @@ async function judgeSemanticHypotheses(ctx: LoopContext): Promise<void> {
     ctx.hypothesisSet.eliminate(h)
     emitSemanticHypothesis(ctx, { kind: 'eliminated', id: h.id, explanation: h.explanation, ...(c.reason ? { reason: c.reason } : {}) })
   }
+}
+
+/**
+ * Returns the id of the task to reopen when the host's `reviewerRevision` turns the pass's verdict into a note; otherwise
+ * undefined. Only at the end of a run (every task COMPLETE), only when the pass reopened nothing itself, and
+ * only once.
+ */
+function maybeReopenForReviewerRevision(ctx: LoopContext, result: { pending_verdict: ReviewerVerdict | null; reopened_task_ids: string[] }): string | undefined {
+  if (!ctx.reviewerRevision || ctx.reviewerRevisionDone || !result.pending_verdict || result.reopened_task_ids.length > 0) return undefined
+  if (!ctx.taskGraph.tasks.every((t) => t.status === 'COMPLETE')) return undefined
+  const taskId = ctx.lastCompletedTaskId
+  if (!taskId || !ctx.taskGraph.getTask(taskId)) return undefined
+  let note: string | null = null
+  try {
+    note = ctx.reviewerRevision(result.pending_verdict)
+  } catch {
+    return undefined
+  }
+  if (!note || !note.trim()) return undefined
+  ctx.reviewerRevisionDone = true
+  try {
+    ctx.onReviewerRevision?.({ taskId, note })
+  } catch {
+    /* an observability handler must never break the run */
+  }
+  return taskId
 }
 
 /**
@@ -1621,6 +1674,7 @@ async function* driveMainLoop(ctx: LoopContext): AsyncGenerator<HarnessCheckpoin
     ctx.nodeExecutionOrder.push('update_task_state')
     if (postGatePassed && execResult.success && taskAccomplished) {
       applyTaskOutcome(ctx.taskGraph, currentTask.id, { status: 'COMPLETE', fromExecutionLayer: true })
+      ctx.lastCompletedTaskId = currentTask.id
       ctx.finalResult = execResult.output
 
       if (ctx.experienceStore.available) {
@@ -1874,7 +1928,7 @@ async function drive(ctx: LoopContext, options: HarnessRunOptions): Promise<Harn
     const reviewPassResult = await reviewerPass(
       ctx.worldModel, ctx.successCriteria, ctx.failureDiagnostics, ctx.beliefDepGraph,
       ctx.depGraphBudget, ctx.hypothesisSet, ctx.taskGraph, ctx.diagnostics, ctx.evidenceStore, ctx.propagationQueue,
-      runAdversarialLens, ctx.semanticCriterionCoverage,
+      runAdversarialLens, ctx.semanticCriterionCoverage, ctx.isCheckableCriterion,
     )
     const allFindings = [...reviewPassResult.implementer_findings, ...reviewPassResult.reviewer_findings, ...reviewPassResult.adversarial_findings]
     reportLayer(ctx, 'reviewer_pass', allFindings.length > 0, allFindings.length > 0 ? allFindings[0] : 'self-review found nothing to flag')
@@ -1884,6 +1938,12 @@ async function drive(ctx: LoopContext, options: HarnessRunOptions): Promise<Harn
     // iteration" within one drive() call is the reopened-tasks second main-loop pass below;
     // if nothing reopened, this just rides along in the final checkpoint unconsumed.
     ctx.pendingReviewerVerdict = reviewPassResult.pending_verdict
+
+    // Make a finding act: at the end of a run, with nothing already reopened, the host may turn the verdict into a
+    // revision note. The last task to complete is reopened so it runs once more (the reopened-tasks pass below), and the
+    // host delivers the note to whatever produces the answer. At most once per run; every failure path is a no-op.
+    const revisionReopened = maybeReopenForReviewerRevision(ctx, reviewPassResult)
+    if (revisionReopened) reviewPassResult.reopened_task_ids.push(revisionReopened)
 
     if (reviewPassResult.reopened_task_ids.length > 0) {
       for (const taskId of reviewPassResult.reopened_task_ids) {
@@ -1901,7 +1961,7 @@ async function drive(ctx: LoopContext, options: HarnessRunOptions): Promise<Harn
       const reviewPassResult2 = await reviewerPass(
         ctx.worldModel, ctx.successCriteria, ctx.failureDiagnostics, ctx.beliefDepGraph,
         ctx.depGraphBudget, ctx.hypothesisSet, ctx.taskGraph, ctx.diagnostics, ctx.evidenceStore, ctx.propagationQueue,
-        runAdversarialLens, ctx.semanticCriterionCoverage,
+        runAdversarialLens, ctx.semanticCriterionCoverage, ctx.isCheckableCriterion,
       )
       ctx.pendingReviewerVerdict = reviewPassResult2.pending_verdict
     }

@@ -633,3 +633,44 @@ describe('AgentLoop.createHarnessProposer — source reliability (AUDIT_SEMANTIC
     expect(harnessStore.observations).toEqual([])
   })
 })
+
+describe('AgentLoop.createHarnessProposer — reviewer revision note', () => {
+  it('shows the model its previous answer and the finding, then asks for a new answer', async () => {
+    const llmClient = new ScriptedLLMClient([{ content: 'first answer' }, { content: 'revised answer' }])
+    const agentLoop = buildAgentLoop(llmClient)
+    let pending: string[] = []
+    const proposer = agentLoop.createHarnessProposer({
+      messages: [{ role: 'user', content: 'do the thing' }],
+      tools: [],
+      sessionId: 'session-1',
+      userMessage: 'do the thing',
+      maxIterations: 5,
+      sources: [],
+      takeSteeringNotes: () => pending.splice(0),
+    })
+    const toolCtx = { worldModel: undefined as never, evidenceStore: undefined as never }
+    expect(await proposer(toolCtx)).toEqual({ __harnessExecutionStatus: 'complete', output: 'first answer' })
+
+    pending = ['[revision] Success criterion not covered by any belief: "x"']
+    expect(await proposer(toolCtx)).toEqual({ __harnessExecutionStatus: 'complete', output: 'revised answer' })
+
+    const second = llmClient.seenMessages[1]
+    expect(second.at(-2)).toMatchObject({ role: 'assistant', content: 'first answer' })
+    expect(second.at(-1)?.role).toBe('user')
+    expect(second.at(-1)?.content).toContain('Success criterion not covered by any belief: "x"')
+    expect(second.at(-1)?.content).toContain('Answer again')
+  })
+
+  it('a revision note is not treated as a steering note (the user did not send it)', async () => {
+    const llmClient = new ScriptedLLMClient([{ content: 'answer' }])
+    const agentLoop = buildAgentLoop(llmClient)
+    const proposer = agentLoop.createHarnessProposer({
+      messages: [{ role: 'user', content: 'q' }],
+      tools: [], sessionId: 'session-1', userMessage: 'q', maxIterations: 5, sources: [],
+      takeSteeringNotes: () => ['[revision] a finding'],
+    })
+    await proposer({ worldModel: undefined as never, evidenceStore: undefined as never })
+    const sent = llmClient.seenMessages[0].map((m) => m.content).join('\n')
+    expect(sent).not.toContain('the user sent the following while you were working')
+  })
+})

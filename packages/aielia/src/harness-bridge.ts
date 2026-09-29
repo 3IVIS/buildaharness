@@ -51,6 +51,7 @@ import type { AssistantProgress } from './assistant-types.js'
 import type { TraceEvent } from './trace-events.js'
 import { resolveSupervisorEnabled } from './supervisor-flag.js'
 import { controlStateGateEnabled } from './tool-control-plane.js'
+import { reviewerRevisionEnabled, reviewerRevisionNote, isCheckableCriterion } from './reviewer-revision.js'
 import { semanticHypothesesEnabled, proposeCompetingExplanations, judgeHypothesesAgainstEvidence } from './semantic-hypotheses.js'
 import type { SemanticHypothesisEvent, SemanticHypothesisProposal } from '@buildaharness/harness'
 import { recordLayerTelemetry } from './layer-telemetry.js'
@@ -138,6 +139,8 @@ export interface HarnessRunParams {
   onSemanticHypothesis?: (event: SemanticHypothesisEvent) => void
   /** The competing explanations were already asked for (a tool-less turn drafts its reply first): the harness registers this answer instead of making a second call. `null` = asked, none. `undefined` = not asked. */
   precomputedHypotheses?: SemanticHypothesisProposal[] | null
+  /** The reviewer pass's verdict sent the last answer back for one revision (AUDIT_REVIEWER_REVISION): the note to put in front of the proposer. */
+  onReviewerRevision?: (event: { taskId: string; note: string }) => void
   /** A confident failure-mode match picked the recovery strategy — advisory (see HarnessRunOptions.onFailureModeSwitch). The caller decides how to surface it. */
   onFailureModeSwitch?: (event: { taskId: string; failure_class: string; strategy: string }) => void
   /**
@@ -244,7 +247,7 @@ export class HarnessBridge {
   }
 
   async run(params: HarnessRunParams): Promise<HarnessOutcome> {
-    const { sessionId, userMessage, facts, currentTurnFacts = [], draftReply, classification, initialTasks, activePlan, sources, onProgress, onUsage, oneLoopProposer, runInvestigation, askModeEnabled = false, updateChannel, onReviewConflict, onFailureModeSwitch, onSemanticHypothesis, precomputedHypotheses } = params
+    const { sessionId, userMessage, facts, currentTurnFacts = [], draftReply, classification, initialTasks, activePlan, sources, onProgress, onUsage, oneLoopProposer, runInvestigation, askModeEnabled = false, updateChannel, onReviewConflict, onFailureModeSwitch, onSemanticHypothesis, precomputedHypotheses, onReviewerRevision } = params
     const runtime = new HarnessRuntime()
     // One harness run per (session, turn) — a run_id a resumed run can be found under if this
     // turn's process died mid-run before reaching the `finally` cleanup below.
@@ -491,6 +494,12 @@ export class HarnessBridge {
         // AUDIT_SEMANTIC_HYPOTHESES (default off): ask once for competing explanations, but only for a request the
         // classifier judged underdetermined — every other turn keeps the template seeds and pays for no call.
         // The judge is wired alongside, and the harness only consults it once semantic hypotheses exist.
+        // AUDIT_REVIEWER_REVISION (default off): let a reviewer finding at the end of a run send the last answer back once.
+        // Only where there is a proposer to re-ask — a tool-less turn's reply is already drafted, so a second run would return
+        // the same text.
+        ...(reviewerRevisionEnabled() && oneLoopProposer
+          ? { reviewerRevision: reviewerRevisionNote, onReviewerRevision, isCheckableCriterion }
+          : {}),
         ...(semanticHypothesesEnabled() && classification.isUnderdetermined === true
           ? {
               semanticHypotheses: (input: { objective: string; observations: string[]; beliefs: string[] }) =>

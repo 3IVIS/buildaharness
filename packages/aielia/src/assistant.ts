@@ -1047,10 +1047,12 @@ export class PersonalAssistant {
     const recoveryNotes: string[] = []
     // Competing explanations for an underdetermined request (AUDIT_SEMANTIC_HYPOTHESES) — proposer-facing too.
     const hypothesisNotes: string[] = []
+    // A reviewer finding that sent the last answer back for one revision (AUDIT_REVIEWER_REVISION).
+    const revisionNotes: string[] = []
     // Set on a tool-less turn, where the reply is drafted BEFORE the harness runs: the explanations are asked for up front so the
     // draft can see them, and the harness is handed the same answer instead of asking again. undefined = not asked.
     let precomputedHypotheses: SemanticHypothesisProposal[] | null | undefined
-    const takeProposerNotes = (): string[] => [...(steeringAdapter?.takeNotes() ?? []), ...reviewNotes.splice(0), ...recoveryNotes.splice(0), ...hypothesisNotes.splice(0)]
+    const takeProposerNotes = (): string[] => [...(steeringAdapter?.takeNotes() ?? []), ...reviewNotes.splice(0), ...recoveryNotes.splice(0), ...hypothesisNotes.splice(0), ...revisionNotes.splice(0)]
     // R3 of the internal plan: set only on the flag-ON, non-batch,
     // non-trivial path below — passed to harnessBridge.run() as the toolExecutors 'default' entry
     // instead of precomputing draftReply via AgentLoop.runToolLoop up front, so the harness's own
@@ -1241,6 +1243,7 @@ export class PersonalAssistant {
           : undefined,
         updateChannel: steeringAdapter?.channel,
         precomputedHypotheses,
+        onReviewerRevision: (e) => { revisionNotes.push(e.note) },
         onSemanticHypothesis: (e) => {
           if (e.kind === 'generated') hypothesisNotes.push(renderHypothesisNote(e.hypotheses))
         },

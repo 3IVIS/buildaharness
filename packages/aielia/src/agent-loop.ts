@@ -37,6 +37,7 @@ import { REVIEW_NOTE_PREFIX } from './review-checker.js'
 import { sourceReliabilityEnabled, assessSourceReliability, recordSourceAssessments, renderSourceNote } from './source-reliability.js'
 import { RECOVERY_NOTE_PREFIX } from './recovery-note.js'
 import { HYPOTHESIS_NOTE_PREFIX, hypothesisContextMessage } from './semantic-hypotheses.js'
+import { REVISION_NOTE_PREFIX, revisionContextMessage } from './reviewer-revision.js'
 
 export type ToolLoopResult =
   | { kind: 'final'; content: string; sources: AssistantSource[]; batchBudget?: BatchBudgetTrace }
@@ -338,6 +339,8 @@ export class AgentLoop {
     // turn, and an answer that did not weigh them is revised at most once.
     const weighSources = sourceReliabilityEnabled()
     let sourcesWeighed = false
+    // The last answer this proposer produced — a reviewer revision asks for a new one, so the model has to see the old one.
+    let lastFinalContent: string | undefined
 
     const proposer = async (toolCtx: ToolExecutorContext): Promise<unknown> => {
       const sharing = input.shareAnswer?.() === true && toolCtx.currentTaskId !== undefined
@@ -397,12 +400,17 @@ export class AgentLoop {
       const reviewNotes = allNotes.filter((n) => n.startsWith(REVIEW_NOTE_PREFIX)).map((n) => n.slice(REVIEW_NOTE_PREFIX.length))
       const recoveryNotes = allNotes.filter((n) => n.startsWith(RECOVERY_NOTE_PREFIX)).map((n) => n.slice(RECOVERY_NOTE_PREFIX.length))
       const hypothesisNotes = allNotes.filter((n) => n.startsWith(HYPOTHESIS_NOTE_PREFIX)).map((n) => n.slice(HYPOTHESIS_NOTE_PREFIX.length))
-      const steeringNotes = allNotes.filter((n) => !n.startsWith(REVIEW_NOTE_PREFIX) && !n.startsWith(RECOVERY_NOTE_PREFIX) && !n.startsWith(HYPOTHESIS_NOTE_PREFIX))
+      const revisionNotes = allNotes.filter((n) => n.startsWith(REVISION_NOTE_PREFIX)).map((n) => n.slice(REVISION_NOTE_PREFIX.length))
+      const steeringNotes = allNotes.filter((n) => !n.startsWith(REVIEW_NOTE_PREFIX) && !n.startsWith(RECOVERY_NOTE_PREFIX) && !n.startsWith(HYPOTHESIS_NOTE_PREFIX) && !n.startsWith(REVISION_NOTE_PREFIX))
       if (steeringNotes.length > 0) {
         input.messages.push({
           role: 'user',
           content: `[the user sent the following while you were working on the request above — apply it to your answer]\n${steeringNotes.map((n) => `- ${n}`).join('\n')}`,
         })
+      }
+      for (const body of revisionNotes) {
+        if (lastFinalContent !== undefined) input.messages.push({ role: 'assistant', content: lastFinalContent })
+        input.messages.push({ role: 'user', content: revisionContextMessage(body) })
       }
       for (const body of hypothesisNotes) {
         input.messages.push({ role: 'user', content: hypothesisContextMessage(body) })
@@ -465,6 +473,7 @@ export class AgentLoop {
       }
 
       if (step.result.kind === 'final') {
+        lastFinalContent = step.result.content
         // A plan step's answer is part of the conversation the next step continues from.
         if (stepInstruction) input.messages.push({ role: 'assistant', content: step.result.content })
         if (sharing) {
