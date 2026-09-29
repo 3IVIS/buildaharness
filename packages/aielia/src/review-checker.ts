@@ -1,5 +1,6 @@
 import type { ILLMClient, TokenUsage } from '@buildaharness/runtime'
 import type { BeliefCandidate } from './contradiction-checker.js'
+import { parseModelJson } from './model-json.js'
 
 const REVIEW_SCHEMA = {
   type: 'object',
@@ -80,7 +81,7 @@ export async function checkSemanticReviewConflict(
       undefined,
       { model, onUsage, structuredOutput: { schema: REVIEW_SCHEMA } },
     )
-    const parsed = JSON.parse(response.content) as { conflict?: unknown; reason?: unknown }
+    const parsed = parseModelJson(response.content) as { conflict?: unknown; reason?: unknown }
     if (parsed.conflict !== true) return { conflict: false }
     return { conflict: true, reason: typeof parsed.reason === 'string' ? parsed.reason : undefined }
   } catch {

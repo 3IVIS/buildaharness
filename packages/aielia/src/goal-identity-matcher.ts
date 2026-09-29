@@ -1,4 +1,5 @@
 import type { ILLMClient, TokenUsage } from '@buildaharness/runtime'
+import { parseModelJson } from './model-json.js'
 
 // Phase 2 of plans/hierarchical_goal_tree_and_steering_plan.html. Resolves the plan's "Cross-turn
 // identity matcher" open decision (2026-09-22): a bounded structured-LLM call, same
@@ -73,7 +74,7 @@ export async function matchGoalIdentity(
       undefined,
       { model, onUsage, structuredOutput: { schema: GOAL_MATCH_SCHEMA } },
     )
-    const parsed = JSON.parse(response.content) as { matchedGoalId?: unknown; ambiguous?: unknown }
+    const parsed = parseModelJson(response.content) as { matchedGoalId?: unknown; ambiguous?: unknown }
     const candidateIds = new Set(candidates.map((c) => c.id))
     const ambiguous = parsed.ambiguous === true
     const rawMatchedGoalId = typeof parsed.matchedGoalId === 'string' && candidateIds.has(parsed.matchedGoalId) ? parsed.matchedGoalId : null

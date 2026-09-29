@@ -1,6 +1,7 @@
 import type { ILLMClient, TokenUsage } from '@buildaharness/runtime'
 import type { DecomposedTaskSpec } from './decomposition-classifier.js'
 import type { PlanTemplate } from './plan-templates/index.js'
+import { parseModelJson } from './model-json.js'
 
 export interface Plan {
   templateName: string
@@ -104,7 +105,7 @@ export async function buildPlanFromTemplate(
       undefined,
       { model, onUsage, structuredOutput: { schema: PLAN_SCHEMA } },
     )
-    const parsed = JSON.parse(response.content) as { tasks?: unknown }
+    const parsed = parseModelJson(response.content) as { tasks?: unknown }
     if (!Array.isArray(parsed.tasks)) return null
     const rawTasks = parsed.tasks.filter(isRawPlanTask)
     if (rawTasks.length <= 1) return null

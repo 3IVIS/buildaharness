@@ -2,6 +2,7 @@ import type { ILLMClient, TokenUsage } from '@buildaharness/runtime'
 import { containsCJK } from '@buildaharness/harness'
 import { getInjectionPatterns } from './lexical/patterns.js'
 import { lexicalActive } from './lexical/lexical-mode.js'
+import { parseModelJson } from './model-json.js'
 
 /**
  * Wraps content fetched from the web before it enters the model's context —
@@ -131,7 +132,7 @@ export async function detectInjectionLikelyWithLLM(
       undefined,
       { model, onUsage, structuredOutput: { schema: INJECTION_SCHEMA } },
     )
-    const parsed = JSON.parse(response.content) as { flagged?: unknown; reason?: unknown }
+    const parsed = parseModelJson(response.content) as { flagged?: unknown; reason?: unknown }
     if (parsed.flagged !== true) return { flagged: false }
     return {
       flagged: true,

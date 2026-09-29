@@ -2,6 +2,7 @@ import type { ILLMClient, TokenUsage } from '@buildaharness/runtime'
 import type { ExternalContradictionInput } from '@buildaharness/harness'
 import { getCodingFactMarkerPatterns, testAny } from './lexical/patterns.js'
 import { lexicalActive } from './lexical/lexical-mode.js'
+import { parseModelJson } from './model-json.js'
 
 export interface BeliefCandidate {
   id: string
@@ -323,7 +324,7 @@ export async function checkForContradictions(
       undefined,
       { model, onUsage, structuredOutput: { schema: CONTRADICTION_SCHEMA } },
     )
-    const parsed = JSON.parse(response.content) as {
+    const parsed = parseModelJson(response.content) as {
       contradictions?: ExternalContradictionInput[]
       corroborations?: { existingId?: unknown; newId?: unknown }[]
     }

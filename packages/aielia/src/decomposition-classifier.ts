@@ -1,6 +1,7 @@
 import type { ILLMClient, TokenUsage } from '@buildaharness/runtime'
 import { getEnumerationPatterns, testAny } from './lexical/patterns.js'
 import { lexicalActive } from './lexical/lexical-mode.js'
+import { parseModelJson } from './model-json.js'
 
 const enumeration = getEnumerationPatterns()
 
@@ -205,7 +206,7 @@ export async function reframeTaskDescriptionWithLLM(
       undefined,
       { model, onUsage, structuredOutput: { schema: REFRAME_SCHEMA } },
     )
-    const parsed = JSON.parse(response.content) as { description?: unknown }
+    const parsed = parseModelJson(response.content) as { description?: unknown }
     if (typeof parsed.description !== 'string' || !parsed.description.trim()) return null
     return parsed.description.trim()
   } catch {

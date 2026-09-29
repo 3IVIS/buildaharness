@@ -1,5 +1,6 @@
 import type { ILLMClient, TokenUsage } from '@buildaharness/runtime'
 import type { SupervisorDirectiveData, TrajectoryDigestData } from '@buildaharness/harness'
+import { parseModelJson } from './model-json.js'
 
 /**
  * Trajectory Supervisor decider (S5 host wiring of
@@ -84,7 +85,7 @@ export async function decideSupervisorDirective(
       undefined,
       { model, onUsage, structuredOutput: { schema: SCHEMA } },
     )
-    const parsed = JSON.parse(response.content) as Partial<SupervisorDirectiveData>
+    const parsed = parseModelJson(response.content) as Partial<SupervisorDirectiveData>
     return parsed && typeof parsed === 'object' ? parsed : null
   } catch {
     return null // fail-safe → CONTINUE
