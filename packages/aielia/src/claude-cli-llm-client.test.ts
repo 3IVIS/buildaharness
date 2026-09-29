@@ -513,6 +513,61 @@ describe('ClaudeCliLLMClient', () => {
     }
   })
 
+  it('a `kind: result` report reaches onToolResult with the raw text and is acked, and a throwing listener is swallowed', async () => {
+    const workspaceRoot = await mkdtemp(join(tmpdir(), 'cli-llm-test-'))
+    try {
+      const acks: { decision?: string }[] = []
+      spawnMock.mockImplementation((...args: unknown[]) => {
+        const spawnArgs = args[1] as string[]
+        const mcpConfig = JSON.parse(spawnArgs[spawnArgs.indexOf('--mcp-config') + 1])
+        const gatePort = Number(mcpConfig.mcpServers['file-tools'].env.TOOL_GATE_PORT)
+        const proc = new EventEmitter() as EventEmitter & { stdout: EventEmitter; stderr: EventEmitter }
+        proc.stdout = new EventEmitter()
+        proc.stderr = new EventEmitter()
+        void (async () => {
+          const socket = createConnection({ port: gatePort, host: '127.0.0.1' })
+          let buffer = ''
+          const send = (payload: unknown) => new Promise<void>((resolvePromise) => {
+            const onData = (chunk: Buffer) => {
+              buffer += chunk.toString('utf-8')
+              const nl = buffer.indexOf('\n')
+              if (nl === -1) return
+              acks.push(JSON.parse(buffer.slice(0, nl)))
+              buffer = buffer.slice(nl + 1)
+              socket.off('data', onData)
+              resolvePromise()
+            }
+            socket.on('data', onData)
+            socket.write(`${JSON.stringify(payload)}\n`)
+          })
+          await new Promise<void>((r) => socket.on('connect', () => r()))
+          await send({ kind: 'result', tool: 'read_file', input: { path: 'q3.md' }, text: 'Total: 4058' })
+          await send({ kind: 'result', tool: 'fetch_url', input: { url: 'https://example.com' }, text: 'boom' })
+          socket.end()
+          proc.stdout.emit('data', Buffer.from(streamJsonResult('done')))
+          proc.emit('close', 0)
+        })()
+        return proc
+      })
+
+      const client = new ClaudeCliLLMClient({ fileTools: { workspaceRoot } })
+      const onToolProposal = vi.fn()
+      const onToolResult = vi.fn().mockImplementation(async (tool: string) => {
+        if (tool === 'fetch_url') throw new Error('listener blew up')
+      })
+
+      const result = await client.callChatStructured([{ role: 'user', content: 'x' }], [{ name: 'read_file', input_schema: {} }], { onToolProposal, onToolResult })
+
+      expect(result).toEqual({ content: 'done' })
+      expect(onToolResult).toHaveBeenNthCalledWith(1, 'read_file', { path: 'q3.md' }, 'Total: 4058')
+      expect(onToolResult).toHaveBeenNthCalledWith(2, 'fetch_url', { url: 'https://example.com' }, 'boom')
+      expect(onToolProposal).not.toHaveBeenCalled() // a result report is never mistaken for a proposal
+      expect(acks).toEqual([{ decision: 'allow' }, { decision: 'allow' }])
+    } finally {
+      await rm(workspaceRoot, { recursive: true, force: true })
+    }
+  })
+
   it('Phase D0: a proposal is allowed by default when the caller supplies no onToolProposal', async () => {
     const workspaceRoot = await mkdtemp(join(tmpdir(), 'cli-llm-test-'))
     try {

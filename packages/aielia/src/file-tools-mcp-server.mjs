@@ -260,9 +260,29 @@ function getGateSocket(port) {
  * rest of this subprocess's life the way a permanently-wedged shared socket would.
  */
 export async function requestToolGate(tool, input) {
+  return gateRoundTrip({ tool, input })
+}
+
+// How much of a tool's result text is reported to the parent — enough for the answer-claim
+// grounding check (agent-loop.ts / grounding-check.ts caps what it keeps anyway) without pushing a
+// whole large file down the loopback socket.
+const REPORTED_RESULT_CHARS = 6000
+
+/**
+ * Tells the parent what a read-only tool just returned (ChatOptions.onToolResult), over the same
+ * gate socket and through the same one-in-flight queue as requestToolGate — the wire protocol has
+ * no request ids, so the parent's ack has to be read in order. Best-effort and informational: the
+ * ack is ignored and every transport failure is swallowed, exactly like the gate's own fail-open
+ * posture, so a dead parent can never fail a tool call that already succeeded.
+ */
+export async function reportToolResult(tool, input, text) {
+  await gateRoundTrip({ kind: 'result', tool, input, text: String(text).slice(0, REPORTED_RESULT_CHARS) })
+}
+
+async function gateRoundTrip(payload) {
   const port = process.env.TOOL_GATE_PORT ? Number(process.env.TOOL_GATE_PORT) : undefined
   if (!port) return { decision: 'allow' }
-  const result = gateRequestChain.then(() => doRequestToolGate(port, tool, input))
+  const result = gateRequestChain.then(() => doRequestToolGate(port, payload))
   // However this round trip turns out, the chain must advance — a rejection here would wedge
   // every subsequent call behind it forever.
   gateRequestChain = result.then(
@@ -272,7 +292,7 @@ export async function requestToolGate(tool, input) {
   return result
 }
 
-function doRequestToolGate(port, tool, input) {
+function doRequestToolGate(port, payload) {
   return new Promise((resolve) => {
     let socket
     try {
@@ -315,7 +335,7 @@ function doRequestToolGate(port, tool, input) {
     timer.unref?.()
     socket.on('data', onData)
     socket.on('error', onError)
-    const send = () => socket.write(`${JSON.stringify({ tool, input })}\n`)
+    const send = () => socket.write(`${JSON.stringify(payload)}\n`)
     if (socket.connecting) socket.once('connect', send)
     else send()
   })
@@ -604,6 +624,7 @@ async function main() {
           throw err
         })
         if (content === undefined) return { content: [{ type: 'text', text: `File not found: ${path}` }], isError: true }
+        await reportToolResult('read_file', { path }, content)
         return { content: [{ type: 'text', text: content }] }
       } catch (err) {
         return { content: [{ type: 'text', text: `Error: ${err instanceof Error ? err.message : String(err)}` }], isError: true }
@@ -630,6 +651,7 @@ async function main() {
           if (isEnoent(err)) return []
           throw err
         })
+        await reportToolResult('list_directory', { path }, names.join('\n'))
         return { content: [{ type: 'text', text: names.join('\n') }] }
       } catch (err) {
         return { content: [{ type: 'text', text: `Error: ${err instanceof Error ? err.message : String(err)}` }], isError: true }
@@ -777,6 +799,7 @@ async function main() {
           return { content: [{ type: 'text', text: `Denied: ${gate.reason ?? 'not permitted by tool policy'}` }], isError: true }
         }
         const text = await fetchUrlSafely(url)
+        await reportToolResult('fetch_url', { url }, text)
         return { content: [{ type: 'text', text: tagFetchedContent(text) }] }
       } catch (err) {
         return { content: [{ type: 'text', text: `Error: ${err instanceof Error ? err.message : String(err)}` }], isError: true }
@@ -799,7 +822,9 @@ async function main() {
           if (gate.decision === 'deny') {
             return { content: [{ type: 'text', text: `Denied: ${gate.reason ?? 'not permitted by tool policy'}` }], isError: true }
           }
-          return { content: [{ type: 'text', text: await runWebSearch(query) }] }
+          const searchText = await runWebSearch(query)
+          await reportToolResult('web_search', { query }, searchText)
+          return { content: [{ type: 'text', text: searchText }] }
         } catch (err) {
           return { content: [{ type: 'text', text: `Error: ${err instanceof Error ? err.message : String(err)}` }], isError: true }
         }

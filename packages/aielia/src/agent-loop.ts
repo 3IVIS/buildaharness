@@ -759,6 +759,17 @@ export class AgentLoop {
           reportDenied(tool, input, policy.reason)
           return { decision: 'deny', reason: policy.reason }
         },
+        // The report half: a backend that runs its own tool loop (claude-cli) hands back what each
+        // read-only call returned, so this turn's sources carry the raw text the grounding check
+        // compares the reply to — the manual dispatch loop below does the same for the calls it
+        // makes itself. Same tools and same `path` meaning as that loop's own source push.
+        onToolResult: (tool, input, resultText) => {
+          if (tool === 'read_file' || tool === 'list_directory') {
+            sources.push({ tool, path: String(input.path), excerpt: resultText.slice(0, GROUNDING_EXCERPT_CHARS) })
+          } else if (tool === 'web_search' || tool === 'fetch_url') {
+            sources.push({ tool, path: String(input.query ?? input.url), excerpt: resultText.slice(0, GROUNDING_EXCERPT_CHARS) })
+          }
+        },
       })
 
       if (!response.toolCalls || response.toolCalls.length === 0) {

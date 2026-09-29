@@ -180,12 +180,14 @@ function invokeClaudeStreaming(claudePath: string, args: string[], onToolStep?: 
  *
  * Listens on an ephemeral loopback TCP port for the lifetime of one callChatStructured call;
  * newline-delimited JSON request/response, one request per tool call (`{tool, input}` in,
- * `{decision, reason?}` out — see ChatOptions.onToolProposal). Absent `onToolProposal` (a caller
+ * `{decision, reason?}` out — see ChatOptions.onToolProposal; a `{kind: 'result', tool, input, text}`
+ * message reports an executed tool's raw result instead — see ChatOptions.onToolResult). Absent `onToolProposal` (a caller
  * that hasn't wired the gate), or an unparseable request, every proposal is allowed — the
  * pre-D0 behavior, unchanged.
  */
 function startToolGateServer(
   onToolProposal?: (tool: string, input: Record<string, unknown>) => Promise<ToolProposalDecision>,
+  onToolResult?: (tool: string, input: Record<string, unknown>, resultText: string) => void | Promise<void>,
 ): Promise<{ server: Server; port: number }> {
   return new Promise((resolvePromise, reject) => {
     const server = createServer((socket) => {
@@ -198,10 +200,25 @@ function startToolGateServer(
           buffer = buffer.slice(newlineIndex + 1)
           if (!line.trim()) continue
           void (async (requestLine: string) => {
-            let request: { tool?: unknown; input?: unknown }
+            let request: { kind?: unknown; tool?: unknown; input?: unknown; text?: unknown }
             try {
               request = JSON.parse(requestLine)
             } catch {
+              socket.write(`${JSON.stringify({ decision: 'allow' })}\n`)
+              return
+            }
+            // A `kind: 'result'` message reports what an already-executed read-only tool returned
+            // (see ChatOptions.onToolResult) rather than proposing a call. It rides the same socket
+            // and the same one-request-one-response shape — no request ids exist, so the MCP side
+            // queues it like any proposal — and is acked with the same `allow` shape.
+            if (request.kind === 'result') {
+              try {
+                if (onToolResult && typeof request.tool === 'string' && typeof request.text === 'string') {
+                  await onToolResult(request.tool, (request.input as Record<string, unknown>) ?? {}, request.text)
+                }
+              } catch (err) {
+                console.error('claude-cli tool gate: onToolResult threw — ignoring:', err)
+              }
               socket.write(`${JSON.stringify({ decision: 'allow' })}\n`)
               return
             }
@@ -364,7 +381,7 @@ export class ClaudeCliLLMClient implements ILLMClient {
     // list_reminders — see startToolGateServer's doc comment. Started before the config is
     // built (its port needs to go into TOOL_GATE_PORT) and always closed once this call
     // finishes, gate-decision or not.
-    const gate = await startToolGateServer(options.onToolProposal)
+    const gate = await startToolGateServer(options.onToolProposal, options.onToolResult)
     try {
       const mcpConfig = JSON.stringify({
         mcpServers: {
