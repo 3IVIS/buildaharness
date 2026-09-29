@@ -51,6 +51,8 @@ import type { AssistantProgress } from './assistant-types.js'
 import type { TraceEvent } from './trace-events.js'
 import { resolveSupervisorEnabled } from './supervisor-flag.js'
 import { controlStateGateEnabled } from './tool-control-plane.js'
+import { semanticHypothesesEnabled, proposeCompetingExplanations, judgeHypothesesAgainstEvidence } from './semantic-hypotheses.js'
+import type { SemanticHypothesisEvent } from '@buildaharness/harness'
 import { recordLayerTelemetry } from './layer-telemetry.js'
 import { resolveEscalationPlan, escalationEnabled, harnessGatePolicy, turnPolicyBudget, type EscalationPlan } from './layer-policy-wiring.js'
 import type { LayerPolicyMode } from '@buildaharness/harness'
@@ -132,6 +134,8 @@ export interface HarnessRunParams {
   oneLoopProposer?: (toolCtx: ToolExecutorContext) => unknown | Promise<unknown>
   /** Semantic change reviewer found a conflict — advisory (see HarnessRunOptions.onReviewConflict). The caller decides how to surface it. */
   onReviewConflict?: (event: { taskId: string; reason: string }) => void
+  /** Competing explanations were generated for an underdetermined request, or one was eliminated by evidence (AUDIT_SEMANTIC_HYPOTHESES). The caller decides how to surface it. */
+  onSemanticHypothesis?: (event: SemanticHypothesisEvent) => void
   /** A confident failure-mode match picked the recovery strategy — advisory (see HarnessRunOptions.onFailureModeSwitch). The caller decides how to surface it. */
   onFailureModeSwitch?: (event: { taskId: string; failure_class: string; strategy: string }) => void
   /**
@@ -238,7 +242,7 @@ export class HarnessBridge {
   }
 
   async run(params: HarnessRunParams): Promise<HarnessOutcome> {
-    const { sessionId, userMessage, facts, currentTurnFacts = [], draftReply, classification, initialTasks, activePlan, sources, onProgress, onUsage, oneLoopProposer, runInvestigation, askModeEnabled = false, updateChannel, onReviewConflict, onFailureModeSwitch } = params
+    const { sessionId, userMessage, facts, currentTurnFacts = [], draftReply, classification, initialTasks, activePlan, sources, onProgress, onUsage, oneLoopProposer, runInvestigation, askModeEnabled = false, updateChannel, onReviewConflict, onFailureModeSwitch, onSemanticHypothesis } = params
     const runtime = new HarnessRuntime()
     // One harness run per (session, turn) — a run_id a resumed run can be found under if this
     // turn's process died mid-run before reaching the `finally` cleanup below.
@@ -482,6 +486,18 @@ export class HarnessBridge {
         changeReviewFacts: () => changeReviewFactList,
         onReviewConflict,
         onFailureModeSwitch,
+        // AUDIT_SEMANTIC_HYPOTHESES (default off): ask once for competing explanations, but only for a request the
+        // classifier judged underdetermined — every other turn keeps the template seeds and pays for no call.
+        // The judge is wired alongside, and the harness only consults it once semantic hypotheses exist.
+        ...(semanticHypothesesEnabled() && classification.isUnderdetermined === true
+          ? {
+              semanticHypotheses: (input: { objective: string; observations: string[]; beliefs: string[] }) =>
+                proposeCompetingExplanations({ request: userMessage, observations: input.observations, beliefs: input.beliefs }, this.llmClient, this.model(), onUsage),
+              semanticHypothesisJudge: (input: { hypotheses: Array<{ id: string; explanation: string; predicted_observations: string[] }>; observations: string[] }) =>
+                judgeHypothesesAgainstEvidence(input, this.llmClient, this.model(), onUsage),
+              onSemanticHypothesis,
+            }
+          : {}),
         semanticChangeReviewer: escalationEnabled('change_review', escalationPlan)
           ? (input: { changeDescription: string; highConfidenceBeliefs: BeliefCandidate[]; hypothesisPredictions: string[] }) =>
               checkSemanticReviewConflict(input.changeDescription, input.highConfidenceBeliefs, input.hypothesisPredictions, this.llmClient, this.model(), onUsage)

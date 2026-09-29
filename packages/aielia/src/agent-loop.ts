@@ -36,6 +36,7 @@ import { summarizeToolStep, type AssistantToolStep } from './tool-step.js'
 import { REVIEW_NOTE_PREFIX } from './review-checker.js'
 import { sourceReliabilityEnabled, assessSourceReliability, recordSourceAssessments, renderSourceNote } from './source-reliability.js'
 import { RECOVERY_NOTE_PREFIX } from './recovery-note.js'
+import { HYPOTHESIS_NOTE_PREFIX, hypothesisContextMessage } from './semantic-hypotheses.js'
 
 export type ToolLoopResult =
   | { kind: 'final'; content: string; sources: AssistantSource[]; batchBudget?: BatchBudgetTrace }
@@ -395,12 +396,16 @@ export class AgentLoop {
       const allNotes = input.takeSteeringNotes?.() ?? []
       const reviewNotes = allNotes.filter((n) => n.startsWith(REVIEW_NOTE_PREFIX)).map((n) => n.slice(REVIEW_NOTE_PREFIX.length))
       const recoveryNotes = allNotes.filter((n) => n.startsWith(RECOVERY_NOTE_PREFIX)).map((n) => n.slice(RECOVERY_NOTE_PREFIX.length))
-      const steeringNotes = allNotes.filter((n) => !n.startsWith(REVIEW_NOTE_PREFIX) && !n.startsWith(RECOVERY_NOTE_PREFIX))
+      const hypothesisNotes = allNotes.filter((n) => n.startsWith(HYPOTHESIS_NOTE_PREFIX)).map((n) => n.slice(HYPOTHESIS_NOTE_PREFIX.length))
+      const steeringNotes = allNotes.filter((n) => !n.startsWith(REVIEW_NOTE_PREFIX) && !n.startsWith(RECOVERY_NOTE_PREFIX) && !n.startsWith(HYPOTHESIS_NOTE_PREFIX))
       if (steeringNotes.length > 0) {
         input.messages.push({
           role: 'user',
           content: `[the user sent the following while you were working on the request above — apply it to your answer]\n${steeringNotes.map((n) => `- ${n}`).join('\n')}`,
         })
+      }
+      for (const body of hypothesisNotes) {
+        input.messages.push({ role: 'user', content: hypothesisContextMessage(body) })
       }
       if (reviewNotes.length > 0) {
         input.messages.push({

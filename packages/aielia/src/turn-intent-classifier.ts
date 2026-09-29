@@ -72,6 +72,12 @@ export interface TurnIntentClassification {
    * every non-trivial turn).
    */
   isPlanQuestion?: boolean
+  /**
+   * The 15th judgment: the message asks why something happened or which of several things is true, and the message
+   * itself gives no way to tell the possible explanations apart. Optional and fail-safe false — a classifier failure
+   * never claims a request is underdetermined. Only read by the semantic-hypotheses hook (AUDIT_SEMANTIC_HYPOTHESES).
+   */
+  isUnderdetermined?: boolean
   /** One of listTemplateNames()'s names, or null. Only ever set when context.hasActivePlan is false. */
   matchedPlanTemplate: string | null
   /**
@@ -156,6 +162,7 @@ function failSafeClassification(cause?: unknown): TurnIntentClassification {
     isBulkReminderRequest: false,
     isAbandonRequest: false,
     isPlanQuestion: false,
+    isUnderdetermined: false,
     matchedPlanTemplate: null,
     needsMultiStepPlan: false,
     statesDurableFacts: [],
@@ -207,6 +214,7 @@ const TURN_INTENT_SCHEMA = {
     isBulkReminderRequest: { type: 'boolean' },
     isAbandonRequest: { type: 'boolean' },
     isPlanQuestion: { type: 'boolean' },
+    isUnderdetermined: { type: 'boolean' },
     matchedPlanTemplate: { type: ['string', 'null'], enum: [...listTemplateNames(), null] },
     needsMultiStepPlan: { type: 'boolean' },
     statesDurableFacts: STATES_DURABLE_FACTS_SCHEMA,
@@ -247,7 +255,7 @@ const TURN_INTENT_SCHEMA = {
  * English-only by construction; this prompt is explicitly instructed not to assume English.
  */
 const TURN_INTENT_SYSTEM_PROMPT =
-  "Classify the user's message across fourteen independent judgments, for a personal-assistant that " +
+  "Classify the user's message across fifteen independent judgments, for a personal-assistant that " +
   'can send messages, delete files, spend money, publish content, manage subscriptions/bookings, ' +
   'create reminders, and run durable multi-step plans on the user\'s behalf. The message may be in ' +
   'any language — judge the actual meaning, never assume English.\n\n' +
@@ -327,10 +335,13 @@ const TURN_INTENT_SYSTEM_PROMPT =
   'and asks for no new work and gives no go-ahead to continue. False for "go ahead", "continue", ' +
   '"run the plan", "do the next step", an edit to the plan, an approval, or anything that asks the ' +
   'assistant to do work. If told no plan is active, always return false.\n\n' +
+  '15. isUnderdetermined: true only if the message asks WHY something happened, or WHICH of several things is true, ' +
+  'and nothing in the message settles it — a discrepancy, an unexplained result, a symptom with several plausible causes. ' +
+  'False for a request to do something, a factual lookup, a how-to, or a question with one clear answer.\n\n' +
   'Respond with JSON only, matching this shape exactly: {"riskLevel": "LOW"|"MEDIUM"|"HIGH", ' +
   '"riskReason": string, "isTrivial": boolean, "decomposedTasks": [{"id": string, "description": ' +
   'string, "depends_on": string[], "riskLevel": "LOW"|"MEDIUM"|"HIGH"}], "isReminderRequest": ' +
-  'boolean, "isBulkReminderRequest": boolean, "isAbandonRequest": boolean, "isPlanQuestion": boolean, "matchedPlanTemplate": ' +
+  'boolean, "isBulkReminderRequest": boolean, "isAbandonRequest": boolean, "isPlanQuestion": boolean, "isUnderdetermined": boolean, "matchedPlanTemplate": ' +
   'string|null, "needsMultiStepPlan": boolean, "statesDurableFacts": [{"text": string, "durable": ' +
   'boolean, "confidence": "high"|"medium"|"low", "category": "identity"|"health"|"preference"|' +
   '"location"|"occupation"|"relationships"|"project"|"other"}], "needsGrounding": boolean, ' +
@@ -346,6 +357,7 @@ interface RawTurnIntent {
   isBulkReminderRequest?: unknown
   isAbandonRequest?: unknown
   isPlanQuestion?: unknown
+  isUnderdetermined?: unknown
   matchedPlanTemplate?: unknown
   needsMultiStepPlan?: unknown
   statesDurableFacts?: unknown
@@ -424,6 +436,8 @@ function parseTurnIntent(content: string, context: TurnIntentContext): TurnInten
   const isAbandonRequest = context.hasActivePlan && parsed.isAbandonRequest
   // Tolerant like the other additive signals: absent or malformed is false (an active plan drives the turn, as before).
   const isPlanQuestion = context.hasActivePlan && !isAbandonRequest && parsed.isPlanQuestion === true
+  // Tolerant like the other additive signals: absent or malformed is false.
+  const isUnderdetermined = parsed.isUnderdetermined === true
   const matchedPlanTemplate =
     !context.hasActivePlan && typeof parsed.matchedPlanTemplate === 'string' && listTemplateNames().includes(parsed.matchedPlanTemplate)
       ? parsed.matchedPlanTemplate
@@ -450,6 +464,7 @@ function parseTurnIntent(content: string, context: TurnIntentContext): TurnInten
     isBulkReminderRequest,
     isAbandonRequest,
     isPlanQuestion,
+    isUnderdetermined,
     matchedPlanTemplate,
     needsMultiStepPlan,
     statesDurableFacts,

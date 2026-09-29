@@ -8,6 +8,8 @@ export const HypothesisSchema = z.object({
   discriminating_evidence: z.array(z.string()),
   generation_sources: z.array(z.string()),
   diversity_score: z.number(),
+  /** Semantic hypotheses only: the check or observation that would tell this explanation apart from its rivals. */
+  separating_check: z.string().optional(),
 })
 export type Hypothesis = z.infer<typeof HypothesisSchema>
 

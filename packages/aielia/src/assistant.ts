@@ -38,6 +38,7 @@ import type { LayerPolicyMode } from '@buildaharness/harness'
 import { MemoryService, buildTurnFacts, type MemorySummary, type MemoryExport, type PendingFact } from './memory-service.js'
 import type { UserFact } from './fact-extraction.js'
 import { REVIEW_NOTE_PREFIX, reviewNoticeText } from './review-checker.js'
+import { renderHypothesisNote } from './semantic-hypotheses.js'
 import { RECOVERY_NOTE_PREFIX, recoveryNoteText } from './recovery-note.js'
 import { AssistantSession, type IndexedMessage, type TranscriptSearchHit } from './assistant-session.js'
 import { AgentLoop, OneLoopPause, type BatchBudgetState, type BatchBudgetTrace, type ToolLoopResult, trimmedAverage, nextItemBudget } from './agent-loop.js'
@@ -1043,7 +1044,9 @@ export class PersonalAssistant {
     // A failure-mode-biased recovery switch is proposer-facing only, never shown to the user
     // directly (unlike reviewNotice) — see recovery-note.ts's doc comment.
     const recoveryNotes: string[] = []
-    const takeProposerNotes = (): string[] => [...(steeringAdapter?.takeNotes() ?? []), ...reviewNotes.splice(0), ...recoveryNotes.splice(0)]
+    // Competing explanations for an underdetermined request (AUDIT_SEMANTIC_HYPOTHESES) — proposer-facing too.
+    const hypothesisNotes: string[] = []
+    const takeProposerNotes = (): string[] => [...(steeringAdapter?.takeNotes() ?? []), ...reviewNotes.splice(0), ...recoveryNotes.splice(0), ...hypothesisNotes.splice(0)]
     // R3 of the internal plan: set only on the flag-ON, non-batch,
     // non-trivial path below — passed to harnessBridge.run() as the toolExecutors 'default' entry
     // instead of precomputing draftReply via AgentLoop.runToolLoop up front, so the harness's own
@@ -1226,6 +1229,9 @@ export class PersonalAssistant {
           ? (req) => this.agentLoop.runSupervisorInvestigation(req, { riskHint: classification.riskLevel })
           : undefined,
         updateChannel: steeringAdapter?.channel,
+        onSemanticHypothesis: (e) => {
+          if (e.kind === 'generated') hypothesisNotes.push(renderHypothesisNote(e.hypotheses))
+        },
         onReviewConflict: (e) => {
           reviewReasons.push(e.reason)
           reviewNotes.push(`${REVIEW_NOTE_PREFIX}${e.reason}`)

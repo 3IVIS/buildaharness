@@ -48,6 +48,7 @@ function response(overrides: Record<string, unknown> = {}): string {
     isBulkReminderRequest: false,
     isAbandonRequest: false,
     isPlanQuestion: false,
+    isUnderdetermined: false,
     matchedPlanTemplate: null,
     needsMultiStepPlan: false,
     statesDurableFacts: [],
@@ -76,6 +77,7 @@ describe('classifyTurnIntent — happy path field derivation', () => {
       isBulkReminderRequest: false,
       isAbandonRequest: false,
       isPlanQuestion: false,
+      isUnderdetermined: false,
       matchedPlanTemplate: null,
       needsMultiStepPlan: false,
       statesDurableFacts: [],
@@ -397,6 +399,7 @@ describe('classifyTurnIntent — fail-safe fallback', () => {
     isBulkReminderRequest: false,
     isAbandonRequest: false,
     isPlanQuestion: false,
+    isUnderdetermined: false,
     matchedPlanTemplate: null,
     needsMultiStepPlan: false,
     statesDurableFacts: [],
@@ -511,6 +514,36 @@ describe('classifyTurnIntent — isPlanQuestion', () => {
     const result = await classifyTurnIntent('Go ahead.', new StructuredOnlyLLMClient(JSON.stringify(raw)), ACTIVE_PLAN)
     expect(result.riskLevel).toBe('LOW')
     expect(result.isPlanQuestion).toBe(false)
+  })
+})
+
+describe('classifyTurnIntent — isUnderdetermined', () => {
+  it('is true only when the model says the message asks why / which and nothing settles it', async () => {
+    const llm = new StructuredOnlyLLMClient(response({ isTrivial: false, isUnderdetermined: true }))
+    expect((await classifyTurnIntent('Export says 4,212 rows, dashboard 3,980 — why?', llm, NO_PLAN)).isUnderdetermined).toBe(true)
+  })
+
+  it('a response that omits the field, or sends a non-boolean, is false — never a rejected classification', async () => {
+    const raw = JSON.parse(response({ isTrivial: false })) as Record<string, unknown>
+    delete raw.isUnderdetermined
+    expect((await classifyTurnIntent('Hi.', new StructuredOnlyLLMClient(JSON.stringify(raw)), NO_PLAN)).isUnderdetermined).toBe(false)
+    const odd = await classifyTurnIntent('Hi.', new StructuredOnlyLLMClient(response({ isTrivial: false, isUnderdetermined: 'yes' })), NO_PLAN)
+    expect(odd.riskLevel).toBe('LOW')
+    expect(odd.isUnderdetermined).toBe(false)
+  })
+
+  it('a classifier failure never claims the request is underdetermined', async () => {
+    const result = await classifyTurnIntent('Hi.', new ThrowingLLMClient(), NO_PLAN)
+    expect(result.isUnderdetermined).toBe(false)
+  })
+
+  it('asks for the judgment: fifteen judgments in the prompt, and the field in the schema and the answer shape', async () => {
+    const llm = new StructuredOnlyLLMClient(response({ isTrivial: false }))
+    await classifyTurnIntent('Hi.', llm, NO_PLAN)
+    const system = llm.receivedMessages[0].find((m) => m.role === 'system')?.content ?? ''
+    expect(system).toContain('fifteen independent judgments')
+    expect(system).toContain('15. isUnderdetermined')
+    expect(system).toContain('"isUnderdetermined": boolean')
   })
 })
 

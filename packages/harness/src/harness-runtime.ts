@@ -84,6 +84,42 @@ export const BUDGET_WARNING_FLOOR = 0.5
  */
 export type SemanticTaskCompletion = (input: { taskDescription: string; output: unknown }) => Promise<{ done: boolean; reason?: string }>
 
+/** One competing explanation a host proposes for the request (see `SemanticHypothesesHook`). */
+export interface SemanticHypothesisProposal {
+  explanation: string
+  /** What you would expect to see if this explanation were true. */
+  predicted_observations: string[]
+  /** The check or observation that would separate this explanation from the others. */
+  separating_check?: string
+  confidence?: number
+}
+
+/**
+ * Optional host hook (an LLM call, in aielia): propose 2+ competing explanations for an underdetermined request.
+ * Called at most once per run, at the hypothesis step, only when the host wired it. Returning null or an empty list —
+ * or throwing — leaves the run exactly as it was: the template seeds `generateUpdateHypotheses` produces stay, nothing
+ * else changes. The proposals join the active set tagged `generation_sources: ['semantic']`.
+ */
+export type SemanticHypothesesHook = (input: {
+  objective: string
+  observations: string[]
+  beliefs: string[]
+}) => Promise<SemanticHypothesisProposal[] | null>
+
+/**
+ * Optional host hook: given the semantic hypotheses still active and the observations gathered since it last ran, say which
+ * ones the evidence contradicts. Replaces the negation-word overlap the Python twin uses for the same job. Fails open like
+ * the other hooks (null / throw ⇒ nothing is eliminated).
+ */
+export type SemanticHypothesisJudge = (input: {
+  hypotheses: Array<{ id: string; explanation: string; predicted_observations: string[] }>
+  observations: string[]
+}) => Promise<{ contradicted: Array<{ id: string; reason?: string }> } | null>
+
+export type SemanticHypothesisEvent =
+  | { kind: 'generated'; hypotheses: Array<{ id: string; explanation: string; predicted_observations: string[]; separating_check?: string }> }
+  | { kind: 'eliminated'; id: string; explanation: string; reason?: string }
+
 export interface TurnComplexitySignal {
   riskLevel: 'LOW' | 'MEDIUM' | 'HIGH'
   taskCount: number
@@ -207,6 +243,12 @@ export interface HarnessRunOptions extends HarnessInitOptions {
    * aielia's harness-bridge. The Python twin has no equivalent — the ablation arm is PA-only.
    */
   skipControlState?: boolean
+  /** See `SemanticHypothesesHook`. Absent ⇒ hypotheses are exactly the template seeds. */
+  semanticHypotheses?: SemanticHypothesesHook
+  /** See `SemanticHypothesisJudge`. Only consulted when semantic hypotheses exist. */
+  semanticHypothesisJudge?: SemanticHypothesisJudge
+  /** Fired when semantic hypotheses are generated and when one is eliminated. Observability / a host's note channel; a throwing handler never breaks the run. */
+  onSemanticHypothesis?: (event: SemanticHypothesisEvent) => void
   /** See GateDecisionEvent — fired when action_gate returns BLOCK or ESCALATE, right before the run either loops or halts. */
   onGateDecision?: (event: GateDecisionEvent) => void
   /**
@@ -413,6 +455,13 @@ interface LoopContext {
   skipVerification?: boolean
   skipReviewerPass?: boolean
   skipControlState?: boolean
+  semanticHypotheses?: SemanticHypothesesHook
+  semanticHypothesisJudge?: SemanticHypothesisJudge
+  onSemanticHypothesis?: (event: SemanticHypothesisEvent) => void
+  /** How many evidence observations the hypothesis judge has already seen (not persisted; a resumed run re-judges at most once). */
+  lastJudgedObservationCount?: number
+  /** True once the semantic-hypotheses hook has been asked this run (it is asked once, whatever it answers). */
+  semanticHypothesesAsked?: boolean
   onGateDecision?: (event: GateDecisionEvent) => void
   rollbackExecutors?: Record<string, () => void>
   contradictionChecker?: (
@@ -510,6 +559,9 @@ function buildInitialContext(
     skipVerification: options.skipVerification,
     skipReviewerPass: options.skipReviewerPass,
     skipControlState: options.skipControlState,
+    semanticHypotheses: options.semanticHypotheses,
+    semanticHypothesisJudge: options.semanticHypothesisJudge,
+    onSemanticHypothesis: options.onSemanticHypothesis,
     onGateDecision: options.onGateDecision,
     rollbackExecutors: options.rollbackExecutors,
     contradictionChecker: options.contradictionChecker,
@@ -589,6 +641,9 @@ function buildResumedContext(rawCheckpoint: HarnessCheckpoint, options: HarnessR
     skipVerification: options.skipVerification,
     skipReviewerPass: options.skipReviewerPass,
     skipControlState: options.skipControlState,
+    semanticHypotheses: options.semanticHypotheses,
+    semanticHypothesisJudge: options.semanticHypothesisJudge,
+    onSemanticHypothesis: options.onSemanticHypothesis,
     onGateDecision: options.onGateDecision,
     rollbackExecutors: options.rollbackExecutors,
     contradictionChecker: options.contradictionChecker,
@@ -744,6 +799,85 @@ function pinnedNormalControlState(worldModel: WorldModel): ControlState {
 /** The resolver the action/post-exec gates and parallel reconcile re-resolve with when stale. */
 function controlStateResolverFor(ctx: LoopContext): ControlStateResolverFn {
   return ctx.skipControlState ? (_diagnostics, worldModel) => pinnedNormalControlState(worldModel) : resolveControlState
+}
+
+const SEMANTIC_SOURCE = 'semantic'
+
+function hasSemanticHypotheses(ctx: LoopContext): boolean {
+  return ctx.hypothesisSet.active.some((h) => h.generation_sources.includes(SEMANTIC_SOURCE))
+}
+
+function emitSemanticHypothesis(ctx: LoopContext, event: SemanticHypothesisEvent): void {
+  try {
+    ctx.onSemanticHypothesis?.(event)
+  } catch {
+    /* an observability handler must never break the run */
+  }
+}
+
+/**
+ * Asks the host, once per run, for competing explanations of an underdetermined request and adds them to the active set.
+ * Fails open: a missing hook, a null/empty answer or a throw changes nothing.
+ */
+async function generateSemanticHypotheses(ctx: LoopContext): Promise<void> {
+  if (!ctx.semanticHypotheses || hasSemanticHypotheses(ctx) || ctx.semanticHypothesesAsked) return
+  ctx.semanticHypothesesAsked = true
+  let proposals: SemanticHypothesisProposal[] | null = null
+  try {
+    proposals = await ctx.semanticHypotheses({
+      objective: ctx.objective,
+      observations: ctx.evidenceStore.observations.map((o) => o.obs),
+      beliefs: ctx.worldModel.beliefs.map((b) => b.statement),
+    })
+  } catch {
+    return
+  }
+  const usable = (proposals ?? []).filter((p) => typeof p?.explanation === 'string' && p.explanation.trim() !== '')
+  if (usable.length === 0) return
+  const created = usable.map((p, i) => ({
+    id: `sem_${[...ctx.hypothesisSet.active, ...ctx.hypothesisSet.eliminated].filter((h) => h.generation_sources.includes(SEMANTIC_SOURCE)).length + i}`,
+    explanation: p.explanation.trim(),
+    confidence: typeof p.confidence === 'number' && p.confidence >= 0 && p.confidence <= 1 ? p.confidence : 1 / usable.length,
+    predicted_observations: (p.predicted_observations ?? []).filter((x) => typeof x === 'string' && x.trim() !== ''),
+    discriminating_evidence: [] as string[],
+    generation_sources: [SEMANTIC_SOURCE],
+    diversity_score: 0,
+    ...(typeof p.separating_check === 'string' && p.separating_check.trim() ? { separating_check: p.separating_check.trim() } : {}),
+  }))
+  ctx.hypothesisSet.active.push(...created)
+  emitSemanticHypothesis(ctx, {
+    kind: 'generated',
+    hypotheses: created.map((h) => ({ id: h.id, explanation: h.explanation, predicted_observations: h.predicted_observations, ...(h.separating_check ? { separating_check: h.separating_check } : {}) })),
+  })
+}
+
+/**
+ * After an execution's evidence is recorded: ask the host which semantic hypotheses the new observations contradict and
+ * eliminate them. Fails open (no hook, nothing new, null, throw ⇒ nothing is eliminated).
+ */
+async function judgeSemanticHypotheses(ctx: LoopContext): Promise<void> {
+  if (!ctx.semanticHypothesisJudge || !hasSemanticHypotheses(ctx)) return
+  const observations = ctx.evidenceStore.observations
+  const from = ctx.lastJudgedObservationCount ?? 0
+  const fresh = observations.slice(from)
+  ctx.lastJudgedObservationCount = observations.length
+  if (fresh.length === 0) return
+  const live = ctx.hypothesisSet.active.filter((h) => h.generation_sources.includes(SEMANTIC_SOURCE))
+  let verdict: { contradicted: Array<{ id: string; reason?: string }> } | null = null
+  try {
+    verdict = await ctx.semanticHypothesisJudge({
+      hypotheses: live.map((h) => ({ id: h.id, explanation: h.explanation, predicted_observations: h.predicted_observations })),
+      observations: fresh.map((o) => o.obs),
+    })
+  } catch {
+    return
+  }
+  for (const c of verdict?.contradicted ?? []) {
+    const h = live.find((x) => x.id === c?.id)
+    if (!h) continue
+    ctx.hypothesisSet.eliminate(h)
+    emitSemanticHypothesis(ctx, { kind: 'eliminated', id: h.id, explanation: h.explanation, ...(c.reason ? { reason: c.reason } : {}) })
+  }
 }
 
 /**
@@ -936,10 +1070,16 @@ async function* driveMainLoop(ctx: LoopContext): AsyncGenerator<HarnessCheckpoin
     // signal and can wedge the whole run in BLOCKED. What's actually gated per Phase 2, layer 3
     // is only whether this is worth surfacing to the user, not whether the computation runs.
     generateUpdateHypotheses(ctx.worldModel, ctx.evidenceStore, ctx.hypothesisSet, ctx.failureDiagnostics, ctx.memoryState)
-    reportLayer(ctx, 'hypothesis', hypothesisNotable && ctx.hypothesisSet.active.length > 1,
-      hypothesisNotable && ctx.hypothesisSet.active.length > 1
-        ? `Considered ${ctx.hypothesisSet.active.length} ways this request could be understood; going with the most direct one`
-        : 'single clear LOW-risk task — no competing explanation worth surfacing', hypothesisGate)
+    await generateSemanticHypotheses(ctx)
+    const semanticActive = ctx.hypothesisSet.active.filter((h) => h.generation_sources.includes(SEMANTIC_SOURCE)).length
+    if (semanticActive > 0) {
+      reportLayer(ctx, 'hypothesis', true, `Weighing ${semanticActive} competing explanation${semanticActive === 1 ? '' : 's'} for this request`, hypothesisGate)
+    } else {
+      reportLayer(ctx, 'hypothesis', hypothesisNotable && ctx.hypothesisSet.active.length > 1,
+        hypothesisNotable && ctx.hypothesisSet.active.length > 1
+          ? `Considered ${ctx.hypothesisSet.active.length} ways this request could be understood; going with the most direct one`
+          : 'single clear LOW-risk task — no competing explanation worth surfacing', hypothesisGate)
+    }
 
     ctx.nodeExecutionOrder.push('update_diagnostics')
     updateDiagnostics(ctx.worldModel, ctx.hypothesisSet, ctx.taskGraph, ctx.failureDiagnostics, ctx.beliefDepGraph, ctx.diagnostics)
@@ -1405,6 +1545,7 @@ async function* driveMainLoop(ctx: LoopContext): AsyncGenerator<HarnessCheckpoin
       }
     }
 
+    await judgeSemanticHypotheses(ctx)
     ctx.nodeExecutionOrder.push('update_diagnostics_post_exec')
     updateDiagnostics(ctx.worldModel, ctx.hypothesisSet, ctx.taskGraph, ctx.failureDiagnostics, ctx.beliefDepGraph, ctx.diagnostics)
     reevaluatePolicy(ctx)
