@@ -568,6 +568,64 @@ describe('ClaudeCliLLMClient', () => {
     }
   })
 
+  it('a `kind: execute` request runs through onToolExecute: handled text, declined, and a thrown error each come back in the right shape', async () => {
+    const workspaceRoot = await mkdtemp(join(tmpdir(), 'cli-llm-test-'))
+    try {
+      const replies: Record<string, unknown>[] = []
+      spawnMock.mockImplementation((...args: unknown[]) => {
+        const spawnArgs = args[1] as string[]
+        const mcpConfig = JSON.parse(spawnArgs[spawnArgs.indexOf('--mcp-config') + 1])
+        const gatePort = Number(mcpConfig.mcpServers['file-tools'].env.TOOL_GATE_PORT)
+        const proc = new EventEmitter() as EventEmitter & { stdout: EventEmitter; stderr: EventEmitter }
+        proc.stdout = new EventEmitter()
+        proc.stderr = new EventEmitter()
+        void (async () => {
+          const socket = createConnection({ port: gatePort, host: '127.0.0.1' })
+          let buffer = ''
+          const send = (payload: unknown) => new Promise<void>((resolvePromise) => {
+            const onData = (chunk: Buffer) => {
+              buffer += chunk.toString('utf-8')
+              const nl = buffer.indexOf('\n')
+              if (nl === -1) return
+              replies.push(JSON.parse(buffer.slice(0, nl)))
+              buffer = buffer.slice(nl + 1)
+              socket.off('data', onData)
+              resolvePromise()
+            }
+            socket.on('data', onData)
+            socket.write(`${JSON.stringify(payload)}\n`)
+          })
+          await new Promise<void>((r) => socket.on('connect', () => r()))
+          await send({ kind: 'execute', tool: 'fetch_url', input: { url: 'https://a.test' } })
+          await send({ kind: 'execute', tool: 'web_search', input: { query: 'q' } })
+          await send({ kind: 'execute', tool: 'fetch_url', input: { url: 'https://boom.test' } })
+          socket.end()
+          proc.stdout.emit('data', Buffer.from(streamJsonResult('done')))
+          proc.emit('close', 0)
+        })()
+        return proc
+      })
+
+      const client = new ClaudeCliLLMClient({ fileTools: { workspaceRoot } })
+      const onToolExecute = vi.fn().mockImplementation(async (tool: string, input: Record<string, unknown>) => {
+        if (tool === 'web_search') return undefined
+        if (String(input.url).includes('boom')) throw new Error('blocked by SSRF guard')
+        return '<untrusted_external_content>\npage\n</untrusted_external_content>'
+      })
+
+      await client.callChatStructured([{ role: 'user', content: 'x' }], [{ name: 'fetch_url', input_schema: {} }], { onToolExecute })
+
+      expect(onToolExecute).toHaveBeenCalledTimes(3)
+      expect(replies).toEqual([
+        { handled: true, text: '<untrusted_external_content>\npage\n</untrusted_external_content>' },
+        { handled: false },
+        { handled: true, error: 'blocked by SSRF guard' },
+      ])
+    } finally {
+      await rm(workspaceRoot, { recursive: true, force: true })
+    }
+  })
+
   it('Phase D0: a proposal is allowed by default when the caller supplies no onToolProposal', async () => {
     const workspaceRoot = await mkdtemp(join(tmpdir(), 'cli-llm-test-'))
     try {

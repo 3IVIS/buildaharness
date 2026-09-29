@@ -1,7 +1,7 @@
 import { describe, it, expect, afterEach } from 'vitest'
 import { createServer, type Server } from 'node:net'
 // @ts-expect-error — plain ESM script, no .d.ts; it's import-safe (see its entry-point guard).
-import { formatWebSearchResults, wrapUntrusted, requestToolGate, reportToolResult } from './file-tools-mcp-server.mjs'
+import { formatWebSearchResults, wrapUntrusted, requestToolGate, reportToolResult, requestToolExecution } from './file-tools-mcp-server.mjs'
 
 /**
  * F3 (adoption plan): the claude-cli backend's MCP server gained web_search. The tool
@@ -107,6 +107,39 @@ describe('file-tools-mcp-server requestToolGate (Phase D0)', () => {
     await expect(reportToolResult('read_file', { path: 'x' }, 'y')).resolves.toBeUndefined()
     process.env.TOOL_GATE_PORT = '1'
     await expect(reportToolResult('read_file', { path: 'x' }, 'y')).resolves.toBeUndefined()
+  })
+
+  it('requestToolExecution returns the parent text, undefined when declined/unreachable, and throws the parent error', async () => {
+    let mode: 'text' | 'decline' | 'error' = 'text'
+    const received: Record<string, unknown>[] = []
+    server = createServer((socket) => {
+      acceptedSockets.push(socket)
+      let buffer = ''
+      socket.on('data', (chunk) => {
+        buffer += chunk.toString('utf-8')
+        let nl: number
+        while ((nl = buffer.indexOf('\n')) !== -1) {
+          received.push(JSON.parse(buffer.slice(0, nl)))
+          buffer = buffer.slice(nl + 1)
+          const reply = mode === 'text' ? { handled: true, text: 'wrapped page' } : mode === 'decline' ? { handled: false } : { handled: true, error: 'refused: private address' }
+          socket.write(`${JSON.stringify(reply)}\n`)
+        }
+      })
+    })
+    await new Promise<void>((resolve) => server!.listen(0, '127.0.0.1', resolve))
+    process.env.TOOL_GATE_PORT = String((server.address() as { port: number }).port)
+
+    await expect(requestToolExecution('fetch_url', { url: 'https://a.test' })).resolves.toBe('wrapped page')
+    expect(received[0]).toEqual({ kind: 'execute', tool: 'fetch_url', input: { url: 'https://a.test' } })
+    mode = 'decline'
+    await expect(requestToolExecution('fetch_url', { url: 'https://a.test' })).resolves.toBeUndefined()
+    mode = 'error'
+    await expect(requestToolExecution('web_search', { query: 'q' })).rejects.toThrow('refused: private address')
+
+    delete process.env.TOOL_GATE_PORT
+    await expect(requestToolExecution('fetch_url', { url: 'x' })).resolves.toBeUndefined()
+    process.env.TOOL_GATE_PORT = '1'
+    await expect(requestToolExecution('fetch_url', { url: 'x' })).resolves.toBeUndefined()
   })
 
   it('fails open (allow) when the gate connection errors, rather than wedging the call', async () => {

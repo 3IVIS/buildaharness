@@ -279,10 +279,31 @@ export async function reportToolResult(tool, input, text) {
   await gateRoundTrip({ kind: 'result', tool, input, text: String(text).slice(0, REPORTED_RESULT_CHARS) })
 }
 
-async function gateRoundTrip(payload) {
+// A delegated fetch/search runs a real network round trip on the parent side — far longer than a
+// gate decision — so it gets its own budget. Silence past it means "not handled", and the caller
+// falls back to fetching locally.
+const EXECUTE_REQUEST_TIMEOUT_MS = 60000
+
+/**
+ * Asks the parent to run a network tool itself (ChatOptions.onToolExecute) so the fetch goes
+ * through the parent's own web stack: its SSRF guard, its injected fetch, and its LLM injection
+ * classifier. Resolves to the text the model should see, `undefined` when the parent declines or is
+ * unreachable (the caller then runs the tool locally, the pre-delegation behaviour), or throws the
+ * parent's error message when the parent ran the tool and it failed.
+ */
+export async function requestToolExecution(tool, input) {
+  const reply = await gateRoundTrip({ kind: 'execute', tool, input }, { timeoutMs: EXECUTE_REQUEST_TIMEOUT_MS, failValue: { handled: false } })
+  if (reply && reply.handled === true) {
+    if (typeof reply.error === 'string') throw new Error(reply.error)
+    if (typeof reply.text === 'string') return reply.text
+  }
+  return undefined
+}
+
+async function gateRoundTrip(payload, options) {
   const port = process.env.TOOL_GATE_PORT ? Number(process.env.TOOL_GATE_PORT) : undefined
-  if (!port) return { decision: 'allow' }
-  const result = gateRequestChain.then(() => doRequestToolGate(port, payload))
+  if (!port) return options?.failValue ?? { decision: 'allow' }
+  const result = gateRequestChain.then(() => doRequestToolGate(port, payload, options))
   // However this round trip turns out, the chain must advance — a rejection here would wedge
   // every subsequent call behind it forever.
   gateRequestChain = result.then(
@@ -292,13 +313,15 @@ async function gateRoundTrip(payload) {
   return result
 }
 
-function doRequestToolGate(port, payload) {
+function doRequestToolGate(port, payload, options) {
+  const failValue = options?.failValue ?? { decision: 'allow' }
+  const timeoutMs = options?.timeoutMs ?? GATE_REQUEST_TIMEOUT_MS
   return new Promise((resolve) => {
     let socket
     try {
       socket = getGateSocket(port)
     } catch {
-      resolve({ decision: 'allow' })
+      resolve(failValue)
       return
     }
     let buffer = ''
@@ -318,20 +341,20 @@ function doRequestToolGate(port, payload) {
       try {
         finish(JSON.parse(buffer.slice(0, newlineIndex)))
       } catch {
-        finish({ decision: 'allow' })
+        finish(failValue)
       }
     }
     const onError = () => {
       gateSocket = null // drop the broken connection — the next call gets a fresh one
-      finish({ decision: 'allow' })
+      finish(failValue)
     }
     const timer = setTimeout(() => {
       // See GATE_REQUEST_TIMEOUT_MS's comment — no error/data ever arrived, so this side has no
       // way to know if the socket is genuinely dead; evict it rather than risk reusing it again.
       if (gateSocket === socket) gateSocket = null
       socket.destroy()
-      finish({ decision: 'allow' })
-    }, GATE_REQUEST_TIMEOUT_MS)
+      finish(failValue)
+    }, timeoutMs)
     timer.unref?.()
     socket.on('data', onData)
     socket.on('error', onError)
@@ -798,6 +821,11 @@ async function main() {
         if (gate.decision === 'deny') {
           return { content: [{ type: 'text', text: `Denied: ${gate.reason ?? 'not permitted by tool policy'}` }], isError: true }
         }
+        // Delegated first: the parent's web stack (SSRF guard, injected fetch, LLM injection check)
+        // runs the fetch and hands back the finished, trust-wrapped text. `undefined` = it declined
+        // (or is unreachable) — fetch here, as before.
+        const delegated = await requestToolExecution('fetch_url', { url })
+        if (delegated !== undefined) return { content: [{ type: 'text', text: delegated }] }
         const text = await fetchUrlSafely(url)
         await reportToolResult('fetch_url', { url }, text)
         return { content: [{ type: 'text', text: tagFetchedContent(text) }] }
@@ -822,6 +850,8 @@ async function main() {
           if (gate.decision === 'deny') {
             return { content: [{ type: 'text', text: `Denied: ${gate.reason ?? 'not permitted by tool policy'}` }], isError: true }
           }
+          const delegated = await requestToolExecution('web_search', { query })
+          if (delegated !== undefined) return { content: [{ type: 'text', text: delegated }] }
           const searchText = await runWebSearch(query)
           await reportToolResult('web_search', { query }, searchText)
           return { content: [{ type: 'text', text: searchText }] }

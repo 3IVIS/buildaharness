@@ -59,6 +59,16 @@ export interface ChatOptions {
    * client) never calls this.
    */
   onToolResult?: (tool: string, input: Record<string, unknown>, resultText: string) => void | Promise<void>
+  /**
+   * Lets the caller execute a read-only network tool (fetch_url / web_search) itself instead of the
+   * backend doing it inside its own subprocess. Return the text the model should see as the tool's
+   * result — already trust-wrapped and injection-checked by the caller — or `undefined` to decline,
+   * in which case the backend runs the tool itself exactly as before. Throwing reports the tool as
+   * failed with the thrown message. Why: a backend-side fetch bypasses the caller's own web stack
+   * (its SSRF guard, its injected `fetchImpl`, its LLM injection classifier), so those only applied
+   * on backends that hand tool calls back one at a time. The proxy client never calls this.
+   */
+  onToolExecute?: (tool: string, input: Record<string, unknown>) => Promise<string | undefined>
 }
 
 export interface ToolStepEvent {

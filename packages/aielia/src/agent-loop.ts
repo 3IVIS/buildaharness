@@ -763,6 +763,16 @@ export class AgentLoop {
         // read-only call returned, so this turn's sources carry the raw text the grounding check
         // compares the reply to — the manual dispatch loop below does the same for the calls it
         // makes itself. Same tools and same `path` meaning as that loop's own source push.
+        // Run fetch_url / web_search on this side when web tools are configured, so a claude-cli
+        // fetch gets the same SSRF guard, injected fetch and LLM injection check the manual dispatch
+        // loop gives the proxy backend (executeToolCall). Declines (undefined) without webTools —
+        // the MCP server then fetches for itself, as before.
+        onToolExecute: async (tool, input) => {
+          if (!this.webTools || (tool !== 'fetch_url' && tool !== 'web_search')) return undefined
+          const text = await this.executeToolCall(tool, input, userMessage, onUsage)
+          sources.push({ tool, path: String(input.query ?? input.url), excerpt: text.slice(0, GROUNDING_EXCERPT_CHARS) })
+          return text
+        },
         onToolResult: (tool, input, resultText) => {
           if (tool === 'read_file' || tool === 'list_directory') {
             sources.push({ tool, path: String(input.path), excerpt: resultText.slice(0, GROUNDING_EXCERPT_CHARS) })

@@ -181,13 +181,16 @@ function invokeClaudeStreaming(claudePath: string, args: string[], onToolStep?: 
  * Listens on an ephemeral loopback TCP port for the lifetime of one callChatStructured call;
  * newline-delimited JSON request/response, one request per tool call (`{tool, input}` in,
  * `{decision, reason?}` out — see ChatOptions.onToolProposal; a `{kind: 'result', tool, input, text}`
- * message reports an executed tool's raw result instead — see ChatOptions.onToolResult). Absent `onToolProposal` (a caller
+ * message reports an executed tool's raw result instead — see ChatOptions.onToolResult; a
+ * `{kind: 'execute', tool, input}` message asks the caller to run fetch_url/web_search itself — see
+ * ChatOptions.onToolExecute). Absent `onToolProposal` (a caller
  * that hasn't wired the gate), or an unparseable request, every proposal is allowed — the
  * pre-D0 behavior, unchanged.
  */
 function startToolGateServer(
   onToolProposal?: (tool: string, input: Record<string, unknown>) => Promise<ToolProposalDecision>,
   onToolResult?: (tool: string, input: Record<string, unknown>, resultText: string) => void | Promise<void>,
+  onToolExecute?: (tool: string, input: Record<string, unknown>) => Promise<string | undefined>,
 ): Promise<{ server: Server; port: number }> {
   return new Promise((resolvePromise, reject) => {
     const server = createServer((socket) => {
@@ -211,6 +214,23 @@ function startToolGateServer(
             // (see ChatOptions.onToolResult) rather than proposing a call. It rides the same socket
             // and the same one-request-one-response shape — no request ids exist, so the MCP side
             // queues it like any proposal — and is acked with the same `allow` shape.
+            // A `kind: 'execute'` message asks the caller to run a network tool itself (see
+            // ChatOptions.onToolExecute). `{handled: false}` tells the MCP server to fetch locally as
+            // before; an error is reported as `{handled: true, error}` so the model sees a failed
+            // tool, not a silent second attempt over the real network the caller meant to control.
+            if (request.kind === 'execute') {
+              let reply: { handled: boolean; text?: string; error?: string } = { handled: false }
+              try {
+                if (onToolExecute && typeof request.tool === 'string') {
+                  const text = await onToolExecute(request.tool, (request.input as Record<string, unknown>) ?? {})
+                  if (text !== undefined) reply = { handled: true, text }
+                }
+              } catch (err) {
+                reply = { handled: true, error: err instanceof Error ? err.message : String(err) }
+              }
+              socket.write(`${JSON.stringify(reply)}\n`)
+              return
+            }
             if (request.kind === 'result') {
               try {
                 if (onToolResult && typeof request.tool === 'string' && typeof request.text === 'string') {
@@ -381,7 +401,7 @@ export class ClaudeCliLLMClient implements ILLMClient {
     // list_reminders — see startToolGateServer's doc comment. Started before the config is
     // built (its port needs to go into TOOL_GATE_PORT) and always closed once this call
     // finishes, gate-decision or not.
-    const gate = await startToolGateServer(options.onToolProposal, options.onToolResult)
+    const gate = await startToolGateServer(options.onToolProposal, options.onToolResult, options.onToolExecute)
     try {
       const mcpConfig = JSON.stringify({
         mcpServers: {
