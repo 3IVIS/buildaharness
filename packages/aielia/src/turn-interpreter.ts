@@ -1,3 +1,4 @@
+import { planTasksForRun } from './plan-question.js'
 import type { Task } from '@buildaharness/harness'
 import type { ILLMClient, TokenUsage, ReminderStore, ChatMessage } from '@buildaharness/runtime'
 import { checkRequestAmbiguity } from './ambiguity-guard.js'
@@ -217,8 +218,10 @@ export class TurnInterpreter {
     classification: TurnIntentClassification
     planForCancelCheck: PlanRecord | null
     onUsage: (usage: TokenUsage) => void
+    /** The turn only asks about the active plan (turn-intent-classifier.ts's isPlanQuestion, routing enabled): keep the plan for display but don't let it drive the turn's tasks. */
+    planQuestion?: boolean
   }): Promise<ResolvedTasks> {
-    const { userMessage, sessionId, classification, planForCancelCheck, onUsage } = params
+    const { userMessage, sessionId, classification, planForCancelCheck, onUsage, planQuestion = false } = params
     // The single AUDIT_DECOMPOSITION read: gates both the classifier's decomposedTasks graph and
     // the reframe call below, so the OFF arm is exactly the single-task path.
     const decompose = decompositionEnabled()
@@ -254,8 +257,13 @@ export class TurnInterpreter {
     // that reason — see PlanDraftingService.draftTurn for where template seeding actually happens
     // now.
     let planClassifiedTrace: ResolvedTasks['planClassifiedTrace']
-    if (activePlan) {
-      initialTasks = toHarnessTasks(activePlan.tasks, planTaskRiskLevel)
+    if (activePlan && planQuestion) {
+      // A question about the plan is one ordinary turn: the plan stays as it is (still `activePlan`,
+      // so the result reports its status) but its tasks are not re-run.
+      initialTasks = toHarnessTasks([{ id: 'respond', description: userMessage, depends_on: [] }], toTaskRiskLevel(classification.riskLevel))
+    } else if (activePlan) {
+      // A failed step gets another attempt (and the reason it was rejected) rather than stranding the run.
+      initialTasks = toHarnessTasks(planTasksForRun(activePlan.tasks), planTaskRiskLevel)
     } else {
       planClassifiedTrace = { isCandidate: classification.matchedPlanTemplate !== null, matchedTemplate: classification.matchedPlanTemplate }
     }

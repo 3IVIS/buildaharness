@@ -285,6 +285,7 @@ export function ChatMessageBubble({ role, content, riskLevel, trace, harnessSkip
                   {planStatus.tasks.map((t) => (
                     <li key={t.id} className={t.status === 'RUNNING' ? 'bubble__plan-checklist-item--active' : undefined}>
                       {PLAN_TASK_STATUS_ICON[t.status] ?? '?'} {t.description}
+                      {t.note && <span className="bubble__plan-checklist-note"> — not accepted as done: {t.note}</span>}
                     </li>
                   ))}
                 </ul>

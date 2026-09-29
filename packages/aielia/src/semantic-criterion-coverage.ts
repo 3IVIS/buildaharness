@@ -1,5 +1,6 @@
 import type { ILLMClient, TokenUsage } from '@buildaharness/runtime'
 import type { Belief } from '@buildaharness/harness'
+import { parseModelJson } from './model-json.js'
 
 /**
  * assistant.ts's single ad hoc/single-task turn always passes this exact sentence as its harness
@@ -47,7 +48,10 @@ const SYSTEM_PROMPT =
   'meaning matches). You are given "criterion" (a single success criterion) and "beliefs" (an array ' +
   'of {id, statement} — everything currently believed true) as JSON. Respond with JSON only: ' +
   '{"covered": boolean} — true only if some belief, individually or combined with others, genuinely ' +
-  'establishes the criterion is met, not just related to the same general topic.'
+  'establishes the criterion is met, not just related to the same general topic. A belief of the form ' +
+  '"Completed: <task> — produced: <text>" only records that the assistant replied to that task; it ' +
+  'establishes a criterion only if the produced text itself shows the work was done (a reply saying the ' +
+  'work has not started, or is only proposed, does not).'
 
 /**
  * One LLM call per uncovered criterion, checking it against the whole belief set at once — layered
@@ -79,7 +83,7 @@ export async function checkSemanticCriterionCoverage(
       undefined,
       { model, onUsage, structuredOutput: { schema: COVERAGE_SCHEMA } },
     )
-    const parsed = JSON.parse(response.content) as { covered?: unknown }
+    const parsed = parseModelJson(response.content) as { covered?: unknown }
     return parsed.covered === true
   } catch {
     return false

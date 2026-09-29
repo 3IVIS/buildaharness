@@ -307,8 +307,24 @@ export class AgentLoop {
      * caller-constraint output contract.
      */
     takeSteeringNotes?: () => string[]
+    /**
+     * Plan steps: the instruction to give the model when the harness starts working on `taskId`, or
+     * undefined for a task that is just "answer the user's message" (every ordinary turn). Sent once per
+     * task; the step's final answer is then kept in the conversation so a later step can build on it.
+     */
+    stepInstruction?: (taskId: string) => string | undefined
+    /**
+     * True while the harness is running several subtasks that all stand for ONE answer to the user's
+     * message (an ordinary decomposed turn, not a plan). The first subtask to finish produces the answer;
+     * the rest reuse it instead of asking the model the same question again. A task the harness runs a
+     * second time (a retry after a rejection) gets a fresh call, never the answer that was rejected.
+     */
+    shareAnswer?: () => boolean
   }): (toolCtx: ToolExecutorContext) => Promise<unknown> {
     let dispatchedAnyToolCall = false
+    const instructedSteps = new Set<string>()
+    let sharedOutput: string | undefined
+    const servedTaskIds = new Set<string>()
     let iteration = 0
     // One real, turn-scoped live ControlState for the whole proposer (= the whole turn) — see this
     // method's doc comment. recordToolOutcome dereferences state.evidenceStore, so this must be a
@@ -317,6 +333,18 @@ export class AgentLoop {
     const seenInvestigationObs = new Set<string>()
 
     return async (toolCtx: ToolExecutorContext): Promise<unknown> => {
+      const sharing = input.shareAnswer?.() === true && toolCtx.currentTaskId !== undefined
+      if (sharing && sharedOutput !== undefined) {
+        if (servedTaskIds.has(toolCtx.currentTaskId!)) {
+          // The same task again means the answer was not accepted: ask the model afresh.
+          sharedOutput = undefined
+          servedTaskIds.clear()
+        } else {
+          servedTaskIds.add(toolCtx.currentTaskId!)
+          return { __harnessExecutionStatus: 'complete', output: sharedOutput }
+        }
+      }
+
       if (iteration >= input.maxIterations) {
         // A genuine harness-level failure (not a pause/approval) — see execute.ts's
         // isHarnessPauseSignal special-case, which used to make this throw bypass
@@ -347,6 +375,15 @@ export class AgentLoop {
           role: 'user',
           content: `[trajectory-supervisor investigation findings — read-only evidence gathered because the run had stalled]\n${freshFindings.map((o) => o.content).join('\n\n')}`,
         })
+      }
+
+      const stepInstruction = toolCtx.currentTaskId ? input.stepInstruction?.(toolCtx.currentTaskId) : undefined
+      if (stepInstruction && toolCtx.currentTaskId && !instructedSteps.has(toolCtx.currentTaskId)) {
+        instructedSteps.add(toolCtx.currentTaskId)
+        input.messages.push({ role: 'user', content: stepInstruction })
+        // The per-attempt iteration budget is per step: it otherwise counts across the whole turn, so a
+        // long plan of tool-using steps would trip it partway through for no fault of the step in hand.
+        iteration = 1
       }
 
       const allNotes = input.takeSteeringNotes?.() ?? []
@@ -393,6 +430,13 @@ export class AgentLoop {
       }
 
       if (step.result.kind === 'final') {
+        // A plan step's answer is part of the conversation the next step continues from.
+        if (stepInstruction) input.messages.push({ role: 'assistant', content: step.result.content })
+        if (sharing) {
+          sharedOutput = step.result.content
+          servedTaskIds.clear()
+          servedTaskIds.add(toolCtx.currentTaskId!)
+        }
         return { __harnessExecutionStatus: 'complete', output: step.result.content }
       }
 
@@ -421,6 +465,8 @@ export class AgentLoop {
     onUsage?: (usage: TokenUsage) => void,
     riskHint: TurnIntentClassification['riskLevel'] = 'LOW',
     takeSteeringNotes?: () => string[],
+    stepInstruction?: (taskId: string) => string | undefined,
+    shareAnswer?: () => boolean,
   ): { proposer: (toolCtx: ToolExecutorContext) => Promise<unknown>; sources: AssistantSource[] } {
     const tools = [
       ...(this.fileTools ? FILE_TOOLS : []),
@@ -451,7 +497,7 @@ export class AgentLoop {
       // stays out of that mechanism's way for any maxSteps large enough for it to matter, at
       // the cost of a genuinely small maxSteps (e.g. 6) leaving little room for either.
       maxIterations: Math.max(3, this.maxSteps - RECOVERY_HEADROOM),
-      sources, onToken, onToolStep, onUsage, riskHint, takeSteeringNotes,
+      sources, onToken, onToolStep, onUsage, riskHint, takeSteeringNotes, stepInstruction, shareAnswer,
     })
     return { proposer, sources }
   }

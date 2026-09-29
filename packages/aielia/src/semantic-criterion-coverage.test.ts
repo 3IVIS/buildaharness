@@ -133,3 +133,13 @@ describe('semanticCriterionCoverageEnabled (AUDIT_SEMANTIC_CRITERION_COVERAGE ga
     expect(llm.calls).toBe(2)
   })
 })
+
+describe('checkSemanticCriterionCoverage — output a backend could not constrain to bare JSON', () => {
+  const beliefs = [belief('b1', 'the suite finished with zero failures')]
+
+  it('reads a verdict wrapped in a code fence or behind a sentence of reasoning, instead of failing to "not covered"', async () => {
+    for (const content of ['```json\n{"covered": true}\n```', 'The suite passing establishes it.\n{"covered": true}']) {
+      expect(await checkSemanticCriterionCoverage('all tests pass', beliefs, new StructuredOnlyLLMClient(content))).toBe(true)
+    }
+  })
+})

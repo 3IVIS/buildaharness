@@ -32,6 +32,12 @@ export interface PlanTaskRecord {
    * claiming the user's own work actually got done.
    */
   cancelled?: boolean
+  /**
+   * Why the last attempt at this task did not count as done — set when the semantic task-completion
+   * check judged its output did not do the task (task-completion-check.ts), so a later turn can say
+   * why the plan is stuck. Cleared once the task completes. Absent otherwise.
+   */
+  statusNote?: string
 }
 
 /**
@@ -435,9 +441,16 @@ export async function editPlanTask(memory: MemoryAdapter, sessionId: string, pla
  * `abandonPlan`'s explicit user-abort path; every other event (a task failing, a
  * needs_approval/needs_clarification interrupt, a harness error) leaves it untouched.
  */
-export function updatePlanFromRun(plan: PlanRecord, taskGraphTasks: { id: string; status: TaskStatus }[]): PlanRecord {
+export function updatePlanFromRun(plan: PlanRecord, taskGraphTasks: { id: string; status: TaskStatus }[], taskNotes?: Record<string, string>): PlanRecord {
   const statusById = new Map(taskGraphTasks.map((t) => [t.id, normalizeRestingStatus(t.status)]))
-  const tasks = plan.tasks.map((t): PlanTaskRecord => ({ ...t, status: statusById.get(t.id) ?? t.status }))
+  const tasks = plan.tasks.map((t): PlanTaskRecord => {
+    const status = statusById.get(t.id) ?? t.status
+    // A fresh note wins; an old one survives only while the task stays FAILED — completing (or being
+    // retried from scratch) makes it stale.
+    const note = taskNotes?.[t.id] ?? (status === 'FAILED' ? t.statusNote : undefined)
+    const { statusNote: _drop, ...rest } = t
+    return note ? { ...rest, status, statusNote: note } : { ...rest, status }
+  })
   const allComplete = tasks.length > 0 && tasks.every((t) => t.status === 'COMPLETE')
   return {
     ...plan,

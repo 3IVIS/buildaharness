@@ -314,8 +314,13 @@ export async function reviewerPass(
     ...adversarialResult.reopened_task_ids,
   ]
 
-  // Mark findings as tasks to reopen if tasks are referenced
-  for (const finding of [...implResult.findings, ...reviewResult.findings]) {
+  // Mark findings as tasks to reopen if tasks are referenced. Only the reviewer lens's findings are
+  // matched: the implementer lens's findings quote a success criterion ("Success criterion not covered
+  // by any belief: <criterion text>"), which is user- or plan-authored prose and never a task reference.
+  // Matching it reopened any finished step whose id merely appeared in the criterion's wording (a step
+  // with the id "schedule" against a criterion saying "a schedule is in place"), re-ran it, and could
+  // regress a step that had been accepted.
+  for (const finding of reviewResult.findings) {
     // Look for task IDs in findings referencing specific tasks
     for (const task of taskGraph.tasks) {
       if (finding.includes(task.id) && task.status === 'COMPLETE') {

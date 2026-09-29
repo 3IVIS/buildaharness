@@ -2,6 +2,7 @@ import type { ILLMClient, TokenUsage } from '@buildaharness/runtime'
 import { listTemplateNames } from './plan-templates/index.js'
 import type { DecomposedTaskSpec } from './decomposition-classifier.js'
 import { classifyError } from './error-classifier.js'
+import { parseModelJson } from './model-json.js'
 
 /**
  * 'UNKNOWN' is never produced by a successful classification (TURN_INTENT_SCHEMA's riskLevel enum
@@ -63,6 +64,14 @@ export interface TurnIntentClassification {
   isBulkReminderRequest: boolean
   /** Only meaningful when context.hasActivePlan is true. */
   isAbandonRequest: boolean
+  /**
+   * True only when a plan is active AND the message merely asks about it or discusses it (where it
+   * stands, what a step is, what is left, why something failed) — no new work, no go-ahead to
+   * continue. Such a turn is answered from the plan's state instead of re-driving the plan's tasks.
+   * Additive: a missing/malformed value is false, which is today's behaviour (the active plan drives
+   * every non-trivial turn).
+   */
+  isPlanQuestion?: boolean
   /** One of listTemplateNames()'s names, or null. Only ever set when context.hasActivePlan is false. */
   matchedPlanTemplate: string | null
   /**
@@ -146,6 +155,7 @@ function failSafeClassification(cause?: unknown): TurnIntentClassification {
     isReminderRequest: false,
     isBulkReminderRequest: false,
     isAbandonRequest: false,
+    isPlanQuestion: false,
     matchedPlanTemplate: null,
     needsMultiStepPlan: false,
     statesDurableFacts: [],
@@ -196,6 +206,7 @@ const TURN_INTENT_SCHEMA = {
     isReminderRequest: { type: 'boolean' },
     isBulkReminderRequest: { type: 'boolean' },
     isAbandonRequest: { type: 'boolean' },
+    isPlanQuestion: { type: 'boolean' },
     matchedPlanTemplate: { type: ['string', 'null'], enum: [...listTemplateNames(), null] },
     needsMultiStepPlan: { type: 'boolean' },
     statesDurableFacts: STATES_DURABLE_FACTS_SCHEMA,
@@ -236,7 +247,7 @@ const TURN_INTENT_SCHEMA = {
  * English-only by construction; this prompt is explicitly instructed not to assume English.
  */
 const TURN_INTENT_SYSTEM_PROMPT =
-  "Classify the user's message across thirteen independent judgments, for a personal-assistant that " +
+  "Classify the user's message across fourteen independent judgments, for a personal-assistant that " +
   'can send messages, delete files, spend money, publish content, manage subscriptions/bookings, ' +
   'create reminders, and run durable multi-step plans on the user\'s behalf. The message may be in ' +
   'any language — judge the actual meaning, never assume English.\n\n' +
@@ -311,10 +322,15 @@ const TURN_INTENT_SYSTEM_PROMPT =
   "dissatisfaction with the assistant's previous reply. False if there is no prior reply.\n\n" +
   '13. statesConstraint: true if the message sets a rule, limit, or standing requirement that should ' +
   'govern this and later turns (a format, a prohibition, a scope restriction), not just a one-off ask.\n\n' +
+  '14. isPlanQuestion: true only if told a plan is currently active AND the message only asks about or ' +
+  'discusses that plan — where it stands, what a step is, what is left, why something did not finish — ' +
+  'and asks for no new work and gives no go-ahead to continue. False for "go ahead", "continue", ' +
+  '"run the plan", "do the next step", an edit to the plan, an approval, or anything that asks the ' +
+  'assistant to do work. If told no plan is active, always return false.\n\n' +
   'Respond with JSON only, matching this shape exactly: {"riskLevel": "LOW"|"MEDIUM"|"HIGH", ' +
   '"riskReason": string, "isTrivial": boolean, "decomposedTasks": [{"id": string, "description": ' +
   'string, "depends_on": string[], "riskLevel": "LOW"|"MEDIUM"|"HIGH"}], "isReminderRequest": ' +
-  'boolean, "isBulkReminderRequest": boolean, "isAbandonRequest": boolean, "matchedPlanTemplate": ' +
+  'boolean, "isBulkReminderRequest": boolean, "isAbandonRequest": boolean, "isPlanQuestion": boolean, "matchedPlanTemplate": ' +
   'string|null, "needsMultiStepPlan": boolean, "statesDurableFacts": [{"text": string, "durable": ' +
   'boolean, "confidence": "high"|"medium"|"low", "category": "identity"|"health"|"preference"|' +
   '"location"|"occupation"|"relationships"|"project"|"other"}], "needsGrounding": boolean, ' +
@@ -329,6 +345,7 @@ interface RawTurnIntent {
   isReminderRequest?: unknown
   isBulkReminderRequest?: unknown
   isAbandonRequest?: unknown
+  isPlanQuestion?: unknown
   matchedPlanTemplate?: unknown
   needsMultiStepPlan?: unknown
   statesDurableFacts?: unknown
@@ -389,7 +406,7 @@ function sanitizeDependsOn(tasks: DecomposedTaskSpec[]): DecomposedTaskSpec[] {
 }
 
 function parseTurnIntent(content: string, context: TurnIntentContext): TurnIntentClassification | null {
-  const parsed = JSON.parse(content) as RawTurnIntent
+  const parsed = parseModelJson(content) as RawTurnIntent
   if (parsed.riskLevel !== 'HIGH' && parsed.riskLevel !== 'MEDIUM' && parsed.riskLevel !== 'LOW') return null
   if (typeof parsed.isTrivial !== 'boolean') return null
   if (typeof parsed.isReminderRequest !== 'boolean') return null
@@ -405,6 +422,8 @@ function parseTurnIntent(content: string, context: TurnIntentContext): TurnInten
   const isTrivial = parsed.riskLevel === 'LOW' && parsed.isTrivial
   const isBulkReminderRequest = parsed.isReminderRequest && parsed.isBulkReminderRequest
   const isAbandonRequest = context.hasActivePlan && parsed.isAbandonRequest
+  // Tolerant like the other additive signals: absent or malformed is false (an active plan drives the turn, as before).
+  const isPlanQuestion = context.hasActivePlan && !isAbandonRequest && parsed.isPlanQuestion === true
   const matchedPlanTemplate =
     !context.hasActivePlan && typeof parsed.matchedPlanTemplate === 'string' && listTemplateNames().includes(parsed.matchedPlanTemplate)
       ? parsed.matchedPlanTemplate
@@ -430,6 +449,7 @@ function parseTurnIntent(content: string, context: TurnIntentContext): TurnInten
     isReminderRequest: parsed.isReminderRequest,
     isBulkReminderRequest,
     isAbandonRequest,
+    isPlanQuestion,
     matchedPlanTemplate,
     needsMultiStepPlan,
     statesDurableFacts,

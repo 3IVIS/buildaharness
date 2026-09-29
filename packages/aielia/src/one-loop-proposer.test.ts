@@ -388,3 +388,114 @@ describe('AgentLoop.createHarnessProposer (R2 of the D2 one-loop-rewire follow-u
     expect(afterReset).toEqual({ __harnessExecutionStatus: 'continue' })
   })
 })
+
+describe('AgentLoop.createOneLoopProposer — plan steps (stepInstruction)', () => {
+  const ctx = (currentTaskId: string) => ({ worldModel: undefined as never, evidenceStore: undefined as never, currentTaskId })
+  const instructionFor = (steps: Record<string, string>) => (taskId: string) => (steps[taskId] ? `DO STEP: ${steps[taskId]}` : undefined)
+
+  it('tells the model which step it is on, and each later step continues from the earlier steps\' answers', async () => {
+    const llm = new ScriptedLLMClient([{ content: 'scope: MVP for existing customers' }, { content: 'schedule: ship 15 Nov' }])
+    const { proposer } = buildAgentLoop(llm).createOneLoopProposer(
+      'session-1', [], 'Approved — run the plan.', 'system', undefined, undefined, undefined, 'LOW', undefined,
+      instructionFor({ t1: 'Define scope', t2: 'Build the schedule' }),
+    )
+
+    expect(await proposer(ctx('t1'))).toEqual({ __harnessExecutionStatus: 'complete', output: 'scope: MVP for existing customers' })
+    expect(await proposer(ctx('t2'))).toEqual({ __harnessExecutionStatus: 'complete', output: 'schedule: ship 15 Nov' })
+
+    const first = llm.seenMessages[0].map((m) => `${m.role}: ${m.content}`)
+    expect(first).toEqual(['system: system', 'user: Approved — run the plan.', 'user: DO STEP: Define scope'])
+    // Step 2 sees the user's message, step 1's instruction AND its answer, then its own instruction.
+    const second = llm.seenMessages[1].map((m) => `${m.role}: ${m.content}`)
+    expect(second).toEqual([
+      'system: system',
+      'user: Approved — run the plan.',
+      'user: DO STEP: Define scope',
+      'assistant: scope: MVP for existing customers',
+      'user: DO STEP: Build the schedule',
+    ])
+  })
+
+  it('sends a step\'s instruction once, however many iterations the step takes', async () => {
+    const llm = new ScriptedLLMClient([{ content: '<tool_call>' }, { content: 'done' }])
+    const { proposer } = buildAgentLoop(llm).createOneLoopProposer('session-1', [], 'go', 'system', undefined, undefined, undefined, 'LOW', undefined, instructionFor({ t1: 'Define scope' }))
+
+    await proposer(ctx('t1'))
+    await proposer(ctx('t1'))
+
+    const instructions = llm.seenMessages[1].filter((m) => m.role === 'user' && m.content.startsWith('DO STEP'))
+    expect(instructions).toHaveLength(1)
+  })
+
+  it('a task with no instruction (an ordinary turn) sees exactly the messages it always did', async () => {
+    const llm = new ScriptedLLMClient([{ content: 'answer' }])
+    const { proposer } = buildAgentLoop(llm).createOneLoopProposer('session-1', [], 'hi', 'system', undefined, undefined, undefined, 'LOW', undefined, instructionFor({ t1: 'Define scope' }))
+
+    await proposer(ctx('respond'))
+
+    expect(llm.seenMessages[0].map((m) => `${m.role}: ${m.content}`)).toEqual(['system: system', 'user: hi'])
+  })
+
+  it('gives each step its own iteration budget, so a long plan does not run out partway through', async () => {
+    // maxSteps 5 => a 3-call budget per attempt. Four steps of two calls each would exceed it if the
+    // budget counted across the whole turn.
+    const responses: LLMStructuredResponse[] = []
+    for (let i = 0; i < 4; i++) responses.push({ content: '<tool_call>' }, { content: `step ${i + 1} done` })
+    const llm = new ScriptedLLMClient(responses)
+    const { proposer } = buildAgentLoop(llm).createOneLoopProposer(
+      'session-1', [], 'go', 'system', undefined, undefined, undefined, 'LOW', undefined,
+      instructionFor({ t1: 'a', t2: 'b', t3: 'c', t4: 'd' }),
+    )
+
+    for (const id of ['t1', 't2', 't3', 't4']) {
+      await proposer(ctx(id))
+      expect(await proposer(ctx(id))).toMatchObject({ __harnessExecutionStatus: 'complete' })
+    }
+  })
+})
+
+describe('AgentLoop.createOneLoopProposer — subtasks that share one answer (shareAnswer)', () => {
+  const ctx = (currentTaskId?: string) => ({ worldModel: undefined as never, evidenceStore: undefined as never, ...(currentTaskId ? { currentTaskId } : {}) })
+  const build = (llm: ILLMClient, share: (() => boolean) | undefined) =>
+    buildAgentLoop(llm).createOneLoopProposer('session-1', [], 'Write up all of these.', 'system', undefined, undefined, undefined, 'LOW', undefined, undefined, share).proposer
+
+  it('answers once and hands the same answer to every later subtask, without another model call', async () => {
+    const llm = new ScriptedLLMClient([{ content: 'the one complete answer' }])
+    const proposer = build(llm, () => true)
+
+    for (const id of ['t1', 't2', 't3']) {
+      expect(await proposer(ctx(id))).toEqual({ __harnessExecutionStatus: 'complete', output: 'the one complete answer' })
+    }
+    expect(llm.seenMessages).toHaveLength(1)
+  })
+
+  it('a task the harness runs again (a retry after a rejection) gets a fresh call, not the rejected answer', async () => {
+    const llm = new ScriptedLLMClient([{ content: 'first answer' }, { content: 'second answer' }])
+    const proposer = build(llm, () => true)
+
+    await proposer(ctx('t1'))
+    expect(await proposer(ctx('t2'))).toMatchObject({ output: 'first answer' })
+    expect(await proposer(ctx('t2'))).toMatchObject({ output: 'second answer' })
+    expect(llm.seenMessages).toHaveLength(2)
+  })
+
+  it('the answer is only shared once it is final — a tool-using first subtask finishes its own loop first', async () => {
+    const llm = new ScriptedLLMClient([{ content: '<tool_call>' }, { content: 'final answer after a tool call' }])
+    const proposer = build(llm, () => true)
+
+    expect(await proposer(ctx('t1'))).toEqual({ __harnessExecutionStatus: 'continue' })
+    expect(await proposer(ctx('t1'))).toMatchObject({ __harnessExecutionStatus: 'complete', output: 'final answer after a tool call' })
+    expect(await proposer(ctx('t2'))).toMatchObject({ output: 'final answer after a tool call' })
+    expect(llm.seenMessages).toHaveLength(2)
+  })
+
+  it('does nothing unless sharing is on for the turn, or when the task has no id', async () => {
+    for (const [share, id] of [[undefined, 't1'], [() => false, 't1'], [() => true, undefined]] as const) {
+      const llm = new ScriptedLLMClient([{ content: 'a' }, { content: 'b' }])
+      const proposer = build(llm, share)
+      await proposer(ctx(id))
+      await proposer(ctx(id === undefined ? undefined : 't2'))
+      expect(llm.seenMessages).toHaveLength(2)
+    }
+  })
+})

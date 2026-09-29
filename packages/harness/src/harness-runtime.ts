@@ -74,6 +74,15 @@ export const BUDGET_WARNING_FLOOR = 0.5
  * caller's tool names — well-known values in personal-assistant are 'read_file',
  * 'list_directory', 'web_search', 'fetch_url', 'write_file', 'run_shell_command'.
  */
+/**
+ * Host hook: did this task's output actually accomplish the task? The harness otherwise marks a task
+ * COMPLETE as soon as its executor returns without throwing, so a reply that refuses or asks a
+ * question completes the task all the same. `done: false` sends the task down the same failure path
+ * a thrown executor takes (recovery ladder, bounded retries, stall escalation) instead of COMPLETE.
+ * Absent ⇒ today's behaviour. A hook that throws is treated as `done: true`.
+ */
+export type SemanticTaskCompletion = (input: { taskDescription: string; output: unknown }) => Promise<{ done: boolean; reason?: string }>
+
 export interface TurnComplexitySignal {
   riskLevel: 'LOW' | 'MEDIUM' | 'HIGH'
   taskCount: number
@@ -227,6 +236,9 @@ export interface HarnessRunOptions extends HarnessInitOptions {
     highConfidenceBeliefs: Array<{ id: string; statement: string }>
     hypothesisPredictions: string[]
   }) => Promise<{ conflict: boolean; reason?: string }>
+  semanticTaskCompletion?: SemanticTaskCompletion
+  /** Called when the completion check judged a task's output did not do the task — the host can persist why (e.g. on a durable plan's task). Observability only: a throwing handler never breaks the run. */
+  onTaskNotAccomplished?: (event: { taskId: string; reason: string }) => void
   /**
    * Optional: facts the caller already trusts (e.g. things the user stated in earlier turns) for
    * the semantic change reviewer to check the proposed change against, alongside the world
@@ -332,6 +344,18 @@ function summariseExecutionOutput(output: unknown): string {
   }
 }
 
+/**
+ * The world-model trail belief for a finished task. The bare "Completed: <description>" it used to
+ * be recorded only that a task got a reply, so a downstream check (criterion coverage) that read it
+ * as evidence the work happened could judge a criterion covered while the reply itself said nothing
+ * had started. Carrying what the task produced lets that check judge the substance. The
+ * "Completed: " prefix is kept: contradiction-checker.ts filters trail beliefs on it.
+ */
+function completedTrailStatement(description: string, output: unknown): string {
+  const produced = summariseExecutionOutput(output).trim()
+  return produced ? `Completed: ${description} — produced: ${produced}` : `Completed: ${description}`
+}
+
 function generateRunId(): string {
   const g = globalThis as { crypto?: { randomUUID?: () => string } }
   if (g.crypto?.randomUUID) return g.crypto.randomUUID()
@@ -390,6 +414,11 @@ interface LoopContext {
     highConfidenceBeliefs: Array<{ id: string; statement: string }>
     hypothesisPredictions: string[]
   }) => Promise<{ conflict: boolean; reason?: string }>
+  semanticTaskCompletion?: SemanticTaskCompletion
+  /** Called when the completion check judged a task's output did not do the task — the host can persist why (e.g. on a durable plan's task). Observability only: a throwing handler never breaks the run. */
+  onTaskNotAccomplished?: (event: { taskId: string; reason: string }) => void
+  /** The most recent task the completion check judged not done — read only by stalledTurnFallbackResult so the stranded reply can say why. Not checkpointed. */
+  lastNotAccomplished?: { taskDescription: string; reason: string }
   changeReviewFacts?: () => Array<{ statement: string }>
   onReviewConflict?: (event: { taskId: string; reason: string }) => void
   /** A confident failure-mode match picked the next recovery strategy — see nodes/rollback-replan.ts's RollbackReplanResult.failureModeSwitch. Bookkeeping only unless the host surfaces this to the proposer. */
@@ -471,6 +500,8 @@ function buildInitialContext(
     contradictionChecker: options.contradictionChecker,
     lastContradictionCheckCount: 0,
     semanticChangeReviewer: options.semanticChangeReviewer,
+    semanticTaskCompletion: options.semanticTaskCompletion,
+    onTaskNotAccomplished: options.onTaskNotAccomplished,
     changeReviewFacts: options.changeReviewFacts,
     onReviewConflict: options.onReviewConflict,
     onFailureModeSwitch: options.onFailureModeSwitch,
@@ -551,6 +582,8 @@ function buildResumedContext(rawCheckpoint: HarnessCheckpoint, options: HarnessR
     // just costs one slightly larger delta on the first post-resume check, never a duplicate.
     lastContradictionCheckCount: 0,
     semanticChangeReviewer: options.semanticChangeReviewer,
+    semanticTaskCompletion: options.semanticTaskCompletion,
+    onTaskNotAccomplished: options.onTaskNotAccomplished,
     changeReviewFacts: options.changeReviewFacts,
     onReviewConflict: options.onReviewConflict,
     onFailureModeSwitch: options.onFailureModeSwitch,
@@ -652,7 +685,16 @@ function reportLayer(ctx: LoopContext, layer: LayerActivityEvent['layer'], fired
  * silent no-op. This gives them an explicit, honest "couldn't complete" line instead. Only used
  * when `ctx.finalResult` is not already a usable string.
  */
+/** Opens the stranded-turn reply naming a step the completion check rejected; hosts test for it to avoid repeating that news. */
+export const NOT_ACCOMPLISHED_REPLY_PREFIX = "I didn't complete this step — "
+
 function stalledTurnFallbackResult(ctx: LoopContext): string {
+  // The completion check judged a task's output did not do the task: say which and why, rather than a
+  // generic "ran into a problem" — that reason is what the user needs to steer the next step.
+  if (ctx.lastNotAccomplished) {
+    const { taskDescription, reason } = ctx.lastNotAccomplished
+    return `${NOT_ACCOMPLISHED_REPLY_PREFIX}${taskDescription.slice(0, 200)}: ${reason.slice(0, 300)} Nothing after it has run. Tell me how you'd like to proceed, or rephrase what you need.`
+  }
   const lastFailure = ctx.failureDiagnostics.failure_history.at(-1)?.description ?? ''
   const detail = lastFailure.replace(/^Task failed:\s*/i, '').trim()
   return detail
@@ -1079,6 +1121,43 @@ async function* driveMainLoop(ctx: LoopContext): AsyncGenerator<HarnessCheckpoin
       continue
     }
 
+    // The executor returning is not the same as the task being done: ask the host whether the output
+    // accomplished it. Not done ⇒ the task takes the failure branch below, exactly as a failed executor
+    // would, and no "Completed:" belief is written for it.
+    let taskAccomplished = true
+    if (execResult.success && ctx.semanticTaskCompletion) {
+      let verdict: { done: boolean; reason?: string } = { done: true }
+      try {
+        verdict = await ctx.semanticTaskCompletion({ taskDescription: currentTask.description, output: execResult.output })
+      } catch {
+        /* a failing check must never block a task the executor completed */
+      }
+      if (!verdict.done) {
+        taskAccomplished = false
+        const why = verdict.reason ?? 'the output did not do what the task asked'
+        ctx.lastNotAccomplished = { taskDescription: currentTask.description, reason: why }
+        // Mirror execute()'s own failure bookkeeping (nodes/execute.ts recordFailure), minus the
+        // SYSTEM_ERROR evidence item — the tool worked, so tool reliability must not be dinged.
+        ctx.worldModel.observations.push({
+          id: `not-done-${currentTask.id}-${ctx.stepsUsed}`,
+          content: `TASK_NOT_ACCOMPLISHED: ${why}`,
+          source: 'task_completion_check',
+          recorded_at: new Date().toISOString(),
+        })
+        try {
+          applyTaskOutcome(ctx.taskGraph, currentTask.id, { status: 'FAILED', fromExecutionLayer: true })
+        } catch {
+          /* task may already be in another state */
+        }
+        try {
+          ctx.onTaskNotAccomplished?.({ taskId: currentTask.id, reason: why })
+        } catch {
+          /* an observability handler must never break the run */
+        }
+        reportLayer(ctx, 'verification', true, `task not accomplished — ${why}`)
+      }
+    }
+
     // Phase 2, layer 7 (plan sub-item 2.7): dispatch select_task's concurrentTask instead of
     // silently dropping it — real only for a non-HIGH-risk pair (select_task.ts's own
     // hasOverlap/conflict-probability check already guarantees disjoint write domains; never
@@ -1230,11 +1309,11 @@ async function* driveMainLoop(ctx: LoopContext): AsyncGenerator<HarnessCheckpoin
           // No extracted fact, but the turn is consequential/multi-step enough to warrant a
           // trail — derive a belief from the task's own execution observation instead.
           const trailSource = executed ?? outcome
-          if (trailSource) {
+          if (trailSource && taskAccomplished) {
             const trailEvidence = gatherEvidence(
               {
                 id: `belief-${currentTask.id}-${ctx.stepsUsed}`,
-                obs: `Completed: ${currentTask.description}`,
+                obs: completedTrailStatement(currentTask.description, execResult.output),
                 source: 'world_model_trail',
                 evidence_type: 'INFERENCE',
                 reliability: 'MEDIUM',
@@ -1243,8 +1322,8 @@ async function* driveMainLoop(ctx: LoopContext): AsyncGenerator<HarnessCheckpoin
             )
             if (trailEvidence) {
               updateWorldModel(trailEvidence, ctx.worldModel, ctx.diagnostics, {
-                statement: `Completed: ${currentTask.description}`,
-                derived_from: [trailSource.id],
+                statement: completedTrailStatement(currentTask.description, execResult.output),
+                derived_from: outcome ? [trailSource.id, outcome.id] : [trailSource.id],
               })
             }
           }
@@ -1350,7 +1429,7 @@ async function* driveMainLoop(ctx: LoopContext): AsyncGenerator<HarnessCheckpoin
     )
 
     ctx.nodeExecutionOrder.push('update_task_state')
-    if (postGatePassed && execResult.success) {
+    if (postGatePassed && execResult.success && taskAccomplished) {
       applyTaskOutcome(ctx.taskGraph, currentTask.id, { status: 'COMPLETE', fromExecutionLayer: true })
       ctx.finalResult = execResult.output
 
@@ -1362,6 +1441,8 @@ async function* driveMainLoop(ctx: LoopContext): AsyncGenerator<HarnessCheckpoin
       }
       reportLayer(ctx, 'recovery', false, 'task completed — nothing to recover from')
     } else {
+      // A failure from any other cause supersedes a stale "not accomplished" note.
+      if (taskAccomplished) ctx.lastNotAccomplished = undefined
       ctx.nodeExecutionOrder.push('rollback_replan')
       // Phase 2, layer 10: a real per-task rollback hook instead of the no-op the harness ran
       // before — a caller can restore real state (e.g. a memoryState.rollback_points snapshot)

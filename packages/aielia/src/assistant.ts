@@ -45,6 +45,9 @@ import type { TurnIntentClassification, FactCategory } from './turn-intent-class
 import { ActionApprovalService } from './action-approval-service.js'
 import { PlanService } from './plan-service.js'
 import { PlanDraftingService } from './plan-drafting-service.js'
+import { planQuestionRoutingMode, renderPlanStateBlock, shouldRoutePlanQuestion } from './plan-question.js'
+import { buildStepInstruction, planStepPromptEnabled } from './plan-step-prompt.js'
+import { decomposedAnswerOnceEnabled } from './decomposed-answer.js'
 import { PlanApprovalService, type PlanDecision, type PlanApprovalEdits } from './plan-approval-service.js'
 import { PlanSketchService } from './plan-sketch-service.js'
 import type { PlanRecord } from './plan-store.js'
@@ -909,7 +912,7 @@ export class PersonalAssistant {
     const transcript = await this.session.loadAndCompactTranscript(sessionId)
     const { facts, factsBlock } = await this.memoryService.loadFacts(sessionId)
     const { remindersBlock } = await this.memoryService.loadActiveReminders()
-    const systemPrompt = `${SYSTEM_PROMPT}${factsBlock}${remindersBlock}`
+    let systemPrompt = `${SYSTEM_PROMPT}${factsBlock}${remindersBlock}`
 
     const interpretation = await this.turnInterpreter.interpretIntent({
       userMessage,
@@ -946,6 +949,11 @@ export class PersonalAssistant {
     }
 
     const { classification, planForCancelCheck } = interpretation
+
+    // A message that only asks about the active plan is answered from the plan's recorded state; the
+    // plan is not handed to the harness, so asking where it stands can never re-run (or strand) its tasks.
+    const planQuestionPlan = shouldRoutePlanQuestion({ mode: planQuestionRoutingMode(), plan: planForCancelCheck, isPlanQuestion: classification.isPlanQuestion }) ? planForCancelCheck : null
+    if (planQuestionPlan) systemPrompt += renderPlanStateBlock(planQuestionPlan)
 
     // P3 of the internal plan — the generalized, judgment-based auto-entry
     // into plan mode's exclusive drafting loop (P1/P2), replacing the old direct-to-active
@@ -1041,6 +1049,18 @@ export class PersonalAssistant {
     // instead of precomputing draftReply via AgentLoop.runToolLoop up front, so the harness's own
     // driveMainLoop drives the actual tool calls one iteration at a time.
     let oneLoopProposer: ((toolCtx: ToolExecutorContext) => Promise<unknown>) | undefined
+    // Step id → description for a turn an approved plan drives; filled in once the plan's tasks are known
+    // (resolveTasks, below) and read lazily by the proposer, which only runs during the harness run.
+    let planStepDescriptions: Map<string, string> | undefined
+    // True while several ordinary subtasks stand for one answer (set with the tasks, below).
+    let shareAnswerAcrossTasks = false
+    const shareAnswer = decomposedAnswerOnceEnabled() ? () => shareAnswerAcrossTasks : undefined
+    const stepInstruction = planStepPromptEnabled()
+      ? (taskId: string): string | undefined => {
+          const description = planStepDescriptions?.get(taskId)
+          return description ? buildStepInstruction(description) : undefined
+        }
+      : undefined
     // The mutable array AgentLoop.createOneLoopProposer's proposer pushes to as it dispatches
     // tool calls during the harness run — read back into `sources` once that run finishes (see
     // below), mirroring `loopResult.sources` on the flag-OFF path.
@@ -1079,7 +1099,7 @@ export class PersonalAssistant {
         this.lastProposerKind = 'flat-oneloop'
         const built = this.agentLoop.createOneLoopProposer(
           sessionId, transcript, userMessage, systemPrompt, options.onToken, options.onToolStep, accumulateUsage, classification.riskLevel,
-          takeProposerNotes,
+          takeProposerNotes, stepInstruction, shareAnswer,
         )
         oneLoopProposer = built.proposer
         oneLoopSources = built.sources
@@ -1163,10 +1183,14 @@ export class PersonalAssistant {
     // A compound-looking request decomposes into multiple tasks, and/or an active/matched
     // durable plan drives this turn's task graph instead — see TurnInterpreter.resolveTasks.
     const { initialTasks, activePlan, planClassifiedTrace } =
-      await this.turnInterpreter.resolveTasks({ userMessage, sessionId, classification, planForCancelCheck, onUsage: accumulateUsage })
+      await this.turnInterpreter.resolveTasks({ userMessage, sessionId, classification, planForCancelCheck, onUsage: accumulateUsage, planQuestion: planQuestionPlan !== null })
     if (planClassifiedTrace) {
       this.onTrace?.({ kind: 'plan_classified', isCandidate: planClassifiedTrace.isCandidate, matchedTemplate: planClassifiedTrace.matchedTemplate })
     }
+    // An approved plan drives this turn: each of its steps is its own piece of work for the model.
+    if (activePlan && !planQuestionPlan) planStepDescriptions = new Map(initialTasks.map((t) => [t.id, t.description]))
+    // A request split into subtasks without a plan is still ONE answer to the user.
+    shareAnswerAcrossTasks = !activePlan && initialTasks.length > 1
 
     // Eval harness only — see benchmark-injected-failure.ts. Wraps the one-loop proposer to
     // force a stall so the Trajectory Supervisor's stall edge is exercised in one turn.
@@ -1188,7 +1212,8 @@ export class PersonalAssistant {
         draftReply,
         classification,
         initialTasks,
-        activePlan,
+        // Null for a plan question: the harness must not execute, pace or check the plan's tasks.
+        activePlan: planQuestionPlan ? null : activePlan,
         sources,
         onProgress: options.onProgress,
         onUsage: accumulateUsage,
@@ -1239,6 +1264,7 @@ export class PersonalAssistant {
           usageTotal,
           onUsage: accumulateUsage,
           goalThreadId,
+          taskNotes: outcome.taskNotes,
         }))
       }
 
@@ -1257,6 +1283,7 @@ export class PersonalAssistant {
         usageTotal,
         onUsage: accumulateUsage,
         goalThreadId,
+        taskNotes: outcome.taskNotes,
       }))
     } catch (err) {
       if (err instanceof EscalationHalt) {

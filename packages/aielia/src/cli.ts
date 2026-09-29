@@ -483,7 +483,10 @@ export async function runCli(options: RunCliOptions = {}): Promise<CliInstance> 
     const lines = [
       PLAN_LINE_PREFIX,
       `Plan: ${lastPlanStatus.templateName ?? 'custom plan'} (${lastPlanStatus.completionPct.toFixed(1)}% complete)`,
-      ...lastPlanStatus.tasks.map((task) => `  ${PLAN_TASK_STATUS_ICON[task.status] ?? '?'} [${task.status}] ${task.id} — ${task.description}`),
+      ...lastPlanStatus.tasks.flatMap((task) => [
+        `  ${PLAN_TASK_STATUS_ICON[task.status] ?? '?'} [${task.status}] ${task.id} — ${task.description}`,
+        ...(task.note ? [`      not accepted as done: ${task.note}`] : []),
+      ]),
       `Success criteria: ${lastPlanStatus.successCriteria}`,
     ]
     console.log(`\n${lines.join('\n')}\n`)

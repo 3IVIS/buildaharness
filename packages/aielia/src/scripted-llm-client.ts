@@ -60,7 +60,7 @@ export interface ScriptedLLMClientScript {
 /**
  * Known auxiliary semantic-escalation system prompts and their safe, inert default answer — see
  * ScriptedLLMClientScript's doc comment. Kept in sync by hand with each check's own system prompt
- * (review-checker.ts, failure-mode-matcher.ts, trust-tagging.ts, grounding-check.ts) since there's no shared constant
+ * (review-checker.ts, failure-mode-matcher.ts, trust-tagging.ts, grounding-check.ts, task-completion-check.ts) since there's no shared constant
  * to import without a circular dependency back into this package's own public surface.
  */
 export const SIDE_CALL_MARKERS: Array<[string, string]> = [
@@ -68,6 +68,7 @@ export const SIDE_CALL_MARKERS: Array<[string, string]> = [
   ['You match a set of observed symptoms against a curated library', 'null'],
   ['You are a security classifier analyzing untrusted external content', '{"flagged":false}'],
   ['You check whether an assistant\'s reply is faithful to the raw results', '{"verdict":"grounded"}'],
+  ['You judge whether an assistant actually accomplished a task', '{"done":true}'],
 ]
 
 /** The phrase that opens `turn-intent-classifier.ts`'s system prompt — stable, and how every scripted client tells that mandatory call apart from a real tool-loop call. */
@@ -97,6 +98,7 @@ function deriveTurnIntentJSON(messages: ChatMessage[], override?: Record<string,
     isReminderRequest,
     isBulkReminderRequest: isReminderRequest && risk.requiresApproval,
     isAbandonRequest: false,
+    isPlanQuestion: false,
     matchedPlanTemplate: null,
     needsMultiStepPlan: false,
     statesDurableFacts: [],

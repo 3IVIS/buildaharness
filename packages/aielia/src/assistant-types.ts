@@ -98,7 +98,8 @@ export interface AssistantTurnResult {
     templateName: string | null
     successCriteria: string
     completionPct: number
-    tasks: { id: string; description: string; status: string }[]
+    /** `note`: why a FAILED task did not count as done (set only by the semantic task-completion check). */
+    tasks: { id: string; description: string; status: string; note?: string }[]
   }
   /**
    * Token usage accumulated across every real LLM call this turn made (can be more than one:

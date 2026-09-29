@@ -2461,6 +2461,193 @@ describe('PersonalAssistant structured planning', () => {
     expect(result.planStatus?.completionPct).toBeCloseTo((10 / 12) * 100, 1)
   })
 
+  it('with AUDIT_SEMANTIC_TASK_COMPLETION on, an approved plan task whose output the check judges not done is not counted complete', async () => {
+    const prev = process.env.AUDIT_SEMANTIC_TASK_COMPLETION
+    process.env.AUDIT_SEMANTIC_TASK_COMPLETION = '1'
+    try {
+      const memory = new InMemoryAdapter()
+      const tasks = [{ id: 't1', description: 'Define the launch scope', depends_on: [] as string[], riskLevel: 'LOW' as const }]
+      const plan = createPlanRecord({ templateName: 'project_planning', successCriteria: 'Scope is defined.', tasks })
+      await savePlan(memory, 'completion-session', plan)
+
+      // The task's reply is the streamed answer; the one structured call is the completion check on it.
+      const llm = scriptedResponses([{ content: '{"done":false,"reason":"the reply refuses the task"}' }], ["I can't do that."])
+      const assistant = new PersonalAssistant({ llmClient: llm, memory, planMode: 'gated' })
+
+      const result = await assistant.turn('Give me an update on the plan.', { sessionId: 'completion-session' })
+
+      const checkCalls = llm.receivedMessages.filter((m) => m.some((x) => x.role === 'system' && x.content.includes('You judge whether an assistant actually accomplished a task')))
+      expect(checkCalls).toHaveLength(1)
+      expect(JSON.parse(checkCalls[0].find((x) => x.role === 'user')!.content).task).toBe('Define the launch scope')
+      expect(result.planStatus?.completionPct).toBe(0)
+    } finally {
+      if (prev === undefined) delete process.env.AUDIT_SEMANTIC_TASK_COMPLETION
+      else process.env.AUDIT_SEMANTIC_TASK_COMPLETION = prev
+    }
+  })
+
+  describe('a message that only asks about the active plan (isPlanQuestion)', () => {
+    class ChatRecordingClient extends ScriptedToolLLMClient {
+      chatMessages: ChatMessage[][] = []
+      async *callChat(messages?: ChatMessage[]): AsyncIterable<string> {
+        if (messages) this.chatMessages.push(messages)
+        yield* super.callChat()
+      }
+    }
+    const question = 'Where does the plan stand against its goal?'
+
+    async function stuckPlan(): Promise<{ memory: InMemoryAdapter }> {
+      const memory = new InMemoryAdapter()
+      const base = createPlanRecord({
+        templateName: 'project_planning',
+        successCriteria: 'Scope is defined and the launch is scheduled.',
+        tasks: [
+          { id: 't1', description: 'Define the launch scope', depends_on: [], riskLevel: 'LOW' as const },
+          { id: 't2', description: 'Draft the announcement', depends_on: [], riskLevel: 'LOW' as const },
+        ],
+      })
+      await savePlan(memory, 'stuck-session', {
+        ...base,
+        tasks: [{ ...base.tasks[0], status: 'FAILED', statusNote: 'the reply only asked questions' }, base.tasks[1]],
+      })
+      return { memory }
+    }
+    const client = () => new ChatRecordingClient(() => ({ content: 'unused' }), ['Here is where it stands.'], undefined, overrideFor([[question, { isPlanQuestion: true }]]))
+
+    it('answers from the plan state: the plan is not re-run, and the prompt carries each step and why one failed', async () => {
+      const { memory } = await stuckPlan()
+      const llm = client()
+      const assistant = new PersonalAssistant({ llmClient: llm, memory, planMode: 'gated' })
+
+      const result = await assistant.turn(question, { sessionId: 'stuck-session' })
+
+      expect(result.status).toBe('ok')
+      expect(result.reply).toBe('Here is where it stands.')
+      const system = llm.chatMessages.at(-1)!.find((m) => m.role === 'system')!.content
+      expect(system).toContain('Plan goal (success criteria): Scope is defined and the launch is scheduled.')
+      expect(system).toContain('- [FAILED] Define the launch scope — not accepted because: the reply only asked questions')
+      expect(system).toContain('- [not started] Draft the announcement')
+      // Nothing ran: the untouched task is still pending, the failed one keeps its status and reason.
+      expect(result.planStatus?.tasks).toEqual([
+        { id: 't1', description: 'Define the launch scope', status: 'FAILED', note: 'the reply only asked questions' },
+        { id: 't2', description: 'Draft the announcement', status: 'PENDING' },
+      ])
+      expect(result.planStatus?.completionPct).toBe(0)
+    })
+
+    async function withRouting<T>(mode: string, fn: () => Promise<T>): Promise<T> {
+      const prev = process.env.AUDIT_PLAN_QUESTION_ROUTING
+      process.env.AUDIT_PLAN_QUESTION_ROUTING = mode
+      try {
+        return await fn()
+      } finally {
+        if (prev === undefined) delete process.env.AUDIT_PLAN_QUESTION_ROUTING
+        else process.env.AUDIT_PLAN_QUESTION_ROUTING = prev
+      }
+    }
+
+    async function healthyPlan(): Promise<{ memory: InMemoryAdapter }> {
+      const memory = new InMemoryAdapter()
+      await savePlan(memory, 'stuck-session', createPlanRecord({
+        templateName: 'project_planning',
+        successCriteria: 'Scope is defined and the launch is scheduled.',
+        tasks: [
+          { id: 't1', description: 'Define the launch scope', depends_on: [], riskLevel: 'LOW' as const },
+          { id: 't2', description: 'Draft the announcement', depends_on: [], riskLevel: 'LOW' as const },
+        ],
+      }))
+      return { memory }
+    }
+
+    it('with routing off, a plan question drives the plan as before — and the failed step is retried instead of stranding the run', async () => {
+      await withRouting('off', async () => {
+        const { memory } = await stuckPlan()
+        const llm = client()
+        const result = await new PersonalAssistant({ llmClient: llm, memory, planMode: 'gated' }).turn(question, { sessionId: 'stuck-session' })
+
+        expect(result.status).toBe('ok')
+        expect(result.planStatus?.tasks.map((t) => [t.id, t.status, t.note])).toEqual([['t1', 'COMPLETE', undefined], ['t2', 'COMPLETE', undefined]])
+        expect(llm.chatMessages.flat().some((m) => m.role === 'system' && m.content.includes('Plan goal (success criteria)'))).toBe(false)
+      })
+    })
+
+    it('by default a plan question on a HEALTHY plan still drives the plan (routing only steps in for a stuck one)', async () => {
+      const { memory } = await healthyPlan()
+      const llm = client()
+      const result = await new PersonalAssistant({ llmClient: llm, memory, planMode: 'gated' }).turn(question, { sessionId: 'stuck-session' })
+
+      expect(result.planStatus?.tasks.map((t) => t.status)).toEqual(['COMPLETE', 'COMPLETE'])
+      expect(llm.chatMessages.flat().some((m) => m.role === 'system' && m.content.includes('Plan goal (success criteria)'))).toBe(false)
+    })
+
+    it("with routing 'always' a plan question on a healthy plan is answered from its state, not run", async () => {
+      await withRouting('always', async () => {
+        const { memory } = await healthyPlan()
+        const llm = client()
+        const result = await new PersonalAssistant({ llmClient: llm, memory, planMode: 'gated' }).turn(question, { sessionId: 'stuck-session' })
+
+        expect(result.planStatus?.tasks.map((t) => t.status)).toEqual(['PENDING', 'PENDING'])
+        expect(llm.chatMessages.at(-1)!.find((m) => m.role === 'system')!.content).toContain('- [not started] Define the launch scope')
+      })
+    })
+
+    it('a message that moves a stuck plan forward retries the failed step, and the old reason is cleared once it completes', async () => {
+      const { memory } = await stuckPlan()
+      const llm = new ChatRecordingClient(() => ({ content: 'unused' }), ['Done: scope defined.'], undefined, overrideFor([['Try again', { isPlanQuestion: false }]]))
+      const result = await new PersonalAssistant({ llmClient: llm, memory, planMode: 'gated' }).turn('Try again — the launch is in Q4.', { sessionId: 'stuck-session' })
+
+      expect(result.status).toBe('ok')
+      expect(result.planStatus?.tasks.map((t) => [t.id, t.status, t.note])).toEqual([['t1', 'COMPLETE', undefined], ['t2', 'COMPLETE', undefined]])
+      expect(result.planStatus?.completionPct).toBe(100)
+    })
+
+    it('a plan run that stops on a rejected step says so in its reply, after the last step that did complete', async () => {
+      const prev = process.env.AUDIT_SEMANTIC_TASK_COMPLETION
+      process.env.AUDIT_SEMANTIC_TASK_COMPLETION = '1'
+      try {
+        const memory = new InMemoryAdapter()
+        await savePlan(memory, 'stop-session', createPlanRecord({
+          templateName: 'project_planning',
+          successCriteria: 'Scope is defined and the launch is scheduled.',
+          tasks: [
+            { id: 't1', description: 'Define the launch scope', depends_on: [], riskLevel: 'LOW' as const },
+            { id: 't2', description: 'Build the launch schedule', depends_on: ['t1'], riskLevel: 'LOW' as const },
+          ],
+        }))
+        // One completion check per step: step 1 accepted, step 2 rejected.
+        const llm = scriptedResponses([{ content: '{"done":true}' }, { content: '{"done":false,"reason":"no schedule was produced"}' }], ['The scope is an MVP.'])
+        const result = await new PersonalAssistant({ llmClient: llm, memory, planMode: 'gated' }).turn('Go ahead with the plan.', { sessionId: 'stop-session' })
+
+        expect(result.reply).toContain('The scope is an MVP.')
+        expect(result.reply).toContain('I stopped the plan here: this step was not accepted as done.')
+        expect(result.reply).toContain('- Build the launch schedule: no schedule was produced')
+        expect(result.planStatus?.tasks.map((t) => [t.id, t.status])).toEqual([['t1', 'COMPLETE'], ['t2', 'FAILED']])
+      } finally {
+        if (prev === undefined) delete process.env.AUDIT_SEMANTIC_TASK_COMPLETION
+        else process.env.AUDIT_SEMANTIC_TASK_COMPLETION = prev
+      }
+    })
+
+    it('a not-done verdict during a run is persisted on the plan task with its reason', async () => {
+      const prev = process.env.AUDIT_SEMANTIC_TASK_COMPLETION
+      process.env.AUDIT_SEMANTIC_TASK_COMPLETION = '1'
+      try {
+        const memory = new InMemoryAdapter()
+        const plan = createPlanRecord({ templateName: 'project_planning', successCriteria: 'Scope is defined.', tasks: [{ id: 't1', description: 'Define the launch scope', depends_on: [], riskLevel: 'LOW' as const }] })
+        await savePlan(memory, 'persist-session', plan)
+        const llm = scriptedResponses([{ content: '{"done":false,"reason":"the reply refuses the task"}' }], ["I can't do that."])
+        const assistant = new PersonalAssistant({ llmClient: llm, memory, planMode: 'gated' })
+
+        const result = await assistant.turn('Go ahead with the plan.', { sessionId: 'persist-session' })
+
+        expect(result.planStatus?.tasks[0]).toMatchObject({ id: 't1', status: 'FAILED', note: 'the reply refuses the task' })
+      } finally {
+        if (prev === undefined) delete process.env.AUDIT_SEMANTIC_TASK_COMPLETION
+        else process.env.AUDIT_SEMANTIC_TASK_COMPLETION = prev
+      }
+    })
+  })
+
   it('does not resume a plan from a different session', async () => {
     const llm = scriptedResponses([planDraftResponse(true), verifyResponse()], ['All set.'], undefined, overrideFor([[planningMessage, planTemplateMatch]]))
     const assistant = new PersonalAssistant({ llmClient: llm , planMode: 'gated' })
@@ -2542,7 +2729,8 @@ describe('PersonalAssistant structured planning', () => {
   })
 
   it('falls back silently to the ad hoc decomposition graph when the plan-builder call returns malformed JSON', async () => {
-    const llm = scriptedResponses([{ content: 'not valid json' }], ['Handled anyway.'], undefined, overrideFor([[planningMessage, planTemplateMatch]]))
+    // Two malformed responses: draftPlanRevision retries once before giving up.
+    const llm = scriptedResponses([{ content: 'not valid json' }, { content: 'not valid json' }], ['Handled anyway.'], undefined, overrideFor([[planningMessage, planTemplateMatch]]))
     const assistant = new PersonalAssistant({ llmClient: llm , planMode: 'gated' })
 
     const result = await assistant.turn(planningMessage, { sessionId: 'plan-session' })
@@ -2550,7 +2738,7 @@ describe('PersonalAssistant structured planning', () => {
     expect(result.status).toBe('ok')
     expect(result.reply).toBe('Handled anyway.')
     expect(result.planStatus).toBeUndefined()
-    expect(llm.calls).toBe(2)
+    expect(llm.calls).toBe(3)
   })
 
   it('emits plan_classified and plan_updated trace events when a plan is created', async () => {
@@ -3364,6 +3552,116 @@ describe('PersonalAssistant batch research — harness-driven (flag ON)', () => 
 // fallback, and the OneLoopPause -> buildToolLoopPauseResult catch.
 describe('PersonalAssistant flat tool loop — harness-driven (flag ON)', () => {
   const ROOT = '/workspace'
+
+  describe('a request split into subtasks (no plan) is still one answer', () => {
+    const message = 'Read notes.txt and give me a summary, an outline and a title for it.'
+    const three = [
+      { id: 'a', description: 'the summary of notes.txt', depends_on: [] as string[], riskLevel: 'LOW' },
+      { id: 'b', description: 'the outline of notes.txt', depends_on: ['a'], riskLevel: 'LOW' },
+      { id: 'c', description: 'the title for notes.txt', depends_on: ['b'], riskLevel: 'LOW' },
+    ]
+    const override = (m: string) => (m.includes('a summary, an outline and a title') ? { decomposedTasks: three } : undefined)
+    const build = (llm: ScriptedToolLLMClient) => new PersonalAssistant({ llmClient: llm, fileTools: { backend: makeFakeBackend(), workspaceRoot: ROOT }, oneLoopMode: 'enabled' })
+
+    it('asks the model once, however many subtasks the request was split into, and returns that answer', async () => {
+      const llm = scriptedResponses([{ content: 'Summary, outline and title, all in one.' }], undefined, undefined, override)
+
+      const result = await build(llm).turn(message)
+
+      expect(result.status).toBe('ok')
+      expect(result.reply).toBe('Summary, outline and title, all in one.')
+      // All three subtasks ran through the harness...
+      expect(result.trace?.nodeExecutionOrder.filter((n) => n === 'execute')).toHaveLength(3)
+      // ...on a single call to the model.
+      expect(llm.receivedMessages).toHaveLength(1)
+    })
+
+    it('with AUDIT_DECOMPOSED_ANSWER_ONCE=0 every subtask asks the model again, as before', async () => {
+      const prev = process.env.AUDIT_DECOMPOSED_ANSWER_ONCE
+      process.env.AUDIT_DECOMPOSED_ANSWER_ONCE = '0'
+      try {
+        const llm = scriptedResponses([{ content: 'one' }, { content: 'two' }, { content: 'three' }], undefined, undefined, override)
+
+        const result = await build(llm).turn(message)
+
+        expect(llm.receivedMessages).toHaveLength(3)
+        expect(result.reply).toBe('three')
+      } finally {
+        if (prev === undefined) delete process.env.AUDIT_DECOMPOSED_ANSWER_ONCE
+        else process.env.AUDIT_DECOMPOSED_ANSWER_ONCE = prev
+      }
+    })
+  })
+
+  describe('an approved plan runs step by step', () => {
+    const plan = () => createPlanRecord({
+      templateName: 'project_planning',
+      successCriteria: 'Scope is defined and the launch is scheduled.',
+      tasks: [
+        { id: 't1', description: 'Define the launch scope', depends_on: [], riskLevel: 'LOW' as const },
+        { id: 't2', description: 'Build the launch schedule', depends_on: ['t1'], riskLevel: 'LOW' as const },
+      ],
+    })
+    // The proposer keeps appending to the array it sends, so snapshot each call as it is made.
+    class SnapshotClient extends ScriptedToolLLMClient {
+      snapshots: ChatMessage[][] = []
+      async callChatStructured(messages: ChatMessage[], tools?: ToolDefinition[], options?: ChatOptions): Promise<LLMStructuredResponse> {
+        if (!isTurnIntentRequest(messages)) this.snapshots.push(messages.map((m) => ({ ...m })))
+        return super.callChatStructured(messages, tools, options)
+      }
+    }
+    function snapshotLlm(responses: LLMStructuredResponse[]): SnapshotClient {
+      let i = 0
+      return new SnapshotClient(() => {
+        if (i >= responses.length) throw new Error('no more scripted responses')
+        return responses[i++]
+      })
+    }
+
+    it("gives the model each step's own instruction, and step 2 continues from step 1's answer", async () => {
+      const memory = new InMemoryAdapter()
+      await savePlan(memory, 'plan-session', plan())
+      // Two proposals (one per step); a third structured call, if any, is the criterion-coverage check.
+      const llm = snapshotLlm([{ content: 'Scope: an MVP for existing customers.' }, { content: 'Schedule: launch 15 Nov.' }, { content: '{"covered":false}' }])
+      const assistant = new PersonalAssistant({ llmClient: llm, memory, fileTools: { backend: makeFakeBackend(), workspaceRoot: ROOT }, oneLoopMode: 'enabled', planMode: 'gated' })
+
+      const result = await assistant.turn('Approved — run the plan.', { sessionId: 'plan-session' })
+
+      expect(result.planStatus?.completionPct).toBe(100)
+      expect(llm.snapshots[0].at(-1)!.content).toContain('[plan step]')
+      expect(llm.snapshots[0].at(-1)!.content).toContain('"Define the launch scope"')
+      const second = llm.snapshots[1]
+      expect(second.some((m) => m.role === 'assistant' && m.content === 'Scope: an MVP for existing customers.')).toBe(true)
+      expect(second.at(-1)!.content).toContain('"Build the launch schedule"')
+    })
+
+    it('with AUDIT_PLAN_STEP_PROMPT=0 the steps get no instruction, as before', async () => {
+      const prev = process.env.AUDIT_PLAN_STEP_PROMPT
+      process.env.AUDIT_PLAN_STEP_PROMPT = '0'
+      try {
+        const memory = new InMemoryAdapter()
+        await savePlan(memory, 'plan-session', plan())
+        const llm = scriptedResponses([{ content: 'a' }, { content: 'b' }, { content: '{"covered":false}' }])
+        const assistant = new PersonalAssistant({ llmClient: llm, memory, fileTools: { backend: makeFakeBackend(), workspaceRoot: ROOT }, oneLoopMode: 'enabled', planMode: 'gated' })
+
+        await assistant.turn('Approved — run the plan.', { sessionId: 'plan-session' })
+
+        expect(llm.receivedMessages.flat().some((m) => m.content.includes('[plan step]'))).toBe(false)
+      } finally {
+        if (prev === undefined) delete process.env.AUDIT_PLAN_STEP_PROMPT
+        else process.env.AUDIT_PLAN_STEP_PROMPT = prev
+      }
+    })
+
+    it('an ordinary turn (no plan) gets no step instruction', async () => {
+      const llm = scriptedResponses([{ content: 'Sure.' }])
+      const assistant = new PersonalAssistant({ llmClient: llm, fileTools: { backend: makeFakeBackend(), workspaceRoot: ROOT }, oneLoopMode: 'enabled' })
+
+      await assistant.turn('Read notes.txt and summarize it for me.')
+
+      expect(llm.receivedMessages.flat().some((m) => m.content.includes('[plan step]'))).toBe(false)
+    })
+  })
 
   it("a completed turn's reply is the harness-driven proposer's own final answer (result.finalResult), never a precomputed draftReply", async () => {
     const backend = makeFakeBackend()

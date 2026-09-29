@@ -38,6 +38,7 @@ import { syncHarnessLexicalEnv } from './lexical/lexical-mode.js'
 import { checkSemanticReviewConflict } from './review-checker.js'
 import { checkSemanticFailureMatch } from './failure-mode-matcher.js'
 import { checkSemanticCriterionCoverage, NON_CHECKABLE_DEFAULT_CRITERION } from './semantic-criterion-coverage.js'
+import { checkTaskCompletion, semanticTaskCompletionEnabled } from './task-completion-check.js'
 import { toTaskRiskLevel } from './task-mapping.js'
 import { TOOL_EFFECT_CLASS } from './tool-effect-class.js'
 import { FACT_CAP } from './memory-service.js'
@@ -93,8 +94,8 @@ export function reviewerPassEnabled(env?: Record<string, string | undefined>): b
 const PLAN_AUTO_ADVANCE_TASK_CEILING = 10
 
 export type HarnessOutcome =
-  | { status: 'paused'; checkpoint: HarnessCheckpoint; lastVerification: VerificationResult | null; layerActivity: LayerActivityEvent[] }
-  | { status: 'completed'; result: HarnessRunResult; lastVerification: VerificationResult | null; layerActivity: LayerActivityEvent[] }
+  | { status: 'paused'; checkpoint: HarnessCheckpoint; lastVerification: VerificationResult | null; layerActivity: LayerActivityEvent[]; taskNotes: Record<string, string> }
+  | { status: 'completed'; result: HarnessRunResult; lastVerification: VerificationResult | null; layerActivity: LayerActivityEvent[]; taskNotes: Record<string, string> }
 
 export interface HarnessRunParams {
   sessionId: string
@@ -297,6 +298,8 @@ export class HarnessBridge {
     // more than once; the last one reflects the final task's outcome) — feeds buildAnswerClaim
     // (ResponseService). null if verify() never ran at all this turn.
     let lastVerification: VerificationResult | null = null
+    // Task id → why the completion check judged it not done, so the plan can remember it across turns.
+    const taskNotes: Record<string, string> = {}
 
     let pausedThisTurn = false
     // Q2 — set (in the catch below) when a thrown EscalationHalt carries a populated
@@ -499,6 +502,15 @@ export class HarnessBridge {
           ? (criterion: string, beliefs: Belief[]) =>
               checkSemanticCriterionCoverage(criterion, beliefs, this.llmClient, this.model(), onUsage)
           : undefined,
+        // A plan task is complete only if its output actually did the task — without this the harness
+        // completes it as soon as a reply is produced, so a run of refusals reads as a 100%-done plan.
+        // Scoped to an approved plan's execution (not an ordinary single-task turn) and off by default:
+        // AUDIT_SEMANTIC_TASK_COMPLETION. See task-completion-check.ts.
+        onTaskNotAccomplished: (e: { taskId: string; reason: string }) => { taskNotes[e.taskId] = e.reason },
+        semanticTaskCompletion:
+          activePlan?.executingOnPlan && semanticTaskCompletionEnabled()
+            ? (input: { taskDescription: string; output: unknown }) => checkTaskCompletion(input, this.llmClient, this.model(), onUsage)
+            : undefined,
         // Stop right after a MEDIUM/HIGH-risk plan step resolves (COMPLETE or FAILED), before
         // the loop would go pick the next one — undefined for a non-plan turn, so shouldPause is
         // simply never checked and behavior is unchanged.
@@ -594,11 +606,11 @@ export class HarnessBridge {
         // via the priorCheckpoint branch above on the next turn() call).
         pausedThisTurn = true
         this.recordTurnTelemetry(runId, escalationPlan, layerActivityThisTurn, lastVerification, false)
-        return { status: 'paused', checkpoint: outcome.checkpoint, lastVerification, layerActivity: layerActivityThisTurn }
+        return { status: 'paused', checkpoint: outcome.checkpoint, lastVerification, layerActivity: layerActivityThisTurn, taskNotes }
       }
 
       this.recordTurnTelemetry(runId, escalationPlan, layerActivityThisTurn, lastVerification, true)
-      return { status: 'completed', result: outcome.result, lastVerification, layerActivity: layerActivityThisTurn }
+      return { status: 'completed', result: outcome.result, lastVerification, layerActivity: layerActivityThisTurn, taskNotes }
     } catch (err) {
       // Q2 — inspected only to decide checkpoint retention below, never transformed or
       // swallowed: EscalationHalt still propagates out of run() unexamined otherwise, exactly as
