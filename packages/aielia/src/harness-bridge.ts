@@ -577,7 +577,11 @@ export class HarnessBridge {
         ? await runtime.resume(priorCheckpoint, runOptions)
         : await runtime.run(
             userMessage,
-            [NON_CHECKABLE_DEFAULT_CRITERION],
+            // The plan's own criterion when a durable plan is driving this run — without it the
+            // reviewer's implementer lens only ever saw the non-checkable default (which
+            // checkSemanticCriterionCoverage skips on sight), so the criterion-coverage hook was
+            // unreachable for real traffic. Ad hoc turns keep the default, byte-identical.
+            activePlan?.successCriteria.trim() ? [activePlan.successCriteria.trim()] : [NON_CHECKABLE_DEFAULT_CRITERION],
             runOptions,
           )
       // resume() (if that's the path taken above) returned normally — paused or completed,

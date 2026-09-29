@@ -2385,7 +2385,11 @@ describe('PersonalAssistant structured planning', () => {
     expect(result.planStatus!.tasks.map((t) => t.id)).toEqual([
       'scope_definition', 'work_breakdown', 'resource_planning', 'risk_assessment', 'schedule', 'kickoff',
     ])
-    expect(llm.calls).toBe(4)
+    expect(llm.calls).toBe(5) // +1: the plan's own criterion now reaches the reviewer, so the semantic criterion-coverage check runs
+    // ...and it is the PLAN's criterion the check is asked about, not the non-checkable default.
+    const coverageCalls = llm.receivedMessages.filter((m) => m.some((x) => x.role === 'system' && x.content.includes('You check whether a success criterion is genuinely satisfied')))
+    expect(coverageCalls).toHaveLength(1)
+    expect(coverageCalls[0].find((x) => x.role === 'user')?.content).toContain('The Q3 onboarding redesign ships.')
   })
 
   it('does not build a plan when classification reports fewer than 4 decomposed tasks and no template match', async () => {
@@ -2427,7 +2431,7 @@ describe('PersonalAssistant structured planning', () => {
       planApprovalId: staged.planApprovalId,
       planDecision: 'approve',
     })
-    expect(llm.calls).toBe(4)
+    expect(llm.calls).toBe(5) // +1: the plan's own criterion now reaches the reviewer, so the semantic criterion-coverage check runs
     expect(result.status).toBe('ok')
     expect(result.planStatus?.completionPct).toBe(100)
     expect(result.reply).toBe('All set.')
@@ -2488,15 +2492,15 @@ describe('PersonalAssistant structured planning', () => {
       planDecision: 'approve',
     })
     expect(activated.status).toBe('ok')
-    expect(llm.calls).toBe(4)
+    expect(llm.calls).toBe(5) // +1: the plan's own criterion now reaches the reviewer, so the semantic criterion-coverage check runs
 
     const result = await assistant.turn('Forget this plan, let\'s do something else.', { sessionId: 'plan-session' })
 
     expect(result.planStatus).toBeUndefined()
     // No drafting call this turn (matchedPlanTemplate isn't part of the override for this
     // message, and no plan gets built while abandoning one) — just the one mandatory
-    // classifyTurnIntent call, on top of the prior turns' 4.
-    expect(llm.calls).toBe(5)
+    // classifyTurnIntent call, on top of the prior turns' 4. (Now 5 prior calls — the activated plan's turn also ran the criterion-coverage check.)
+    expect(llm.calls).toBe(6)
   })
 
   it('cancels a single plan task on a matching cancel request without needing approval, and leaves the other pending tasks untouched (conv59/conv70 h9)', async () => {
