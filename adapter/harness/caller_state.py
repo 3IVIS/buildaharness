@@ -43,7 +43,7 @@ class CallerState:
         return {
             "current_constraints": list(self.current_constraints),
             "clarification_history": list(self.clarification_history),
-            "last_update": self.last_update.isoformat() if self.last_update else None,
+            "last_update": (self.last_update or datetime.now(UTC)).isoformat(),
             "output_preferences": dict(self.output_preferences),
             "success_criteria": list(self.success_criteria),
             "constraints_changed": self.constraints_changed,

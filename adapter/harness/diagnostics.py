@@ -159,7 +159,7 @@ class Diagnostics:
             "coverage_health": self.coverage_health.to_dict(),
             "verification_health": self.verification_health.to_dict(),
             "execution_health": self.execution_health.to_dict(),
-            "dep_class_gap_annotation": self.dep_class_gap_annotation,
+            "dep_class_gap_annotation": self.dep_class_gap_annotation or "",
             "provenance": {k: v.to_dict() for k, v in self.provenance.items()},
         }
 

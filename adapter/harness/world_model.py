@@ -68,7 +68,6 @@ class Belief:
             "supporting_evidence": self.supporting_evidence,
             "reliability": self.reliability,
             "recorded_at": self.recorded_at.isoformat(),
-            "contradicts": self.contradicts,
             "applied_contradiction_ids": list(self.applied_contradiction_ids),
             "pending_sweep": self.pending_sweep,
         }
@@ -161,11 +160,13 @@ class WorldModel:
         # next resolve_control_state() Tier 1 pass — they never cause an inline
         # halt or raise an exception at this layer.
         self.contradictions.append(contradiction)
-        # Stamp contradicts[] onto every involved belief so the relationship is
-        # queryable from the belief itself (see Belief.contradicts' own docstring).
-        # Pairwise between all involved beliefs, not just "each points at the
-        # contradiction" — a 3+-way set-level contradiction means every belief in it
-        # contradicts every other one, not just the contradiction record.
+        self._stamp_contradicts(contradiction)
+
+    def _stamp_contradicts(self, contradiction: Contradiction) -> None:
+        """Stamp contradicts[] onto every involved belief so the relationship is queryable from the belief itself
+        (see Belief.contradicts' own docstring). Pairwise between all involved beliefs, not just "each points at the
+        contradiction" — a 3+-way set-level contradiction means every belief in it contradicts every other one.
+        `contradicts` is Python-only derived state: it is not on the TS wire shape, so `from_dict` rebuilds it."""
         beliefs_by_id = {b.id: b for b in self.beliefs}
         for belief_id in contradiction.involved_belief_ids:
             belief = beliefs_by_id.get(belief_id)
@@ -203,5 +204,7 @@ class WorldModel:
             # already validated when it was first persisted.
             wm.beliefs.append(Belief.from_dict(b))
         for c in d.get("contradictions", []):
-            wm.contradictions.append(Contradiction.from_dict(c))
+            contradiction = Contradiction.from_dict(c)
+            wm.contradictions.append(contradiction)
+            wm._stamp_contradicts(contradiction)
         return wm

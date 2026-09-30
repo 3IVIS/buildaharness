@@ -143,7 +143,6 @@ class BeliefDepGraph:
             "propagation_queue": [t.to_dict() for t in self.propagation_queue],
             "unverified_edge_ratio": self.unverified_edge_ratio,
             "confidence_decay_rate": self.confidence_decay_rate,
-            "dep_graph_quality": self.dep_graph_quality,
         }
 
     @classmethod

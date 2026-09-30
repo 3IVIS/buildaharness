@@ -58,9 +58,9 @@ class Task:
             "assigned_strategy": self.assigned_strategy,
             "parallel_write_domains": list(self.parallel_write_domains),
             "abstraction_level": self.abstraction_level,
-            "block_reason": self.block_reason,
-            "completed_evidence": list(self.completed_evidence),
         }
+        if self.block_reason is not None:
+            d["block_reason"] = self.block_reason
         if self.node_kind is not None:
             d["node_kind"] = self.node_kind
         if self.goal_id is not None:
