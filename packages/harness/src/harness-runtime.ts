@@ -46,8 +46,8 @@ import {
   MAX_OPTIONS_PER_QUESTION,
   type AskQuestion,
 } from './nodes/escalate.js'
-import { askQuestion, buildBudgetExhaustedQuestion, resolveAskMode } from './ask-question.js'
-import { checkCallerUpdates, NoOpUpdateChannel, type UpdateChannel, RESTART_ITERATION } from './nodes/check-caller-updates.js'
+import { askQuestion, buildBudgetExhaustedQuestion, DEFAULT_BUDGET_EXTENSION, resolveAskMode } from './ask-question.js'
+import { checkCallerUpdates, cancelTaskGraph, NoOpUpdateChannel, type CallerUpdate, type UpdateChannel, RESTART_ITERATION } from './nodes/check-caller-updates.js'
 import { contextCompression } from './nodes/context-compression.js'
 import { warmStart } from './nodes/warm-start.js'
 import { journalEntryFor, learnFromJournal } from './experience-learning.js'
@@ -1060,7 +1060,7 @@ async function* driveMainLoop(ctx: LoopContext): AsyncGenerator<HarnessCheckpoin
     // recover from, e.g. a low progress_rate on a large task graph with cannotMakeProgress's
     // own history-based stall detection not yet primed — a real, previously-latent deadlock
     // this exposed). Without this, such a branch spins forever instead of ever escalating.
-    if (ctx.stepsUsed > ctx.maxSteps) {
+    if (ctx.stepsUsed > ctx.maxSteps && !nothingLeftToRun(ctx)) {
       const exhaust = escalateBudgetExhausted(ctx.stepsUsed, ctx.maxSteps)
       if (resolveAskMode({ globalEnabled: ctx.askMode === 'enabled' })) {
         askQuestion([buildBudgetExhaustedQuestion(ctx.stepsUsed)], {
@@ -1085,11 +1085,7 @@ async function* driveMainLoop(ctx: LoopContext): AsyncGenerator<HarnessCheckpoin
     )
 
     ctx.nodeExecutionOrder.push('check_caller_updates')
-    const updateResult = await checkCallerUpdates(ctx.callerState, ctx.updateChannel, {
-      worldModel: ctx.worldModel, hypothesisSet: ctx.hypothesisSet, taskGraph: ctx.taskGraph,
-      diagnostics: ctx.diagnostics, failureDiagnostics: ctx.failureDiagnostics,
-      evidenceStore: ctx.evidenceStore, outputContract: ctx.outputContract,
-    })
+    const updateResult = await pollCallerUpdates(ctx)
     if (updateResult === RESTART_ITERATION) {
       resolveAndStamp(ctx)
       continue
@@ -1901,7 +1897,20 @@ async function* driveMainLoop(ctx: LoopContext): AsyncGenerator<HarnessCheckpoin
       )
     }
 
-    if (ctx.stepsUsed >= ctx.maxSteps) {
+    // Running out of budget with every task already COMPLETE is not a halt: nothing is left to do, and the loop only
+    // needs one more pass to notice and finish. (It used to halt here, discarding a finished run's answer and asking
+    // the user how to proceed on work that was done.)
+    // A resumed run replays its interrupted step and reaches this check BEFORE the top of the next iteration would poll
+    // for the user's answer to the budget question, so poll here first: "Continue" extends the limit, "Stop" cancels
+    // what is left. (Only when the budget is actually spent and work remains — an ordinary iteration never gets here.)
+    if (ctx.stepsUsed >= ctx.maxSteps && !nothingLeftToRun(ctx)) {
+      const late = await pollCallerUpdates(ctx)
+      if (late === RESTART_ITERATION) {
+        resolveAndStamp(ctx)
+        continue
+      }
+    }
+    if (ctx.stepsUsed >= ctx.maxSteps && !nothingLeftToRun(ctx)) {
       const exhaust = escalateBudgetExhausted(ctx.stepsUsed, ctx.maxSteps)
       if (resolveAskMode({ globalEnabled: ctx.askMode === 'enabled' })) {
         askQuestion([buildBudgetExhaustedQuestion(ctx.stepsUsed)], {
@@ -1921,6 +1930,61 @@ async function* driveMainLoop(ctx: LoopContext): AsyncGenerator<HarnessCheckpoin
 
     yield toCheckpoint(ctx)
   }
+}
+
+/** Every task is COMPLETE, or was cancelled by the caller (blocked `goal_cancelled`) — nothing is left to run. */
+function nothingLeftToRun(ctx: LoopContext): boolean {
+  const tasks = ctx.taskGraph.tasks
+  return tasks.length > 0 && tasks.every(t => t.status === 'COMPLETE' || (t.status === 'BLOCKED' && t.block_reason === 'goal_cancelled'))
+}
+
+/**
+ * Polls the caller's update channel once (constraint changes, steering, a clarification answer). An answer to the budget
+ * question is a CONTROL action, not a scope constraint: it is taken off the update here and acted on directly, so it
+ * never reaches the constraint pipeline (which appended it as constraint text and let the task-graph revalidator drop
+ * the very task the user asked to continue with, or invent a new one).
+ */
+async function pollCallerUpdates(ctx: LoopContext): Promise<Awaited<ReturnType<typeof checkCallerUpdates>>> {
+  const channel: UpdateChannel = {
+    poll: async () => {
+      const update = await ctx.updateChannel.poll()
+      return update ? takeBudgetAnswers(ctx, update) : update
+    },
+  }
+  return checkCallerUpdates(ctx.callerState, channel, {
+    worldModel: ctx.worldModel, hypothesisSet: ctx.hypothesisSet, taskGraph: ctx.taskGraph,
+    diagnostics: ctx.diagnostics, failureDiagnostics: ctx.failureDiagnostics,
+    evidenceStore: ctx.evidenceStore, outputContract: ctx.outputContract,
+  })
+}
+
+/**
+ * Acts on the user's answer to the budget_exhausted question (ask-question.ts's `buildBudgetExhaustedQuestion`) and removes
+ * it from the update. Until now the answer was only appended to the caller's constraint text: picking "Continue with 10
+ * more steps" changed nothing, so a resumed run halted again at once, and "Stop" did nothing either.
+ *  - Continue: the step limit grows by DEFAULT_BUDGET_EXTENSION.
+ *  - Stop and summarize: every task that is not already done is blocked (the same cancel a steering CANCEL_CURRENT
+ *    uses), so the loop finishes with what exists.
+ *  - Let me clarify the goal: no budget effect; the answer stays a constraint for the resumed run to read.
+ * Options are recognised by the exact labels the builder produced, not by fuzzy text.
+ */
+function takeBudgetAnswers(ctx: LoopContext, update: CallerUpdate): CallerUpdate | null {
+  const answers = update.pending_update.clarification_answers
+  if (!Array.isArray(answers)) return update
+  const template = buildBudgetExhaustedQuestion(0)
+  const continueLabel = template.options?.[0]?.label
+  const stopLabel = template.options?.[1]?.label
+  const isBudget = (a: { questionId?: string }) => a.questionId === template.id
+  const budget = (answers as Array<{ questionId?: string; selectedLabels?: string[] }>).filter(isBudget)
+  if (budget.length === 0) return update
+  for (const answer of budget) {
+    if (!Array.isArray(answer.selectedLabels)) continue
+    if (continueLabel !== undefined && answer.selectedLabels.includes(continueLabel)) ctx.maxSteps += DEFAULT_BUDGET_EXTENSION
+    else if (stopLabel !== undefined && answer.selectedLabels.includes(stopLabel)) cancelTaskGraph(ctx.taskGraph)
+  }
+  const rest = (answers as Array<{ questionId?: string }>).filter((a) => !isBudget(a))
+  if (rest.length === 0) return null
+  return { ...update, pending_update: { ...update.pending_update, clarification_answers: rest } }
 }
 
 async function runMainLoopWithCheckpoints(

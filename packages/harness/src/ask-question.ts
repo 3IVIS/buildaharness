@@ -109,7 +109,10 @@ export function askQuestion(questions: AskQuestion[], opts: BuildAskBlockerOptio
  * no "does a discrete option set even exist" branching, unlike review_failure (see
  * diagnoseReviewFailureOptions() in nodes/review-proposed-change.ts). Pure, no LLM call.
  */
-export function buildBudgetExhaustedQuestion(stepsUsed: number, extension = 10): AskQuestion {
+/** How many steps the budget question's "Continue" option adds. Shared with the harness's resume handling so the label and the effect cannot drift. */
+export const DEFAULT_BUDGET_EXTENSION = 10
+
+export function buildBudgetExhaustedQuestion(stepsUsed: number, extension = DEFAULT_BUDGET_EXTENSION): AskQuestion {
   return {
     id: 'budget-exhausted-resolution',
     question: `The step budget is exhausted (at step ${stepsUsed}). How should I proceed?`,

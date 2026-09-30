@@ -114,7 +114,15 @@ export class AskClarificationService {
     pendingClarificationId: string,
     response: AskResponse | undefined,
     askModeEnabled: boolean,
-  ): Promise<AssistantTurnResult> {
+    /**
+     * True when tool turns run through the one-loop proposer (the default). A resumed harness run has NO proposer, so it
+     * could only return the stored draft reply — empty for a tool turn, which is what the user got — and the answer,
+     * fed into the constraint pipeline, is never read by the proposer's model. In that mode the validated answer is
+     * handed to the ordinary turn pipeline instead (`{ fallThrough: true }`, the same shape a plan approval uses), and
+     * the paused run is discarded.
+     */
+    handOffToOrdinaryTurn = false,
+  ): Promise<AssistantTurnResult | { fallThrough: true; answerText: string }> {
     const staged = (await this.memory.get(this.pendingKey(pendingClarificationId))) as AskClarificationPendingState | undefined
     if (!staged) {
       return { status: 'ok', reply: 'That question is no longer pending — nothing to resolve.' }
@@ -138,6 +146,11 @@ export class AskClarificationService {
     // buildEscalatedResult below each already append `userMessage` (here, the rendered answer)
     // as the turn's user message themselves; appending it here too would duplicate it.
     const answerText = formatAskResponse(staged.questions, response)
+
+    if (handOffToOrdinaryTurn) {
+      await this.harnessBridge.discardPausedRun(sessionId)
+      return { fallThrough: true, answerText: `Answer to your question: ${answerText}` }
+    }
 
     const updateChannel = new OneShotAnswerChannel({ clarification_answers: response.answers, ask_questions: staged.questions })
     try {

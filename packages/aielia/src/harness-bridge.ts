@@ -259,6 +259,16 @@ export class HarnessBridge {
     }
   }
 
+  /**
+   * Drops the paused harness run a `needs_clarification` left behind (its checkpoint and its resume-attempt counter),
+   * so the next ordinary run for this session starts fresh instead of resuming it. Used when a clarification answer
+   * is handed to the ordinary turn pipeline rather than fed back into the paused run.
+   */
+  async discardPausedRun(sessionId: string): Promise<void> {
+    await deleteHarnessCheckpoint(this.checkpointStore, `turn:${sessionId}`).catch(() => {})
+    await this.memory.delete(resumeAttemptsKey(sessionId)).catch(() => {})
+  }
+
   async run(params: HarnessRunParams): Promise<HarnessOutcome> {
     const { sessionId, userMessage, facts, currentTurnFacts = [], draftReply, classification, initialTasks, activePlan, sources, onProgress, onUsage, oneLoopProposer, runInvestigation, askModeEnabled = false, updateChannel, onReviewConflict, onFailureModeSwitch, onSemanticHypothesis, precomputedHypotheses, onReviewerRevision } = params
     const runtime = new HarnessRuntime()
