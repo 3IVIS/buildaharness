@@ -1,8 +1,20 @@
-import { describe, it, expect, vi, afterEach } from 'vitest'
+import { describe, it, expect, vi, afterEach, beforeAll, afterAll } from 'vitest'
 import { normalizeBlend, makeBlendAdjuster, type BlendRule } from './blend-engine.js'
 import { makeTurnInitializer, type SessionField, type ResourceBudget } from './turn-context.js'
 import { makePreferenceExtractor, type PreferenceSignal } from './preference-extractor.js'
 import { jaccardSimilarity, makeMultiSourceReducer, type BranchConfig } from './multi-source-reducer.js'
+
+// These tests exercise the harness's lexical checks, which are off by default (lexical/lexical-off.ts),
+// so this file switches them on.
+let savedLexicalMode: string | undefined
+beforeAll(() => {
+  savedLexicalMode = process.env.HARNESS_LEXICAL_MODE
+  process.env.HARNESS_LEXICAL_MODE = 'enabled'
+})
+afterAll(() => {
+  if (savedLexicalMode === undefined) delete process.env.HARNESS_LEXICAL_MODE
+  else process.env.HARNESS_LEXICAL_MODE = savedLexicalMode
+})
 
 // ─── G-1: StrategyBlendEngine ─────────────────────────────────────────────
 

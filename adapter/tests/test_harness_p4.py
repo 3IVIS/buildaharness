@@ -36,6 +36,13 @@ from harness.task_graph import (
 )
 from harness.world_model import Belief, Contradiction, WorldModel
 
+
+@pytest.fixture(autouse=True)
+def _lexical_checks_on(monkeypatch):
+    """These tests exercise the harness's lexical checks, which are off by default (harness/lexical_off.py)."""
+    monkeypatch.setenv("HARNESS_LEXICAL_MODE", "enabled")
+
+
 # ── Helpers ───────────────────────────────────────────────────────────────────
 
 

@@ -11,6 +11,7 @@
  * lexical check in this plan — a future consumer shouldn't assume the primitive itself handles
  * non-English phrasing or paraphrase tolerance.
  */
+import { harnessLexicalActive } from '../lexical/lexical-off.js'
 
 export interface PreferenceSignal {
   patterns: string[]
@@ -46,7 +47,9 @@ export function makePreferenceExtractor(
     const lowerText = (text as string).toLowerCase()
     const updates: Record<string, unknown> = {}
 
-    for (const signal of signals) {
+    // HARNESS_LEXICAL preference-patterns: phrase lists over free text; off → no signal is read.
+    const patternsOn = harnessLexicalActive('preference-patterns')
+    for (const signal of patternsOn ? signals : []) {
       if (signal.patterns.some((p) => lowerText.includes(p.toLowerCase()))) {
         if (signal.delta != null) {
           const base = (state[signal.field] as number) ?? 0

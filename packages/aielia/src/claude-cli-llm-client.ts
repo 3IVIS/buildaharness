@@ -415,7 +415,8 @@ export class ClaudeCliLLMClient implements ILLMClient {
               ...(this.shellTools ? { ENABLE_SHELL_TOOLS: '1' } : {}),
               ...(this.webTools?.braveApiKey ? { BRAVE_SEARCH_API_KEY: this.webTools.braveApiKey } : {}),
               ...(this.actionTools ? { ENABLE_EMAIL_TOOL: '1' } : {}),
-              ...(lexicalOffEnvValue() ? { ASSISTANT_LEXICAL_OFF: lexicalOffEnvValue() } : {}),
+              // Always passed (even empty): the server reads an unset value as the default, every family off.
+              ASSISTANT_LEXICAL_RESOLVED_OFF: lexicalOffEnvValue(),
             },
           },
         },

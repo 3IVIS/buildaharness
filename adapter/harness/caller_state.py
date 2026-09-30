@@ -14,6 +14,8 @@ from dataclasses import dataclass, field
 from datetime import UTC, datetime
 from typing import TYPE_CHECKING, Any
 
+from .lexical_off import harness_lexical_active
+
 if TYPE_CHECKING:
     from .escalation import AskAnswer, AskQuestion
 
@@ -122,6 +124,8 @@ def update_success_criteria(caller_state: CallerState, world_model: Any) -> None
     flagged in world_model.stale_flags. Beliefs are never deleted — only flagged.
     """
     if not caller_state.success_criteria:
+        return
+    if not harness_lexical_active("criterion-scope"):  # "no shared word" is a lexical test
         return
 
     criteria_tokens: set[str] = set()

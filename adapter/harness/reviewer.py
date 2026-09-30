@@ -26,6 +26,7 @@ from collections import deque
 from dataclasses import dataclass, field
 from typing import Any, Literal
 
+from .lexical_off import harness_lexical_active
 from .lexical_patterns import get_evidence_negation_words
 
 # Was a locally-hardcoded 7-word set missing "unavailable" relative to hypothesis.py's
@@ -261,7 +262,7 @@ def seed_adversarial_prior(
         high_rate_classes = {fc for fc, cnt in class_counts.items() if cnt >= 2}
         already_seeded = {d["belief_id"] for d in negated_beliefs}
 
-        if high_rate_classes:
+        if high_rate_classes and harness_lexical_active("failure-class-seed"):
             for belief in beliefs:
                 if belief.id in already_seeded:
                     continue
@@ -379,7 +380,8 @@ def implementer_lens(
     complete_task_descriptions = " ".join(
         getattr(t, "description", "").lower() for t in tasks if getattr(t, "status", "") == "COMPLETE"
     )
-    for criterion in success_criteria:
+    # HARNESS_LEXICAL criterion-substring: word overlap is the only judge here; off → no finding.
+    for criterion in success_criteria if harness_lexical_active("criterion-substring") else []:
         criterion_tokens = set(criterion.lower().split())
         covered = bool(criterion_tokens & set(complete_task_descriptions.split()))
         if not covered:
@@ -419,7 +421,7 @@ def reviewer_lens(
     # Also include all observations for field presence check
     all_obs_content = " ".join(getattr(o, "content", "").lower() for o in observations)
 
-    for field_name in required_fields:
+    for field_name in required_fields if harness_lexical_active("required-sections") else []:
         if field_name.lower() not in all_obs_content:
             findings.append(
                 ReviewFinding(
@@ -443,7 +445,7 @@ def reviewer_lens(
             if getattr(entry, "reliability", "") == "HIGH":
                 high_rel_obs.append(getattr(entry, "obs", "").lower())
 
-    for assumption in assumptions:
+    for assumption in assumptions if harness_lexical_active("assumption-overlap") else []:
         assumption_lower = assumption.lower()
         assumption_tokens = set(assumption_lower.split())
         validated = any(bool(assumption_tokens & set(obs.split())) for obs in high_rel_obs)
@@ -462,7 +464,7 @@ def reviewer_lens(
     for c in contradictions:
         involved_in_contradictions.update(getattr(c, "involved_belief_ids", []))
 
-    if evidence_store is not None:
+    if evidence_store is not None and harness_lexical_active("evidence-negation"):
         entries = getattr(evidence_store, "entries", [])
         for entry in entries:
             if getattr(entry, "reliability", "") != "HIGH":

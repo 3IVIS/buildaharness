@@ -40,6 +40,13 @@ from harness.staleness import staleness_sweep
 from harness.world_model import Belief, Contradiction, WorldModel
 from harness.world_model_ops import integrate_evidence, recompute_belief_health
 
+
+@pytest.fixture(autouse=True)
+def _lexical_checks_on(monkeypatch):
+    """These tests exercise the harness's lexical checks, which are off by default (harness/lexical_off.py)."""
+    monkeypatch.setenv("HARNESS_LEXICAL_MODE", "enabled")
+
+
 # ── Helpers ───────────────────────────────────────────────────────────────────
 
 

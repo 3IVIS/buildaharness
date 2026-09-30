@@ -10,7 +10,7 @@ import { stagePendingAction, loadPendingAction } from './file-tools.js'
 import type { SendEmail } from './email.js'
 import { listUndoLogEntries } from './action-snapshot.js'
 import { SCHOOL_DATES_BATCH_FIXTURE, fixtureUserMessage, fixtureStructuredResponses, fixtureWebSearch } from './batch-research-fixtures.js'
-import { classifyRisk } from './risk-classifier.js'
+import { classifyRiskLexical } from './risk-classifier.js'
 import { decompositionEnabled } from './turn-interpreter.js'
 
 // This file predates the lexicalMode rollback (lexical-mode.ts's DEFAULT_LEXICAL_MODE) and its
@@ -70,7 +70,7 @@ function looksTrivial(message: string): boolean {
  */
 function deriveTurnIntentJSON(messages: ChatMessage[], override?: Record<string, unknown>): string {
   const userContent = messages.find((m) => m.role === 'user')?.content ?? ''
-  const risk = classifyRisk(userContent)
+  const risk = classifyRiskLexical(userContent)
   const isReminderRequest = risk.reason.includes('reminder')
   const isBulkReminderRequest = isReminderRequest && risk.requiresApproval
   const base = {

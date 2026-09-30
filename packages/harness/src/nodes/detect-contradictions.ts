@@ -182,6 +182,7 @@ const LINE_LEVEL_KEYWORDS = getGranularityMarkers().statementLevelMarkers
 function detectAbstractionContradictions(beliefs: Belief[], context: AbstractionContext | null | undefined): Contradiction[] {
   const results: Contradiction[] = []
   if (!context) return results
+  if (!harnessLexicalActive('granularity-markers')) return results // keyword list: see lexical/lexical-off.ts
 
   const abstractionLevel = context.abstraction_level ?? 'module'
   if (!['module', 'component', 'system'].includes(abstractionLevel)) return results
@@ -313,7 +314,8 @@ export function detectContradictions(
 
   let all: Contradiction[] = [
     ...(harnessLexicalActive('negation-pairs') ? detectPairwiseContradictions(beliefs) : []),
-    ...detectSetLevelContradictions(beliefs),
+    // The set-level detector is built on the same lexical negation matcher, so it follows the same switch.
+    ...(harnessLexicalActive('negation-pairs') ? detectSetLevelContradictions(beliefs) : []),
     ...detectTemporalContradictions(beliefs, envLog),
     ...detectAbstractionContradictions(beliefs, abstractionContext),
   ]

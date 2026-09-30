@@ -1,5 +1,6 @@
 import { z } from 'zod'
 import type { AskAnswer, AskQuestion } from '../nodes/escalate.js'
+import { harnessLexicalActive } from '../lexical/lexical-off.js'
 
 /**
  * Q4 (the internal plan) — renders one AskAnswer as a distinct,
@@ -143,6 +144,8 @@ interface WorldModelLike {
  */
 export function updateSuccessCriteria(callerState: CallerState, worldModel: WorldModelLike): void {
   if (callerState.success_criteria.length === 0) return
+  // HARNESS_LEXICAL criterion-scope: "no shared word" is a lexical test; off → no belief is flagged stale.
+  if (!harnessLexicalActive('criterion-scope')) return
 
   const criteriaTokens = new Set<string>()
   for (const criterion of callerState.success_criteria) {

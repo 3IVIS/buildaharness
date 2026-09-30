@@ -64,7 +64,10 @@ async function run(llm: ILLMClient) {
 }
 
 describe('semantic constraint check through the bridge', () => {
-  afterEach(() => { delete process.env.AUDIT_SEMANTIC_CONSTRAINT_CHECK })
+  afterEach(() => {
+    delete process.env.AUDIT_SEMANTIC_CONSTRAINT_CHECK
+    delete process.env.ASSISTANT_LEXICAL_MODE
+  })
 
   it('default (on): a reply that acknowledges the constraint passes, and the model was asked', async () => {
     const llm = new JudgeLLM('{"violations":[]}')
@@ -81,8 +84,17 @@ describe('semantic constraint check through the bridge', () => {
     expect(llm.judged).toBe(1)
   })
 
-  it('off: the lexical word match is back, so the same acknowledging reply throws and no model call is made', async () => {
+  it('off, lexical checks at their default (off): no constraint check runs at all and no model call is made', async () => {
     process.env.AUDIT_SEMANTIC_CONSTRAINT_CHECK = '0'
+    const llm = new JudgeLLM('{"violations":[]}')
+    const r = await run(llm)
+    expect(r.error).toBeUndefined()
+    expect(llm.judged).toBe(0)
+  })
+
+  it('off, lexical mode enabled: the lexical word match is back, so the same acknowledging reply throws and no model call is made', async () => {
+    process.env.AUDIT_SEMANTIC_CONSTRAINT_CHECK = '0'
+    process.env.ASSISTANT_LEXICAL_MODE = 'enabled'
     const llm = new JudgeLLM('{"violations":[]}')
     const r = await run(llm)
     expect(r.error).toBeInstanceOf(OutputContractError)

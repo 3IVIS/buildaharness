@@ -10,6 +10,8 @@ from collections.abc import Callable
 from dataclasses import dataclass
 from typing import Any
 
+from .lexical_off import harness_lexical_active
+
 
 @dataclass
 class PreferenceSignal:
@@ -41,7 +43,8 @@ def make_preference_extractor(
         lower_text = text.lower()
         updates: dict[str, Any] = {}
 
-        for signal in signals:
+        # HARNESS_LEXICAL preference-patterns: phrase lists over free text; off → no signal is read.
+        for signal in signals if harness_lexical_active("preference-patterns") else []:
             if any(pattern.lower() in lower_text for pattern in signal.patterns):
                 if signal.delta is not None:
                     base = state.get(signal.field, 0)

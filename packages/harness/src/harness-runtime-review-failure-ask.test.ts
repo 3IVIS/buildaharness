@@ -1,7 +1,19 @@
-import { describe, it, expect } from 'vitest'
+import { describe, it, expect, beforeAll, afterAll } from 'vitest'
 import { HarnessRuntime, type HarnessRunOptions } from './harness-runtime.js'
 import { EscalationHalt } from './nodes/escalate.js'
 import type { Task } from './state/task-graph.js'
+
+// These tests exercise the harness's lexical checks, which are off by default (lexical/lexical-off.ts),
+// so this file switches them on.
+let savedLexicalMode: string | undefined
+beforeAll(() => {
+  savedLexicalMode = process.env.HARNESS_LEXICAL_MODE
+  process.env.HARNESS_LEXICAL_MODE = 'enabled'
+})
+afterAll(() => {
+  if (savedLexicalMode === undefined) delete process.env.HARNESS_LEXICAL_MODE
+  else process.env.HARNESS_LEXICAL_MODE = savedLexicalMode
+})
 
 // The review_failure escalation site: a proposed change that fails review twice in a row for the same task halts the run.
 // With ask mode on and MORE THAN ONE dimension failing, the halt is a structured "which fix should I apply?" question. Until

@@ -1,5 +1,6 @@
 import { looksLikeEnumeratedItemsLexical } from './decomposition-classifier.js'
 import { getRiskPatterns, testAny, splitOnAny } from './lexical/patterns.js'
+import { lexicalActive } from './lexical/lexical-mode.js'
 
 export type RiskLevel = 'LOW' | 'MEDIUM' | 'HIGH'
 
@@ -473,7 +474,20 @@ function isExemptClause(clause: string): boolean {
   return testAny(risk.pastTenseQuestion, clause) || testAny(risk.reportedThirdPartySpeech, clause) || testAny(risk.firstPersonPastNarrative, clause)
 }
 
+/**
+ * The lexical risk judgment, gated by lexicalMode's `risk` family (off by default). Off → no judgment
+ * is made and the answer is the conservative one an unknown risk gets: HIGH, requiring approval. Its
+ * only production caller is a durable plan step persisted without its own risk level.
+ */
 export function classifyRisk(message: string): RiskClassification {
+  if (!lexicalActive('risk')) {
+    return { riskLevel: 'HIGH', requiresApproval: true, reason: 'Risk not judged (the lexical risk check is switched off), so treated as high.' }
+  }
+  return classifyRiskLexical(message)
+}
+
+/** The raw keyword judgment, never switched off — for test doubles standing in for the classifier model (scripted-llm-client.ts). */
+export function classifyRiskLexical(message: string): RiskClassification {
   const isReminderRecallQuestion = testAny(risk.reminderRecallQuestion, message)
   if (risk.reminderPattern.pattern.test(message) && !isReminderRecallQuestion) {
     if (looksLikeEnumeratedItemsLexical(message)) {

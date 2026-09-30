@@ -16,6 +16,7 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from typing import Any
 
+from .lexical_off import harness_lexical_active
 from .lexical_patterns import get_constraint_negation_words
 
 _CONSTRAINT_NEGATION_WORDS = get_constraint_negation_words()
@@ -156,8 +157,8 @@ def check_required_sections(result: Any, output_contract: OutputContract) -> lis
             elif not result_dict[section]:
                 violations.append(f"required_sections: section {section!r} is empty")
         elif result_str:
-            # Text result: check for heading marker
-            if section.lower() not in result_str.lower():
+            # Text result: check for heading marker (a substring match; HARNESS_LEXICAL required-sections)
+            if harness_lexical_active("required-sections") and section.lower() not in result_str.lower():
                 violations.append(f"required_sections: missing section {section!r} in text result")
         else:
             violations.append(f"required_sections: cannot check section {section!r} — result is None")
@@ -200,7 +201,8 @@ def check_caller_specific_constraints(result: Any, caller_state: Any) -> list[st
     result_str = result if isinstance(result, str) else ""
     result_dict = _to_dict(result) or {}
 
-    for constraint in current_constraints:
+    # HARNESS_LEXICAL constraint-negation: off → no constraint is checked by word match.
+    for constraint in current_constraints if harness_lexical_active("constraint-negation") else []:
         constraint_lower = constraint.lower()
         constraint_tokens = set(constraint_lower.split())
 

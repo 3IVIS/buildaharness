@@ -1,4 +1,4 @@
-import { describe, it, expect, vi } from 'vitest'
+import { describe, it, expect, vi, beforeAll, afterAll } from 'vitest'
 
 import { WorldModel, BeliefDepGraph } from '../state/world-model.js'
 import { ControlState } from '../state/control-state.js'
@@ -21,6 +21,18 @@ import { rollbackAndReplan, cannotMakeProgress, buildStrategyOrdering, STALL_WIN
 import { makeSurfaceBlocker, awaitClarification, EscalationHalt, handleEscalationResponse } from './escalate.js'
 import { applyConstraintChangePropagation, revalidateTaskGraph } from './check-caller-updates.js'
 import { resolveControlState } from './resolve-control-state.js'
+
+// These tests exercise the harness's lexical checks, which are off by default (lexical/lexical-off.ts),
+// so this file switches them on.
+let savedLexicalMode: string | undefined
+beforeAll(() => {
+  savedLexicalMode = process.env.HARNESS_LEXICAL_MODE
+  process.env.HARNESS_LEXICAL_MODE = 'enabled'
+})
+afterAll(() => {
+  if (savedLexicalMode === undefined) delete process.env.HARNESS_LEXICAL_MODE
+  else process.env.HARNESS_LEXICAL_MODE = savedLexicalMode
+})
 
 // ─── helpers ─────────────────────────────────────────────────────────────────
 

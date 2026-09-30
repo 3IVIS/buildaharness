@@ -15,6 +15,8 @@ import uuid
 from pathlib import Path
 from typing import cast
 
+import pytest
+
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
 from harness import hypothesis as hypothesis_module
@@ -27,6 +29,12 @@ from harness.output_contract import check_caller_specific_constraints
 from harness.reviewer import reviewer_lens
 from harness.task_graph import estimate_world_model_granularity
 from harness.world_model import Belief, WorldModel
+
+
+@pytest.fixture(autouse=True)
+def _lexical_checks_on(monkeypatch):
+    """These tests exercise the harness's lexical checks, which are off by default (harness/lexical_off.py)."""
+    monkeypatch.setenv("HARNESS_LEXICAL_MODE", "enabled")
 
 
 def _belief(statement: str, confidence: float = 0.8, bid: str | None = None) -> Belief:

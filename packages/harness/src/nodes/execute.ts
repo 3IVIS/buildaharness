@@ -1,3 +1,4 @@
+import { harnessLexicalActive } from '../lexical/lexical-off.js'
 import type { WorldModel } from '../state/world-model.js'
 import type { EvidenceStore } from '../state/evidence-store.js'
 import type { TaskGraph, Task } from '../state/task-graph.js'
@@ -171,6 +172,9 @@ const SYSTEM_ERROR_SYMPTOM_PATTERNS: SymptomPattern[] = [
 // list falling through unclassified (returns null, degrades gracefully); worth a note, not a
 // redesign.
 function classifySystemErrorSymptom(message: string): string | null {
+  // HARNESS_LEXICAL system-error-symptoms: with it off the raw error text is kept as the symptom, and
+  // a semantic failure matcher (when the host wires one) maps it onto the library by meaning.
+  if (!harnessLexicalActive('system-error-symptoms')) return null
   const lower = message.toLowerCase()
   for (const { test, symptom } of SYSTEM_ERROR_SYMPTOM_PATTERNS) {
     if (test(lower)) return symptom

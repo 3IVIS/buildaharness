@@ -18,6 +18,7 @@ from typing import Any, cast
 
 from .evidence import EvidenceStore
 from .hypothesis import HypothesisSet
+from .lexical_off import harness_lexical_active
 from .lexical_patterns import get_granularity_markers, get_negation_pairs
 from .script_utils import shared_tokens, tokenize
 from .world_model import Belief, Contradiction, ContradictionSeverity, WorldModel
@@ -47,6 +48,9 @@ def _statements_opposed(stmt_a: str, stmt_b: str) -> bool:
     belief statements are free text (verbatim user messages, LLM-authored task descriptions), not
     a controlled vocabulary that only differs by its status word.
     """
+    # HARNESS_LEXICAL negation-pairs: this matcher backs both the pairwise and the set-level detector.
+    if not harness_lexical_active("negation-pairs"):
+        return False
     a = stmt_a.lower()
     b = stmt_b.lower()
 
@@ -226,7 +230,7 @@ def detect_abstraction_contradictions(
     # granularity-markers.json (see get_granularity_markers()'s doc comment).
     line_level_keywords, _function_level_keywords = get_granularity_markers()
 
-    if abstraction_level in ("module", "component", "system"):
+    if abstraction_level in ("module", "component", "system") and harness_lexical_active("granularity-markers"):
         for belief in beliefs:
             stmt = belief.statement.lower()
             if any(kw.lower() in stmt for kw in line_level_keywords):

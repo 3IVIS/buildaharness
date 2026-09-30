@@ -448,6 +448,9 @@ without ever exposing the filesystem or shell.
 
 ## Batch research budget
 
+> The list detector below is a lexical check (the `batch-list` family), **off by default**: set
+> `ASSISTANT_LEXICAL_ON=batch-list` (or `ASSISTANT_LEXICAL_MODE=enabled`) to use batch research.
+
 The flat `maxSteps` cap that governs an ordinary chat turn (see below) doesn't
 know the difference between a one-question turn and a turn asking for the same
 lookup across many items — a 7-item batch and a 1-item question get the same
@@ -802,6 +805,27 @@ independently per field. Settings persist as plain JSON at
 package's persistence, it's a real file, not encrypted, so `authToken` and
 `braveApiKey` are stored in plaintext there. This is the same trust boundary
 the repo's root `.env` already has, not a new one.
+
+### Lexical checks (off by default)
+
+Every lexical pass in this package (regex / keyword / phrase-list checks over natural-language text) sits
+behind one switch, `lexicalMode`, and **every one is off by default** in the CLI, the browser tab and the
+desktop app — the LLM-based checks do the work instead. The ten families (`fact-markers`, `coding-fact`,
+`injection`, `enumeration`, `risk`, `task-cancel`, `plan-mode`, `batch-list`, `tool-yield`,
+`template-keywords`) and what "off" means for each are listed in `src/lexical/lexical-mode.ts`.
+
+- `ASSISTANT_LEXICAL_MODE=enabled` turns every family back on (the pre-2026-09-28 behaviour).
+- `ASSISTANT_LEXICAL_ON=batch-list,task-cancel` turns only those families back on (`all` for every one).
+- `ASSISTANT_LEXICAL_OFF=<families>` turns families off even under `enabled`; it wins over ON.
+
+The mode is handed to `@buildaharness/harness`'s own lexical switch at the start of every run, so
+`enabled` turns the harness's checks back on too (see that package's README).
+
+Some families have no LLM replacement, so with them off the feature they drive does not run: batch
+research (`batch-list`), matching "skip that step" to one step of an active plan (`task-cancel`), leaving
+plan drafting by phrase (`plan-mode`; `/plan` still works), and the batch sub-loop's lexical dead-end
+detection (`tool-yield`; the web tool's own "No results found." still counts). With `risk` off, a durable
+plan step saved without its own risk level is treated as HIGH.
 
 ## REPL commands
 

@@ -1,7 +1,19 @@
-import { describe, it, expect, vi } from 'vitest'
+import { describe, it, expect, vi, beforeAll, afterAll } from 'vitest'
 import type { ChatMessage, ChatOptions, ILLMClient, LLMStructuredResponse, ToolDefinition, FsBackend } from '@buildaharness/runtime'
 import type { AskResponse } from '@buildaharness/harness'
 import { PersonalAssistant } from './assistant.js'
+
+// This file tests the 'plan-mode' lexical family, which is off by default (lexical/lexical-mode.ts), so it
+// switches just that family on.
+let savedLexicalOn: string | undefined
+beforeAll(() => {
+  savedLexicalOn = process.env.ASSISTANT_LEXICAL_ON
+  process.env.ASSISTANT_LEXICAL_ON = 'plan-mode'
+})
+afterAll(() => {
+  if (savedLexicalOn === undefined) delete process.env.ASSISTANT_LEXICAL_ON
+  else process.env.ASSISTANT_LEXICAL_ON = savedLexicalOn
+})
 
 function makeFakeBackend(): FsBackend {
   const files = new Map<string, string>()

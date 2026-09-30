@@ -386,6 +386,7 @@ const INJECTION_PATTERNS = Object.values(injectionPatternsData).flatMap((lang) =
 )
 
 export function detectInjectionLikely(text) {
+  if (LEXICAL_OFF_FAMILIES.has('injection')) return { flagged: false }
   for (const { pattern, reason } of INJECTION_PATTERNS) {
     if (pattern.test(text)) return { flagged: true, reason }
   }
@@ -594,11 +595,16 @@ const REMINDER_REQUEST_MARKER = new RegExp(
   'i',
 )
 
-// lexicalMode: the parent hands the resolved off-families in as ASSISTANT_LEXICAL_OFF (see
-// lexical/lexical-mode.ts). Only the fact-marker family is honoured here — this script's injection
-// regex deliberately stays on, because for fetched pages under the claude-cli backend it is the only
-// injection check they get (the LLM check never sees these results).
-const LEXICAL_OFF_FAMILIES = new Set(String(process.env.ASSISTANT_LEXICAL_OFF ?? '').split(',').map((s) => s.trim().toLowerCase()).filter(Boolean))
+// lexicalMode: the parent hands the resolved off-families in as ASSISTANT_LEXICAL_RESOLVED_OFF (see
+// lexical/lexical-mode.ts's lexicalOffEnvValue). Unset means the default — every family off; an empty
+// value means none off. This script honours `fact-markers` (the reminder fact-vs-to-do guard and its
+// reminder-request clause) and `injection` (the regex on fetched pages). `let`, not `const`: the
+// self-test below exercises the patterns themselves and switches them on for its own run.
+const ALL_LEXICAL_FAMILIES = ['fact-markers', 'coding-fact', 'injection', 'enumeration', 'risk', 'task-cancel', 'plan-mode', 'batch-list', 'tool-yield', 'template-keywords']
+let LEXICAL_OFF_FAMILIES =
+  process.env.ASSISTANT_LEXICAL_RESOLVED_OFF === undefined
+    ? new Set(ALL_LEXICAL_FAMILIES)
+    : new Set(String(process.env.ASSISTANT_LEXICAL_RESOLVED_OFF).split(',').map((s) => s.trim().toLowerCase()).filter(Boolean))
 
 function looksLikeDurableFact(text) {
   if (LEXICAL_OFF_FAMILIES.has('fact-markers')) return false
@@ -917,6 +923,7 @@ async function main() {
           // check refused the reminder outright any time the raw message mentioned an unrelated
           // fact anywhere, even though the reminder's own `text` content wasn't the fact itself.
           const wholeMessageIsFactOnly =
+            !LEXICAL_OFF_FAMILIES.has('fact-markers') &&
             !REMINDER_REQUEST_MARKER.test(process.env.CURRENT_USER_MESSAGE ?? '') &&
             looksLikeDurableFact(process.env.CURRENT_USER_MESSAGE ?? '')
           if (looksLikeDurableFact(text) || wholeMessageIsFactOnly) {
@@ -970,6 +977,8 @@ async function main() {
 }
 
 async function selfTest() {
+  // The checks below test the lexical patterns themselves, so switch every family on for this run.
+  LEXICAL_OFF_FAMILIES = new Set()
   const dir = await mkdtemp(`${tmpdir()}/file-tools-mcp-test-`)
   try {
     const resolved = resolveInWorkspace(dir, 'notes.txt')

@@ -5,7 +5,7 @@ import type {
   LLMStructuredResponse,
   ToolDefinition,
 } from '@buildaharness/runtime'
-import { classifyRisk } from './risk-classifier.js'
+import { classifyRiskLexical } from './risk-classifier.js'
 
 /**
  * A deterministic, network-free {@link ILLMClient} for tests and demos — the one publicly
@@ -93,7 +93,7 @@ function isTurnIntentRequest(messages: ChatMessage[]): boolean {
  */
 function deriveTurnIntentJSON(messages: ChatMessage[], override?: Record<string, unknown>): string {
   const userContent = messages.find((m) => m.role === 'user')?.content ?? ''
-  const risk = classifyRisk(userContent)
+  const risk = classifyRiskLexical(userContent)
   const isReminderRequest = risk.reason.includes('reminder')
   const base = {
     riskLevel: risk.riskLevel,

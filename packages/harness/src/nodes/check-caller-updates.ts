@@ -8,6 +8,7 @@ import type { ControlStateResolverFn } from '../generation-id.js'
 import { CallerState, updateSuccessCriteria } from '../state/caller-state.js'
 import { OutputContract, updateOutputContract } from '../state/output-contract.js'
 import { detectContradictions } from './detect-contradictions.js'
+import { harnessLexicalActive } from '../lexical/lexical-off.js'
 
 export const RESTART_ITERATION = 'RESTART_ITERATION' as const
 export type UpdateCheckResult = typeof RESTART_ITERATION | 'NO_UPDATE'
@@ -81,6 +82,9 @@ function criterionCovered(criterionTokens: Set<string>, taskGraph: TaskGraph): b
 export function revalidateTaskGraph(taskGraph: TaskGraph, callerState: CallerState): TaskGraph {
   const updatedCriteria = [...new Set(callerState.success_criteria)]
   if (updatedCriteria.length === 0) return taskGraph
+  // HARNESS_LEXICAL criterion-scope: scope and coverage are judged by shared words; with it off the
+  // graph is left as it is rather than blocking or adding tasks on a word match.
+  if (!harnessLexicalActive('criterion-scope')) return taskGraph
 
   const criteriaTokenSets = updatedCriteria.map(c => new Set(c.toLowerCase().split(/\s+/)))
 

@@ -6,6 +6,7 @@ import processImprovementData from './data/process_improvement.json'
 import contentCreationData from './data/content_creation.json'
 import tripPlanningData from './data/trip_planning.json'
 import { getTemplateKeywords } from '../lexical/patterns.js'
+import { lexicalActive } from '../lexical/lexical-mode.js'
 import { codePlanTemplates, codePlanTemplatesEnabled } from '../code-plan-templates.js'
 
 export interface PlanTask {
@@ -70,6 +71,7 @@ const DEFAULT_TEMPLATE = 'problem_solving'
 function scoreTemplates(description: string): Record<string, number> {
   const lower = description.toLowerCase()
   const scores: Record<string, number> = Object.fromEntries(Object.keys(TEMPLATE_KEYWORDS).map((name) => [name, 0]))
+  if (!lexicalActive('template-keywords')) return scores // lexicalMode: every score 0 → no keyword match
   for (const [name, keywords] of Object.entries(TEMPLATE_KEYWORDS)) {
     for (const keyword of keywords) {
       if (lower.includes(keyword)) scores[name]++

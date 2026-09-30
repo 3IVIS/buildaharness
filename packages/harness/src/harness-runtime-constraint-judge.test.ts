@@ -1,10 +1,22 @@
-import { describe, it, expect } from 'vitest'
+import { describe, it, expect, beforeAll, afterAll } from 'vitest'
 import { HarnessRuntime, type SemanticConstraintJudge } from './harness-runtime.js'
 import { OutputContractError, outputValidation } from './nodes/output-validation.js'
 import { OutputContract } from './state/output-contract.js'
 import { CallerState } from './state/caller-state.js'
 import type { Task } from './state/task-graph.js'
 import type { UpdateChannel } from './nodes/check-caller-updates.js'
+
+// These tests exercise the harness's lexical checks, which are off by default (lexical/lexical-off.ts),
+// so this file switches them on.
+let savedLexicalMode: string | undefined
+beforeAll(() => {
+  savedLexicalMode = process.env.HARNESS_LEXICAL_MODE
+  process.env.HARNESS_LEXICAL_MODE = 'enabled'
+})
+afterAll(() => {
+  if (savedLexicalMode === undefined) delete process.env.HARNESS_LEXICAL_MODE
+  else process.env.HARNESS_LEXICAL_MODE = savedLexicalMode
+})
 
 // semanticConstraintJudge: the host, not a word match, decides whether a finished reply breaks a caller constraint.
 

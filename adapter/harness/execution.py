@@ -8,6 +8,8 @@ from dataclasses import dataclass
 from datetime import UTC, datetime
 from typing import Any, Literal
 
+from .lexical_off import harness_lexical_active
+
 ReversibilityStrategy = Literal["snapshot", "git-revert", "patch-rollback", "ephemeral"]
 
 # Ordered most-specific first — the first matching pattern wins.
@@ -33,6 +35,8 @@ def _classify_system_error_symptom(message: str) -> str | None:
     (e.g. "file not found"), so this bridges the two before SYSTEM_ERROR
     evidence is written.
     """
+    if not harness_lexical_active("system-error-symptoms"):
+        return None
     lower = message.lower()
     for needles, symptom in _SYSTEM_ERROR_SYMPTOM_PATTERNS:
         if any(needle in lower for needle in needles):

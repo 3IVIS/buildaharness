@@ -12,6 +12,8 @@ from __future__ import annotations
 import sys
 from pathlib import Path
 
+import pytest
+
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
 from harness.diagnostics import Diagnostics
@@ -40,6 +42,13 @@ from harness.voi import (
     verification_adequacy_critic,
 )
 from harness.world_model import Belief, Observation, WorldModel
+
+
+@pytest.fixture(autouse=True)
+def _lexical_checks_on(monkeypatch):
+    """These tests exercise the harness's lexical checks, which are off by default (harness/lexical_off.py)."""
+    monkeypatch.setenv("HARNESS_LEXICAL_MODE", "enabled")
+
 
 # ── Helpers ───────────────────────────────────────────────────────────────────
 

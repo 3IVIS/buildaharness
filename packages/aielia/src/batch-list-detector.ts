@@ -1,4 +1,5 @@
 import { getConnectorWords } from './lexical/patterns.js'
+import { lexicalActive } from './lexical/lexical-mode.js'
 
 export interface BatchListDetection {
   /** Exact strings as they appeared in the list (marker/bullet stripped), in message order. */
@@ -71,6 +72,7 @@ function nameShapedContent(trimmedLine: string): string | null {
  * 3-item floor.
  */
 export function detectHomogeneousBatchList(message: string): BatchListDetection | null {
+  if (!lexicalActive('batch-list')) return null // lexicalMode: see lexical/lexical-mode.ts
   const lines = message.split('\n')
   let bestRun: string[] = []
   let currentRun: string[] = []

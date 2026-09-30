@@ -7,7 +7,7 @@ import { PersonalAssistant } from './assistant.js'
 import { createScriptedLLMClient } from './scripted-llm-client.js'
 import { runCli, type RunCliOptions, type CliInstance } from './cli.js'
 import { DEFAULT_CONFIG, type ConfigStore, type AssistantConfig } from './config.js'
-import { classifyRisk } from './risk-classifier.js'
+import { classifyRiskLexical } from './risk-classifier.js'
 import { PLAN_LINE_PREFIX } from './cli-icons.js'
 
 /**
@@ -46,7 +46,7 @@ function looksTrivial(message: string): boolean {
 
 function deriveTurnIntentJSON(messages: ChatMessage[]): string {
   const userContent = messages.find((m) => m.role === 'user')?.content ?? ''
-  const risk = classifyRisk(userContent)
+  const risk = classifyRiskLexical(userContent)
   return JSON.stringify({
     riskLevel: risk.riskLevel,
     riskReason: risk.reason,

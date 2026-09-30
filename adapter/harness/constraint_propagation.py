@@ -16,6 +16,7 @@ from .caller_state import CallerState, update_success_criteria
 from .contradiction import detect_contradictions
 from .evidence import EvidenceStore
 from .hypothesis import HypothesisSet
+from .lexical_off import harness_lexical_active
 from .output_contract import OutputContract, update_output_contract
 from .task_graph import Task, TaskGraph
 from .world_model import WorldModel
@@ -36,7 +37,8 @@ def revalidate_task_graph(
     """
     updated_criteria = set(caller_state.success_criteria)
 
-    if updated_criteria:
+    # HARNESS_LEXICAL criterion-scope: scope and coverage are judged by shared words; off → graph unchanged.
+    if updated_criteria and harness_lexical_active("criterion-scope"):
         for task in task_graph.tasks:
             if task.status == "COMPLETE":
                 continue

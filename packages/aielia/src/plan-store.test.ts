@@ -1,4 +1,4 @@
-import { describe, it, expect } from 'vitest'
+import { describe, it, expect, beforeAll, afterAll } from 'vitest'
 import { InMemoryAdapter, type FsBackend, type MemoryAdapter } from '@buildaharness/runtime'
 import {
   loadActivePlan,
@@ -20,6 +20,18 @@ import {
   type PlanFsPersistence,
 } from './plan-store.js'
 import type { Plan } from './plan-builder.js'
+
+// This file tests the 'task-cancel' lexical family, which is off by default (lexical/lexical-mode.ts), so it
+// switches just that family on.
+let savedLexicalOn: string | undefined
+beforeAll(() => {
+  savedLexicalOn = process.env.ASSISTANT_LEXICAL_ON
+  process.env.ASSISTANT_LEXICAL_ON = 'task-cancel'
+})
+afterAll(() => {
+  if (savedLexicalOn === undefined) delete process.env.ASSISTANT_LEXICAL_ON
+  else process.env.ASSISTANT_LEXICAL_ON = savedLexicalOn
+})
 
 /** In-memory FsBackend with a working `rename`, standing in for a real disk. */
 function makeFakeFsBackend(): FsBackend & { files: Map<string, string> } {

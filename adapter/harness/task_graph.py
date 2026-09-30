@@ -8,6 +8,7 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from typing import Any, Literal
 
+from .lexical_off import harness_lexical_active
 from .lexical_patterns import get_granularity_markers
 
 TaskStatus = Literal["PENDING", "ACTIVE", "VERIFYING", "COMPLETE", "FAILED", "BLOCKED"]
@@ -466,6 +467,10 @@ def check_abstraction_alignment(
     the score hasn't changed since the last computation in that case.
     """
     if not force and not task_graph.changed:
+        return 1.0
+    # HARNESS_LEXICAL granularity-markers: the granularity estimate is a keyword count; with it off the
+    # alignment reads neutral (1.0), the value an unchanged graph gets.
+    if not harness_lexical_active("granularity-markers"):
         return 1.0
 
     wm_granularity = estimate_world_model_granularity(world_model)

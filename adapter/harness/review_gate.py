@@ -5,6 +5,7 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from typing import Any, Literal
 
+from .lexical_off import harness_lexical_active
 from .lexical_patterns import get_review_negation_triggers
 from .script_utils import contains_cjk, tokenize
 
@@ -117,6 +118,8 @@ def check_output_contract(
 
     required_fields = getattr(output_contract, "required_interface_fields", [])
     change_desc = _get_change_description(proposed_change).lower()
+    if not harness_lexical_active("review-phrases"):  # "remove <field>" is a phrase match over free text
+        required_fields = []
 
     for field_name in required_fields:
         fn_lower = field_name.lower()
@@ -170,7 +173,7 @@ def check_code_quality(
     # In a real system this would invoke the linter; here we pass unless
     # the change explicitly marks itself as low-quality
     change_desc = _get_change_description(proposed_change).lower()
-    if "syntax error" in change_desc or "invalid code" in change_desc:
+    if harness_lexical_active("review-phrases") and ("syntax error" in change_desc or "invalid code" in change_desc):
         return DimensionResult(
             dimension="code_quality",
             passed=False,
@@ -323,6 +326,8 @@ def _is_negation(change_desc: str, belief_stmt: str) -> bool:
     shared_tokens gate already relies on (which needs no length cutoff at all, since a single shared
     CJK character is exactly as meaningful a signal there as a whole shared English word is here).
     """
+    if not harness_lexical_active("review-negation"):
+        return False
     if not belief_stmt or not change_desc:
         return False
     negation_patterns = [f"{trigger}{belief_stmt}" for trigger in _NEGATION_TRIGGERS]

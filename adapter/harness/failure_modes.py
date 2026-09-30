@@ -11,6 +11,7 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from typing import TYPE_CHECKING, Any
 
+from .lexical_off import harness_lexical_active
 from .recovery import StrategyType
 
 if TYPE_CHECKING:
@@ -72,6 +73,8 @@ class FailureModeLibrary:
         task_graph: Any,
     ) -> MatchResult:
         """Return the best-matching pattern result (advisory, read-only)."""
+        if not harness_lexical_active("failure-exact-match"):  # condition substrings over free text
+            return _no_match()
         beliefs: list[Any] = getattr(world_model, "beliefs", []) if world_model else []
         belief_statements = [getattr(b, "statement", "") for b in beliefs]
 

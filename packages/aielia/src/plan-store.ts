@@ -2,6 +2,7 @@ import type { FsBackend, MemoryAdapter } from '@buildaharness/runtime'
 import { containsCJK, tokenize, type TaskStatus } from '@buildaharness/harness'
 import type { Plan } from './plan-builder.js'
 import { getTaskCancelPatterns, testAny } from './lexical/patterns.js'
+import { lexicalActive } from './lexical/lexical-mode.js'
 
 // Storage-taxonomy note (Phase 5b): this is the personal-assistant's State tier ("what's true
 // now") — `plan:${sessionId}` records the currently-active task graph and its per-task status,
@@ -385,6 +386,7 @@ const { taskCancelVerbs: TASK_CANCEL_VERBS, taskReferenceMarker: TASK_REFERENCE_
  * message-level risk gate, same as today. Returns the first matching task in plan order, or null.
  */
 export function matchTaskCancelAttempt(message: string, plan: PlanRecord): TaskCancelMatch | null {
+  if (!lexicalActive('task-cancel')) return null // lexicalMode: see lexical/lexical-mode.ts
   if (!testAny(TASK_CANCEL_VERBS, message)) return null
   if (!testAny(TASK_REFERENCE_MARKER, message)) return null
   const lower = message.toLowerCase()

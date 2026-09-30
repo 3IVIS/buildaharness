@@ -114,6 +114,10 @@ function checkOutputContract(proposedChange: ProposedChange, outputContract: Out
   if (outputContract === null) {
     return { dimension: 'output_contract_precheck', passed: true, reason: 'No output contract provided' }
   }
+  // HARNESS_LEXICAL review-phrases: "remove <section>" is a phrase match over free text.
+  if (!harnessLexicalActive('review-phrases')) {
+    return { dimension: 'output_contract_precheck', passed: true, reason: 'Lexical phrase check switched off' }
+  }
   const changeDesc = getChangeDescription(proposedChange)
   for (const section of outputContract.required_sections) {
     const s = section.toLowerCase()
@@ -143,7 +147,7 @@ function checkCodeQuality(proposedChange: ProposedChange, toolManifest: Evidence
     return { dimension: 'code_quality', passed: true, reason: 'No linter available — code quality check skipped' }
   }
   const changeDesc = getChangeDescription(proposedChange)
-  if (changeDesc.includes('syntax error') || changeDesc.includes('invalid code')) {
+  if (harnessLexicalActive('review-phrases') && (changeDesc.includes('syntax error') || changeDesc.includes('invalid code'))) {
     return { dimension: 'code_quality', passed: false, reason: 'Change description indicates code quality issues' }
   }
   return { dimension: 'code_quality', passed: true, reason: 'Code quality check passed' }

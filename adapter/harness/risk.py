@@ -6,6 +6,8 @@ import re
 from dataclasses import dataclass
 from typing import Any, Literal
 
+from .lexical_off import harness_lexical_active
+
 RiskLevel = Literal["LOW", "MEDIUM", "HIGH"]
 
 
@@ -42,6 +44,10 @@ def compute_change_scope(task: Any) -> float:
     once a language decision lands in the sibling
     the internal plan. No action until that decision lands.
     """
+    # HARNESS_LEXICAL change-scope-keywords: keyword/regex counts over free text; off → 0.0, the value the TS
+    # twin always has (it never computes a text scope).
+    if not harness_lexical_active("change-scope-keywords"):
+        return 0.0
     description = str(getattr(task, "description", "") or "")
     score = 0.0
     # Functions/methods mentioned
