@@ -1,105 +1,71 @@
-"""Risk estimation — P5.1."""
+"""Risk estimation — P5.1.
+
+Twin of packages/harness/src/nodes/estimate-risk.ts. An action's risk comes from its module type first
+(`infrastructure` is always HIGH, `test` always LOW) and, for business logic, from a composite of how central the
+touched files are to the task graph's write domains and how large the change is (lines / functions touched).
+"""
 
 from __future__ import annotations
 
-import re
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from typing import Any, Literal
 
-from .lexical_off import harness_lexical_active
-
 RiskLevel = Literal["LOW", "MEDIUM", "HIGH"]
+RiskEstimate = RiskLevel
+ModuleType = Literal["test", "business_logic", "infrastructure"]
+
+MAX_LINES = 500
+MAX_FUNCTIONS = 20
+MODULE_SCORE_BUSINESS = 0.5
 
 
 @dataclass
-class RiskFactors:
-    file_centrality: float  # normalised [0,1]
-    change_scope: float  # normalised [0,1]
-    module_type_score: float  # 0.0=test, 0.5=utility, 1.0=core/infra
+class RiskableAction:
+    module_type: ModuleType
+    affected_files: list[str] | None = None
+    lines_affected: int | None = None
+    functions_affected: int | None = None
+    metadata: dict[str, Any] = field(default_factory=dict)
 
 
-def compute_file_centrality(file_path: str, world_model: Any) -> float:
-    """Count references to file_path in world model environment context; normalise by /50."""
-    if not file_path:
-        return 0.0
-    count = 0
-    for obs in getattr(world_model, "observations", []):
-        content = str(getattr(obs, "content", "") or "")
-        obs_str = str(getattr(obs, "obs", "") or "")
-        if file_path in content or file_path in obs_str:
-            count += 1
-    for belief in getattr(world_model, "beliefs", []):
-        stmt = str(getattr(belief, "statement", "") or "")
-        if file_path in stmt:
-            count += 1
-    return min(1.0, count / 50.0)
+def estimate_risk(action: RiskableAction, task_graph: Any, world_model: Any = None) -> RiskLevel:
+    """Risk of `action` (TS estimateRisk). HIGH results set `reduce_edit_size` and `increase_verification` on
+    `action.metadata`.
 
-
-def compute_change_scope(task: Any) -> float:
-    """Estimate scope from task description text.
-
-    English-only keyword/regex matching (deferred, per
-    the internal plan Phase 3 step 2): a scoring heuristic, not a hard
-    gate, so this rides the same JSON-pattern-store mechanism the rest of this repo already uses
-    once a language decision lands in the sibling
-    the internal plan. No action until that decision lands.
+    business_logic composite = 0.3 * file_centrality + 0.4 * change_scope + 0.3 * 0.5, where file_centrality is the
+    share of the graph's write domains that mention the touched files and change_scope averages
+    `lines_affected / 500` and `functions_affected / 20` (each capped at 1). HIGH >= 0.5, MEDIUM >= 0.3, else LOW.
     """
-    # HARNESS_LEXICAL change-scope-keywords: keyword/regex counts over free text; off → 0.0, the value the TS
-    # twin always has (it never computes a text scope).
-    if not harness_lexical_active("change-scope-keywords"):
-        return 0.0
-    description = str(getattr(task, "description", "") or "")
-    score = 0.0
-    # Functions/methods mentioned
-    score += len(re.findall(r"\bdef\b|\bfunction\b|\bmethod\b", description, re.IGNORECASE)) * 0.1
-    # File references (word.extension pattern)
-    score += len(re.findall(r"\w+\.\w+", description)) * 0.2
-    # Line ranges
-    score += len(re.findall(r"line\s+\d+", description, re.IGNORECASE)) * 0.05
-    return min(1.0, score / 10.0)
+    if action.module_type == "infrastructure":
+        action.metadata["reduce_edit_size"] = True
+        action.metadata["increase_verification"] = True
+        return "HIGH"
+    if action.module_type == "test":
+        return "LOW"
 
+    affected_files = action.affected_files or []
+    all_domains = [d for t in task_graph.tasks for d in t.parallel_write_domains]
+    file_centrality = (
+        0.0
+        if not affected_files
+        else sum(sum(1 for d in all_domains if f in d) for f in affected_files)
+        / (max(len(all_domains), 1) * len(affected_files))
+    )
 
-def classify_module_type(file_path: str) -> float:
-    """Classify based on path heuristics.
+    line_score = min(1.0, (action.lines_affected or 0) / MAX_LINES)
+    func_score = min(1.0, (action.functions_affected or 0) / MAX_FUNCTIONS)
+    change_scope = (line_score + func_score) / 2
 
-    Returns:
-        0.0 for test/spec files
-        0.5 for utility/helper/common/shared
-        1.0 for core/infra (default)
-    """
-    p = (file_path or "").lower()
-    if "test" in p or "spec" in p:
-        return 0.0
-    if any(x in p for x in ("util", "helper", "common", "shared")):
-        return 0.5
-    return 1.0
+    composite = 0.3 * file_centrality + 0.4 * change_scope + 0.3 * MODULE_SCORE_BUSINESS
 
-
-def estimate_risk(current_task: Any, world_model: Any) -> RiskLevel:
-    """Compute risk from 3 factors; updates task.risk_level as a side effect.
-
-    Weighted formula: 0.4 * centrality + 0.3 * scope + 0.3 * module_score
-    HIGH if score >= 0.7, MEDIUM if >= 0.4, else LOW.
-    """
-    task_file = str(getattr(current_task, "file_path", None) or "")
-    task_description = str(getattr(current_task, "description", "") or "")
-    path_to_use = task_file or task_description
-
-    centrality = compute_file_centrality(path_to_use, world_model)
-    scope = compute_change_scope(current_task)
-    module_score = classify_module_type(path_to_use)
-
-    score = 0.4 * centrality + 0.3 * scope + 0.3 * module_score
-
-    if score >= 0.7:
-        level: RiskLevel = "HIGH"
-    elif score >= 0.4:
-        level = "MEDIUM"
+    if composite >= 0.5:
+        risk: RiskLevel = "HIGH"
+    elif composite >= 0.3:
+        risk = "MEDIUM"
     else:
-        level = "LOW"
+        risk = "LOW"
 
-    # Side effect: update task.risk_level
-    if hasattr(current_task, "risk_level"):
-        current_task.risk_level = level
-
-    return level
+    if risk == "HIGH":
+        action.metadata["reduce_edit_size"] = True
+        action.metadata["increase_verification"] = True
+    return risk

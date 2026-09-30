@@ -11,11 +11,9 @@ import pytest
 from harness.caller_state import CallerState, update_success_criteria
 from harness.contradiction import detect_pairwise_contradictions, detect_set_level_contradictions
 from harness.lexical_off import HARNESS_LEXICAL_CHECKS, harness_lexical_active
-from harness.output_contract import OutputContract, check_caller_specific_constraints, check_required_sections
+from harness.output_contract import OutputContract, validate_output_contract
 from harness.preference_extractor import PreferenceSignal, make_preference_extractor
 from harness.review_gate import check_code_quality, check_world_model_consistency
-from harness.risk import compute_change_scope
-from harness.task_graph import Task
 from harness.world_model import Belief, WorldModel
 
 
@@ -89,15 +87,10 @@ def test_review_phrases(monkeypatch):
 def test_constraint_negation(monkeypatch):
     cs = CallerState(current_constraints=["Do not use tabs"])
     off, on = _both(
-        monkeypatch, "constraint-negation", lambda: check_caller_specific_constraints("I will not use tabs.", cs)
+        monkeypatch,
+        "constraint-negation",
+        lambda: validate_output_contract("I will not use tabs.", OutputContract(), cs).violations,
     )
-    assert off == []
-    assert on
-
-
-def test_required_sections_in_a_text_result(monkeypatch):
-    contract = OutputContract(required_sections=["Summary"])
-    off, on = _both(monkeypatch, "required-sections", lambda: check_required_sections("no heading here", contract))
     assert off == []
     assert on
 
@@ -119,10 +112,3 @@ def test_preference_patterns(monkeypatch):
     off, on = _both(monkeypatch, "preference-patterns", lambda: extract({"feedback_text": "please go faster"}))
     assert off.get("preference_updates", {}) == {}
     assert on["preference_updates"] == {"response_pace": "fast"}
-
-
-def test_change_scope_keywords(monkeypatch):
-    task = Task(id="t1", description="edit function parse in utils.py at line 40")
-    off, on = _both(monkeypatch, "change-scope-keywords", lambda: compute_change_scope(task))
-    assert off == 0.0
-    assert on > 0.0

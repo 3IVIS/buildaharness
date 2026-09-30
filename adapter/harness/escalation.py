@@ -376,14 +376,15 @@ def escalate(
     if hasattr(harness_run_state, "memory_state") and harness_run_state.memory_state is not None:
         ms = harness_run_state.memory_state
         if hasattr(ms, "journal"):
+            from .memory import JournalEntry
+
             ms.journal.append(
-                {
-                    "action_class": "escalation",
-                    "reason": surface_blocker.reason,
-                    "missing_info": surface_blocker.missing_info,
-                    "run_id": run_id,
-                    "escalated_at": surface_blocker.escalated_at.isoformat(),
-                }
+                JournalEntry(
+                    step=len(ms.journal),
+                    action_class="escalation",
+                    outcome=f"escalated:{surface_blocker.reason} (run {run_id})",
+                    success=False,
+                )
             )
 
     raise EscalationHalt(surface_blocker)

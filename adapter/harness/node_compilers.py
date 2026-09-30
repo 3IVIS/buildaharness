@@ -82,7 +82,7 @@ def compile_apply_tool_reliability(
         "_RELIABILITY_RANKS = {'LOW': 0, 'MEDIUM': 1, 'HIGH': 2}\n"
         "_RANK_TO_RELIABILITY = {0: 'LOW', 1: 'MEDIUM', 2: 'HIGH'}\n"
         "_new_entries = []\n"
-        f"for _e in list({evidence_store_var}.entries):\n"
+        f"for _e in list({evidence_store_var}.observations):\n"
         f"{type_filter}"
         "    _env = _get_envelope(_e.source)\n"
         "    if _env is not None:\n"
@@ -92,7 +92,7 @@ def compile_apply_tool_reliability(
         "            from dataclasses import replace as _dc_replace\n"
         "            _e = _dc_replace(_e, reliability=_RANK_TO_RELIABILITY[_cap_rank])\n"
         "    _new_entries.append(_e)\n"
-        f"{evidence_store_var}.entries = _new_entries\n"
+        f"{evidence_store_var}.observations = _new_entries\n"
         f"if isinstance({diagnostics_var}, dict):\n"
         f'    {diagnostics_var}.setdefault("verification_health", {{}})["feasibility"] = 1.0\n'
     )
@@ -121,12 +121,13 @@ def compile_update_world_model(
     base_code = (
         "from harness.world_model_ops import integrate_evidence as _integrate_evidence\n"
         "from harness.world_model_ops import recompute_belief_health as _recompute_belief_health\n"
+        "from harness.diagnostics import Diagnostics as _Diagnostics\n"
         # Track how many observations existed before integration so we only
         # return the NEW ones — the caller uses 'append' reducer to accumulate.
         f"_obs_before = len({world_model_var}.observations)\n"
         f"_integrate_evidence({evidence_store_var}, {world_model_var},"
         f" reliability_threshold={reliability_threshold!r})\n"
-        f"_recompute_belief_health({world_model_var})\n"
+        f"_recompute_belief_health({world_model_var}, _Diagnostics())\n"
         "from harness.world_model_ops import bump_generation as _bump_generation\n"
         f"_bump_generation({world_model_var})\n"
         f"_new_obs_dicts = [{{'id': _o.id, 'content': _o.content, 'source': _o.source}}"
@@ -214,14 +215,16 @@ def compile_hypothesis_set_node(
     max_hyps: int = config.get("max_hypotheses_shown", 5)
 
     return (
-        "from harness.hypothesis import generate_hypotheses as _generate_hypotheses\n"
+        "from harness.failure_modes import FailureDiagnostics as _FailureDiagnostics\n"
+        "from harness.failure_modes import build_default_library as _build_default_library\n"
+        "from harness.hypothesis import generate_update_hypotheses as _generate_update_hypotheses\n"
         "from harness.hypothesis import compute_diversity_score as _compute_diversity_score\n"
         "from harness.hypothesis import HypothesisSet as _HypothesisSet\n"
-        f"_new_hyps = _generate_hypotheses({world_model_var}, {evidence_store_var})\n"
+        "from harness.memory import MemoryState as _MemoryState\n"
         f"if {hypothesis_set_var} is None:\n"
-        f"    {hypothesis_set_var} = _HypothesisSet(active=_new_hyps)\n"
-        f"else:\n"
-        f"    {hypothesis_set_var}.active.extend(_new_hyps)\n"
+        f"    {hypothesis_set_var} = _HypothesisSet()\n"
+        f"_generate_update_hypotheses({world_model_var}, {evidence_store_var}, {hypothesis_set_var},"
+        f" _FailureDiagnostics(failure_mode_library=_build_default_library()), _MemoryState())\n"
         f"_diversity_score = _compute_diversity_score({hypothesis_set_var})\n"
         f"{output_var} = {{\n"
         f'    "active_count": len({hypothesis_set_var}.active),\n'
@@ -427,21 +430,28 @@ def compile_reviewer_pass_node(
 ) -> str:
     """Generate code for a reviewer_pass canvas node.
 
-    Emits a call to reviewer_pass() from P9.2, then wires the tasks_reopened
-    flag to a loop re-entry signal for the run engine.
+    Emits a call to reviewer_pass() from P9.2 with default scratch state for the parts a canvas node does not
+    carry, then wires the reopened task ids to a loop re-entry signal for the run engine.
     """
     return (
+        "from harness.belief_graph import BeliefDepGraph as _BeliefDepGraph\n"
+        "from harness.belief_graph import DepGraphBudget as _DepGraphBudget\n"
+        "from harness.diagnostics import Diagnostics as _Diagnostics\n"
+        "from harness.evidence import EvidenceStore as _EvidenceStore\n"
+        "from harness.failure_modes import FailureDiagnostics as _FailureDiagnostics\n"
+        "from harness.reviewer import PropagationQueue as _PropagationQueue\n"
         "from harness.reviewer import reviewer_pass as _reviewer_pass\n"
         f"{output_var} = _reviewer_pass(\n"
-        f"    world_model={world_model_var},\n"
-        f"    task_graph={task_graph_var},\n"
-        f"    success_criteria=[],\n"
-        f"    output_contract=None,\n"
-        f"    hypothesis_set={hypothesis_set_var},\n"
-        f"    evidence_store=None,\n"
-        f"    caller_state=None,\n"
-        f"    belief_dep_graph=None,\n"
-        f"    failure_history=None,\n"
+        f"    {world_model_var},\n"
+        f"    [],\n"
+        f"    _FailureDiagnostics(),\n"
+        f"    _BeliefDepGraph(),\n"
+        f"    _DepGraphBudget(),\n"
+        f"    {hypothesis_set_var},\n"
+        f"    {task_graph_var},\n"
+        f"    _Diagnostics(),\n"
+        f"    _EvidenceStore(),\n"
+        f"    _PropagationQueue(),\n"
         f")\n"
         f"_tasks_reopened = bool({output_var}.reopened_task_ids)\n"
     )

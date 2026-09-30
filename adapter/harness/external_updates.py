@@ -106,6 +106,52 @@ class PostgresNotifyChannel(UpdateChannel):
         return None
 
 
+def take_budget_answers(payload: dict[str, Any], memory_state: Any, task_graph: Any) -> dict[str, Any] | None:
+    """Act on the user's answer to the budget_exhausted question and remove it from the update (TS takeBudgetAnswers).
+
+    An answer to the budget question is a CONTROL action, not a scope constraint, so it never reaches the constraint
+    pipeline. Options are recognised by the exact labels the question builder produced:
+      - "Continue with N more steps": memory_state.max_steps grows by DEFAULT_BUDGET_EXTENSION;
+      - "Stop and summarize progress so far": every unfinished task is cancelled (`goal_cancelled`);
+      - "Let me clarify the goal": no budget effect; the answer stays a constraint.
+    Returns the update without the budget answers, or None when nothing else was in it.
+    """
+    from .ask_question import DEFAULT_BUDGET_EXTENSION, build_budget_exhausted_question
+    from .constraint_propagation import cancel_task_graph
+
+    answers = payload.get("clarification_answers")
+    if not isinstance(answers, list):
+        return payload
+
+    template = build_budget_exhausted_question(0)
+    assert template.options is not None
+    continue_label, stop_label = template.options[0].label, template.options[1].label
+
+    def question_id(a: Any) -> Any:
+        return a.get("questionId") if isinstance(a, dict) else getattr(a, "question_id", None)
+
+    def labels(a: Any) -> Any:
+        return a.get("selectedLabels") if isinstance(a, dict) else getattr(a, "selected_labels", None)
+
+    budget = [a for a in answers if question_id(a) == template.id]
+    if not budget:
+        return payload
+    for answer in budget:
+        selected = labels(answer)
+        if not isinstance(selected, list):
+            continue
+        if continue_label in selected:
+            if memory_state is not None:
+                memory_state.max_steps += DEFAULT_BUDGET_EXTENSION
+        elif stop_label in selected and task_graph is not None:
+            cancel_task_graph(task_graph)
+
+    rest = [a for a in answers if question_id(a) != template.id]
+    if not rest:
+        return None
+    return {**payload, "clarification_answers": rest}
+
+
 def check_external_updates(
     channel: UpdateChannel,
     caller_state: Any,
@@ -113,6 +159,7 @@ def check_external_updates(
     task_graph: Any,
     diagnostics: Any,
     output_contract: Any | None = None,
+    memory_state: Any | None = None,
 ) -> bool:
     """Non-blocking poll for external constraint updates.
 
@@ -138,6 +185,12 @@ def check_external_updates(
 
     if update is None:
         return False
+
+    remaining = take_budget_answers(update.payload, memory_state, task_graph)
+    if remaining is None:
+        return False  # the whole update was an answer to the budget question, handled as a control action
+    if remaining is not update.payload:
+        update = PendingUpdate(update_type=update.update_type, payload=remaining, received_at=update.received_at)
 
     inject_clarification(caller_state, update.payload)
 

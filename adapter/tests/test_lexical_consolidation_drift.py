@@ -2,8 +2,7 @@
 Regression tests for the lexical-pattern consolidation done as Phase 0 of
 the internal plan — proves the fixes actually changed consumer behavior
 (not just that the shared getters return the expected content, already covered in
-test_script_utils.py), and drift-guards that reviewer.py/hypothesis.py now share one negation-word
-set instead of two independently-hardcoded, drifted copies.
+test_script_utils.py).
 
 Run: pytest adapter/tests/test_lexical_consolidation_drift.py -v
 """
@@ -19,14 +18,10 @@ import pytest
 
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
-from harness import hypothesis as hypothesis_module
-from harness import reviewer as reviewer_module
 from harness.caller_state import CallerState
 from harness.contradiction import detect_abstraction_contradictions
-from harness.evidence import Evidence, EvidenceStore, EvidenceType, ReliabilityClass
-from harness.hypothesis import Hypothesis, check_contradicting_evidence
-from harness.output_contract import check_caller_specific_constraints
-from harness.reviewer import reviewer_lens
+from harness.evidence import Evidence, EvidenceType, ReliabilityClass
+from harness.output_contract import OutputContract, validate_output_contract
 from harness.task_graph import estimate_world_model_granularity
 from harness.world_model import Belief, WorldModel
 
@@ -52,53 +47,13 @@ def _evidence(obs: str, reliability: str = "HIGH") -> Evidence:
     )
 
 
-def test_reviewer_and_hypothesis_share_one_evidence_negation_word_set():
-    """Drift-guard: both modules now read the same lexical_patterns.get_evidence_negation_words()
-    at import time, rather than each hardcoding its own (previously-drifted) copy."""
-    assert reviewer_module._EVIDENCE_NEGATION_WORDS == hypothesis_module._EVIDENCE_NEGATION_WORDS
-    assert "unavailable" in reviewer_module._EVIDENCE_NEGATION_WORDS
-
-
-def test_reviewer_lens_now_detects_unavailable_as_negation():
-    """Regression: reviewer.py's own negation_keywords set used to be missing "unavailable"
-    (present in hypothesis.py's identical-purpose set) — a HIGH-reliability "service unavailable"
-    observation contradicting a "service is available" belief was silently never flagged."""
-    wm = WorldModel()
-    belief = _belief("the payment service is available")
-    wm.beliefs.append(belief)
-
-    es = EvidenceStore()
-    es.entries.append(_evidence("the payment service is currently unavailable"))
-
-    findings = reviewer_lens(world_model=wm, output_contract=None, task_graph=None, evidence_store=es)
-    gap_findings = [f for f in findings if f.finding_type == "gap"]
-    assert len(gap_findings) == 1, (
-        f"expected reviewer_lens to flag the unavailable/available contradiction, got: {findings}"
-    )
-
-
-def test_check_contradicting_evidence_still_detects_unavailable():
-    """hypothesis.py's own set already had "unavailable" before this consolidation — regression
-    guard that migrating it to the shared source didn't narrow it."""
-    hyp = Hypothesis(
-        id="h1",
-        explanation="the payment service is available",
-        confidence=0.6,
-        predicted_observations=["the payment service is available"],
-        discriminating_evidence=[],
-        generation_sources=["symptom_inference"],
-    )
-    es = EvidenceStore()
-    es.entries.append(_evidence("the payment service is currently unavailable"))
-    assert check_contradicting_evidence(hyp, es) is True
-
-
 def test_check_caller_specific_constraints_still_works_after_migration():
-    """output_contract.py's check_caller_specific_constraints now reads
-    lexical_patterns.get_constraint_negation_words() instead of its own hardcoded copy — regression
-    guard that the end-to-end constraint-violation check still works unchanged."""
+    """output_contract.py's caller-constraint check reads lexical_patterns.get_constraint_negation_words()
+    instead of its own hardcoded copy — regression guard that the end-to-end constraint-violation check still works."""
     caller_state = CallerState(current_constraints=["must not mention pricing details"])
-    violations = check_caller_specific_constraints("Our pricing details are $10/month.", caller_state)
+    violations = validate_output_contract(
+        "Our pricing details are $10/month.", OutputContract(), caller_state
+    ).violations
     assert len(violations) == 1
     assert "must not mention pricing details" in violations[0]
 

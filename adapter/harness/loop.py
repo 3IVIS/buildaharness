@@ -58,11 +58,18 @@ from .escalation import (
 from .external_updates import NoOpUpdateChannel, UpdateChannel, check_external_updates
 from .gates import action_gate, decomposition_gate, post_exec_gate
 from .investigation import count_investigations
-from .memory import MemoryState, apply_retention_policy, check_max_steps, compress_memory, should_compress
+from .memory import (
+    JournalEntry,
+    MemoryState,
+    apply_retention_policy,
+    check_max_steps,
+    compress_memory,
+    should_compress,
+)
 from .policy import select_best_action
 from .progress import cannot_make_progress
 from .recovery import STRATEGY_ORDER, RecoveryBudget, StrategyState, switch_strategy
-from .replanning import ReplanScope, apply_replan, assess_replan_scope, requeue_failed_leaves
+from .replanning import apply_replan, requeue_failed_leaves
 from .staleness import increment_generation_id
 from .supervisor import SupervisorDirective, supervisor_enabled
 from .verification import verify
@@ -205,7 +212,7 @@ def _build_surface_blocker(
     current_task_summary = "No active task"
     if task_graph is not None and hasattr(task_graph, "tasks"):
         for t in task_graph.tasks:
-            if getattr(t, "status", None) == "ACTIVE":
+            if getattr(t, "status", None) == "RUNNING":
                 current_task_summary = f"Task {t.id}: {t.description}"
                 break
         if current_task_summary == "No active task":
@@ -337,6 +344,7 @@ def run_one_iteration(
             task_graph,
             diagnostics,
             output_contract=output_contract,
+            memory_state=memory_state,
         )
         # If an update was applied, control_state will be re-resolved in Sub-step A
         # (generation_id was already incremented by check_external_updates)
@@ -345,10 +353,14 @@ def run_one_iteration(
 
     if memory_state is not None:
         # P6.5 — compression trigger
-        if should_compress(world_model, memory_state):
-            compress_memory(world_model, memory_state)
+        if should_compress(memory_state):
+            result = compress_memory(memory_state)
+            memory_state.compression_risk.compressed_structures.extend(result.dropped)
+            memory_state.compression_risk.pruned_regions.extend(result.pruned)
             increment_generation_id(world_model)
-            memory_state.journal.append({"event": "compression", "step": step_count, "outcome": "pass"})
+            memory_state.journal.append(
+                JournalEntry(step=step_count, action_class="compression", outcome="completed", success=True)
+            )
 
         # P6.6 — budget check
         budget_status = check_max_steps(step_count, memory_state, diagnostics)
@@ -380,11 +392,13 @@ def run_one_iteration(
                 "step_count": step_count,
             }
         if budget_status == "warn":
-            memory_state.journal.append({"event": "budget_warn", "step": step_count, "outcome": "pass"})
+            memory_state.journal.append(
+                JournalEntry(step=step_count, action_class="budget_warn", outcome="completed", success=True)
+            )
 
     # P6.1/P6.2 — stall detection and strategy switch
     if strategy_state is not None and failure_diagnostics is not None and task_graph is not None:
-        if cannot_make_progress(strategy_state, failure_diagnostics, task_graph):
+        if cannot_make_progress(strategy_state, failure_diagnostics):
             # Recovery budget (Phase 2): checked BEFORE switching, not after — an exhausted
             # budget escalates instead of taking one more revision it can't afford. This is
             # additional to (not instead of) the existing STRATEGY_ORDER-length bound below.
@@ -594,21 +608,12 @@ def run_one_iteration(
                             "step_count": step_count,
                         }
 
-            # P6.4 — replan on stall (treat as local scope with no specific contradiction).
-            # Skipped when the supervisor already did a GLOBAL REFRAME_PLAN this iteration.
+            # P6.4 — replan on stall. In TS a stall (cannot_make_progress) is a GLOBAL replan — the graph is rebuilt
+            # from success criteria + beliefs (rollbackAndReplan's `noProgress` branch). Skipped when the supervisor
+            # already did a GLOBAL REFRAME_PLAN this iteration.
             if caller_state is not None and not supervisor_reframed:
-                contradiction = type("_C", (), {"scope": "local"})()
-                current_task = None
-                try:
-                    from .task_graph import select_unblocked_leaf
-
-                    current_task = select_unblocked_leaf(task_graph)
-                except Exception:
-                    pass
-                if current_task is not None:
-                    scope: ReplanScope = assess_replan_scope(contradiction, task_graph)
-                    task_graph = apply_replan(scope, contradiction, current_task, task_graph, world_model, caller_state)
-                    increment_generation_id(world_model)
+                task_graph = apply_replan("GLOBAL", None, None, task_graph, world_model, caller_state)
+                increment_generation_id(world_model)
 
                 # Trajectory Supervisor lever 1 (S8) — a REDIRECT_STRATEGY directive means
                 # "retry this task under a different strategy". The LOCAL replan above only
@@ -708,7 +713,7 @@ def run_one_iteration(
 
     # P6.6 — journal retention at end of step
     if memory_state is not None:
-        memory_state.journal = apply_retention_policy(memory_state.journal, memory_state.journal_retention_policy)
+        apply_retention_policy(memory_state)
 
     # Track risk state history for oscillation proxy — risk_summary() derives the legacy
     # three-way NORMAL/CAUTIOUS/BLOCKED reading progress.py's oscillation proxy expects
@@ -737,28 +742,40 @@ def run_one_iteration(
         detect_contradictions(world_model, evidence_store, hypothesis_set, None)
 
     if failure_diagnostics is not None:
-        match_result = failure_diagnostics.failure_mode_library.match(world_model, hypothesis_set, task_graph)
-        failure_diagnostics.matched_pattern = match_result if match_result.matched else None
+        symptoms = [o.content for o in world_model.observations]
+        failure_diagnostics.matched_pattern = failure_diagnostics.failure_mode_library.match(symptoms)
 
     # ── P9 — reviewer pass after post_exec_gate ───────────────────────────────
     review_result: Any = None
     tasks_reopened = False
 
     if belief_dep_graph is not None and output_contract is not None:
-        from .reviewer import reviewer_pass
+        from .belief_graph import DepGraphBudget
+        from .evidence import EvidenceStore
+        from .failure_modes import FailureDiagnostics
+        from .hypothesis import HypothesisSet
+        from .reviewer import PropagationQueue, reviewer_pass
 
         sc_list = getattr(caller_state, "success_criteria", []) if caller_state else []
         review_result = reviewer_pass(
-            world_model=world_model,
-            task_graph=task_graph,
-            success_criteria=sc_list,
-            output_contract=output_contract,
-            hypothesis_set=hypothesis_set,
-            evidence_store=evidence_store,
-            caller_state=caller_state,
-            belief_dep_graph=belief_dep_graph,
-            failure_history=failure_diagnostics,
+            world_model,
+            sc_list,
+            failure_diagnostics if failure_diagnostics is not None else FailureDiagnostics(),
+            belief_dep_graph,
+            DepGraphBudget(),
+            hypothesis_set if hypothesis_set is not None else HypothesisSet(),
+            task_graph,
+            diagnostics,
+            evidence_store if evidence_store is not None else EvidenceStore(),
+            PropagationQueue(),
         )
+        # The pass only reports which COMPLETE tasks a finding reopens; the caller puts them back to PENDING
+        # (TS runtime does the same before its second main-loop pass).
+        for reopened_id in review_result.reopened_task_ids:
+            reopened_task = task_graph.get_task(reopened_id)
+            if reopened_task is not None:
+                reopened_task.status = "PENDING"
+                task_graph.changed = True
         tasks_reopened = review_result.tasks_reopened
 
         # Phase I / INV-18: hand this iteration's verdict to the *next* iteration's

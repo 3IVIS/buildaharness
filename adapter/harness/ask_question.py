@@ -142,14 +142,16 @@ def ask_question(
 #
 # Static, templated question content for the two deterministic (non-supervisor) halt
 # sites the internal plan's Q7 wires: budget_exhausted (loop.py)
-# and review_failure (output_contract.py). Both builders are pure and add no LLM call —
+# and review_failure (the review gate). Both builders are pure and add no LLM call —
 # the options are fixed text (budget_exhausted) or mechanically derived from a caller's
 # already-computed diagnostics (review_failure), never drafted by a model.
 
-_DEFAULT_BUDGET_EXTENSION_STEPS = 10
+# How many steps the budget question's "Continue" option adds. Shared with the harness's answer handling
+# (external_updates.take_budget_answers) so the label and the effect cannot drift (TS DEFAULT_BUDGET_EXTENSION).
+DEFAULT_BUDGET_EXTENSION = 10
 
 
-def build_budget_exhausted_question(step_count: int, extension: int = _DEFAULT_BUDGET_EXTENSION_STEPS) -> AskQuestion:
+def build_budget_exhausted_question(step_count: int, extension: int = DEFAULT_BUDGET_EXTENSION) -> AskQuestion:
     """Static options for a budget_exhausted halt — zero extra LLM cost.
 
     A genuinely discrete, enumerable set of resolutions exists here (per Q7's scope), so
@@ -167,46 +169,39 @@ def build_budget_exhausted_question(step_count: int, extension: int = _DEFAULT_B
     )
 
 
-# Maps the category prefix each output_contract.py check_* function stamps onto its own
-# violation strings (see check_format_requirements/check_required_sections/
-# check_interface_constraints/check_caller_specific_constraints) to a static, human-facing
-# candidate fix. Adding a new check_* category later just needs an entry here to become
-# askable; until then its violations still surface via missing_info as they do today.
-_REVIEW_VIOLATION_FIXES: dict[str, str] = {
-    "format_requirements": "Adjust the output to match the required format",
-    "required_sections": "Add the missing required section(s) to the output",
-    "interface_constraints": "Fix the interface field(s) that are missing or have the wrong type",
-    "caller_constraint": "Revise the output to satisfy the caller-specific constraint(s)",
+# Twin of REVIEW_DIMENSION_FIXES in packages/harness/src/nodes/review-proposed-change.ts: each review dimension
+# (review_gate.py's DimensionResult.dimension) maps to a static, human-facing candidate fix.
+_REVIEW_DIMENSION_FIXES: dict[str, str] = {
+    "task_alignment": "Revise the proposed change to align with the current task description",
+    "world_model_consistency": "Resolve the conflict with existing high-confidence beliefs before proceeding",
+    "output_contract_precheck": "Adjust the proposed change to satisfy the output contract",
+    "code_quality": "Address the code-quality issue before proceeding",
+    "hypothesis_compatibility": "Reconcile the change with the active hypothesis predictions",
 }
 
 
-def diagnose_review_failure_options(violations: Sequence[str]) -> list[AskQuestionOption] | None:
-    """Deterministically categorize output-contract violations into candidate fixes (Q7).
+def diagnose_review_failure_options(failed_dimensions: Sequence[Any]) -> list[AskQuestionOption] | None:
+    """Candidate fixes for a failed review, one per distinct failed review dimension (TS diagnoseReviewFailureOptions).
 
-    Groups `validate_output_contract()`'s violation strings by the dimension-prefix each
-    check_* function already stamps on them, and returns one static, templated fix option
-    per distinct category present — no LLM call, nothing drafted from the violation text
-    itself. Returns None (not an empty list) when fewer than two distinct categories are
-    present (a single diagnosed problem isn't "more than one plausible fix" — Q7's scope
-    text) or when there are more categories than Q0's 4-option-per-question ceiling can
-    hold (silently dropping one would be worse than falling back) — both cases leave the
-    call site to fall back to today's plain missing_info halt, unchanged.
+    `failed_dimensions` are the review gate's DimensionResult objects. Returns one static, templated fix option per
+    distinct dimension, in order of first appearance — no LLM call, nothing drafted from the reason text. Returns None
+    (not an empty list) with fewer than two distinct dimensions (a single diagnosed problem is not "more than one
+    plausible fix") or more than MAX_OPTIONS_PER_QUESTION (silently dropping one would be worse than falling back);
+    the call site then falls back to the plain missing_info halt.
     """
-    categories: list[str] = []
-    for v in violations:
-        prefix = v.split(":", 1)[0].strip()
-        key = "caller_constraint" if prefix.startswith("caller_constraint") else prefix
-        if key in _REVIEW_VIOLATION_FIXES and key not in categories:
-            categories.append(key)
-    if len(categories) < 2 or len(categories) > MAX_OPTIONS_PER_QUESTION:
+    distinct: list[str] = []
+    for d in failed_dimensions:
+        if d.dimension not in distinct:
+            distinct.append(d.dimension)
+    if len(distinct) < 2 or len(distinct) > MAX_OPTIONS_PER_QUESTION:
         return None
-    return [AskQuestionOption(label=_REVIEW_VIOLATION_FIXES[c]) for c in categories]
+    return [AskQuestionOption(label=_REVIEW_DIMENSION_FIXES[d]) for d in distinct]
 
 
 def build_review_failure_question(options: Sequence[AskQuestionOption]) -> AskQuestion:
     """Wrap diagnose_review_failure_options()'s output into an AskQuestion. Pure."""
     return AskQuestion(
         id="review-failure-resolution",
-        question="The output failed review. Which fix should I apply?",
+        question="The proposed change failed review. Which fix should I apply?",
         options=list(options),
     )

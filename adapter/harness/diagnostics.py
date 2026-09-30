@@ -175,96 +175,131 @@ class Diagnostics:
         )
 
 
+_RELIABILITY_WEIGHT: dict[str, float] = {"HIGH": 1.0, "MEDIUM": 0.5, "LOW": 0.0}
+
+
+def _dep_class_gap_annotation(task_graph: Any) -> str:
+    levels = sorted({t.abstraction_level for t in task_graph.tasks})
+    if len(levels) <= 1:
+        return ""
+    gaps = [
+        f"gap between level {levels[i - 1]} and {levels[i]}"
+        for i in range(1, len(levels))
+        if levels[i] - levels[i - 1] > 1
+    ]
+    return f"Abstraction class gaps detected: {', '.join(gaps)}" if gaps else ""
+
+
 def update_diagnostics(
-    diagnostics: Diagnostics,
     world_model: Any,
     hypothesis_set: Any,
-    evidence_store: Any,
-    task_graph: Any | None = None,
-    execution_journal: list[dict[str, Any]] | None = None,
+    task_graph: Any,
+    failure_diagnostics: Any,
+    dep_graph: Any,
+    diagnostics: Diagnostics,
     force: bool = False,
 ) -> None:
-    """Recompute all ten sub-dimensions from current system state in a single pass.
+    """Recompute every sub-dimension from current state in a single pass (TS updateDiagnostics).
 
-    force=True causes check_abstraction_alignment to run regardless of
-    task_graph.changed — used by the P9 reviewer pass.
+    * belief_health: freshness = 1 - stale/beliefs; consistency = 1 - min(1, contradictions/beliefs); support =
+      mean reliability weight (HIGH 1.0 / MEDIUM 0.5 / LOW 0.0; default MEDIUM);
+    * coverage_health: symptom_coverage = min(1, #active hypotheses / max(#observations, 1)); explanation_coverage
+      = source-entropy of the active hypotheses;
+    * verification_health: strength = 1 - dep_graph.unverified_edge_ratio; feasibility = composite of tool adequacy,
+      evidence adequacy and abstraction fit (weights 1, 1, 0.3);
+    * execution_health (over the task graph): progress_rate = complete / attempted once attempted >=
+      EXECUTION_RATIO_MIN_ATTEMPTS (else neutral 1.0); failure_recurrence = min(1, failures / 10); oscillation =
+      failed / total (same minimum sample);
+    * matched_pattern from the failure-mode library over the world model's observations, and the advisory
+      dep_class_gap_annotation.
+
+    `force=True` makes check_abstraction_alignment recompute even when the task graph is unchanged (reviewer pass).
     """
-    execution_journal = execution_journal or []
+    from .hypothesis import compute_source_entropy
+    from .task_graph import check_abstraction_alignment
 
-    # ── belief_health ────────────────────────────────────────────────────────
-    stale_flag_ratio: float = getattr(world_model, "stale_flag_ratio", 0.0)
-    diagnostics.belief_health.freshness = max(0.0, min(1.0, 1.0 - stale_flag_ratio))
+    belief_count = len(world_model.beliefs)
 
-    belief_count = max(1, len(world_model.beliefs))
-    contradiction_density = len(world_model.contradictions) / belief_count
-    diagnostics.belief_health.consistency = max(0.0, min(1.0, 1.0 - contradiction_density))
+    # belief_health
+    stale_ratio = sum(1 for v in world_model.stale_flags.values() if v) / max(1, belief_count)
+    freshness = normalise(1 - stale_ratio, "ratio")
+    assert_normalised(freshness, "belief_health.freshness")
 
-    proxies: dict[str, float] = getattr(world_model, "belief_health_proxies", {})
-    diagnostics.belief_health.support = proxies.get("support", 1.0)
+    density = min(1.0, len(world_model.contradictions) / belief_count) if belief_count > 0 else 0.0
+    consistency = normalise(1 - density, "ratio")
+    assert_normalised(consistency, "belief_health.consistency")
 
-    # ── coverage_health ──────────────────────────────────────────────────────
-    hypotheses = getattr(hypothesis_set, "hypotheses", [])
+    mean_support = (
+        sum(_RELIABILITY_WEIGHT.get(b.reliability or "MEDIUM", 0.5) for b in world_model.beliefs) / belief_count
+        if belief_count > 0
+        else 1.0
+    )
+    support = normalise(mean_support, "ratio")
+    assert_normalised(support, "belief_health.support")
 
-    all_symptoms: set[str] = set()
-    explained_symptoms: set[str] = set()
-    for h in hypotheses:
-        for s in getattr(h, "target_symptoms", []):
-            all_symptoms.add(s)
-            explained_symptoms.add(s)
-    if hasattr(evidence_store, "entries"):
-        for e in evidence_store.entries:
-            tag = getattr(e, "symptom_tag", None)
-            if tag:
-                all_symptoms.add(tag)
+    diagnostics.belief_health.freshness = freshness
+    diagnostics.belief_health.consistency = consistency
+    diagnostics.belief_health.support = support
 
-    diagnostics.coverage_health.symptom_coverage = len(explained_symptoms) / len(all_symptoms) if all_symptoms else 1.0
+    # coverage_health
+    n_active = len(hypothesis_set.active)
+    symptom_coverage = normalise(
+        min(1.0, n_active / max(len(world_model.observations), 1)) if n_active > 0 else 0.0, "ratio"
+    )
+    assert_normalised(symptom_coverage, "coverage_health.symptom_coverage")
+    explanation_coverage = normalise(compute_source_entropy(hypothesis_set), "ratio")
+    assert_normalised(explanation_coverage, "coverage_health.explanation_coverage")
+    diagnostics.coverage_health.symptom_coverage = symptom_coverage
+    diagnostics.coverage_health.explanation_coverage = explanation_coverage
 
-    if hypotheses:
-        covered = sum(
-            1
-            for h in hypotheses
-            if getattr(h, "discriminating_evidence", None) or getattr(h, "supporting_evidence", [])
+    # verification_health
+    strength = normalise(1 - dep_graph.unverified_edge_ratio, "ratio")
+    assert_normalised(strength, "verification_health.strength")
+
+    abstraction_fit = check_abstraction_alignment(task_graph, world_model, force)
+    tool_adequacy = normalise(0.8 if world_model.completeness_flags else 0.6, "ratio")
+    evidence_adequacy = normalise(0.8 if world_model.observations else 0.4, "ratio")
+    feasibility = normalise(
+        {"components": [tool_adequacy, evidence_adequacy, abstraction_fit], "weights": [1, 1, 0.3]}, "composite"
+    )
+    assert_normalised(feasibility, "verification_health.feasibility")
+    diagnostics.verification_health.strength = strength
+    diagnostics.verification_health.feasibility = feasibility
+
+    # execution_health — success rate of tasks *attempted* so far, neutral below the minimum sample so a single
+    # failed attempt of a single-task turn (0/1 = 0) cannot trip Tier 2 before recovery can retry once.
+    total_tasks = len(task_graph.tasks)
+    completed = sum(1 for t in task_graph.tasks if t.status == "COMPLETE")
+    failed = sum(1 for t in task_graph.tasks if t.status == "FAILED")
+    attempted = completed + failed
+    enough = attempted >= EXECUTION_RATIO_MIN_ATTEMPTS
+
+    progress_rate = normalise(completed / attempted if enough else 1.0, "ratio")
+    assert_normalised(progress_rate, "execution_health.progress_rate")
+    failure_recurrence = normalise(min(1.0, len(failure_diagnostics.failure_history) / 10), "ratio")
+    assert_normalised(failure_recurrence, "execution_health.failure_recurrence")
+    oscillation = normalise(failed / total_tasks if total_tasks > 0 and enough else 0.0, "ratio")
+    assert_normalised(oscillation, "execution_health.oscillation_score")
+    diagnostics.execution_health.progress_rate = progress_rate
+    diagnostics.execution_health.failure_recurrence = failure_recurrence
+    diagnostics.execution_health.oscillation_score = oscillation
+
+    # failure_mode_library match over the observed symptoms
+    from .failure_modes import MatchResult
+
+    match = failure_diagnostics.failure_mode_library.match([o.content for o in world_model.observations])
+    if match is not None:
+        failure_diagnostics.matched_pattern = MatchResult(
+            failure_class=match.failure_class,
+            confidence=normalise(match.confidence, "match_confidence"),
+            matched_pattern=match.matched_pattern,
+            strategy_affinity=match.strategy_affinity,
         )
-        diagnostics.coverage_health.explanation_coverage = covered / len(hypotheses)
     else:
-        diagnostics.coverage_health.explanation_coverage = 1.0
+        failure_diagnostics.matched_pattern = None
 
-    # ── verification_health ───────────────────────────────────────────────────
-    # strength is updated by P5.5; feasibility gets a 0.3-weighted contribution
-    # from abstraction alignment (P4.4) when the task graph has changed.
-    if task_graph is not None and (force or getattr(task_graph, "changed", False)):
-        from .task_graph import check_abstraction_alignment  # avoid circular import
-
-        alignment_score = check_abstraction_alignment(task_graph, world_model, force=True)
-        current_feasibility = diagnostics.verification_health.feasibility
-        diagnostics.verification_health.feasibility = max(
-            0.0, min(1.0, 0.3 * alignment_score + 0.7 * current_feasibility)
-        )
-
-    # ── execution_health ─────────────────────────────────────────────────────
-    if execution_journal:
-        total = len(execution_journal)
-        completed = sum(1 for e in execution_journal if e.get("status") == "completed")
-        # Below EXECUTION_RATIO_MIN_ATTEMPTS attempts the ratio stays neutral: with one attempt a single
-        # failure reads 0/1 = 0, past CRITICAL_THRESHOLD, so Tier 2 DENYs before recovery can retry once
-        # (spec/harness-core.json "execution_ratio_min_attempts"; twin of update-diagnostics.ts).
-        diagnostics.execution_health.progress_rate = (
-            completed / max(1, total) if total >= EXECUTION_RATIO_MIN_ATTEMPTS else 1.0
-        )
-
-        failure_modes = [e.get("failure_mode") for e in execution_journal if e.get("failure_mode")]
-        if failure_modes:
-            most_common = max(failure_modes.count(m) for m in set(failure_modes))
-            diagnostics.execution_health.failure_recurrence = most_common / len(failure_modes)
-        else:
-            diagnostics.execution_health.failure_recurrence = 0.0
-
-        risk_states = [e.get("risk_state") for e in execution_journal if e.get("risk_state")]
-        if len(risk_states) >= 2:
-            reversals = sum(1 for i in range(1, len(risk_states)) if risk_states[i] != risk_states[i - 1])
-            diagnostics.execution_health.oscillation_score = reversals / (len(risk_states) - 1)
-        else:
-            diagnostics.execution_health.oscillation_score = 0.0
+    # dep_class_gap_annotation: advisory string only — never a numeric input to any tier
+    diagnostics.dep_class_gap_annotation = _dep_class_gap_annotation(task_graph)
 
 
 # ── Normalisation contract (INV-02) ───────────────────────────────────────────
@@ -282,15 +317,17 @@ def normalise_composite(raw: float, weights: list[float], components: list[float
     return max(0.0, min(1.0, weighted_sum / total_weight))
 
 
-def normalise_entropy(source_counts: dict[str, int]) -> float:
-    """Compute normalised Shannon entropy over a source frequency distribution."""
-    num_sources = len(source_counts)
+def normalise_entropy(source_counts: dict[str, int] | list[int] | list[float]) -> float:
+    """Compute normalised Shannon entropy over a source frequency distribution (a dict of counts or, as the
+    TS twin takes it, a plain list of counts)."""
+    counts = list(source_counts.values()) if isinstance(source_counts, dict) else list(source_counts)
+    num_sources = len(counts)
     if num_sources < 2:
         return 0.0
-    total = sum(source_counts.values())
+    total = sum(counts)
     if total == 0:
         return 0.0
-    probs = [count / total for count in source_counts.values()]
+    probs = [count / total for count in counts]
     entropy = -sum(p * math.log2(p) for p in probs if p > 0)
     max_entropy = math.log2(num_sources)
     if max_entropy == 0:
@@ -302,19 +339,26 @@ def normalise_match_confidence(raw: float) -> float:
     return max(0.0, min(1.0, raw))
 
 
-def normalise(raw_value: float, dimension_type: DimensionType, **kwargs: Any) -> float:
+def normalise(raw_value: Any, dimension_type: DimensionType, **kwargs: Any) -> float:
     """Dispatch to the correct normalisation method for the given dimension type.
 
     All calls to tier 4 arithmetic must pass through this function — never
     call sub-methods directly (INV-02).
+
+    Accepts the TS `normalise(raw, type)` input forms as well as the keyword form: a `composite` raw value may
+    be `{"components": [...], "weights": [...]}` and an `entropy` raw value a list of counts.
     """
     if dimension_type == "ratio":
         return normalise_ratio(raw_value)
     elif dimension_type == "composite":
+        if isinstance(raw_value, dict):
+            return normalise_composite(0.0, list(raw_value["weights"]), list(raw_value["components"]))
         weights: list[float] = kwargs.get("weights", [1.0])
         components: list[float] = kwargs.get("components", [raw_value])
         return normalise_composite(raw_value, weights, components)
     elif dimension_type == "entropy":
+        if isinstance(raw_value, (list, tuple)):
+            return normalise_entropy(list(raw_value))
         source_counts: dict[str, int] = kwargs.get("source_counts", {})
         return normalise_entropy(source_counts)
     elif dimension_type == "match_confidence":

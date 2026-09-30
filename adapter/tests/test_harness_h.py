@@ -2,7 +2,7 @@
 Phase H — Planning-layer primitive separation (ADR-003 F-2).
 
 Covers: TaskOutcome / apply_task_outcome() as the single State-write path,
-select_best_action's move to policy.py, and INV-17 (no update_task_status()
+select_best_action's move to policy.py, and INV-17 (no set_status()
 call outside that one path).
 
 Run: pytest adapter/tests/test_harness_h.py -v
@@ -35,42 +35,47 @@ def _get(tg: TaskGraph, task_id: str) -> Task:
 
 HARNESS_DIR = Path(__file__).parent.parent / "harness"
 
-# Files allowed to call TaskGraph.update_task_status() directly — the primitive's own
+# Files allowed to call TaskGraph.set_status() directly — the primitive's own
 # module (defines it) and apply_task_outcome() (the one wrapper). Everything else in
 # production code must go through apply_task_outcome() (INV-17).
 _ALLOWED_DIRECT_CALLERS = {"task_graph.py"}
 
 
-def test_inv17_no_direct_update_task_status_outside_task_graph() -> None:
+def test_inv17_no_direct_set_status_outside_task_graph() -> None:
     """INV-17: no production module other than task_graph.py itself calls
-    TaskGraph.update_task_status() directly — execution.py, loop.py, and any future
+    TaskGraph.set_status() directly — execution.py, loop.py, and any future
     caller must go through apply_task_outcome()."""
     offenders: list[str] = []
     for path in HARNESS_DIR.glob("*.py"):
         if path.name in _ALLOWED_DIRECT_CALLERS:
             continue
         text = path.read_text()
-        if re.search(r"\.update_task_status\(", text):
+        if re.search(r"\.set_status\(", text):
             offenders.append(path.name)
-    assert offenders == [], f"direct update_task_status() call(s) outside apply_task_outcome(): {offenders}"
+    assert offenders == [], f"direct set_status() call(s) outside apply_task_outcome(): {offenders}"
 
 
 def test_apply_task_outcome_transitions_status() -> None:
     tg = TaskGraph(tasks=[Task(id="a", description="d", status="PENDING")])
-    apply_task_outcome(tg, "a", TaskOutcome(status="ACTIVE"))
-    assert _get(tg, "a").status == "ACTIVE"
-    apply_task_outcome(tg, "a", TaskOutcome(status="VERIFYING"))
-    assert _get(tg, "a").status == "VERIFYING"
+    apply_task_outcome(tg, "a", TaskOutcome(status="RUNNING"))
+    assert _get(tg, "a").status == "RUNNING"
+    apply_task_outcome(tg, "a", TaskOutcome(status="BLOCKED"))
+    assert _get(tg, "a").status == "BLOCKED"
 
 
 def test_apply_task_outcome_invalid_transition_raises() -> None:
-    tg = TaskGraph(tasks=[Task(id="a", description="d", status="PENDING")])
+    """COMPLETE is terminal; FAILED needs the execution layer (TS TaskGraph.setStatus rules)."""
+    tg = TaskGraph(tasks=[Task(id="a", description="d", status="COMPLETE"), Task(id="b", description="d")])
     with pytest.raises(ValueError):
-        apply_task_outcome(tg, "a", TaskOutcome(status="COMPLETE"))
+        apply_task_outcome(tg, "a", TaskOutcome(status="RUNNING"))
+    with pytest.raises(ValueError):
+        apply_task_outcome(tg, "b", TaskOutcome(status="FAILED"))
+    apply_task_outcome(tg, "b", TaskOutcome(status="FAILED", from_execution_layer=True))
+    assert _get(tg, "b").status == "FAILED"
 
 
 def test_apply_task_outcome_stamps_completed_evidence_on_complete() -> None:
-    tg = TaskGraph(tasks=[Task(id="a", description="d", status="VERIFYING")])
+    tg = TaskGraph(tasks=[Task(id="a", description="d", status="RUNNING")])
     apply_task_outcome(tg, "a", TaskOutcome(status="COMPLETE", evidence_ids=["belief-1", "belief-2"]))
     task = _get(tg, "a")
     assert task.status == "COMPLETE"
@@ -79,7 +84,7 @@ def test_apply_task_outcome_stamps_completed_evidence_on_complete() -> None:
 
 def test_apply_task_outcome_does_not_stamp_evidence_on_non_complete() -> None:
     tg = TaskGraph(tasks=[Task(id="a", description="d", status="PENDING")])
-    apply_task_outcome(tg, "a", TaskOutcome(status="ACTIVE", evidence_ids=["belief-1"]))
+    apply_task_outcome(tg, "a", TaskOutcome(status="RUNNING", evidence_ids=["belief-1"]))
     assert _get(tg, "a").completed_evidence == []
 
 
@@ -93,7 +98,7 @@ def test_apply_task_outcome_block_reason_propagates() -> None:
 
 def test_task_outcome_continue_field_defaults_false_and_unconsumed() -> None:
     """Forward-compat field for Phase D1's loop-again signal — additive, unused today."""
-    outcome = TaskOutcome(status="ACTIVE")
+    outcome = TaskOutcome(status="RUNNING")
     assert outcome.continue_ is False
 
 
@@ -111,9 +116,8 @@ def test_select_best_action_allow_returns_noop_exploration() -> None:
     assert result == {"type": "noop", "exploration": True}
 
 
-# ── Characterization: execute() still drives the ACTIVE/FAILED/VERIFYING lifecycle
-#    identically now that it goes through apply_task_outcome() instead of calling
-#    TaskGraph.update_task_status() directly ──
+# ── Characterization: execute() fails the task through apply_task_outcome() (as the execution layer) and, like TS,
+#    leaves a successful task's status to the driver ──
 
 
 def test_execute_success_lifecycle_via_apply_task_outcome() -> None:
@@ -128,7 +132,7 @@ def test_execute_success_lifecycle_via_apply_task_outcome() -> None:
         evidence_store=None,
     )
     assert result.success is True
-    assert _get(tg, "t1").status == "VERIFYING"
+    assert _get(tg, "t1").status == "PENDING"
 
 
 def test_execute_failure_lifecycle_via_apply_task_outcome() -> None:

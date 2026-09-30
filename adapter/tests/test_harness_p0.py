@@ -360,7 +360,7 @@ def test_T16_output_contract_from_dict_populates_fields():
     """T16 — from_dict with required_sections populates the field; others default."""
     oc = OutputContract.from_dict({"required_sections": ["summary"]})
     assert oc.required_sections == ["summary"]
-    assert oc.format_requirements == {}
+    assert oc.format == "text"
     assert oc.required_interface_fields == []
 
 

@@ -1,37 +1,38 @@
 """
-Hypothesis data model, generation sources, elimination policy, and
-diversity enforcement — P1.6 and P1.7.
+Hypothesis set and generation — P1.6 and P1.7.
 
-Four structurally distinct generation sources ensure diverse hypothesis sets.
-Elimination moves hypotheses to a bounded retained set (K-retention).
-Shannon entropy over sources drives diversity enforcement.
+Twin of packages/harness/src/state/hypothesis-set.ts and nodes/generate-update-hypotheses.ts.
+
+Each pass seeds one hypothesis per generation source (symptom inference, counterfactual, failure-mode library,
+analogy). Passes repeat until the source-diversity score (normalised Shannon entropy over the sources of the active
+hypotheses) reaches `DIVERSITY_THRESHOLD` or `MAX_PASSES` is hit. Low-confidence hypotheses, and those a world-model
+contradiction names, are then eliminated; an oversized active set is pruned to the `KEEP_BELIEFS` most confident.
 """
 
 from __future__ import annotations
 
-import math
-import uuid
 from dataclasses import dataclass, field
 from datetime import UTC, datetime
-from typing import TYPE_CHECKING, Any, Literal
+from typing import Any, Literal
 
+from .diagnostics import normalise
 from .evidence import EvidenceStore
-from .lexical_off import harness_lexical_active
-from .lexical_patterns import get_evidence_negation_words
+from .failure_modes import FailureDiagnostics
+from .memory import MemoryState, PrunedRegion
+from .world_model import WorldModel
 
-if TYPE_CHECKING:
-    from .world_model import WorldModel
+MAX_BELIEFS = 10
+KEEP_BELIEFS = 5
+DIVERSITY_THRESHOLD = 0.7
+MAX_PASSES = 10
 
-# Was a locally-hardcoded 8-word set, drifted from reviewer.py's identical-purpose 7-word set (that
-# one was missing "unavailable") — now the same shared source both read; see
-# lexical_patterns.get_evidence_negation_words()'s doc comment.
-_EVIDENCE_NEGATION_WORDS = get_evidence_negation_words()
-
-EliminationReason = Literal[
-    "CONTRADICTING_EVIDENCE",
-    "PREDICTION_FAILURE",
-    "POSTERIOR_BELOW_FLOOR",
-]
+GenerationSource = Literal["symptom_inference", "counterfactual", "failure_mode_library", "analogy"]
+GENERATION_SOURCES: tuple[GenerationSource, ...] = (
+    "symptom_inference",
+    "counterfactual",
+    "failure_mode_library",
+    "analogy",
+)
 
 
 @dataclass
@@ -39,12 +40,12 @@ class Hypothesis:
     id: str
     explanation: str
     confidence: float
-    predicted_observations: list[str]
-    discriminating_evidence: list[str]
-    generation_sources: list[str]
+    predicted_observations: list[str] = field(default_factory=list)
+    discriminating_evidence: list[str] = field(default_factory=list)
+    generation_sources: list[str] = field(default_factory=list)
+    diversity_score: float = 0.0
     # Semantic hypotheses only: the check or observation that would tell this explanation apart from its rivals.
-    # Empty for every other source, and then absent from to_dict(), so existing payloads are byte-identical.
-    separating_check: str = ""
+    separating_check: str | None = None
 
     def to_dict(self) -> dict[str, Any]:
         d: dict[str, Any] = {
@@ -54,6 +55,7 @@ class Hypothesis:
             "predicted_observations": list(self.predicted_observations),
             "discriminating_evidence": list(self.discriminating_evidence),
             "generation_sources": list(self.generation_sources),
+            "diversity_score": self.diversity_score,
         }
         if self.separating_check:
             d["separating_check"] = self.separating_check
@@ -65,430 +67,212 @@ class Hypothesis:
             id=d["id"],
             explanation=d["explanation"],
             confidence=d["confidence"],
-            predicted_observations=d.get("predicted_observations", []),
-            discriminating_evidence=d.get("discriminating_evidence", []),
-            generation_sources=d.get("generation_sources", []),
-            separating_check=d.get("separating_check", ""),
+            predicted_observations=list(d.get("predicted_observations", [])),
+            discriminating_evidence=list(d.get("discriminating_evidence", [])),
+            generation_sources=list(d.get("generation_sources", [])),
+            diversity_score=d.get("diversity_score", 0.0),
+            separating_check=d.get("separating_check"),
         )
 
 
 @dataclass
-class EliminationRecord:
-    hypothesis_id: str
-    reason: EliminationReason
-    eliminated_at: datetime = field(default_factory=lambda: datetime.now(UTC))
+class EliminationPolicy:
+    """Twin of TS EliminationPolicy: `floor` is the confidence below which a hypothesis is dropped and
+    `retention_k` bounds the audit trail of eliminated hypotheses."""
+
+    conditions: list[str] = field(default_factory=lambda: ["contradicting_evidence", "prediction_failure_count"])
+    retention_k: int = 10
+    floor: float = 0.05
 
     def to_dict(self) -> dict[str, Any]:
-        return {
-            "hypothesis_id": self.hypothesis_id,
-            "reason": self.reason,
-            "eliminated_at": self.eliminated_at.isoformat(),
-        }
+        return {"conditions": list(self.conditions), "retention_k": self.retention_k, "floor": self.floor}
 
     @classmethod
-    def from_dict(cls, d: dict[str, Any]) -> EliminationRecord:
+    def from_dict(cls, d: dict[str, Any]) -> EliminationPolicy:
         return cls(
-            hypothesis_id=d["hypothesis_id"],
-            reason=d["reason"],
-            eliminated_at=datetime.fromisoformat(d["eliminated_at"]) if "eliminated_at" in d else datetime.now(UTC),
+            conditions=list(d.get("conditions", ["contradicting_evidence", "prediction_failure_count"])),
+            retention_k=d.get("retention_k", 10),
+            floor=d.get("floor", 0.05),
         )
 
 
 @dataclass
 class HypothesisSet:
     active: list[Hypothesis] = field(default_factory=list)
-    eliminated: list[tuple[Hypothesis, EliminationRecord]] = field(default_factory=list)
-    diversity_score: float = 0.0
+    eliminated: list[Hypothesis] = field(default_factory=list)
+    elimination_policy: EliminationPolicy = field(default_factory=EliminationPolicy)
+
+    def eliminate(self, hypothesis: Hypothesis) -> None:
+        """Move a hypothesis from active to eliminated, keeping only the last `retention_k` eliminated."""
+        self.active = [h for h in self.active if h.id != hypothesis.id]
+        self.eliminated.append(hypothesis)
+        excess = len(self.eliminated) - self.elimination_policy.retention_k
+        if excess > 0:
+            del self.eliminated[:excess]
 
     def to_dict(self) -> dict[str, Any]:
         return {
             "active": [h.to_dict() for h in self.active],
-            "eliminated": [{"hypothesis": h.to_dict(), "record": r.to_dict()} for h, r in self.eliminated],
-            "diversity_score": self.diversity_score,
+            "eliminated": [h.to_dict() for h in self.eliminated],
+            "elimination_policy": self.elimination_policy.to_dict(),
         }
 
     @classmethod
     def from_dict(cls, d: dict[str, Any]) -> HypothesisSet:
-        hs = cls(diversity_score=d.get("diversity_score", 0.0))
-        for item in d.get("active", []):
-            hs.active.append(Hypothesis.from_dict(item))
-        for item in d.get("eliminated", []):
-            h = Hypothesis.from_dict(item["hypothesis"])
-            r = EliminationRecord.from_dict(item["record"])
-            hs.eliminated.append((h, r))
-        return hs
-
-
-@dataclass
-class EliminationPolicy:
-    """
-    Constants for hypothesis elimination and diversity enforcement.
-
-    prediction_failure_threshold=3: three missed predictions before elimination
-    posterior_floor=0.05: hypotheses below 5% confidence are implausible noise
-    k_retention=20: keeps a bounded audit trail of eliminated hypotheses
-    diversity_threshold=0.7: normalised Shannon entropy target over sources
-    max_diversity_passes=3: safety cap to prevent infinite generation loops
-    """
-
-    prediction_failure_threshold: int = 3
-    posterior_floor: float = 0.05
-    k_retention: int = 20
-    diversity_threshold: float = 0.7
-    max_diversity_passes: int = 3
-
-    def to_dict(self) -> dict[str, Any]:
-        return {
-            "prediction_failure_threshold": self.prediction_failure_threshold,
-            "posterior_floor": self.posterior_floor,
-            "k_retention": self.k_retention,
-            "diversity_threshold": self.diversity_threshold,
-            "max_diversity_passes": self.max_diversity_passes,
-        }
-
-    @classmethod
-    def from_dict(cls, d: dict[str, Any]) -> EliminationPolicy:
         return cls(
-            prediction_failure_threshold=d.get("prediction_failure_threshold", 3),
-            posterior_floor=d.get("posterior_floor", 0.05),
-            k_retention=d.get("k_retention", 20),
-            diversity_threshold=d.get("diversity_threshold", 0.7),
-            max_diversity_passes=d.get("max_diversity_passes", 3),
+            active=[Hypothesis.from_dict(h) for h in d.get("active", [])],
+            eliminated=[
+                Hypothesis.from_dict(h["hypothesis"] if "hypothesis" in h else h) for h in d.get("eliminated", [])
+            ],
+            elimination_policy=EliminationPolicy.from_dict(d.get("elimination_policy", {})),
         )
 
 
-# ── Generation sources (P1.6) ─────────────────────────────────────────────────
-
-
-def symptom_inference(
-    world_model: WorldModel,
-    evidence_store: EvidenceStore,
-) -> list[Hypothesis]:
-    """Generate hypotheses by clustering raw observations via word-overlap.
-
-    Lexical: with HARNESS_LEXICAL_OFF naming `hypothesis-clustering` this produces nothing, and the
-    semantic hypotheses (semantic_hypotheses.py) are the only source of explanations built from content.
-    """
-    if not harness_lexical_active("hypothesis-clustering"):
-        return []
-    observations = evidence_store.query(evidence_type="OBSERVATION")
-    all_texts = [e.obs for e in observations] + [o.content for o in world_model.observations]
-
-    if not all_texts:
-        return []
-
-    used = [False] * len(all_texts)
-    clusters: list[list[str]] = []
-
-    for i, text_i in enumerate(all_texts):
-        if used[i]:
-            continue
-        cluster = [text_i]
-        words_i = set(text_i.lower().split())
-        for j in range(i + 1, len(all_texts)):
-            if used[j]:
-                continue
-            words_j = set(all_texts[j].lower().split())
-            if words_i and words_j:
-                jaccard = len(words_i & words_j) / len(words_i | words_j)
-                if jaccard > 0.2:
-                    cluster.append(all_texts[j])
-                    used[j] = True
-        used[i] = True
-        clusters.append(cluster)
-
-    return [
-        Hypothesis(
-            id=str(uuid.uuid4()),
-            explanation=f"Symptom cluster: {cluster[0][:80]}",
-            confidence=0.5,
-            predicted_observations=cluster,
-            discriminating_evidence=[],
-            generation_sources=["symptom_inference"],
-        )
-        for cluster in clusters
-    ]
-
-
-def counterfactual_reasoning(world_model: WorldModel) -> list[Hypothesis]:
-    """Generate counterfactual alternatives for each high-confidence belief."""
-    if not world_model.beliefs:
-        return []
-
-    return [
-        Hypothesis(
-            id=str(uuid.uuid4()),
-            explanation=f"Counterfactual: alternative explanation for '{belief.statement[:80]}'",
-            confidence=0.3,
-            predicted_observations=[],
-            discriminating_evidence=list(belief.derived_from),
-            generation_sources=["counterfactual_reasoning"],
-        )
-        for belief in world_model.beliefs
-        if belief.confidence >= 0.6
-    ]
-
-
-def failure_mode_library_contribution(fml_stub: dict | None) -> list[Hypothesis]:
-    """Generate hypotheses from the failure mode library stub (advisory only).
-
-    Never writes to any control structure — return type is list[Hypothesis] only.
-    Enforces INV-08: the library is advisory, never blocking.
-    """
-    if not fml_stub:
-        return []
-
-    return [
-        Hypothesis(
-            id=str(uuid.uuid4()),
-            explanation=str(description),
-            confidence=0.2,
-            predicted_observations=[],
-            discriminating_evidence=[],
-            generation_sources=["failure_mode_library"],
-        )
-        for description in fml_stub.values()
-    ]
-
-
-def generate_from_failure_library(
-    world_model: WorldModel,
-    failure_mode_library: Any,
-) -> list[Hypothesis]:
-    """Generate hypotheses from the typed FailureModeLibrary (generation source 3 — P6.3).
-
-    Returns an empty list if the library is None or no pattern matches.
-    The returned hypothesis records generation_sources=["failure_mode_library"] so
-    diversity enforcement can account for this source independently.
-    """
-    if failure_mode_library is None:
-        return []
-
-    match_result = failure_mode_library.match(world_model, None, None)
-    if not getattr(match_result, "matched", False):
-        return []
-
-    template = ""
-    for pattern in getattr(failure_mode_library, "patterns", ()):
-        if getattr(pattern, "name", "") == getattr(match_result, "pattern_name", ""):
-            template = getattr(pattern, "hypothesis_template", "")
-            break
-
-    if not template:
-        return []
-
-    return [
-        Hypothesis(
-            id=str(uuid.uuid4()),
-            explanation=template,
-            confidence=getattr(match_result, "normalised_confidence", 0.2),
-            predicted_observations=[],
-            discriminating_evidence=[],
-            generation_sources=["failure_mode_library"],
-        )
-    ]
-
-
-def analogy_based_generation(experience_store: Any) -> list[Hypothesis]:
-    """Generate hypotheses from past experience analogies.
-
-    Guard on line 1 is the canonical INV-10 no-op pattern — callers in all
-    later phases that use the experience store must replicate this guard.
-    """
-    if experience_store is None or not getattr(experience_store, "available", False):
-        return []
-
-    hypotheses = []
-    try:
-        decompositions = getattr(experience_store, "successful_decompositions", [])
-        for decomp in decompositions:
-            hypotheses.append(
-                Hypothesis(
-                    id=str(uuid.uuid4()),
-                    explanation=f"Analogy from past experience: {str(decomp)[:80]}",
-                    confidence=0.4,
-                    predicted_observations=[],
-                    discriminating_evidence=[],
-                    generation_sources=["analogy_based"],
-                )
-            )
-    except Exception:
-        pass
-    return hypotheses
-
-
-def _jaccard(a: str, b: str) -> float:
-    wa = set(a.lower().split())
-    wb = set(b.lower().split())
-    if not wa or not wb:
-        return 0.0
-    return len(wa & wb) / len(wa | wb)
-
-
-def generate_hypotheses(
-    world_model: WorldModel,
-    evidence_store: EvidenceStore,
-    fml_stub: dict | None = None,
-    experience_store: Any = None,
-) -> list[Hypothesis]:
-    """Collect from all four sources, deduplicate by explanation word-overlap."""
-    all_hypotheses: list[Hypothesis] = []
-    all_hypotheses.extend(symptom_inference(world_model, evidence_store))
-    all_hypotheses.extend(counterfactual_reasoning(world_model))
-    all_hypotheses.extend(failure_mode_library_contribution(fml_stub))
-    all_hypotheses.extend(analogy_based_generation(experience_store))
-
-    used = [False] * len(all_hypotheses)
-    merged: list[Hypothesis] = []
-    dedupe = harness_lexical_active("hypothesis-clustering")
-
-    for i, h_i in enumerate(all_hypotheses):
-        if used[i]:
-            continue
-        combined_sources = list(h_i.generation_sources)
-        for j in range(i + 1, len(all_hypotheses)):
-            if used[j]:
-                continue
-            if dedupe and _jaccard(h_i.explanation, all_hypotheses[j].explanation) > 0.8:
-                for src in all_hypotheses[j].generation_sources:
-                    if src not in combined_sources:
-                        combined_sources.append(src)
-                used[j] = True
-        used[i] = True
-        merged.append(
-            Hypothesis(
-                id=str(uuid.uuid4()),
-                explanation=h_i.explanation,
-                confidence=h_i.confidence,
-                predicted_observations=h_i.predicted_observations,
-                discriminating_evidence=h_i.discriminating_evidence,
-                generation_sources=combined_sources,
-            )
-        )
-
-    return merged
-
-
-# ── Elimination policy (P1.7) ─────────────────────────────────────────────────
-
-
-def check_contradicting_evidence(
-    hypothesis: Hypothesis,
-    evidence_store: EvidenceStore,
-) -> bool:
-    """Return True if any HIGH-reliability evidence contradicts a predicted observation.
-
-    Lexical (shared word + a negation word); off under HARNESS_LEXICAL_OFF=hypothesis-negation-elimination,
-    where semantic_hypotheses.eliminate_contradicted, fed by an LLM judgment, does the job instead.
-    """
-    if not harness_lexical_active("hypothesis-negation-elimination"):
-        return False
-    for entry in evidence_store.entries:
-        if entry.reliability != "HIGH":
-            continue
-        if entry.evidence_type not in ("OBSERVATION", "INFERENCE"):
-            continue
-        obs_words = set(entry.obs.lower().split())
-        for predicted in hypothesis.predicted_observations:
-            pred_words = set(predicted.lower().split())
-            if not pred_words:
-                continue
-            common = obs_words & pred_words
-            if common and (obs_words & _EVIDENCE_NEGATION_WORDS):
-                return True
-    return False
-
-
-def check_prediction_failure(
-    hypothesis: Hypothesis,
-    failure_counts: dict[str, int],
-    policy: EliminationPolicy,
-) -> bool:
-    return failure_counts.get(hypothesis.id, 0) >= policy.prediction_failure_threshold
-
-
-def check_posterior_floor(
-    hypothesis: Hypothesis,
-    policy: EliminationPolicy,
-) -> bool:
-    return hypothesis.confidence < policy.posterior_floor
-
-
-def eliminate(
-    hypothesis_set: HypothesisSet,
-    evidence_store: EvidenceStore,
-    failure_counts: dict[str, int],
-    policy: EliminationPolicy,
-) -> HypothesisSet:
-    """Move hypotheses meeting any elimination condition to the eliminated set.
-
-    An empty active set after elimination is valid — it signals to coverage_health
-    in P3 that no hypotheses survived the current evidence.
-    """
-    remaining: list[Hypothesis] = []
-
-    for h in hypothesis_set.active:
-        reason: EliminationReason | None = None
-        if check_contradicting_evidence(h, evidence_store):
-            reason = "CONTRADICTING_EVIDENCE"
-        elif check_prediction_failure(h, failure_counts, policy):
-            reason = "PREDICTION_FAILURE"
-        elif check_posterior_floor(h, policy):
-            reason = "POSTERIOR_BELOW_FLOOR"
-
-        if reason is not None:
-            record = EliminationRecord(
-                hypothesis_id=h.id,
-                reason=reason,
-                eliminated_at=datetime.now(UTC),
-            )
-            hypothesis_set.eliminated.append((h, record))
-        else:
-            remaining.append(h)
-
-    hypothesis_set.active = remaining
-
-    if len(hypothesis_set.eliminated) > policy.k_retention:
-        hypothesis_set.eliminated.sort(key=lambda pair: pair[1].eliminated_at)
-        hypothesis_set.eliminated = hypothesis_set.eliminated[-policy.k_retention :]
-
-    return hypothesis_set
+# ── diversity ─────────────────────────────────────────────────────────────────
 
 
 def compute_diversity_score(hypothesis_set: HypothesisSet) -> float:
-    """Compute normalised Shannon entropy over generation sources in the active set."""
-    source_counts: dict[str, int] = {}
-    for h in hypothesis_set.active:
-        for src in h.generation_sources:
-            source_counts[src] = source_counts.get(src, 0) + 1
-
-    total = sum(source_counts.values())
-    if total == 0 or len(source_counts) < 2:
-        hypothesis_set.diversity_score = 0.0
+    """Normalised Shannon entropy of the generation sources across the active hypotheses (0 when none)."""
+    if not hypothesis_set.active:
         return 0.0
+    sources: list[str] = []
+    for h in hypothesis_set.active:
+        for s in h.generation_sources:
+            if s not in sources:
+                sources.append(s)
+    counts = [sum(1 for h in hypothesis_set.active if s in h.generation_sources) for s in sources]
+    return normalise(counts, "entropy")
 
-    probs = [count / total for count in source_counts.values()]
-    entropy = -sum(p * math.log2(p) for p in probs if p > 0)
-    max_entropy = math.log2(len(source_counts))
-    score = max(0.0, min(1.0, entropy / max_entropy)) if max_entropy > 0 else 0.0
-    hypothesis_set.diversity_score = score
-    return score
+
+def compute_source_entropy(hypothesis_set: HypothesisSet) -> float:
+    return compute_diversity_score(hypothesis_set)
 
 
-def enforce_diversity(
-    hypothesis_set: HypothesisSet,
+# ── generation ────────────────────────────────────────────────────────────────
+
+
+def _make_seed(id: str, source: GenerationSource, explanation: str, confidence: float = 0.5) -> Hypothesis:
+    return Hypothesis(
+        id=id,
+        explanation=explanation,
+        confidence=confidence,
+        predicted_observations=[],
+        discriminating_evidence=[],
+        generation_sources=[source],
+        diversity_score=0.0,
+    )
+
+
+def _generate_from_source(
+    source: GenerationSource,
     world_model: WorldModel,
     evidence_store: EvidenceStore,
-    fml_stub: dict | None,
-    experience_store: Any,
-    policy: EliminationPolicy,
-) -> HypothesisSet:
-    """Trigger additional generation passes until diversity meets threshold or cap is hit."""
-    compute_diversity_score(hypothesis_set)
-    pass_count = 0
-    while hypothesis_set.diversity_score < policy.diversity_threshold and pass_count < policy.max_diversity_passes:
-        new_hypotheses = generate_hypotheses(world_model, evidence_store, fml_stub, experience_store)
-        hypothesis_set.active.extend(new_hypotheses)
-        compute_diversity_score(hypothesis_set)
-        pass_count += 1
-    return hypothesis_set
+    hypothesis_set: HypothesisSet,
+    failure_diagnostics: FailureDiagnostics,
+    pass_index: int,
+) -> list[Hypothesis]:
+    suffix = f"_p{pass_index}" if pass_index > 0 else ""
+
+    if source == "symptom_inference":
+        observations = evidence_store.observations
+        if observations:
+            return [
+                _make_seed(f"symp_{o.id}{suffix}", source, f"Symptom inference from: {o.obs}", 0.4 + i * 0.05)
+                for i, o in enumerate(observations[:1])
+            ]
+        return [_make_seed(f"symp_default{suffix}", source, "No symptoms observed — hypothesis: system nominal", 0.3)]
+
+    if source == "counterfactual":
+        beliefs = world_model.beliefs
+        if beliefs:
+            return [
+                _make_seed(
+                    f"counter_{beliefs[0].id}{suffix}",
+                    source,
+                    f'Counterfactual: if "{beliefs[0].statement}" were false, goal would be impacted',
+                    0.35,
+                )
+            ]
+        return [
+            _make_seed(f"counter_default{suffix}", source, "Counterfactual: prior state differs from expected", 0.3)
+        ]
+
+    if source == "failure_mode_library":
+        symptoms = [o.obs for o in evidence_store.observations]
+        match = failure_diagnostics.failure_mode_library.match(symptoms)
+        if match is not None:
+            return [
+                _make_seed(
+                    f"fml_{match.matched_pattern}{suffix}",
+                    source,
+                    f"Failure mode match: {match.failure_class} (confidence {match.confidence:.2f})",
+                    match.confidence,
+                )
+            ]
+        return [_make_seed(f"fml_unknown{suffix}", source, "Failure mode: unknown pattern — exploratory", 0.2)]
+
+    # analogy
+    if hypothesis_set.eliminated:
+        template = hypothesis_set.eliminated[0]
+        return [
+            _make_seed(
+                f"analogy_{template.id}{suffix}",
+                source,
+                f"Analogy from eliminated hypothesis: {template.explanation}",
+                0.25,
+            )
+        ]
+    return [_make_seed(f"analogy_default{suffix}", source, "Analogy: no prior eliminations — structural guess", 0.2)]
+
+
+def _apply_elimination_policy(hypothesis_set: HypothesisSet, world_model: WorldModel) -> None:
+    to_eliminate = [
+        h
+        for h in hypothesis_set.active
+        if h.confidence < hypothesis_set.elimination_policy.floor
+        # a contradiction whose description references this hypothesis id contradicts it
+        or any(h.id in c.description for c in world_model.contradictions)
+    ]
+    for h in to_eliminate:
+        hypothesis_set.eliminate(h)
+
+
+def generate_update_hypotheses(
+    world_model: WorldModel,
+    evidence_store: EvidenceStore,
+    hypothesis_set: HypothesisSet,
+    failure_diagnostics: FailureDiagnostics,
+    memory_state: MemoryState,
+) -> None:
+    """Generate / refresh the active hypotheses (TS generateUpdateHypotheses)."""
+    pass_index = 0
+    diversity = compute_diversity_score(hypothesis_set)
+
+    while True:
+        existing_ids = {h.id for h in hypothesis_set.active}
+        for source in GENERATION_SOURCES:
+            for h in _generate_from_source(
+                source, world_model, evidence_store, hypothesis_set, failure_diagnostics, pass_index
+            ):
+                if h.id not in existing_ids:
+                    hypothesis_set.active.append(h)
+                    existing_ids.add(h.id)
+        diversity = compute_diversity_score(hypothesis_set)
+        pass_index += 1
+        if not (diversity < DIVERSITY_THRESHOLD and pass_index < MAX_PASSES):
+            break
+
+    for h in hypothesis_set.active:
+        h.diversity_score = diversity
+
+    _apply_elimination_policy(hypothesis_set, world_model)
+
+    if len(hypothesis_set.active) > MAX_BELIEFS:
+        hypothesis_set.active.sort(key=lambda h: h.confidence, reverse=True)
+        pruned = hypothesis_set.active[KEEP_BELIEFS:]
+        del hypothesis_set.active[KEEP_BELIEFS:]
+        now = datetime.now(UTC).isoformat()
+        for h in pruned:
+            memory_state.compression_risk.pruned_regions.append(
+                PrunedRegion(id=f"hypothesis_{h.id}", description=h.explanation, token_count=0, pruned_at=now)
+            )

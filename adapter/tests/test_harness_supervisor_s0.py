@@ -12,7 +12,7 @@ from __future__ import annotations
 
 import pytest
 
-from harness.failure_modes import FailureDiagnostics, FailureEntry
+from harness.failure_modes import FailureDiagnostics, FailureRecord
 from harness.recovery import STRATEGY_ORDER, StrategyState
 from harness.state_store import HarnessRunState
 from harness.supervisor import (
@@ -197,7 +197,7 @@ def _oversized_state():
         completion_history=[0] * 40,
         stall_reason="strategy_loop " + "y" * 500,
     )
-    fd = FailureDiagnostics(failure_history=[FailureEntry(failure_class=f"class_{i % 5}", step=i) for i in range(60)])
+    fd = FailureDiagnostics(failure_history=[FailureRecord(failure_class=f"class_{i % 5}") for i in range(60)])
     tg = TaskGraph(
         tasks=[
             Task(id=f"t{i}", description="d" * 400, status="FAILED", depends_on=[], risk_level="LOW") for i in range(30)
@@ -280,7 +280,7 @@ def test_digest_reflects_strategy_loop_stall():
 
 
 def test_digest_reflects_failure_recurrence_stall():
-    fd = FailureDiagnostics(failure_history=[FailureEntry(failure_class="flaky_test", step=i) for i in range(3)])
+    fd = FailureDiagnostics(failure_history=[FailureRecord(failure_class="flaky_test") for i in range(3)])
     ss = StrategyState(stall_reason="failure_recurrence")
     d = build_digest(ss, fd, TaskGraph(), WorldModel())
     assert d.stall_reason == "failure_recurrence"

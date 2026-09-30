@@ -356,8 +356,14 @@ def _resolve_medium(
         belief.confidence = max(0.0, belief.confidence * 0.75)
         belief.applied_contradiction_ids.append(contradiction.id)
         belief.pending_sweep = True
-        if belief_dep_graph is not None and belief.id not in belief_dep_graph.propagation_queue:
-            belief_dep_graph.propagation_queue.append(belief.id)
+        if belief_dep_graph is not None and not any(
+            t.source_belief_id == belief.id for t in belief_dep_graph.propagation_queue
+        ):
+            from .belief_graph import PropagationTask
+
+            belief_dep_graph.propagation_queue.append(
+                PropagationTask(source_belief_id=belief.id, target_belief_id=belief.id)
+            )
 
 
 def _resolve_high(
@@ -374,8 +380,8 @@ def _resolve_high(
             continue
         belief.applied_contradiction_ids.append(contradiction.id)
         belief.pending_sweep = True
-        if belief_dep_graph is not None:
-            belief_dep_graph.invalidation_frontier.add(belief.id)
+        if belief_dep_graph is not None and belief.id not in belief_dep_graph.invalidation_frontier:
+            belief_dep_graph.invalidation_frontier.append(belief.id)
 
     # TS resolveHigh only marks the belief applied and grows the invalidation frontier; it never blocks
     # tasks. `task_graph` is kept in the signature for callers but is intentionally unused.

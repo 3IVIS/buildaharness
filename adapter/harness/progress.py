@@ -3,7 +3,8 @@ Stall detection — P6.1.
 
 cannot_make_progress() detects four distinct stall patterns via measurable
 proxies. Any single proxy returning True triggers recovery logic in the main loop.
-Threshold constants are overridable via environment variables.
+The thresholds are fixed constants (as in TS rollback-replan.ts); they are module attributes, so a test can patch
+them, but there are no environment overrides.
 """
 
 from __future__ import annotations
@@ -24,7 +25,7 @@ _RISK_ORDER: dict[str, int] = {"NORMAL": 0, "CAUTIOUS": 1, "BLOCKED": 2}
 _CAUTIOUS_LEVEL: int = _RISK_ORDER["CAUTIOUS"]
 
 
-def _stalled_completion(strategy_state: Any, task_graph: Any) -> bool:
+def _stalled_completion(strategy_state: Any) -> bool:
     """Proxy 1: returns True if no new tasks completed in the last STALL_WINDOW steps."""
     history: list[int] = getattr(strategy_state, "completion_history", [])
     if len(history) < STALL_WINDOW:
@@ -50,7 +51,7 @@ def _failure_recurring(failure_diagnostics: Any) -> bool:
         return False
     recent = history[-RECURRENCE_THRESHOLD:]
     classes = [getattr(e, "failure_class", None) for e in recent]
-    return len(set(classes)) == 1 and classes[0] is not None
+    return len(set(classes)) == 1 and classes[0] not in (None, "")
 
 
 def _risk_oscillating(strategy_state: Any) -> bool:
@@ -69,14 +70,14 @@ def _risk_oscillating(strategy_state: Any) -> bool:
 def cannot_make_progress(
     strategy_state: Any,
     failure_diagnostics: Any,
-    task_graph: Any,
+    task_graph: Any = None,
 ) -> bool:
     """Return True if any of the four stall proxies fires.
 
     Short-circuits after the first True proxy. Records which proxy triggered in
     strategy_state.stall_reason for downstream logging.
     """
-    if _stalled_completion(strategy_state, task_graph):
+    if _stalled_completion(strategy_state):
         if hasattr(strategy_state, "stall_reason"):
             strategy_state.stall_reason = "completion_velocity"
         return True

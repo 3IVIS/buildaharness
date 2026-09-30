@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import json
 from dataclasses import dataclass, field
 from typing import Any, Literal
 
@@ -66,7 +67,7 @@ def check_world_model_consistency(
     proposed_change: Any,
     world_model: Any,
 ) -> DimensionResult:
-    """Fail if the proposed change contradicts a HIGH-reliability belief.
+    """Fail if the proposed change contradicts a HIGH-confidence belief (confidence >= 0.8).
 
     A 'contradiction' is detected when the proposed change description
     explicitly negates a HIGH-reliability belief statement (simple text match).
@@ -82,8 +83,7 @@ def check_world_model_consistency(
     beliefs = getattr(world_model, "beliefs", [])
 
     for belief in beliefs:
-        reliability = str(getattr(belief, "reliability", "") or "").upper()
-        if reliability != "HIGH":
+        if belief.confidence < 0.8:  # only HIGH-confidence beliefs count (TS: `belief.confidence < 0.8 -> continue`)
             continue
         stmt = str(getattr(belief, "statement", "") or "").lower()
         # Check for simple negation: "not <stmt>" or "removes <stmt>" etc.
@@ -91,7 +91,7 @@ def check_world_model_consistency(
             return DimensionResult(
                 dimension="world_model_consistency",
                 passed=False,
-                reason=f"Change contradicts HIGH-reliability belief: {stmt!r}",
+                reason=f"Change contradicts HIGH-reliability belief: {json.dumps(stmt, ensure_ascii=False)}",
             )
 
     return DimensionResult(
@@ -105,7 +105,7 @@ def check_output_contract(
     proposed_change: Any,
     output_contract: Any,
 ) -> DimensionResult:
-    """Fail if the change removes a required_interface_field.
+    """Fail if the change removes a required section (TS checks `required_sections`).
 
     Detects removal patterns like 'remove <field>', 'delete <field>', 'drop <field>'.
     """
@@ -116,7 +116,7 @@ def check_output_contract(
             reason="No output contract provided",
         )
 
-    required_fields = getattr(output_contract, "required_interface_fields", [])
+    required_fields = getattr(output_contract, "required_sections", [])
     change_desc = _get_change_description(proposed_change).lower()
     if not harness_lexical_active("review-phrases"):  # "remove <field>" is a phrase match over free text
         required_fields = []
@@ -133,7 +133,7 @@ def check_output_contract(
             return DimensionResult(
                 dimension="output_contract_precheck",
                 passed=False,
-                reason=f"Change removes required interface field: {field_name!r}",
+                reason=f"Change removes required interface field: {json.dumps(field_name, ensure_ascii=False)}",
             )
 
     return DimensionResult(
@@ -199,22 +199,15 @@ def check_hypothesis_compatibility(
             reason="No hypothesis set provided",
         )
 
-    hypotheses = getattr(hypothesis_set, "hypotheses", [])
     change_desc = _get_change_description(proposed_change).lower()
 
-    for h in hypotheses:
-        # Only check active/non-eliminated hypotheses
-        eliminated = getattr(h, "eliminated", False)
-        if eliminated:
-            continue
-        predicted_obs = getattr(h, "predicted_observations", [])
-        for obs in predicted_obs:
-            obs_lower = str(obs).lower()
-            if _is_negation(change_desc, obs_lower):
+    for h in hypothesis_set.active:
+        for obs in h.predicted_observations:
+            if _is_negation(change_desc, obs.lower()):
                 return DimensionResult(
                     dimension="hypothesis_compatibility",
                     passed=False,
-                    reason=f"Change contradicts predicted observation: {obs!r}",
+                    reason=f"Change contradicts predicted observation: {json.dumps(obs, ensure_ascii=False)}",
                 )
 
     return DimensionResult(
@@ -342,3 +335,53 @@ def _is_negation(change_desc: str, belief_stmt: str) -> bool:
     change_words = set(tokenize(change_desc))
     overlap = [w for w in stmt_words if w in change_words]
     return len(overlap) >= min(2, len(stmt_words))
+
+
+def escalate_review_failure(
+    review_result: ReviewResult,
+    current_task_summary: str,
+    harness_run_state: Any,
+    run_id: str = "",
+    *,
+    session_ask_mode: bool | None = None,
+) -> None:
+    """Halt on a failed review that has hit the consecutive-failure limit (TS harness-runtime's review_failure site).
+
+    Only acts when `review_result.escalation_triggered`. When the effective ask mode is on and the failed dimensions
+    diagnose two or more distinct candidate fixes, the blocker carries a structured "which fix should I apply?"
+    question; otherwise it is the plain missing_info halt. Raises EscalationHalt (via escalate()).
+    """
+    if review_result.passed or not review_result.escalation_triggered:
+        return
+
+    from .ask_question import (
+        build_ask_blocker,
+        build_review_failure_question,
+        diagnose_review_failure_options,
+        resolve_ask_mode,
+    )
+    from .escalation import SurfaceBlocker, escalate
+
+    missing_info = [d.reason for d in review_result.failed_dimensions]
+    # Flag-OFF byte-identical: resolve the effective mode HERE rather than relying on build_ask_blocker's own
+    # degrade, which would still populate a collapsed single question/options pair while nominally "off".
+    fix_options = (
+        diagnose_review_failure_options(review_result.failed_dimensions)
+        if resolve_ask_mode(session_ask_mode=session_ask_mode)
+        else None
+    )
+    if fix_options:
+        blocker = build_ask_blocker(
+            [build_review_failure_question(fix_options)],
+            reason="review_failure",
+            missing_info=missing_info,
+            current_task_summary=current_task_summary,
+            session_ask_mode=session_ask_mode,
+        )
+    else:
+        blocker = SurfaceBlocker(
+            reason="review_failure",
+            missing_info=missing_info,
+            current_task_summary=current_task_summary,
+        )
+    escalate(blocker, harness_run_state, run_id)

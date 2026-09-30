@@ -1,89 +1,108 @@
 """
 World model integration operations — P2.1.
 
-integrate_evidence() integrates Evidence from the evidence store into the
-world model using reliability-weighted logic. It only calls add_observation()
-— never add_belief() — to enforce INV-01.
-
-recompute_belief_health() returns three proxy sub-dimensions (freshness,
-consistency, support) for use in Tier 4 of resolve_control_state() (P3).
+Twin of packages/harness/src/nodes/update-world-model.ts. `update_world_model()` folds one piece of Evidence into
+the world model: OBSERVATION / SYSTEM_ERROR evidence becomes an observation (and marks its region complete unless
+`prune`), INFERENCE evidence becomes a belief (which requires an explicit `derived_from` chain — INV-01). It then
+refreshes the belief-health sub-dimensions and bumps the generation.
 """
 
 from __future__ import annotations
 
-from .evidence import EvidenceStore
-from .world_model import Observation, WorldModel
+from typing import Any
 
-_RELIABILITY_ORDER: dict[str, int] = {"LOW": 0, "MEDIUM": 1, "HIGH": 2}
+from .diagnostics import Diagnostics, normalise
+from .evidence import Evidence
+from .world_model import Belief, Observation, WorldModel
+
+_RELIABILITY_TO_FLOAT: dict[str, float] = {"HIGH": 1.0, "MEDIUM": 0.5}
 
 
-def integrate_evidence(
-    evidence_store: EvidenceStore,
+def _reliability_to_float(reliability: str) -> float:
+    return _RELIABILITY_TO_FLOAT.get(reliability, 0.0)
+
+
+def _parse_iso(value: str) -> Any:
+    from datetime import UTC, datetime
+
+    try:
+        parsed = datetime.fromisoformat(value)
+    except (TypeError, ValueError):
+        return datetime.now(UTC)
+    return parsed if parsed.tzinfo is not None else parsed.replace(tzinfo=UTC)
+
+
+def update_world_model(
+    evidence: Evidence,
     world_model: WorldModel,
-    reliability_threshold: str = "HIGH",
+    diagnostics: Diagnostics,
+    belief_input: dict[str, Any] | None = None,
+    region_key: str | None = None,
+    prune: bool | None = None,
 ) -> None:
-    """Integrate evidence entries at or above reliability_threshold into world_model.observations[].
+    """Integrate `evidence` (TS updateWorldModel). `belief_input` = {id?, statement?, derived_from}."""
+    recorded_at = _parse_iso(evidence.freshness)
 
-    Never calls add_belief() — belief creation requires explicit inference nodes (INV-01).
-    """
-    threshold_rank = _RELIABILITY_ORDER.get(reliability_threshold, 2)
-    for entry in evidence_store.entries:
-        entry_rank = _RELIABILITY_ORDER.get(entry.reliability, 0)
-        if entry_rank >= threshold_rank:
+    if evidence.evidence_type in ("OBSERVATION", "SYSTEM_ERROR"):
+        world_model.add_observation(
+            Observation(id=evidence.id, content=evidence.obs, source=evidence.source, recorded_at=recorded_at)
+        )
+        key = region_key if region_key is not None else evidence.source
+        world_model.completeness_flags[key] = prune is not True
+    elif evidence.evidence_type == "INFERENCE":
+        belief_input = belief_input or {}
+        world_model.add_belief(
+            Belief(
+                id=belief_input.get("id") or evidence.id,
+                statement=belief_input.get("statement") or evidence.obs,
+                confidence=_reliability_to_float(evidence.reliability),
+                supporting_evidence=[],
+                reliability="",
+                derived_from=list(belief_input.get("derived_from") or []),
+                recorded_at=recorded_at,
+            )
+        )
+        if region_key:
+            world_model.completeness_flags[region_key] = prune is not True
+
+    recompute_belief_health(world_model, diagnostics)
+    world_model.generation_id += 1
+
+
+def recompute_belief_health(world_model: WorldModel, diagnostics: Diagnostics) -> None:
+    """Refresh belief_health freshness / consistency / support from the world model (TS recomputeBeliefHealth)."""
+    belief_count = len(world_model.beliefs)
+    stale_ratio = sum(1 for v in world_model.stale_flags.values() if v) / max(1, belief_count)
+    diagnostics.belief_health.freshness = normalise(1 - stale_ratio, "ratio")
+
+    density = min(1.0, len(world_model.contradictions) / belief_count) if belief_count > 0 else 0.0
+    diagnostics.belief_health.consistency = normalise(1 - density, "ratio")
+
+    mean_support = sum(b.confidence for b in world_model.beliefs) / belief_count if belief_count > 0 else 1.0
+    diagnostics.belief_health.support = normalise(mean_support, "ratio")
+
+
+_RELIABILITY_ORDER = {"LOW": 0, "MEDIUM": 1, "HIGH": 2}
+
+
+def integrate_evidence(evidence_store: Any, world_model: WorldModel, reliability_threshold: str = "HIGH") -> None:
+    """Bulk helper for the canvas `update_world_model` node compiler (Python-only): add every store entry at or
+    above `reliability_threshold` as an observation. Never creates beliefs (INV-01); the per-evidence TS-shaped
+    entry point is update_world_model()."""
+    threshold = _RELIABILITY_ORDER.get(reliability_threshold, 2)
+    known = {o.id for o in world_model.observations}
+    for entry in evidence_store.observations:
+        if _RELIABILITY_ORDER.get(entry.reliability, 0) >= threshold and entry.id not in known:
             world_model.add_observation(
                 Observation(
-                    id=entry.id,
-                    content=entry.obs,
-                    source=entry.source,
-                    recorded_at=entry.recorded_at,
+                    id=entry.id, content=entry.obs, source=entry.source, recorded_at=_parse_iso(entry.freshness)
                 )
             )
-
-
-def recompute_belief_health(world_model: WorldModel) -> dict[str, float]:
-    """Compute three belief_health proxy sub-dimensions and store them on the world model.
-
-    Returns:
-        {"freshness": float, "consistency": float, "support": float}
-        Each value is in [0.0, 1.0].
-
-    - freshness: 1 - stale_flag_ratio (from stale_flags if present, else 0)
-    - consistency: 1 - contradiction_density (contradictions / max(1, beliefs))
-    - support: mean reliability weight over beliefs (HIGH=1.0, MEDIUM=0.5, LOW=0.2)
-    """
-    stale_flags: dict[str, bool] = getattr(world_model, "stale_flags", {})
-    stale_count = sum(1 for v in stale_flags.values() if v)
-    belief_count = max(1, len(world_model.beliefs))
-    stale_flag_ratio = stale_count / belief_count
-
-    contradiction_density = len(world_model.contradictions) / belief_count
-
-    if world_model.beliefs:
-        weights = []
-        for belief in world_model.beliefs:
-            # Use the highest-reliability supporting evidence, or default 0.5
-            if belief.supporting_evidence:
-                weights.append(0.5)  # evidence IDs stored as strings; default MEDIUM weight
-            else:
-                weights.append(0.5)
-        mean_weight = sum(weights) / len(weights)
-    else:
-        mean_weight = 1.0  # no beliefs → no deficit
-
-    freshness = max(0.0, min(1.0, 1.0 - stale_flag_ratio))
-    consistency = max(0.0, min(1.0, 1.0 - contradiction_density))
-    support = max(0.0, min(1.0, mean_weight))
-
-    proxies: dict[str, float] = {
-        "freshness": freshness,
-        "consistency": consistency,
-        "support": support,
-    }
-    # Store on world model as transient proxy (not persisted as a typed field)
-    world_model.belief_health_proxies = proxies  # type: ignore[attr-defined]
-    return proxies
 
 
 def bump_generation(world_model: WorldModel) -> None:
     """Increment generation_id after each world model write cycle (staleness tracking)."""
     world_model.generation_id += 1
+
+
+__all__ = ["bump_generation", "integrate_evidence", "recompute_belief_health", "update_world_model"]

@@ -11,8 +11,6 @@ Run all:     pytest adapter/tests/test_harness_p1.py -v
 import json
 import sys
 import uuid
-from dataclasses import dataclass
-from datetime import UTC, datetime
 from pathlib import Path
 
 import pytest
@@ -21,22 +19,19 @@ import pytest
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
 from harness.evidence import Evidence, EvidenceStore
+from harness.failure_modes import FailureDiagnostics, FailureModeLibrary, build_default_library
 from harness.hypothesis import (
-    EliminationPolicy,
+    DIVERSITY_THRESHOLD,
     Hypothesis,
     HypothesisSet,
-    analogy_based_generation,
     compute_diversity_score,
-    counterfactual_reasoning,
-    eliminate,
-    enforce_diversity,
-    failure_mode_library_contribution,
-    generate_hypotheses,
-    symptom_inference,
+    generate_update_hypotheses,
 )
+from harness.memory import MemoryState
 from harness.tool_manifest import FrozenManifestError, build_manifest
 from harness.tool_reliability import (
-    ToolEnvelope,
+    ToolReliabilityEnvelope,
+    apply_tool_reliability,
     apply_tool_reliability_envelope,
     get_envelope,
 )
@@ -62,7 +57,7 @@ def _make_evidence(
     evidence_type="OBSERVATION",
     obs="test observation",
     source="test_tool",
-    freshness=1.0,
+    freshness="2026-01-01T00:00:00+00:00",
 ) -> Evidence:
     return Evidence(
         id=str(uuid.uuid4()),
@@ -134,29 +129,34 @@ def test_t03_query_by_evidence_type():
 
 
 def test_t04_evidence_store_roundtrip():
-    """T04 · EvidenceStore round-trips through to_dict()/from_dict() without data loss."""
+    """T04 · EvidenceStore round-trips through to_dict()/from_dict() without data loss (envelopes and the
+    tool-availability manifest included)."""
+    from harness.evidence import ToolAvailability
+
     store = _make_evidence_store_with_mix()
-    # Add one more with a specific recorded_at to ensure datetime round-trips
-    ev = Evidence(
-        id="special",
-        obs="special obs",
-        reliability="HIGH",
-        source="mypy",
-        evidence_type="OBSERVATION",
-        freshness=0.75,
-        recorded_at=datetime(2026, 6, 1, 12, 0, 0, tzinfo=UTC),
+    store.add_observation(
+        Evidence(
+            id="special",
+            obs="special obs",
+            reliability="HIGH",
+            source="mypy",
+            evidence_type="OBSERVATION",
+            freshness="2026-06-01T12:00:00+00:00",
+        )
     )
-    store.append(ev)
+    store.tool_reliability_envelopes["grep"] = ToolReliabilityEnvelope("grep", "HIGH", "LOW")
+    store.tool_availability_manifest["mypy"] = ToolAvailability(True, None)
 
-    d = store.to_dict()
-    restored = EvidenceStore.from_dict(d)
+    restored = EvidenceStore.from_dict(store.to_dict())
 
-    assert len(restored.entries) == len(store.entries)
-    special = next(e for e in restored.entries if e.id == "special")
+    assert len(restored.observations) == len(store.observations)
+    special = next(e for e in restored.observations if e.id == "special")
     assert special.obs == "special obs"
     assert special.reliability == "HIGH"
-    assert special.freshness == 0.75
-    assert special.recorded_at == datetime(2026, 6, 1, 12, 0, 0, tzinfo=UTC)
+    assert special.freshness == "2026-06-01T12:00:00+00:00"
+    assert restored.tool_reliability_envelopes["grep"].max_conclusion_reliability == "LOW"
+    assert restored.is_tool_available("mypy") is True
+    assert restored.is_tool_available("unregistered") is False
 
 
 # ══════════════════════════════════════════════════════════════════════════════
@@ -181,30 +181,49 @@ def test_t05_apply_envelope_caps_inference_from_grep():
     assert capped.obs == ev.obs  # other fields unchanged
 
 
-def test_t06_apply_envelope_noop_for_observation():
-    """T06 · apply_tool_reliability_envelope on OBSERVATION is a no-op."""
+def test_t06_apply_envelope_caps_any_evidence_type():
+    """T06 · like TS applyToolReliability, the cap applies to OBSERVATION evidence too (not INFERENCE only)."""
     ev = Evidence(
         id="e1",
         obs="found pattern X",
         reliability="HIGH",
         source="grep",
         evidence_type="OBSERVATION",
-        freshness=1.0,
     )
     grep_envelope = get_envelope("grep")
     assert grep_envelope is not None
     result = apply_tool_reliability_envelope(ev, grep_envelope)
-    assert result is ev  # same object returned
-    assert result.reliability == "HIGH"
+    assert result.reliability == "LOW"
+
+
+def test_t06b_apply_tool_reliability_refreshes_feasibility():
+    """apply_tool_reliability() looks the envelope up by source and sets verification_health.feasibility to
+    1 - (share of registered envelopes capped at LOW)."""
+    from harness.diagnostics import Diagnostics
+
+    store = EvidenceStore()
+    store.tool_reliability_envelopes["grep"] = ToolReliabilityEnvelope("grep", "HIGH", "LOW")
+    store.tool_reliability_envelopes["pytest"] = ToolReliabilityEnvelope("pytest", "HIGH", "HIGH")
+    diagnostics = Diagnostics()
+    ev = Evidence(id="e", obs="x", reliability="HIGH", source="grep", evidence_type="INFERENCE")
+
+    capped = apply_tool_reliability(ev, store, diagnostics)
+
+    assert capped.reliability == "LOW"
+    assert diagnostics.verification_health.feasibility == pytest.approx(0.5)
+    unknown = apply_tool_reliability(
+        Evidence(id="e2", obs="y", reliability="HIGH", source="other", evidence_type="OBSERVATION"), store, diagnostics
+    )
+    assert unknown.reliability == "HIGH"
 
 
 def test_t07_get_envelope_grep():
     """T07 · get_envelope("grep") returns envelope with max_conclusion_reliability="LOW"."""
     envelope = get_envelope("grep")
     assert envelope is not None
-    assert isinstance(envelope, ToolEnvelope)
+    assert isinstance(envelope, ToolReliabilityEnvelope)
     assert envelope.max_conclusion_reliability == "LOW"
-    assert envelope.tool_name == "grep"
+    assert envelope.tool == "grep"
 
 
 def test_t08_get_envelope_unknown_returns_none():
@@ -257,219 +276,131 @@ def test_t12_failing_probe_marks_unavailable():
 
 
 # ══════════════════════════════════════════════════════════════════════════════
-# P1.6 — Hypothesis generation (T13–T16)
+# P1.6 / P1.7 — Hypothesis generation and elimination (T13–T20)
+# Twin of nodes/generate-update-hypotheses.ts and state/hypothesis-set.ts.
 # ══════════════════════════════════════════════════════════════════════════════
+
+
+def _generate(wm=None, store=None, hs=None, fd=None, memory=None):
+    hs = hs if hs is not None else HypothesisSet()
+    generate_update_hypotheses(
+        wm or _make_world_model_with_data(),
+        store or EvidenceStore(),
+        hs,
+        fd or FailureDiagnostics(failure_mode_library=build_default_library()),
+        memory or MemoryState(),
+    )
+    return hs
 
 
 def test_t13_all_four_sources_produce_hypotheses():
-    """T13 · Each of the four generation functions returns >=1 hypothesis with non-empty fixture."""
-    wm = _make_world_model_with_data()
+    """T13 · a pass seeds one hypothesis per source (symptom, counterfactual, failure_mode_library, analogy)."""
     store = EvidenceStore()
-    store.append(_make_evidence(obs="error in module X", evidence_type="OBSERVATION"))
+    store.add_observation(_make_evidence(obs="error in module X", evidence_type="OBSERVATION"))
 
-    # symptom_inference
-    results_si = symptom_inference(wm, store)
-    assert len(results_si) >= 1
+    hs = _generate(store=store)
 
-    # counterfactual_reasoning (needs a belief with confidence >= 0.6)
-    results_cr = counterfactual_reasoning(wm)
-    assert len(results_cr) >= 1
-
-    # failure_mode_library_contribution
-    fml_stub = {"null_ptr": "Null pointer dereference pattern", "race_cond": "Race condition pattern"}
-    results_fml = failure_mode_library_contribution(fml_stub)
-    assert len(results_fml) >= 1
-
-    # analogy_based_generation with a mock available store
-    @dataclass
-    class MockExperienceStore:
-        available: bool = True
-        successful_decompositions: list = None
-
-        def __post_init__(self):
-            if self.successful_decompositions is None:
-                self.successful_decompositions = ["past decomposition A", "past decomposition B"]
-
-    mock_store = MockExperienceStore()
-    results_ab = analogy_based_generation(mock_store)
-    assert len(results_ab) >= 1
+    sources = {s for h in hs.active for s in h.generation_sources}
+    assert sources == {"symptom_inference", "counterfactual", "failure_mode_library", "analogy"}
+    ids = {h.id for h in hs.active}
+    assert any(i.startswith("symp_") for i in ids)
+    assert "counter_b-1" in ids
 
 
-def test_t14_generation_sources_correctly_labelled():
-    """T14 · generation_sources on each Hypothesis correctly identifies its source."""
-    wm = _make_world_model_with_data()
+def test_t14_seed_confidences_and_labels():
+    """T14 · seed confidences follow TS: symptom 0.4, counterfactual 0.35, unknown failure mode 0.2, analogy 0.2."""
     store = EvidenceStore()
-    store.append(_make_evidence(obs="error in module X", evidence_type="OBSERVATION"))
-    fml_stub = {"pattern1": "desc1"}
+    store.add_observation(_make_evidence(obs="error in module X", evidence_type="OBSERVATION"))
+    hs = _generate(store=store)
 
-    for h in symptom_inference(wm, store):
-        assert "symptom_inference" in h.generation_sources
-        assert len(h.generation_sources) > 0
-
-    for h in counterfactual_reasoning(wm):
-        assert "counterfactual_reasoning" in h.generation_sources
-
-    for h in failure_mode_library_contribution(fml_stub):
-        assert "failure_mode_library" in h.generation_sources
+    by_source = {h.generation_sources[0]: h for h in hs.active if len(h.generation_sources) == 1}
+    assert by_source["symptom_inference"].confidence == pytest.approx(0.4)
+    assert by_source["counterfactual"].confidence == pytest.approx(0.35)
+    assert by_source["failure_mode_library"].id == "fml_unknown"
+    assert by_source["analogy"].id == "analogy_default"
 
 
-def test_t15_analogy_based_generation_noop_on_none():
-    """T15 · analogy_based_generation(None) returns [] without raising (INV-10 seed test)."""
-    result = analogy_based_generation(None)
-    assert result == []
-    assert isinstance(result, list)
+def test_t15_diversity_reaches_threshold_in_one_pass():
+    """T15 · four equally-populated sources give entropy 1.0 >= DIVERSITY_THRESHOLD, so no second pass is run
+    and every active hypothesis carries the resulting diversity_score."""
+    hs = _generate()
+    assert len(hs.active) == 4
+    assert compute_diversity_score(hs) == pytest.approx(1.0)
+    assert compute_diversity_score(hs) >= DIVERSITY_THRESHOLD
+    assert all(h.diversity_score == pytest.approx(1.0) for h in hs.active)
 
 
-def test_t16_generate_hypotheses_merges_overlapping_sources():
-    """T16 · generate_hypotheses() returns non-empty list; merged hypotheses have combined sources."""
-    wm = _make_world_model_with_data()
+def test_t16_failure_mode_match_seeds_named_entry(monkeypatch):
+    """T16 · a matching library entry seeds `fml_<entry id>` with the match confidence."""
+    monkeypatch.setenv("HARNESS_LEXICAL_MODE", "enabled")
     store = EvidenceStore()
-    store.append(_make_evidence(obs="error in module X", evidence_type="OBSERVATION"))
-    fml_stub = {"pattern1": "error in module X description"}  # deliberately overlaps with obs
-
-    results = generate_hypotheses(wm, store, fml_stub=fml_stub)
-    assert len(results) > 0
-    for h in results:
-        assert len(h.generation_sources) > 0, "No hypothesis should have empty generation_sources"
+    store.add_observation(_make_evidence(obs="the tool unavailable error again", evidence_type="OBSERVATION"))
+    hs = _generate(store=store)
+    fml = next(h for h in hs.active if "failure_mode_library" in h.generation_sources)
+    assert fml.id == "fml_tool-unavailable-cascade"
+    assert "TOOL_UNAVAILABLE_CASCADE" in fml.explanation
 
 
-# ══════════════════════════════════════════════════════════════════════════════
-# P1.7 — Hypothesis elimination policy (T17–T20)
-# ══════════════════════════════════════════════════════════════════════════════
+def test_t17_confidence_below_floor_is_eliminated():
+    """T17 · a hypothesis below elimination_policy.floor (0.05) is eliminated by a generation pass."""
+    low = Hypothesis(id="h-low", explanation="noise", confidence=0.02, generation_sources=["symptom_inference"])
+    hs = _generate(hs=HypothesisSet(active=[low]))
+    assert all(h.id != "h-low" for h in hs.active)
+    assert [h.id for h in hs.eliminated] == ["h-low"]
 
 
-def test_t17_posterior_below_floor_elimination():
-    """T17 · Hypothesis with confidence=0.02 is moved to eliminated with POSTERIOR_BELOW_FLOOR."""
-    h = Hypothesis(
-        id="h-low",
-        explanation="some hypothesis",
-        confidence=0.02,
-        predicted_observations=[],
-        discriminating_evidence=[],
-        generation_sources=["symptom_inference"],
-    )
-    hs = HypothesisSet(active=[h])
-    policy = EliminationPolicy(posterior_floor=0.05)
-
-    result = eliminate(hs, EvidenceStore(), {}, policy)
-
-    assert len(result.active) == 0
-    assert len(result.eliminated) == 1
-    _, record = result.eliminated[0]
-    assert record.reason == "POSTERIOR_BELOW_FLOOR"
-    assert record.hypothesis_id == "h-low"
+def test_t18_retention_k_trims_oldest():
+    """T18 · eliminate() keeps only the last retention_k (10) eliminated hypotheses."""
+    hs = HypothesisSet()
+    for i in range(25):
+        h = Hypothesis(id=f"h-{i}", explanation=f"hyp {i}", confidence=0.0)
+        hs.active.append(h)
+        hs.eliminate(h)
+    assert hs.active == []
+    assert [h.id for h in hs.eliminated] == [f"h-{i}" for i in range(15, 25)]
 
 
-def test_t18_k_retention_trims_oldest():
-    """T18 · After 25 eliminations with k_retention=20, eliminated list has exactly 20 entries."""
-    policy = EliminationPolicy(posterior_floor=0.99, k_retention=20)
-    hypotheses = [
+def test_t19_active_set_over_max_is_pruned_to_keep_beliefs():
+    """T19 · more than MAX_BELIEFS (10) active hypotheses are pruned to the 5 most confident; the rest are
+    recorded as pruned regions on memory_state.compression_risk."""
+    memory = MemoryState()
+    seeded = [
         Hypothesis(
-            id=f"h-{i}",
-            explanation=f"hyp {i}",
-            confidence=0.0,  # all below 0.99 floor
-            predicted_observations=[],
-            discriminating_evidence=[],
-            generation_sources=["symptom_inference"],
+            id=f"h-{i}", explanation=f"hyp {i}", confidence=0.5 + i / 100, generation_sources=["symptom_inference"]
         )
-        for i in range(25)
+        for i in range(12)
     ]
-    hs = HypothesisSet(active=hypotheses)
+    hs = _generate(hs=HypothesisSet(active=seeded), memory=memory)
+    assert len(hs.active) == 5
+    assert min(h.confidence for h in hs.active) >= 0.5
+    assert len(memory.compression_risk.pruned_regions) > 0
+    assert all(r.id.startswith("hypothesis_") for r in memory.compression_risk.pruned_regions)
 
-    result = eliminate(hs, EvidenceStore(), {}, policy)
 
-    assert len(result.active) == 0
-    assert len(result.eliminated) == 20
+def test_t20_contradiction_naming_a_hypothesis_eliminates_it():
+    """T20 · a world-model contradiction whose description mentions the hypothesis id eliminates it."""
+    from harness.world_model import Contradiction
 
-
-def test_t19_enforce_diversity_triggers_additional_passes():
-    """T19 · enforce_diversity() with single-source hypotheses triggers additional generation passes."""
     wm = _make_world_model_with_data()
-    store = EvidenceStore()
-    store.append(_make_evidence(obs="error in module X", evidence_type="OBSERVATION"))
-
-    # Start with a hypothesis set where all hypotheses share one source
-    hs = HypothesisSet(
-        active=[
-            Hypothesis(
-                id=str(uuid.uuid4()),
-                explanation="single source hypothesis",
-                confidence=0.5,
-                predicted_observations=[],
-                discriminating_evidence=[],
-                generation_sources=["symptom_inference"],
-            )
-        ]
+    h = Hypothesis(id="h-target", explanation="x", confidence=0.6, generation_sources=["symptom_inference"])
+    wm.contradictions.append(
+        Contradiction(id="c1", type="pairwise", severity="LOW", scope="local", description="conflicts with h-target")
     )
-
-    initial_score = compute_diversity_score(hs)
-    assert initial_score == 0.0  # Only one source → entropy = 0
-
-    policy = EliminationPolicy(diversity_threshold=0.7, max_diversity_passes=3)
-    fml_stub = {"p1": "pattern 1", "p2": "pattern 2"}
-    result = enforce_diversity(hs, wm, store, fml_stub=fml_stub, experience_store=None, policy=policy)
-
-    # After enforce_diversity, either diversity is improved or max passes reached
-    # The key assertion: if new hypotheses with different sources were added, score should improve
-    assert isinstance(result.diversity_score, float)
-    assert len(result.active) >= 1
+    hs = _generate(wm=wm, hs=HypothesisSet(active=[h]))
+    assert all(x.id != "h-target" for x in hs.active)
+    assert any(x.id == "h-target" for x in hs.eliminated)
 
 
-def test_t20_each_elimination_condition_independently_works():
-    """T20 · Each elimination condition independently triggers elimination at its threshold."""
-    # Test 1: POSTERIOR_BELOW_FLOOR
-    h1 = Hypothesis(
-        id="h1",
-        explanation="h1",
-        confidence=0.01,
-        predicted_observations=[],
-        discriminating_evidence=[],
-        generation_sources=["symptom_inference"],
-    )
-    hs1 = HypothesisSet(active=[h1])
-    result1 = eliminate(hs1, EvidenceStore(), {}, EliminationPolicy(posterior_floor=0.05))
-    assert len(result1.eliminated) == 1
-    assert result1.eliminated[0][1].reason == "POSTERIOR_BELOW_FLOOR"
-
-    # Test 2: PREDICTION_FAILURE (threshold=1)
-    h2 = Hypothesis(
-        id="h2",
-        explanation="h2",
-        confidence=0.5,
-        predicted_observations=["X should be present"],
-        discriminating_evidence=[],
-        generation_sources=["symptom_inference"],
-    )
-    hs2 = HypothesisSet(active=[h2])
-    policy2 = EliminationPolicy(prediction_failure_threshold=1)
-    result2 = eliminate(hs2, EvidenceStore(), {"h2": 1}, policy2)
-    assert len(result2.eliminated) == 1
-    assert result2.eliminated[0][1].reason == "PREDICTION_FAILURE"
-
-    # Test 3: CONTRADICTING_EVIDENCE
-    h3 = Hypothesis(
-        id="h3",
-        explanation="h3",
-        confidence=0.5,
-        predicted_observations=["module X present"],
-        discriminating_evidence=[],
-        generation_sources=["symptom_inference"],
-    )
-    store3 = EvidenceStore()
-    store3.append(
-        Evidence(
-            id="e1",
-            obs="no module X found",
-            reliability="HIGH",
-            source="grep",
-            evidence_type="OBSERVATION",
-            freshness=1.0,
-        )
-    )
-    hs3 = HypothesisSet(active=[h3])
-    result3 = eliminate(hs3, store3, {}, EliminationPolicy())
-    assert len(result3.eliminated) == 1
-    assert result3.eliminated[0][1].reason == "CONTRADICTING_EVIDENCE"
+def test_default_library_shape():
+    lib = build_default_library()
+    assert isinstance(lib, FailureModeLibrary)
+    assert {e.id for e in lib.entries} == {
+        "circular-dependency",
+        "tool-unavailable-cascade",
+        "scope-creep",
+        "stale-belief-reliance",
+    }
+    assert lib.class_priors == {}
 
 
 # ══════════════════════════════════════════════════════════════════════════════

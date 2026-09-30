@@ -299,7 +299,7 @@ def test_T07_blocked_risk_state_triggers_escalation():
     assert state.pending_escalation.reason == "blocked_state"
     assert exc_info.value.blocker.reason == "blocked_state"
     # Journal entry must be present
-    assert any(e.get("action_class") == "escalation" for e in state.memory_state.journal), (
+    assert any(e.action_class == "escalation" for e in state.memory_state.journal), (
         "escalation journal entry must be recorded"
     )
 

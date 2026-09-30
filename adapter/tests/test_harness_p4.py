@@ -17,21 +17,23 @@ import pytest
 
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
+from harness.belief_graph import BeliefDepGraph
 from harness.contradiction import detect_contradictions
-from harness.control_state import resolve_control_state
+from harness.control_state import ControlState, resolve_control_state
 from harness.diagnostics import Diagnostics, update_diagnostics
 from harness.evidence import EvidenceStore
+from harness.failure_modes import FailureDiagnostics
 from harness.hypothesis import HypothesisSet
-from harness.parallel_merge import merge_world_models, reconcile_parallel_branches
+from harness.parallel_merge import ParallelBranch, merge_world_models, reconcile_parallel_branches
 from harness.task_graph import (
-    ConflictProbabilityCache,
+    GraphCycleError,
     Task,
     TaskGraph,
     check_abstraction_alignment,
-    compute_initial_conflict_probabilities,
-    record_actual_overlap,
+    make_conflict_key,
+    select_task,
     select_unblocked_leaf,
-    should_use_pessimistic_blocking,
+    update_task_graph,
     validate_task_graph,
 )
 from harness.world_model import Belief, Contradiction, WorldModel
@@ -89,27 +91,36 @@ def _healthy_diagnostics() -> Diagnostics:
 # ── P4.1 — Task graph with 6-state status ────────────────────────────────────
 
 
-def test_T01_complete_to_active_raises() -> None:
-    """Attempting to transition a COMPLETE task to ACTIVE raises ValueError."""
-    graph = TaskGraph(tasks=[_task("A", status="COMPLETE")])
-    with pytest.raises(ValueError):
-        graph.update_task_status("A", "ACTIVE")
+def test_T01_complete_is_terminal_and_failed_needs_execution_layer() -> None:
+    """COMPLETE is terminal; FAILED can only be set by the execution layer (TS TaskGraph.setStatus)."""
+    graph = TaskGraph(tasks=[_task("A", status="COMPLETE"), _task("B")])
+    with pytest.raises(ValueError, match="terminal"):
+        graph.set_status("A", "RUNNING")
+    with pytest.raises(ValueError, match="execution layer"):
+        graph.set_status("B", "FAILED")
+    graph.set_status("B", "FAILED", from_execution_layer=True)
+    assert graph.get_task("B").status == "FAILED"
+    assert graph.changed is True
+    with pytest.raises(ValueError, match="not found"):
+        graph.set_status("nope", "RUNNING")
 
 
-def test_T02_validate_detects_cycle() -> None:
-    """validate_task_graph() returns a non-empty error list when A→B and B→A."""
-    a = _task("A", depends_on=["B"])
-    b = _task("B", depends_on=["A"])
-    graph = TaskGraph(tasks=[a, b])
-    errors = validate_task_graph(graph)
-    assert errors, "expected cycle error but got none"
+def test_T02_cycle_detection_and_orphan_validation() -> None:
+    """update_task_graph() raises GraphCycleError for A→B→A; validate_task_graph() reports orphaned dependencies."""
+    graph = TaskGraph(tasks=[_task("A", depends_on=["B"]), _task("B", depends_on=["A"])])
+    with pytest.raises(GraphCycleError):
+        update_task_graph(None, None, None, graph)
+
+    orphan = TaskGraph(tasks=[_task("A", depends_on=["ghost"])])
+    assert validate_task_graph(orphan) == ['Task "A" depends on unknown task "ghost"']
+    assert validate_task_graph(TaskGraph(tasks=[_task("A")])) == []
 
 
 def test_T03_select_unblocked_leaf() -> None:
     """select_unblocked_leaf() returns None when no PENDING task has all deps COMPLETE;
     returns the correct task when exactly one qualifies."""
-    # No task qualifies: B is PENDING but depends on A which is ACTIVE (not COMPLETE)
-    a = _task("A", status="ACTIVE")
+    # No task qualifies: B is PENDING but depends on A which is RUNNING (not COMPLETE)
+    a = _task("A", status="RUNNING")
     b = _task("B", depends_on=["A"])
     graph = TaskGraph(tasks=[a, b])
     assert select_unblocked_leaf(graph) is None
@@ -124,45 +135,42 @@ def test_T03_select_unblocked_leaf() -> None:
 # ── P4.2 — conflict_probability_cache ────────────────────────────────────────
 
 
-def test_T04_identical_write_domains_get_1_0() -> None:
-    """Tasks with identical parallel_write_domains get initial conflict_probability=1.0."""
-    ta = _task("A", write_domains=["state"])
-    tb = _task("B", write_domains=["state"])
-    graph = TaskGraph(tasks=[ta, tb])
-    cache = compute_initial_conflict_probabilities(graph)
-    key = cache._key("state", "state")
-    assert cache.probabilities[key] == 1.0
-    assert should_use_pessimistic_blocking(cache, "state", "state") is True
+def test_T04_shared_write_domain_gets_same_domain_probability() -> None:
+    """update_task_graph seeds conflict_probability_cache: two tasks writing the same domain get
+    min(1, count / #tasks) = 1.0 for that domain against itself."""
+    graph = TaskGraph(tasks=[_task("A", write_domains=["state"]), _task("B", write_domains=["state"])])
+    update_task_graph(None, None, None, graph)
+    assert graph.conflict_probability_cache[make_conflict_key("state", "state")] == 1.0
+    assert graph.get_conflict_probability("state", "state") == 1.0
 
 
-def test_T05_disjoint_write_domains_get_0_0() -> None:
-    """Tasks with fully disjoint parallel_write_domains get initial conflict_probability=0.0."""
-    ta = _task("A", write_domains=["domain_a"])
-    tb = _task("B", write_domains=["domain_b"])
-    graph = TaskGraph(tasks=[ta, tb])
-    cache = compute_initial_conflict_probabilities(graph)
-    key = cache._key("domain_a", "domain_b")
-    assert cache.probabilities[key] == 0.0
-    assert should_use_pessimistic_blocking(cache, "domain_a", "domain_b") is False
+def test_T05_disjoint_write_domains_are_seeded_by_prevalence() -> None:
+    """Different domains get min(1, (countA + countB) / (2 * #tasks)); same-domain needs >= 2 writers."""
+    graph = TaskGraph(tasks=[_task("A", write_domains=["domain_a"]), _task("B", write_domains=["domain_b"])])
+    update_task_graph(None, None, None, graph)
+    assert graph.get_conflict_probability("domain_a", "domain_b") == pytest.approx(0.5)
+    assert graph.get_conflict_probability("domain_a", "domain_a") == 0  # only one writer -> not seeded
+    assert make_conflict_key("domain_b", "domain_a") == "domain_a::domain_b"
 
 
-def test_T06_experience_data_biases_probability_toward_1() -> None:
-    """10 observed conflicts for a domain pair raises the cached probability toward 1.0."""
-    ta = _task("A", write_domains=["domain_a"])
-    tb = _task("B", write_domains=["domain_b"])
-    graph = TaskGraph(tasks=[ta, tb])
-    cache = compute_initial_conflict_probabilities(graph)
+def test_T06_select_task_runs_second_task_concurrently_unless_pessimistic() -> None:
+    """select_task picks the highest-risk ready task, plus the next one when their write domains do not overlap or the
+    recorded conflict probability is <= 0.5 (PESSIMISTIC_THRESHOLD); > 0.5 serialises them; HUMAN_REQUIRED escalates."""
+    high = _task("H", risk_level="HIGH", write_domains=["x"])
+    low = _task("L", risk_level="LOW", write_domains=["y"])
+    graph = TaskGraph(tasks=[low, high])
+    result = select_task(graph, ControlState())
+    assert (result.task.id, result.concurrent_task.id, result.escalate) == ("H", "L", False)
 
-    initial_key = cache._key("domain_a", "domain_b")
-    initial_prob = cache.probabilities.get(initial_key, 0.0)
-    assert initial_prob == 0.0
+    overlap = TaskGraph(tasks=[_task("A", risk_level="HIGH", write_domains=["s"]), _task("B", write_domains=["s"])])
+    overlap.set_conflict_probability("s", "s", 0.8)
+    result = select_task(overlap, ControlState())
+    assert (result.task.id, result.concurrent_task) == ("A", None)
+    overlap.set_conflict_probability("s", "s", 0.4)
+    assert select_task(overlap, ControlState()).concurrent_task.id == "B"
 
-    for _ in range(10):
-        record_actual_overlap(cache, "domain_a", "domain_b", conflict_observed=True)
-
-    final_prob = cache.probabilities[initial_key]
-    assert final_prob > initial_prob, "probability did not increase after 10 conflict observations"
-    assert final_prob > 0.5, "expected probability biased toward 1.0 after 10 conflicts"
+    assert select_task(graph, ControlState(escalation_reason="HUMAN_REQUIRED")).escalate is True
+    assert select_task(TaskGraph(), ControlState()).task is None
 
 
 # ── P4.3 — Parallel branch merge ─────────────────────────────────────────────
@@ -173,7 +181,7 @@ def test_T07_merged_generation_id_is_max() -> None:
     wm_a = _world_model(gen=3)
     wm_b = _world_model(gen=7)
     wm_c = _world_model(gen=5)
-    merged = merge_world_models([wm_a, wm_b, wm_c])
+    merged = merge_world_models(wm_a, wm_b, wm_c)
     assert merged.generation_id == 7
 
 
@@ -189,7 +197,7 @@ def test_T08_optimistic_contradiction_detected_at_merge() -> None:
     assert len(wm_a.contradictions) == 0
     assert len(wm_b.contradictions) == 0
 
-    merged = merge_world_models([wm_a, wm_b])
+    merged = merge_world_models(wm_a, wm_b)
     evidence_store = EvidenceStore()
     hypothesis_set = HypothesisSet()
     detect_contradictions(merged, evidence_store, hypothesis_set)
@@ -197,33 +205,42 @@ def test_T08_optimistic_contradiction_detected_at_merge() -> None:
     assert len(merged.contradictions) > 0, "expected at least one contradiction in merged model from opposed beliefs"
 
 
-def test_T09_conflict_cache_updated_at_merge() -> None:
-    """Actual write domain overlap at merge updates conflict_probability_cache."""
-    ta = _task("A", write_domains=["shared"])
-    tb = _task("B", write_domains=["shared"])
-    cache = ConflictProbabilityCache()
-    cache.probabilities[cache._key("shared", "shared")] = 1.0  # pre-seeded
+def test_T09_reconcile_decays_domain_pair_probability() -> None:
+    """reconcile_parallel_branches decays the conflict probability of each given domain pair by x0.9 (only pairs that
+    already have a positive probability), stamps the merged generation_id on the resolved control state."""
+    graph = TaskGraph(tasks=[_task("A", write_domains=["shared"]), _task("B", write_domains=["shared"])])
+    graph.set_conflict_probability("shared", "shared", 1.0)
 
-    wm_a = _world_model(gen=2)
-    wm_b = _world_model(gen=3)
-    diagnostics = _healthy_diagnostics()
-    evidence_store = EvidenceStore()
-    hypothesis_set = HypothesisSet()
-
-    before_count = cache.observation_counts.get(cache._key("shared", "shared"), 0)
-    reconcile_parallel_branches(
-        branch_models=[wm_a, wm_b],
-        branch_tasks=[ta, tb],
-        conflict_cache=cache,
-        evidence_store=evidence_store,
-        hypothesis_set=hypothesis_set,
-        diagnostics=diagnostics,
+    result = reconcile_parallel_branches(
+        [ParallelBranch(_world_model(gen=2), ControlState()), ParallelBranch(_world_model(gen=3), ControlState())],
+        graph,
+        _healthy_diagnostics(),
+        FailureDiagnostics(),
+        EvidenceStore(),
+        HypothesisSet(),
+        parallel_domain_pairs=[("shared", "shared"), ("a", "b")],
     )
-    after_count = cache.observation_counts.get(cache._key("shared", "shared"), 0)
-    assert after_count > before_count, "observation count should increase after reconcile"
+    assert graph.get_conflict_probability("shared", "shared") == pytest.approx(0.9)
+    assert graph.get_conflict_probability("a", "b") == 0
+    assert result.world_model.generation_id == 3
+    assert result.control_state.generation_id == 3
 
-    # Subsequent lookup still uses pessimistic blocking (probability was high and True observed)
-    assert should_use_pessimistic_blocking(cache, "shared", "shared") is True
+
+def test_T09b_merge_semantics() -> None:
+    """Union by id with the later branch winning; assumptions deduplicated; completeness merged; the environment
+    change log is not carried over (TS mergeWorldModels)."""
+    a = _world_model(_belief("b1", "first"), gen=1)
+    b = _world_model(_belief("b1", "second"), gen=2)
+    a.assumptions = ["x", "y"]
+    b.assumptions = ["y", "z"]
+    a.completeness_flags = {"r": True}
+    b.completeness_flags = {"r": False}
+    a.environment_change_log = [{"id": "c"}]
+    merged = merge_world_models(a, b)
+    assert [x.statement for x in merged.beliefs] == ["second"]
+    assert merged.assumptions == ["x", "y", "z"]
+    assert merged.completeness_flags == {"r": False}
+    assert merged.environment_change_log == []
 
 
 def test_T10_system_breaking_contradiction_at_merge_does_not_raise() -> None:
@@ -236,7 +253,7 @@ def test_T10_system_breaking_contradiction_at_merge_does_not_raise() -> None:
     wm_a = _world_model(b1, gen=2)
     wm_b = _world_model(b2, gen=3)
 
-    merged = merge_world_models([wm_a, wm_b])
+    merged = merge_world_models(wm_a, wm_b)
 
     # Manually inject a SYSTEM_BREAKING contradiction to simulate the worst case
     sys_breaking = Contradiction(
@@ -286,13 +303,8 @@ def test_T11_fine_grained_tasks_against_coarse_world_model_reduce_score() -> Non
     # Feasibility should be reduced when wired into diagnostics
     diagnostics = Diagnostics()
     original_feasibility = diagnostics.verification_health.feasibility
-    update_diagnostics(
-        diagnostics,
-        wm,
-        HypothesisSet(),
-        EvidenceStore(),
-        task_graph=graph,
-    )
+    update_diagnostics(wm, HypothesisSet(), graph, FailureDiagnostics(), BeliefDepGraph(), diagnostics)
+    # composite [0.6 tool, 0.4 evidence, alignment 0.0] / (1 + 1 + 0.3) with no completeness flags / observations
     assert diagnostics.verification_health.feasibility < original_feasibility, (
         "feasibility should decrease when alignment score < 1.0"
     )

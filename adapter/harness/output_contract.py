@@ -1,18 +1,20 @@
 """
-Output contract data model — P0.5.
+Output contract data model and validation — P0.5, P5, P9.
 
-OutputContract holds the caller's format and interface requirements.
-Both validators are stubs in Phase 0:
-  - contract_shadow_check()    → full implementation in P5
-  - validate_output_contract() → full implementation in P9
+Twin of packages/harness/src/state/output-contract.ts, nodes/output-validation.ts and the contractShadowCheck in
+nodes/policy-gates.ts.
 
-Callers can be written against the ContractCheckResult return type now;
-the stubs return is_stub=True so integration tests can detect that real
-checks have not yet been wired.
+  - contract_shadow_check()   the cheap post-exec-gate check: every `required_sections` entry must be a key of a
+                              dict result;
+  - output_validation()       the authoritative final check (format, required sections, interface constraints,
+                              validation rules, caller-constraint negation); raises OutputContractError;
+  - validate_output_contract() the same check returned as a ContractCheckResult (no exception).
 """
 
 from __future__ import annotations
 
+import json
+import re
 from dataclasses import dataclass, field
 from typing import Any
 
@@ -24,7 +26,7 @@ _CONSTRAINT_NEGATION_WORDS = get_constraint_negation_words()
 
 @dataclass
 class OutputContract:
-    format_requirements: dict[str, Any] = field(default_factory=dict)
+    format: str = "text"
     required_sections: list[str] = field(default_factory=list)
     required_interface_fields: list[str] = field(default_factory=list)
     interface_constraints: dict[str, Any] = field(default_factory=dict)
@@ -33,7 +35,7 @@ class OutputContract:
 
     def to_dict(self) -> dict[str, Any]:
         return {
-            "format_requirements": dict(self.format_requirements),
+            "format": self.format,
             "required_sections": list(self.required_sections),
             "required_interface_fields": list(self.required_interface_fields),
             "interface_constraints": dict(self.interface_constraints),
@@ -43,13 +45,17 @@ class OutputContract:
 
     @classmethod
     def from_dict(cls, d: dict[str, Any]) -> OutputContract:
+        fmt = d.get("format")
+        if fmt is None:  # legacy shape: format_requirements = {"format": ...}
+            legacy = d.get("format_requirements") or {}
+            fmt = legacy.get("format", "text") if isinstance(legacy, dict) else "text"
         return cls(
-            format_requirements=d.get("format_requirements", {}),
-            required_sections=d.get("required_sections", []),
-            required_interface_fields=d.get("required_interface_fields", []),
-            interface_constraints=d.get("interface_constraints", {}),
-            validation_rules=d.get("validation_rules", []),
-            caller_specific_constraints=d.get("caller_specific_constraints", []),
+            format=fmt,
+            required_sections=list(d.get("required_sections", [])),
+            required_interface_fields=list(d.get("required_interface_fields", [])),
+            interface_constraints=dict(d.get("interface_constraints", {})),
+            validation_rules=list(d.get("validation_rules", [])),
+            caller_specific_constraints=list(d.get("caller_specific_constraints", [])),
         )
 
 
@@ -76,28 +82,27 @@ class ContractCheckResult:
 
 
 def update_output_contract(caller_state: Any, output_contract: OutputContract) -> OutputContract:
-    """Re-derive output contract from updated caller_state constraints — P7.2.
+    """Re-derive output contract from updated caller_state constraints — P7.2 (TS updateOutputContract).
 
-    Replaces caller_specific_constraints with the current constraints from
-    caller_state. Re-derives required_interface_fields where a constraint
-    specifies a mandatory output field via "required: <field>" syntax.
-    Returns a new OutputContract (immutable update).
+    Replaces caller_specific_constraints with the current constraints from caller_state. A constraint written
+    "required: <field> ..." adds `<field>` (first token after the colon, one leading/trailing quote stripped) to
+    required_interface_fields. Returns a new OutputContract (immutable update).
     """
     new_constraints = list(caller_state.current_constraints)
 
-    # Re-derive required_interface_fields from constraints
     required_fields = list(output_contract.required_interface_fields)
     for constraint in new_constraints:
-        lower = constraint.lower()
-        if "required:" in lower:
-            parts = constraint.split(":", 1)
+        if "required:" in constraint.lower():
+            parts = constraint.split(":")
             if len(parts) > 1:
-                field_candidate = parts[1].strip().split()[0].strip("\"'")
-                if field_candidate and field_candidate not in required_fields:
-                    required_fields.append(field_candidate)
+                rest = ":".join(parts[1:]).strip()
+                tokens = re.split(r"\s+", rest)
+                candidate = re.sub(r"^['\"]|['\"]$", "", tokens[0]) if tokens else ""
+                if candidate and candidate not in required_fields:
+                    required_fields.append(candidate)
 
     return OutputContract(
-        format_requirements=dict(output_contract.format_requirements),
+        format=output_contract.format,
         required_sections=list(output_contract.required_sections),
         required_interface_fields=required_fields,
         interface_constraints=dict(output_contract.interface_constraints),
@@ -106,151 +111,104 @@ def update_output_contract(caller_state: Any, output_contract: OutputContract) -
     )
 
 
-def check_format_requirements(result: Any, output_contract: OutputContract) -> list[str]:
-    """Validate output_contract.format_requirements against result."""
+# ── authoritative output validation (TS nodes/output-validation.ts) ──────────
+
+
+class OutputContractError(Exception):
+    def __init__(self, violated_dimension: str, violations: list[str]) -> None:
+        super().__init__(f'Output contract violation in "{violated_dimension}": {"; ".join(violations)}')
+        self.violated_dimension = violated_dimension
+        self.violations = violations
+
+
+def _js_str(value: Any) -> str:
+    """JS String(value) for the primitives that reach a violation message."""
+    if value is True:
+        return "true"
+    if value is False:
+        return "false"
+    if value is None:
+        return "null"
+    return str(value)
+
+
+def output_validation(
+    final_result: Any,
+    output_contract: OutputContract,
+    caller_state: Any,
+    *,
+    skip_caller_constraints: bool = False,
+) -> ContractCheckResult:
+    """Validate a finished reply against the contract (TS outputValidation). Raises OutputContractError.
+
+    `skip_caller_constraints` skips the lexical caller-constraint word match — set when the host judges the
+    constraints itself (semantic constraint judge). With HARNESS_LEXICAL constraint-negation off (the default) that
+    match does not run either.
+    """
     violations: list[str] = []
-    fmt = output_contract.format_requirements
-    if not fmt:
-        return violations
+    result: dict[str, Any] = final_result if isinstance(final_result, dict) else {}
 
-    result_dict = _to_dict(result)
-    result_str = result if isinstance(result, str) else ""
+    if output_contract.format and output_contract.format != "any":
+        if isinstance(final_result, str) and output_contract.format == "json":
+            try:
+                json.loads(final_result)
+            except ValueError:
+                violations.append("format: expected JSON, got non-parseable string")
 
-    # Check required top-level keys
-    for req_field in fmt.get("required_fields", []):
-        if result_dict is not None and req_field not in result_dict:
-            violations.append(f"format_requirements: missing required field {req_field!r}")
+    for section in output_contract.required_sections:
+        if section not in result:
+            violations.append(f'required_sections: missing field "{section}"')
 
-    # Check max_length constraint
-    max_len = fmt.get("max_length")
-    if max_len is not None:
-        if result_str and len(result_str) > max_len:
-            violations.append(f"format_requirements: result length {len(result_str)} exceeds max_length {max_len}")
-
-    # Check format type
-    expected_format = fmt.get("format")
-    if expected_format == "json":
-        if not isinstance(result, (dict, list)):
-            violations.append("format_requirements: expected JSON (dict/list) format")
-    elif expected_format == "plain_text":
-        if not isinstance(result, str):
-            violations.append("format_requirements: expected plain_text (str) format")
-
-    return violations
-
-
-def check_required_sections(result: Any, output_contract: OutputContract) -> list[str]:
-    """Verify all required_sections are present and non-empty in result."""
-    violations: list[str] = []
-    sections = output_contract.required_sections
-    if not sections:
-        return violations
-
-    result_dict = _to_dict(result)
-    result_str = result if isinstance(result, str) else ""
-
-    for section in sections:
-        if result_dict is not None:
-            # Dict result: check top-level key
-            if section not in result_dict:
-                violations.append(f"required_sections: missing section {section!r}")
-            elif not result_dict[section]:
-                violations.append(f"required_sections: section {section!r} is empty")
-        elif result_str:
-            # Text result: check for heading marker (a substring match; HARNESS_LEXICAL required-sections)
-            if harness_lexical_active("required-sections") and section.lower() not in result_str.lower():
-                violations.append(f"required_sections: missing section {section!r} in text result")
-        else:
-            violations.append(f"required_sections: cannot check section {section!r} — result is None")
-
-    return violations
-
-
-def check_interface_constraints(result: Any, output_contract: OutputContract) -> list[str]:
-    """Verify required_interface_fields presence and type constraints."""
-    violations: list[str] = []
-    result_dict = _to_dict(result)
-    if result_dict is None:
-        result_dict = {}
-
-    for field_name in output_contract.required_interface_fields:
-        if field_name not in result_dict:
-            violations.append(f"interface_constraints: missing required field {field_name!r}")
-
-    for field_name, expected_type in output_contract.interface_constraints.items():
-        if field_name not in result_dict:
-            continue  # missing required fields already caught above
-        value = result_dict[field_name]
-        if not _check_type(value, expected_type):
-            actual_type = type(value).__name__
+    for key, expected in output_contract.interface_constraints.items():
+        if key in result and result[key] != expected:
             violations.append(
-                f"interface_constraints: type mismatch for {field_name!r}: "
-                f"expected {expected_type!r}, got {actual_type!r}"
+                f'interface_constraints: field "{key}" expected {_js_str(expected)}, got {_js_str(result[key])}'
             )
 
-    return violations
+    for rule in output_contract.validation_rules:
+        colon = rule.find(":")
+        if colon > 0:
+            rule_field = rule[:colon].strip()
+            if rule_field not in result:
+                violations.append(f'validation_rules: rule "{rule}" references missing field "{rule_field}"')
 
+    result_text = (
+        (final_result if isinstance(final_result, str) else "") + " " + " ".join(_js_str(v) for v in result.values())
+    ).lower()
 
-def check_caller_specific_constraints(result: Any, caller_state: Any) -> list[str]:
-    """Evaluate result against caller_state.current_constraints (live list — may be updated by P7)."""
-    violations: list[str] = []
-    if caller_state is None:
-        return violations
-
-    current_constraints: list[str] = getattr(caller_state, "current_constraints", [])
-    result_str = result if isinstance(result, str) else ""
-    result_dict = _to_dict(result) or {}
-
-    # HARNESS_LEXICAL constraint-negation: off → no constraint is checked by word match.
-    for constraint in current_constraints if harness_lexical_active("constraint-negation") else []:
+    lexical_constraints = not skip_caller_constraints and harness_lexical_active("constraint-negation")
+    for constraint in caller_state.current_constraints if (lexical_constraints and caller_state is not None) else []:
         constraint_lower = constraint.lower()
-        constraint_tokens = set(constraint_lower.split())
+        if not any(t in _CONSTRAINT_NEGATION_WORDS for t in re.split(r"\s+", constraint_lower)):
+            continue
+        for kw in _CONSTRAINT_NEGATION_WORDS:
+            idx = constraint_lower.find(kw)
+            if idx == -1:
+                continue
+            subject = constraint_lower[idx + len(kw) :].strip()
+            subject_tokens = [t for t in re.split(r"\s+", subject)[:4] if len(t) > 3]
+            if subject_tokens and any(t in result_text for t in subject_tokens):
+                violations.append(f'caller_specific_constraints: constraint violated: "{constraint}"')
+                break
 
-        # "output must not reference X" — check absence
-        if constraint_tokens & _CONSTRAINT_NEGATION_WORDS:
-            # Extract the subject of the negation (heuristic: words after the negation keyword)
-            violated = False
-            for kw in _CONSTRAINT_NEGATION_WORDS:
-                if kw in constraint_lower:
-                    subject = constraint_lower.split(kw, 1)[-1].strip()
-                    subject_tokens = set(subject.split()[:4])  # first 4 words
-                    if subject_tokens:
-                        result_text = (result_str + " " + " ".join(str(v) for v in result_dict.values())).lower()
-                        if any(tok in result_text for tok in subject_tokens if len(tok) > 3):
-                            violated = True
-                            break
-            if violated:
-                violations.append(f"caller_constraint violated: {constraint!r}")
+    if violations:
+        raise OutputContractError(violations[0].split(":")[0], violations)
 
-        # "response must be in X language" — simple heuristic
-        if "must be in" in constraint_lower or "language" in constraint_lower:
-            pass  # heuristic too fragile; skip without false-positive
-
-    return violations
+    return ContractCheckResult(passed=True, violations=[], is_stub=False)
 
 
 def validate_output_contract(
     result: Any,
     output_contract: OutputContract,
     caller_state: Any = None,
+    *,
+    skip_caller_constraints: bool = False,
 ) -> ContractCheckResult:
-    """Full authoritative output contract validation — P9.4 real implementation.
-
-    Replaces the P0.5 stub.  Checks all four dimensions:
-      1. format_requirements
-      2. required_sections
-      3. interface_constraints (fields + types)
-      4. caller-specific constraints from caller_state.current_constraints
-
-    A result that fails any check returns passed=False with a non-empty violations list.
-    is_stub is always False — this is the real implementation.
-    """
-    violations: list[str] = []
-    violations.extend(check_format_requirements(result, output_contract))
-    violations.extend(check_required_sections(result, output_contract))
-    violations.extend(check_interface_constraints(result, output_contract))
-    violations.extend(check_caller_specific_constraints(result, caller_state))
-    return ContractCheckResult(passed=len(violations) == 0, violations=violations, is_stub=False)
+    """output_validation() returned as a ContractCheckResult instead of raised."""
+    try:
+        return output_validation(result, output_contract, caller_state, skip_caller_constraints=skip_caller_constraints)
+    except OutputContractError as exc:
+        return ContractCheckResult(passed=False, violations=list(exc.violations), is_stub=False)
 
 
 def completion_check_final(
@@ -263,134 +221,36 @@ def completion_check_final(
 ) -> ContractCheckResult:
     """Final completion gate — authoritative contract check before harness return.
 
-    Calls validate_output_contract(). If passed=False, raises EscalationHalt via
-    escalate() with reason="contract_violation". The harness must not return a
-    contract-failing result silently.
-
-    Q7 (the internal plan): when the violations diagnose two or
-    more distinct candidate fixes (diagnose_review_failure_options — a plain deterministic
-    grouping, no LLM call), the blocker offers them as a structured question via
-    ask_question.build_ask_blocker(), gated by session_ask_mode + the global
-    HARNESS_ASK_QUESTION flag exactly like every other build_ask_blocker() caller
-    (INV-29). Fewer than two diagnosed fixes, or the flag/session off, falls back to
-    today's plain missing_info halt, unchanged.
+    Calls validate_output_contract(). If passed=False, raises EscalationHalt via escalate() with
+    reason="review_failure" and the violations as missing_info: the harness must not return a contract-failing
+    result silently. (TS output_validation throws an OutputContractError instead of pausing the run; the halt is the
+    Python driver's way to surface it. Like TS, no structured question is offered here — that is the review
+    gate's site, see review_gate.escalate_review_failure.) `session_ask_mode` is accepted for older callers.
     """
     check = validate_output_contract(result, output_contract, caller_state)
     if not check.passed:
-        from .ask_question import (
-            build_ask_blocker,
-            build_review_failure_question,
-            diagnose_review_failure_options,
-            resolve_ask_mode,
-        )
         from .escalation import SurfaceBlocker, escalate
 
-        # Flag-OFF byte-identical (Protected Invariants): this site had no question/
-        # options at all before Q7 — resolve the effective mode HERE rather than relying
-        # on build_ask_blocker's own internal degrade (which would still populate a
-        # collapsed single question/options pair even while nominally "off").
-        effective = resolve_ask_mode(session_ask_mode=session_ask_mode)
-        fix_options = diagnose_review_failure_options(check.violations) if effective else None
-        if fix_options:
-            blocker = build_ask_blocker(
-                [build_review_failure_question(fix_options)],
-                reason="review_failure",
-                missing_info=check.violations,
-                current_task_summary="Output contract validation failed",
-                session_ask_mode=session_ask_mode,
-            )
-        else:
-            blocker = SurfaceBlocker(
-                reason="review_failure",
-                missing_info=check.violations,
-                current_task_summary="Output contract validation failed",
-            )
+        blocker = SurfaceBlocker(
+            reason="review_failure",
+            missing_info=check.violations,
+            current_task_summary="Output contract validation failed",
+        )
         run_id = getattr(harness_run_state, "run_id", "") if harness_run_state else ""
         escalate(blocker, harness_run_state, run_id)
     return check
 
 
-def contract_shadow_check(result: Any, output_contract: OutputContract) -> ContractCheckResult:
-    """Lightweight interface-stability check at post_exec_gate — P5 real implementation.
+def contract_shadow_check(result: Any, output_contract: OutputContract | None) -> ContractCheckResult:
+    """Lightweight post-exec-gate check (TS contractShadowCheck): every `required_sections` entry must be present
+    as a key of a dict result. A missing contract, or a non-dict result, passes."""
+    if output_contract is None:
+        return ContractCheckResult(passed=True, violations=[], is_stub=False)
 
-    Checks:
-    1. All required_interface_fields are present in result dict
-    2. Type constraints in interface_constraints are satisfied
-    Returns is_stub=False since this is the real implementation.
-    """
     violations: list[str] = []
-
-    # Normalise result to a dict for field lookup
     if isinstance(result, dict):
-        result_dict = result
-    elif result is None:
-        result_dict = {}
-    else:
-        # Try to coerce to dict via to_dict() or __dict__
-        if hasattr(result, "to_dict"):
-            result_dict = result.to_dict()
-        elif hasattr(result, "__dict__"):
-            result_dict = vars(result)
-        else:
-            result_dict = {}
+        for section in output_contract.required_sections:
+            if section not in result:
+                violations.append(f"Missing required field: {section}")
 
-    # 1. Check required_interface_fields are present
-    for field_name in output_contract.required_interface_fields:
-        if field_name not in result_dict:
-            violations.append(f"Missing required interface field: {field_name!r}")
-
-    # 2. Check type constraints
-    for field_name, expected_type in output_contract.interface_constraints.items():
-        if field_name not in result_dict:
-            continue  # missing fields already caught above
-        value = result_dict[field_name]
-        if not _check_type(value, expected_type):
-            actual_type = type(value).__name__
-            violations.append(f"Type mismatch for {field_name!r}: expected {expected_type!r}, got {actual_type!r}")
-
-    return ContractCheckResult(
-        passed=len(violations) == 0,
-        violations=violations,
-        is_stub=False,
-    )
-
-
-def _to_dict(result: Any) -> dict[str, Any] | None:
-    """Normalise result to a dict for field lookup, or return None."""
-    if isinstance(result, dict):
-        return result
-    if result is None:
-        return {}
-    if hasattr(result, "to_dict"):
-        return result.to_dict()
-    if hasattr(result, "__dict__"):
-        return vars(result)
-    return None
-
-
-def _check_type(value: Any, expected_type: Any) -> bool:
-    """Check that value matches the expected_type descriptor.
-
-    expected_type can be a Python type object, a type name string (e.g. "str", "int"),
-    or a list of accepted type names.
-    """
-    if expected_type is None:
-        return True
-    if isinstance(expected_type, type):
-        return isinstance(value, expected_type)
-    if isinstance(expected_type, str):
-        type_map: dict[str, type] = {
-            "str": str,
-            "int": int,
-            "float": float,
-            "bool": bool,
-            "list": list,
-            "dict": dict,
-        }
-        py_type = type_map.get(expected_type.lower())
-        if py_type is None:
-            return True  # unknown type — pass conservatively
-        return isinstance(value, py_type)
-    if isinstance(expected_type, list):
-        return any(_check_type(value, t) for t in expected_type)
-    return True
+    return ContractCheckResult(passed=len(violations) == 0, violations=violations, is_stub=False)

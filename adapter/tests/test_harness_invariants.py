@@ -63,10 +63,9 @@ from harness.diagnostics import (
 from harness.evidence import EvidenceStore
 from harness.experience_store import WarmStartResult, warm_start
 from harness.failure_modes import FailureDiagnostics
-from harness.hypothesis import Hypothesis, HypothesisSet
+from harness.hypothesis import HypothesisSet
 from harness.loop import run_one_iteration, select_best_action
 from harness.memory import MemoryState
-from harness.output_contract import OutputContract
 from harness.recovery import StrategyState
 from harness.reviewer import ReviewPassResult, reviewer_pass
 from harness.state_store import HarnessRunState
@@ -389,24 +388,27 @@ def test_inv_07_dep_class_gap_does_not_block_tiers_1_to_4():
 
 
 def test_inv_08_failure_mode_library_only_used_in_tier4_and_hypothesis():
-    """INV-08: Failure mode library is consumed by hypothesis generation and Tier 4 only."""
-    from harness.failure_modes import FailureModeLibrary, build_default_library
-    from harness.hypothesis import generate_from_failure_library
+    """INV-08: Failure mode library is consumed by hypothesis generation and Tier 4 only — matching is read-only."""
+    from harness.evidence import EvidenceStore
+    from harness.failure_modes import FailureDiagnostics, FailureModeLibrary, build_default_library
+    from harness.hypothesis import HypothesisSet, generate_update_hypotheses
+    from harness.memory import MemoryState
 
     lib = build_default_library()
     assert isinstance(lib, FailureModeLibrary)
-    assert len(lib.patterns) > 0
+    assert len(lib.entries) > 0
 
-    # generate_from_failure_library is the only hypothesis-generation entry point
     wm = _make_world_model()
-    hyps = generate_from_failure_library(wm, lib)
-    assert isinstance(hyps, list)
+    fd = FailureDiagnostics(failure_mode_library=lib)
+    hs = HypothesisSet()
+    generate_update_hypotheses(wm, EvidenceStore(), hs, fd, MemoryState())
+    assert any("failure_mode_library" in h.generation_sources for h in hs.active)
 
-    # The library does not mutate world_model or control_state directly
-    # (structural invariant: same world_model after library use)
+    # The library does not mutate world_model or the failure diagnostics' matched_pattern
     obs_count_before = len(wm.observations)
-    _ = generate_from_failure_library(wm, lib)
+    _ = lib.match(["circular dependency"])
     assert len(wm.observations) == obs_count_before, "INV-08 violated: failure library mutated the world model"
+    assert fd.matched_pattern is None
 
 
 # ══════════════════════════════════════════════════════════════════════════════
@@ -415,48 +417,34 @@ def test_inv_08_failure_mode_library_only_used_in_tier4_and_hypothesis():
 
 
 def test_inv_09_adversarial_prior_not_live_after_reviewer_pass():
-    """INV-09: reviewer_pass result has no live references to the adversarial prior."""
+    """INV-09: reviewer_pass result has no live references to the adversarial prior — the seeds are a local list."""
+    from harness.belief_graph import BeliefDepGraph, DepGraphBudget
+    from harness.diagnostics import Diagnostics
+    from harness.evidence import EvidenceStore
+    from harness.failure_modes import FailureDiagnostics
+    from harness.reviewer import PropagationQueue
 
     wm = _make_world_model(2)
-    task_graph = TaskGraph(
-        tasks=[
-            Task(id="t1", description="task", status="ACTIVE", completed_evidence=[], abstraction_level=0),
-        ]
-    )
-    hypothesis_set = HypothesisSet(
-        active=[
-            Hypothesis(
-                id="h1",
-                explanation="test",
-                confidence=0.7,
-                predicted_observations=[],
-                discriminating_evidence=[],
-                generation_sources=["symptom_inference"],
-            )
-        ],
-        eliminated=[],
-    )
-    output_contract = OutputContract()
+    task_graph = TaskGraph(tasks=[Task(id="t1", description="task", status="RUNNING", abstraction_level=0)])
 
     result = reviewer_pass(
-        world_model=wm,
-        task_graph=task_graph,
-        success_criteria=["criterion 1"],
-        output_contract=output_contract,
-        hypothesis_set=hypothesis_set,
-        evidence_store=None,
-        caller_state=None,
-        belief_dep_graph=None,
-        failure_history=None,
+        wm,
+        ["criterion 1"],
+        FailureDiagnostics(),
+        BeliefDepGraph(),
+        DepGraphBudget(),
+        HypothesisSet(),
+        task_graph,
+        Diagnostics(),
+        EvidenceStore(),
+        PropagationQueue(),
     )
 
     assert isinstance(result, ReviewPassResult)
-    # The ReviewPassResult must not hold a reference to an adversarial_prior object
-    # that would remain live. Check it is serialisable as a plain dict.
     result_dict = result.to_dict()
     assert isinstance(result_dict, dict)
-    # adversarial_prior key should be absent or None in the public result
     assert "adversarial_prior" not in result_dict or result_dict.get("adversarial_prior") is None
+    assert not hasattr(result, "adversarial_prior")
 
 
 # ══════════════════════════════════════════════════════════════════════════════

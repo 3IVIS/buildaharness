@@ -1,95 +1,69 @@
 """
 Tool reliability envelopes — P1.2.
 
-Per-tool mappings that cap the maximum conclusion reliability an inference
-drawn from that tool's output can claim. OBSERVATION and SYSTEM_ERROR evidence
-are not capped. Unknown tools fail open (no cap applied) — this is intentional.
-Fail-closed behaviour (blocking unknown tools) is reserved for the verification
-adequacy critic in P5.
+Twin of packages/harness/src/nodes/apply-tool-reliability.ts. An envelope caps the reliability a conclusion drawn
+from a tool's output may claim. Unlike the earlier Python behaviour (INFERENCE only), the cap applies to **any**
+evidence type, and applying it also refreshes `verification_health.feasibility` from the share of registered
+envelopes that are capped at LOW. A source with no registered envelope is not capped (fail open).
 """
 
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import replace
+from typing import Any
 
-from .evidence import _RELIABILITY_FROM_ORDER, _RELIABILITY_ORDER, Evidence, ReliabilityClass
+from .diagnostics import normalise
+from .evidence import (
+    _RELIABILITY_FROM_ORDER,
+    _RELIABILITY_ORDER,
+    Evidence,
+    EvidenceStore,
+    ReliabilityClass,
+    ToolReliabilityEnvelope,
+)
 
-
-@dataclass
-class ToolEnvelope:
-    tool_name: str
-    description: str
-    scope_limits: list[str]
-    max_conclusion_reliability: ReliabilityClass
-
-
-TOOL_RELIABILITY_ENVELOPES: dict[str, ToolEnvelope] = {
-    "grep": ToolEnvelope(
-        tool_name="grep",
-        description="Text search tool — confirms text presence only",
-        scope_limits=[
-            "cannot confirm semantic meaning",
-            "cannot confirm absence of a pattern",
-        ],
-        max_conclusion_reliability="LOW",
-    ),
-    "linter": ToolEnvelope(
-        tool_name="linter",
-        description="Static code linter",
-        scope_limits=["confirms syntax only", "cannot confirm runtime behaviour"],
-        max_conclusion_reliability="MEDIUM",
-    ),
-    "type_checker": ToolEnvelope(
-        tool_name="type_checker",
-        description="Static type checker",
-        scope_limits=[
-            "confirms type signatures",
-            "cannot confirm runtime correctness",
-        ],
-        max_conclusion_reliability="MEDIUM",
-    ),
-    "unit_test_runner": ToolEnvelope(
-        tool_name="unit_test_runner",
-        description="Unit test runner",
-        scope_limits=[],
-        max_conclusion_reliability="HIGH",
-    ),
-    "integration_test_runner": ToolEnvelope(
-        tool_name="integration_test_runner",
-        description="Integration test runner",
-        scope_limits=[],
-        max_conclusion_reliability="HIGH",
-    ),
+# Ready-made envelopes for common developer tools. Nothing loads these implicitly (TS has no default envelopes):
+# a host that wants them registers them on the store, e.g. `store.tool_reliability_envelopes.update(...)`.
+TOOL_RELIABILITY_ENVELOPES: dict[str, ToolReliabilityEnvelope] = {
+    "grep": ToolReliabilityEnvelope("grep", "HIGH", "LOW"),
+    "linter": ToolReliabilityEnvelope("linter", "HIGH", "MEDIUM"),
+    "type_checker": ToolReliabilityEnvelope("type_checker", "HIGH", "MEDIUM"),
+    "unit_test_runner": ToolReliabilityEnvelope("unit_test_runner", "HIGH", "HIGH"),
+    "integration_test_runner": ToolReliabilityEnvelope("integration_test_runner", "HIGH", "HIGH"),
 }
 
+# Back-compat alias for the old dataclass name.
+ToolEnvelope = ToolReliabilityEnvelope
 
-def apply_tool_reliability_envelope(evidence: Evidence, envelope: ToolEnvelope) -> Evidence:
-    """Cap INFERENCE evidence reliability to the envelope maximum.
 
-    OBSERVATION and SYSTEM_ERROR evidence are returned unchanged — raw sensor
-    data and definite tool failures are not subject to scope capping.
-    Evidence objects are immutable by convention — a new instance is returned.
+def apply_tool_reliability(evidence: Evidence, evidence_store: EvidenceStore, diagnostics: Any) -> Evidence:
+    """Cap `evidence.reliability` by its source's envelope and refresh feasibility (TS applyToolReliability).
+
+    Returns a new Evidence (evidence is immutable by convention).
     """
-    if evidence.evidence_type != "INFERENCE":
-        return evidence
+    envelope = evidence_store.tool_reliability_envelopes.get(evidence.source)
+    capped: ReliabilityClass = evidence.reliability
+    if envelope is not None:
+        max_rank = _RELIABILITY_ORDER[envelope.max_conclusion_reliability]
+        if _RELIABILITY_ORDER[evidence.reliability] > max_rank:
+            capped = _RELIABILITY_FROM_ORDER[max_rank]  # type: ignore[assignment]
 
-    current_order = _RELIABILITY_ORDER[evidence.reliability]
-    cap_order = _RELIABILITY_ORDER[envelope.max_conclusion_reliability]
-    capped_order = min(current_order, cap_order)
+    envelopes = list(evidence_store.tool_reliability_envelopes.values())
+    low_count = sum(1 for e in envelopes if e.max_conclusion_reliability == "LOW")
+    gap_ratio = low_count / len(envelopes) if envelopes else 0.0
+    diagnostics.verification_health.feasibility = normalise(1 - gap_ratio, "ratio")
 
-    if capped_order == current_order:
-        return evidence
-
-    from dataclasses import replace
-
-    capped: ReliabilityClass = _RELIABILITY_FROM_ORDER[capped_order]  # type: ignore[assignment]
     return replace(evidence, reliability=capped)
 
 
-def get_envelope(tool_name: str) -> ToolEnvelope | None:
-    """Return the registered envelope for tool_name, or None for unknown tools.
+def apply_tool_reliability_envelope(evidence: Evidence, envelope: ToolReliabilityEnvelope) -> Evidence:
+    """Cap one piece of evidence by an explicit envelope (no diagnostics side effect)."""
+    max_rank = _RELIABILITY_ORDER[envelope.max_conclusion_reliability]
+    if _RELIABILITY_ORDER[evidence.reliability] <= max_rank:
+        return evidence
+    return replace(evidence, reliability=_RELIABILITY_FROM_ORDER[max_rank])  # type: ignore[arg-type]
 
-    Returns None for unknown tools (fail-open) — unregistered tools are not
-    penalised, they are just not granted a reliability cap either.
-    """
+
+def get_envelope(tool_name: str) -> ToolReliabilityEnvelope | None:
+    """Ready-made envelope for a well-known tool, or None (fail open)."""
     return TOOL_RELIABILITY_ENVELOPES.get(tool_name)

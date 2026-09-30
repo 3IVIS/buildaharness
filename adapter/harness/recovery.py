@@ -16,7 +16,6 @@ through the same existing surface-blocker path.
 
 from __future__ import annotations
 
-import math
 from dataclasses import dataclass, field
 from typing import Any, Literal
 
@@ -79,7 +78,12 @@ class StrategyState:
     current_strategy: StrategyType = "DIRECT_EDIT"
     switch_count: int = 0
     switch_triggers: list[str] = field(default_factory=list)
-    prior_strategy_weights: dict[str, float] = field(default_factory=dict)
+    # Flat prior over the six strategies (1/6 each), as TS makeFlatWeights().
+    prior_strategy_weights: dict[str, float] = field(
+        default_factory=lambda: {s: 1 / len(STRATEGY_ORDER) for s in STRATEGY_ORDER}
+    )
+    # Strategy ordering warm_start derives from experience (TS StrategyState.recovery_strategy_order).
+    recovery_strategy_order: list[StrategyType] = field(default_factory=lambda: list(STRATEGY_ORDER))
     completion_history: list[int] = field(default_factory=list)
     risk_state_history: list[str] = field(default_factory=list)
     stall_reason: str = ""
@@ -94,6 +98,7 @@ class StrategyState:
             "switch_count": self.switch_count,
             "switch_triggers": list(self.switch_triggers),
             "prior_strategy_weights": dict(self.prior_strategy_weights),
+            "recovery_strategy_order": list(self.recovery_strategy_order),
             "completion_history": list(self.completion_history),
             "risk_state_history": list(self.risk_state_history),
             "stall_reason": self.stall_reason,
@@ -107,7 +112,10 @@ class StrategyState:
             current_strategy=d.get("current_strategy", "DIRECT_EDIT"),
             switch_count=d.get("switch_count", 0),
             switch_triggers=list(d.get("switch_triggers", [])),
-            prior_strategy_weights=dict(d.get("prior_strategy_weights", {})),
+            prior_strategy_weights=dict(
+                d.get("prior_strategy_weights", {s: 1 / len(STRATEGY_ORDER) for s in STRATEGY_ORDER})
+            ),
+            recovery_strategy_order=list(d.get("recovery_strategy_order", STRATEGY_ORDER)),
             completion_history=list(d.get("completion_history", [])),
             risk_state_history=list(d.get("risk_state_history", [])),
             stall_reason=d.get("stall_reason", ""),
@@ -197,10 +205,11 @@ def get_next_strategy(strategy_state: StrategyState, order: list[str] | None = N
     STRATEGY_ORDER. Falls back to STRATEGY_ORDER when not given.
     """
     sequence = order or STRATEGY_ORDER
+    # A current strategy that is not in the sequence behaves as index -1 (TS indexOf), so the next one is the first.
     try:
         idx = sequence.index(strategy_state.current_strategy)
     except ValueError:
-        idx = 0
+        idx = -1
     next_idx = min(idx + 1, len(sequence) - 1)
     return sequence[next_idx]  # type: ignore[return-value]
 
@@ -227,7 +236,7 @@ def switch_strategy(
         try:
             idx = ordering.index(strategy_state.current_strategy)
         except ValueError:
-            idx = 0
+            idx = -1
         next_idx = min(idx + 1, len(ordering) - 1)
         next_strategy: StrategyType = ordering[next_idx]  # type: ignore[assignment]
     else:
@@ -252,7 +261,7 @@ def apply_failure_mode_bias(match_result: Any, strategy_state: StrategyState) ->
     Advisory only — the caller decides whether to follow the suggestion.
     Returns get_next_strategy() if confidence < 0.7 or no affinity is set.
     """
-    confidence = getattr(match_result, "normalised_confidence", 0.0)
+    confidence = getattr(match_result, "confidence", 0.0)
     if confidence >= 0.7:
         affinity = getattr(match_result, "strategy_affinity", None)
         if affinity is not None and affinity in STRATEGY_ORDER:
@@ -265,25 +274,13 @@ def get_strategy_with_experience(
     failure_class: str,
     experience_store: Any,
 ) -> StrategyType:
-    """Return next strategy using softmax when experience_store is available (INV-10).
-
-    Falls back transparently to get_next_strategy() when experience_store is absent
-    or unavailable — the caller never needs to check experience_store.available directly.
+    """Next strategy after the current one in the experience-ordered ladder (TS buildStrategyOrdering +
+    getNextStrategy). Falls back transparently to get_next_strategy() when the store is absent or unavailable.
     """
     if experience_store is None or not getattr(experience_store, "available", False):
         return get_next_strategy(strategy_state)
 
-    try:
-        weights_by_class: dict[str, dict[str, float]] = getattr(experience_store, "strategy_weights", {})
-        class_weights = weights_by_class.get(failure_class, {})
-        if not class_weights:
-            return get_next_strategy(strategy_state)
+    from .experience_store import build_strategy_ordering
 
-        values = {s: class_weights.get(s, 0.0) for s in STRATEGY_ORDER}
-        max_v = max(values.values())
-        exps = {s: math.exp(v - max_v) for s, v in values.items()}
-        total = sum(exps.values())
-        probs = {s: e / total for s, e in exps.items()}
-        return max(probs, key=lambda s: probs[s])  # type: ignore[return-value]
-    except Exception:
-        return get_next_strategy(strategy_state)
+    ordering = build_strategy_ordering(failure_class, experience_store)
+    return get_next_strategy(strategy_state, ordering)

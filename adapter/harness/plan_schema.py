@@ -32,7 +32,7 @@ class PlanTemplate(BaseModel):
 
 class TaskStatusOverride(BaseModel):
     id: str
-    status: str  # PENDING/ACTIVE/VERIFYING/COMPLETE/FAILED/BLOCKED
+    status: str  # PENDING/RUNNING/COMPLETE/FAILED/BLOCKED/HUMAN_REQUIRED
     block_reason: str | None = None
 
 

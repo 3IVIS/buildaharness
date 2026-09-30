@@ -20,11 +20,11 @@ sys.path.insert(0, str(Path(__file__).parent.parent))
 
 from harness.belief_graph import (
     BeliefDepGraph,
+    BeliefNode,
     DepGraphBudget,
     apply_decay,
     compute_dep_graph_quality,
     propagate_beliefs,
-    propagate_single_update,
 )
 from harness.contradiction import (
     apply_resolution_policy,
@@ -34,6 +34,7 @@ from harness.contradiction import (
     detect_temporal_contradictions,
     record_external_contradiction,
 )
+from harness.diagnostics import Diagnostics
 from harness.evidence import Evidence, EvidenceStore, ReliabilityClass
 from harness.hypothesis import Hypothesis, HypothesisSet
 from harness.staleness import staleness_sweep
@@ -90,14 +91,15 @@ def test_t01_observation_evidence_goes_to_observations_not_beliefs():
 
 
 def test_t02_recompute_belief_health_fresh_world_model():
-    """T02: recompute_belief_health() on a fresh world model returns freshness=1.0,
-    consistency=1.0, support=1.0."""
+    """T02: recompute_belief_health() on a fresh world model sets freshness=1.0, consistency=1.0, support=1.0."""
     wm = WorldModel()
-    proxies = recompute_belief_health(wm)
+    d = Diagnostics()
+    d.belief_health.freshness = d.belief_health.consistency = d.belief_health.support = 0.1
+    recompute_belief_health(wm, d)
 
-    assert proxies["freshness"] == pytest.approx(1.0)
-    assert proxies["consistency"] == pytest.approx(1.0)
-    assert proxies["support"] == pytest.approx(1.0)
+    assert d.belief_health.freshness == pytest.approx(1.0)
+    assert d.belief_health.consistency == pytest.approx(1.0)
+    assert d.belief_health.support == pytest.approx(1.0)
 
 
 def test_t03_consistency_decreases_with_contradictions():
@@ -109,8 +111,9 @@ def test_t03_consistency_decreases_with_contradictions():
     for _i in range(3):
         wm.add_contradiction(Contradiction(id=str(uuid.uuid4()), type="pairwise", severity="LOW", scope="local"))
 
-    proxies = recompute_belief_health(wm)
-    assert proxies["consistency"] < 1.0
+    d = Diagnostics()
+    recompute_belief_health(wm, d)
+    assert d.belief_health.consistency == pytest.approx(0.5)  # 1 - 3/6
 
 
 # ══════════════════════════════════════════════════════════════════════════════
@@ -142,9 +145,9 @@ def test_t05_apply_decay_clamps_to_zero():
 
 
 def test_t06_compute_unverified_edge_ratio():
-    """T06: compute_unverified_edge_ratio() returns 0.5 when 1 of 2 edges has confidence=0.0."""
+    """T06: unverified_edge_ratio is the share of edges with verified=False (TS recomputeUnverifiedEdgeRatio)."""
     graph = BeliefDepGraph()
-    graph.add_edge("A", "B", confidence=0.8)
+    graph.add_edge("A", "B", confidence=0.8, verified=True)
     graph.add_edge("C", "D", confidence=0.0)
 
     ratio = graph.compute_unverified_edge_ratio()
@@ -157,39 +160,30 @@ def test_t06_compute_unverified_edge_ratio():
 
 
 def test_t07_confidence_weighting_propagation():
-    """T07: A 0.3-confidence edge propagates a belief confidence of 0.9 to a downstream
-    belief at 0.27 (0.9 × 0.3)."""
+    """T07: a 0.3-confidence edge caps the target node's confidence at source * edge (0.9 x 0.3 = 0.27)."""
     graph = BeliefDepGraph()
     budget = DepGraphBudget()
+    graph.belief_nodes = [BeliefNode("A", 0.9), BeliefNode("B", 0.9)]
+    graph.add_edge("A", "B", confidence=0.3)
 
-    belief_a = _belief("A is present", confidence=0.9)
-    belief_b = _belief("B follows from A", confidence=0.9)
-    graph.add_edge(belief_a.id, belief_b.id, confidence=0.3)
+    propagate_beliefs(graph, budget, WorldModel())
 
-    result = propagate_single_update(graph, belief_a.id, 0.9, budget)
-    # The downstream belief ID should be queued for propagation
-    assert belief_b.id in graph.propagation_queue or belief_b.id in result
+    assert graph.belief_nodes[1].confidence == pytest.approx(0.27)
 
 
 def test_t08_budget_breach_widens_frontier():
-    """T08: Budget breach (unverified_edge_ratio > max_unverified_edge_ratio) widens the
-    invalidation_frontier to include all beliefs reachable from current frontier members."""
+    """T08: when unverified_edge_ratio > max_unverified_edge_ratio the frontier gains the direct targets of
+    edges whose source is already on it (TS propagateBeliefs; one hop per pass)."""
     graph = BeliefDepGraph()
     budget = DepGraphBudget(max_unverified_edge_ratio=0.1)  # Very tight budget
 
-    # Build A -> B -> C chain, A is in frontier
     graph.add_edge("A", "B", confidence=0.0)  # unverified
     graph.add_edge("B", "C", confidence=0.0)  # unverified
-    graph.invalidation_frontier.add("A")
-    graph.propagation_queue.append("A")
+    graph.invalidation_frontier.append("A")
 
-    wm = WorldModel()
-    wm.beliefs.append(_belief("A", derived_from=["obs-1"]))
+    propagate_beliefs(graph, budget, WorldModel())
 
-    propagate_beliefs(graph, budget, wm)
-
-    # After budget breach, frontier should include B and C
-    assert "B" in graph.invalidation_frontier or "C" in graph.invalidation_frontier
+    assert graph.invalidation_frontier == ["A", "B"]
 
 
 def test_t09_dep_graph_quality_in_range_and_decreases():
@@ -200,6 +194,8 @@ def test_t09_dep_graph_quality_in_range_and_decreases():
     q_clean = compute_dep_graph_quality(graph_clean, rolling_prediction_accuracy=0.8)
     assert 0.0 <= q_clean <= 1.0
 
+    graph_clean.derived_from_edges[0].verified = True
+    q_clean = compute_dep_graph_quality(graph_clean, rolling_prediction_accuracy=0.8)
     graph_dirty = BeliefDepGraph()
     graph_dirty.add_edge("A", "B", confidence=0.0)  # unverified
     q_dirty = compute_dep_graph_quality(graph_dirty, rolling_prediction_accuracy=0.8)
@@ -574,3 +570,25 @@ def test_t18_staleness_sweep_calls_apply_decay():
     )
 
     assert graph.edges[0].confidence < initial_confidence, "Edge confidence should have decayed"
+
+
+def test_update_world_model_folds_evidence_in_as_ts_does():
+    """update_world_model: OBSERVATION/SYSTEM_ERROR -> observation (+ completeness flag for its region);
+    INFERENCE -> belief (needs derived_from), confidence from reliability; generation bumps; health refreshes."""
+    from harness.world_model_ops import update_world_model
+
+    wm = WorldModel()
+    d = Diagnostics()
+    obs = Evidence(id="e1", obs="saw x", reliability="HIGH", source="grep", evidence_type="OBSERVATION")
+    update_world_model(obs, wm, d, region_key="src/", prune=True)
+    assert [o.id for o in wm.observations] == ["e1"]
+    assert wm.completeness_flags == {"src/": False}
+    assert wm.generation_id == 1
+
+    inf = Evidence(id="e2", obs="x means y", reliability="MEDIUM", source="grep", evidence_type="INFERENCE")
+    with pytest.raises(ValueError):
+        update_world_model(inf, wm, d)  # no derived_from chain (INV-01)
+    update_world_model(inf, wm, d, belief_input={"id": "b", "derived_from": ["e1"]})
+    assert wm.beliefs[0].confidence == 0.5
+    assert wm.beliefs[0].id == "b"
+    assert d.belief_health.support == pytest.approx(0.5)

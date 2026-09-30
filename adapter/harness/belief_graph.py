@@ -1,86 +1,127 @@
 """
 Belief dependency graph — P2.2 and P2.3.
 
-BeliefDepGraph is a directed graph where each node is a belief ID and each
-edge carries its own confidence score that decays independently of content
-changes. DepGraphBudget controls the decay rate and the frontier-widening
-threshold. propagate_beliefs() forwards confidence updates through the graph
-with weighting. compute_dep_graph_quality() produces a normalised [0,1] scalar
-for use in Tier 2 of resolve_control_state() (P3).
+Twin of packages/harness/src/state/world-model.ts (BeliefDepGraph / DepGraphBudget) and
+nodes/update-world-model.ts (propagateBeliefs). The graph is a set of belief nodes and
+`derived_from` edges; each edge carries its own confidence (decayed independently of belief content)
+and a `verified` flag. `unverified_edge_ratio` is the share of edges not yet verified.
+propagate_beliefs() is a single pass, not a work-queue drain.
 """
 
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-from datetime import UTC, datetime
-from typing import TYPE_CHECKING, Any, Literal
+from typing import TYPE_CHECKING, Any
 
 if TYPE_CHECKING:
     from .world_model import WorldModel
 
-_PROPAGATION_SAFETY_LIMIT = 100
+
+# ── data structures ───────────────────────────────────────────────────────────
 
 
-# ── P2.2 data structures ──────────────────────────────────────────────────────
+@dataclass
+class BeliefNode:
+    belief_id: str
+    confidence: float = 1.0
+
+    def to_dict(self) -> dict[str, Any]:
+        return {"belief_id": self.belief_id, "confidence": self.confidence}
+
+    @classmethod
+    def from_dict(cls, d: dict[str, Any]) -> BeliefNode:
+        return cls(belief_id=d["belief_id"], confidence=d.get("confidence", 1.0))
 
 
 @dataclass
 class BeliefEdge:
+    """A derived_from edge. Serialised with the TS keys `from` / `to` (Python keywords aside)."""
+
     from_id: str
     to_id: str
     confidence: float
-    last_verified: datetime = field(default_factory=lambda: datetime.now(UTC))
+    verified: bool = False
 
     def to_dict(self) -> dict[str, Any]:
-        return {
-            "from_id": self.from_id,
-            "to_id": self.to_id,
-            "confidence": self.confidence,
-            "last_verified": self.last_verified.isoformat(),
-        }
+        return {"from": self.from_id, "to": self.to_id, "confidence": self.confidence, "verified": self.verified}
 
     @classmethod
     def from_dict(cls, d: dict[str, Any]) -> BeliefEdge:
         return cls(
-            from_id=d["from_id"],
-            to_id=d["to_id"],
+            from_id=d["from"] if "from" in d else d["from_id"],
+            to_id=d["to"] if "to" in d else d["to_id"],
             confidence=d["confidence"],
-            last_verified=datetime.fromisoformat(d["last_verified"]) if "last_verified" in d else datetime.now(UTC),
+            verified=bool(d.get("verified", False)),
         )
+
+
+@dataclass
+class PropagationTask:
+    source_belief_id: str
+    target_belief_id: str
+
+    def to_dict(self) -> dict[str, Any]:
+        return {"source_belief_id": self.source_belief_id, "target_belief_id": self.target_belief_id}
+
+    @classmethod
+    def from_dict(cls, d: dict[str, Any]) -> PropagationTask:
+        return cls(source_belief_id=d["source_belief_id"], target_belief_id=d["target_belief_id"])
 
 
 @dataclass
 class DepGraphBudget:
     max_unverified_edge_ratio: float = 0.3
-    confidence_decay_rate: float = 0.02
-    refresh_policy: Literal["lazy", "eager"] = "lazy"
+    refresh_policy: str = "per_iteration"
+    confidence_decay_rate: float = 0.05
 
     def to_dict(self) -> dict[str, Any]:
         return {
             "max_unverified_edge_ratio": self.max_unverified_edge_ratio,
-            "confidence_decay_rate": self.confidence_decay_rate,
             "refresh_policy": self.refresh_policy,
+            "confidence_decay_rate": self.confidence_decay_rate,
         }
 
     @classmethod
     def from_dict(cls, d: dict[str, Any]) -> DepGraphBudget:
         return cls(
             max_unverified_edge_ratio=d.get("max_unverified_edge_ratio", 0.3),
-            confidence_decay_rate=d.get("confidence_decay_rate", 0.02),
-            refresh_policy=d.get("refresh_policy", "lazy"),
+            refresh_policy=d.get("refresh_policy", "per_iteration"),
+            confidence_decay_rate=d.get("confidence_decay_rate", 0.05),
         )
 
 
 @dataclass
 class BeliefDepGraph:
-    belief_nodes: dict[str, str] = field(default_factory=dict)
-    edges: list[BeliefEdge] = field(default_factory=list)
-    invalidation_frontier: set[str] = field(default_factory=set)
-    propagation_queue: list[str] = field(default_factory=list)
+    belief_nodes: list[BeliefNode] = field(default_factory=list)
+    derived_from_edges: list[BeliefEdge] = field(default_factory=list)
+    invalidation_frontier: list[str] = field(default_factory=list)
+    propagation_queue: list[PropagationTask] = field(default_factory=list)
+    unverified_edge_ratio: float = 0.0
+    confidence_decay_rate: float = 0.05
+    # Python-only advisory scalar (see compute_dep_graph_quality); not part of the TS shape.
     dep_graph_quality: float = 1.0
 
-    def add_edge(self, from_id: str, to_id: str, confidence: float) -> None:
-        self.edges.append(BeliefEdge(from_id=from_id, to_id=to_id, confidence=confidence))
+    @property
+    def edges(self) -> list[BeliefEdge]:
+        """Alias for derived_from_edges (the pre-TS-parity name)."""
+        return self.derived_from_edges
+
+    def add_edge(self, from_id: str, to_id: str, confidence: float, verified: bool = False) -> None:
+        self.derived_from_edges.append(
+            BeliefEdge(from_id=from_id, to_id=to_id, confidence=confidence, verified=verified)
+        )
+
+    def recompute_unverified_edge_ratio(self) -> None:
+        total = len(self.derived_from_edges)
+        if total == 0:
+            self.unverified_edge_ratio = 0.0
+            return
+        unverified = sum(1 for e in self.derived_from_edges if not e.verified)
+        self.unverified_edge_ratio = unverified / total
+
+    def compute_unverified_edge_ratio(self) -> float:
+        self.recompute_unverified_edge_ratio()
+        return self.unverified_edge_ratio
 
     def get_downstream(self, belief_id: str) -> list[str]:
         """Return all belief IDs reachable (transitively) from belief_id."""
@@ -88,124 +129,101 @@ class BeliefDepGraph:
         queue = [belief_id]
         while queue:
             current = queue.pop(0)
-            for edge in self.edges:
+            for edge in self.derived_from_edges:
                 if edge.from_id == current and edge.to_id not in visited:
                     visited.add(edge.to_id)
                     queue.append(edge.to_id)
         return list(visited)
 
-    def compute_unverified_edge_ratio(self) -> float:
-        if not self.edges:
-            return 0.0
-        unverified = sum(1 for e in self.edges if e.confidence <= 0.0)
-        return unverified / len(self.edges)
-
     def to_dict(self) -> dict[str, Any]:
         return {
-            "belief_nodes": dict(self.belief_nodes),
-            "edges": [e.to_dict() for e in self.edges],
+            "belief_nodes": [n.to_dict() for n in self.belief_nodes],
+            "derived_from_edges": [e.to_dict() for e in self.derived_from_edges],
             "invalidation_frontier": list(self.invalidation_frontier),
-            "propagation_queue": list(self.propagation_queue),
+            "propagation_queue": [t.to_dict() for t in self.propagation_queue],
+            "unverified_edge_ratio": self.unverified_edge_ratio,
+            "confidence_decay_rate": self.confidence_decay_rate,
             "dep_graph_quality": self.dep_graph_quality,
         }
 
     @classmethod
     def from_dict(cls, d: dict[str, Any]) -> BeliefDepGraph:
-        graph = cls(
-            belief_nodes=d.get("belief_nodes", {}),
-            invalidation_frontier=set(d.get("invalidation_frontier", [])),
-            propagation_queue=list(d.get("propagation_queue", [])),
+        nodes_raw = d.get("belief_nodes", [])
+        if isinstance(nodes_raw, dict):  # legacy shape: {belief_id: description}
+            nodes = [BeliefNode(belief_id=k) for k in nodes_raw]
+        else:
+            nodes = [BeliefNode.from_dict(n) for n in nodes_raw]
+        edges_raw = d.get("derived_from_edges", d.get("edges", []))
+        queue_raw = d.get("propagation_queue", [])
+        queue = [
+            PropagationTask(source_belief_id=t, target_belief_id=t)
+            if isinstance(t, str)
+            else PropagationTask.from_dict(t)
+            for t in queue_raw
+        ]
+        return cls(
+            belief_nodes=nodes,
+            derived_from_edges=[BeliefEdge.from_dict(e) for e in edges_raw],
+            invalidation_frontier=list(d.get("invalidation_frontier", [])),
+            propagation_queue=queue,
+            unverified_edge_ratio=d.get("unverified_edge_ratio", 0.0),
+            confidence_decay_rate=d.get("confidence_decay_rate", 0.05),
             dep_graph_quality=d.get("dep_graph_quality", 1.0),
         )
-        for e in d.get("edges", []):
-            graph.edges.append(BeliefEdge.from_dict(e))
-        return graph
 
 
-# ── P2.2 decay ────────────────────────────────────────────────────────────────
+# ── decay ─────────────────────────────────────────────────────────────────────
 
 
 def apply_decay(graph: BeliefDepGraph, budget: DepGraphBudget) -> None:
-    """Decay all edge confidence values by budget.confidence_decay_rate.
-
-    Edges decayed to 0.0 are added to the invalidation_frontier. Decay
-    operates independently of belief content — an edge can become unreliable
-    even when both connected beliefs are still valid.
-    """
-    for edge in graph.edges:
+    """Decay every edge's confidence by budget.confidence_decay_rate (floored at 0), then recompute the
+    unverified-edge ratio (TS DepGraphBudget.applyDecay). Decay is independent of belief content."""
+    for edge in graph.derived_from_edges:
         edge.confidence = max(0.0, edge.confidence - budget.confidence_decay_rate)
-        if edge.confidence <= 0.0:
-            graph.invalidation_frontier.add(edge.to_id)
+    graph.recompute_unverified_edge_ratio()
 
 
-# ── P2.3 propagation ──────────────────────────────────────────────────────────
-
-
-def propagate_single_update(
-    graph: BeliefDepGraph,
-    belief_id: str,
-    updated_confidence: float,
-    budget: DepGraphBudget,
-) -> list[str]:
-    """Propagate a confidence update from belief_id to its direct downstream beliefs.
-
-    Returns the list of belief IDs queued for further propagation.
-    Only queues downstream beliefs when the confidence change exceeds 0.05
-    to prevent infinite micro-updates.
-    """
-    queued: list[str] = []
-    for edge in graph.edges:
-        if edge.from_id != belief_id:
-            continue
-        propagated = edge.confidence * updated_confidence
-        # Only propagate if the change is meaningful
-        if abs(propagated - updated_confidence) > 0.05:
-            if edge.to_id not in graph.propagation_queue:
-                graph.propagation_queue.append(edge.to_id)
-                queued.append(edge.to_id)
-    return queued
+# ── propagation ───────────────────────────────────────────────────────────────
 
 
 def propagate_beliefs(
     graph: BeliefDepGraph,
     budget: DepGraphBudget,
-    world_model: WorldModel,
+    world_model: WorldModel | None = None,
 ) -> None:
-    """Process the propagation queue, forwarding confidence updates through the graph.
+    """One propagation pass (TS propagateBeliefs).
 
-    Safety limit of 100 iterations prevents runaway propagation in cyclic graphs.
-    After propagation, checks the budget — if breached, widens the invalidation
-    frontier to all beliefs reachable from current frontier members.
+    For each edge with confidence < 1.0 the target node's confidence is capped at
+    source.confidence * edge.confidence. Then the unverified-edge ratio is recomputed and, when it
+    exceeds budget.max_unverified_edge_ratio, the invalidation frontier is widened by the direct
+    targets of edges whose source is already on the frontier.
     """
-    belief_index = {b.id: b for b in world_model.beliefs}
-    iterations = 0
+    for edge in graph.derived_from_edges:
+        if edge.confidence < 1.0:
+            source = next((n for n in graph.belief_nodes if n.belief_id == edge.from_id), None)
+            target = next((n for n in graph.belief_nodes if n.belief_id == edge.to_id), None)
+            if source is not None and target is not None:
+                target.confidence = max(0.0, min(target.confidence, source.confidence * edge.confidence))
 
-    while graph.propagation_queue and iterations < _PROPAGATION_SAFETY_LIMIT:
-        belief_id = graph.propagation_queue.pop(0)
-        belief = belief_index.get(belief_id)
-        if belief is not None:
-            propagate_single_update(graph, belief_id, belief.confidence, budget)
-        iterations += 1
+    graph.recompute_unverified_edge_ratio()
 
-    # Budget breach check — widen invalidation frontier if needed
-    ratio = graph.compute_unverified_edge_ratio()
-    if ratio > budget.max_unverified_edge_ratio:
-        current_frontier = set(graph.invalidation_frontier)
-        for fid in current_frontier:
-            for downstream_id in graph.get_downstream(fid):
-                graph.invalidation_frontier.add(downstream_id)
+    if graph.unverified_edge_ratio > budget.max_unverified_edge_ratio:
+        frontier = set(graph.invalidation_frontier)
+        to_add: list[str] = []
+        for edge in graph.derived_from_edges:
+            if edge.from_id in frontier and edge.to_id not in frontier:
+                to_add.append(edge.to_id)
+        for node_id in to_add:
+            graph.invalidation_frontier.append(node_id)
+            frontier.add(node_id)
 
 
 def compute_dep_graph_quality(
     graph: BeliefDepGraph,
     rolling_prediction_accuracy: float,
 ) -> float:
-    """Compute dep_graph_quality as a weighted average of edge verifiedness and accuracy.
-
-    Quality = (1 - unverified_edge_ratio) × 0.6 + rolling_prediction_accuracy × 0.4
-    Result is normalised to [0, 1] and stored on the graph.
-    """
-    unverified_ratio = graph.compute_unverified_edge_ratio()
-    quality = max(0.0, min(1.0, (1.0 - unverified_ratio) * 0.6 + rolling_prediction_accuracy * 0.4))
+    """Python-only advisory scalar: (1 - unverified_edge_ratio) * 0.6 + rolling_prediction_accuracy * 0.4."""
+    graph.recompute_unverified_edge_ratio()
+    quality = max(0.0, min(1.0, (1.0 - graph.unverified_edge_ratio) * 0.6 + rolling_prediction_accuracy * 0.4))
     graph.dep_graph_quality = quality
     return quality

@@ -26,7 +26,7 @@ import os
 from collections.abc import Mapping
 from typing import Any
 
-from .hypothesis import EliminationRecord, Hypothesis, HypothesisSet
+from .hypothesis import Hypothesis, HypothesisSet
 from .semantic_checks import _extract_json
 
 SEMANTIC_SOURCE = "semantic"
@@ -174,7 +174,7 @@ def add_semantic_hypotheses(hs: HypothesisSet, proposals: list[dict[str, Any]] |
     if not usable:
         return []
     base = sum(1 for h in hs.active if SEMANTIC_SOURCE in h.generation_sources) + sum(
-        1 for h, _ in hs.eliminated if SEMANTIC_SOURCE in h.generation_sources
+        1 for h in hs.eliminated if SEMANTIC_SOURCE in h.generation_sources
     )
     created: list[Hypothesis] = []
     for i, p in enumerate(usable):
@@ -204,8 +204,7 @@ def eliminate_contradicted(hs: HypothesisSet, contradicted: list[dict[str, str]]
         target = next((h for h in hs.active if h.id == c.get("id") and SEMANTIC_SOURCE in h.generation_sources), None)
         if target is None:
             continue
-        hs.active = [h for h in hs.active if h.id != target.id]
-        hs.eliminated.append((target, EliminationRecord(hypothesis_id=target.id, reason="CONTRADICTING_EVIDENCE")))
+        hs.eliminate(target)
         removed.append(target)
     return removed
 

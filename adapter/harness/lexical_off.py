@@ -17,22 +17,15 @@ mode. Read at call time, never at import time. Names shared with the TS twin mea
   - review-phrases                   review_gate.py — "remove <field>" and "syntax error" phrases
   - failure-exact-match              failure_modes.py — required/excluded condition substring matching
   - system-error-symptoms            execution.py — error phrases mapped onto library symptom text
-  - criterion-substring              reviewer.py — implementer lens: criterion words vs COMPLETE task text
+  - criterion-substring              reviewer.py — implementer lens: criterion text inside a belief statement
+  - criterion-proximity              reviewer.py — adversarial seeding: criterion text inside a belief statement
   - criterion-scope                  constraint_propagation.py / caller_state.py — criterion/task/belief overlap
   - constraint-negation              output_contract.py — the lexical caller-constraint check
-  - required-sections                output_contract.py (section heading in a text result), reviewer.py
-                                     (required field name in observation text)
   - preference-patterns              preference_extractor.py — phrase lists
   - source-dedupe                    multi_source_reducer.py — word-overlap near-duplicate detection
-  - hypothesis-clustering            hypothesis.py — Jaccard clustering and dedupe
-  - hypothesis-negation-elimination  hypothesis.py — `check_contradicting_evidence`
-  - evidence-negation                reviewer.py — reviewer lens: HIGH evidence with a negation word vs a belief
-  - assumption-overlap               reviewer.py — reviewer lens: assumption words vs HIGH observations
-  - failure-class-seed               reviewer.py — adversarial seed: failure-class name inside a belief
-  - change-scope-keywords            risk.py — `compute_change_scope`'s keyword/regex count
 
-Not covered, on purpose (they match identifiers or paths, not prose): output_contract.py's `required:` DSL,
-reviewer.py's task-id-in-observation check, risk.py's file-path centrality and path-based module type.
+Not covered, on purpose (they match identifiers, not prose): output_contract.py's `required:` DSL and the
+reviewer pass's task-id-in-finding check.
 """
 
 from __future__ import annotations
@@ -48,17 +41,11 @@ HARNESS_LEXICAL_CHECKS: tuple[str, ...] = (
     "failure-exact-match",
     "system-error-symptoms",
     "criterion-substring",
+    "criterion-proximity",
     "criterion-scope",
     "constraint-negation",
-    "required-sections",
     "preference-patterns",
     "source-dedupe",
-    "hypothesis-clustering",
-    "hypothesis-negation-elimination",
-    "evidence-negation",
-    "assumption-overlap",
-    "failure-class-seed",
-    "change-scope-keywords",
 )
 
 DEFAULT_HARNESS_LEXICAL_MODE = "disabled"
