@@ -304,6 +304,13 @@ from .reviewer import (
 
 # Phase 5
 from .risk import ModuleType, RiskableAction, RiskEstimate, RiskLevel, estimate_risk
+from .runtime import (
+    HarnessInitResult,
+    HarnessRunOptions,
+    HarnessRunResult,
+    HarnessRuntime,
+    initialize_harness_state,
+)
 from .staleness import assert_generation_fresh, increment_generation_id, is_stale, staleness_check, staleness_sweep
 from .state_store import HarnessRunState
 from .supervisor import (
@@ -433,7 +440,11 @@ __all__ = [
     "FailureRecord",
     "FrozenManifestError",
     "GraphCycleError",
+    "HarnessInitResult",
+    "HarnessRunOptions",
+    "HarnessRunResult",
     "HarnessRunState",
+    "HarnessRuntime",
     "HarnessTraceContext",
     "Hypothesis",
     "HypothesisSet",
@@ -600,6 +611,7 @@ __all__ = [
     "implementer_lens",
     "increment_generation_id",
     "initialize_harness",
+    "initialize_harness_state",
     "inject_clarification",
     "integrate_evidence",
     "is_stale",

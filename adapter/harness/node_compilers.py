@@ -38,6 +38,7 @@ def compile_gather_evidence(node: dict, evidence_store_var: str) -> str:
 
     lines = [
         "import uuid as _uuid",
+        "from datetime import UTC as _UTC, datetime as _datetime",
         "from harness.evidence import Evidence as _Evidence",
         "from harness.tool_reliability import get_envelope as _get_envelope",
         f"_ev_reliability = {reliability_expr}",
@@ -47,7 +48,7 @@ def compile_gather_evidence(node: dict, evidence_store_var: str) -> str:
         "    reliability=_ev_reliability,",
         f"    source={source_tool!r},",
         f"    evidence_type={evidence_type!r},",
-        "    freshness=1.0,",
+        "    freshness=_datetime.now(_UTC).isoformat(),",
         ")",
         f"{evidence_store_var}.append(_ev)",
     ]

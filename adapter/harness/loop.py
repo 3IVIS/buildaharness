@@ -1,4 +1,8 @@
 """
+LEGACY skeleton: this is NOT the TS order. `harness.runtime.HarnessRuntime` (TS `driveMainLoop` twin) is the
+TS-faithful driver and carries the same Python features (RecoveryBudget, plan export, DB experience store,
+tracing hook); prefer it for new code. See HARNESS_PY_VS_TS_MISMATCHES.md §20.
+
 Main loop — P3.5 skeleton extended with P6 recovery & memory wiring, P7
 external update poll + escalation triggers, and P8 experience store hooks.
 
