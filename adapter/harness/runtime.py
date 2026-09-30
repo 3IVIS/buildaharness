@@ -26,9 +26,9 @@ hypotheses, `reviewerRevision`, turn signals. The semantic hooks that do not nee
 from __future__ import annotations
 
 import json
-from collections.abc import Callable, Mapping, Sequence
+from collections.abc import Callable, Iterator, Mapping, Sequence
 from dataclasses import dataclass, field
-from typing import Any, cast
+from typing import Any, Literal, cast
 from uuid import uuid4
 
 from ._core_generated import RECOVERY_ACTION_DEPENDENCIES
@@ -42,6 +42,7 @@ from .ask_question import (
 )
 from .belief_graph import BeliefDepGraph, DepGraphBudget
 from .caller_state import CallerState
+from .checkpoint import CHECKPOINT_SCHEMA_VERSION, assert_checkpoint_schema_current
 from .contradiction import detect_contradictions, record_external_contradiction
 from .control_state import ControlState, resolve_control_state, risk_summary
 from .diagnostics import Diagnostics, normalise, update_diagnostics
@@ -299,6 +300,10 @@ class HarnessRunOptions:
     task_class: str = ""  # keys the DB-backed ExperienceStore warm start
     execution_context: Any | None = None  # ExecutionContext handed to the DB-backed update_experience_store
     on_node: Callable[[str, LoopContext], None] | None = None  # tracing hook: called as each TS node starts
+    # checkpointing (TS onCheckpoint / shouldPause): called with each yielded checkpoint; a True `should_pause`
+    # stops the run there and `start()` returns a paused outcome that `resume()` continues
+    on_checkpoint: Callable[[dict[str, Any]], None] | None = None
+    should_pause: Callable[[dict[str, Any]], bool] | None = None
 
 
 @dataclass
@@ -324,7 +329,9 @@ class LoopContext:
     last_contradiction_check_count: int = 0
     last_failure_match_symptom_count: int = 0
     supervisor_ask_user_count: int = 0
-    pending_continuation: str | None = None
+    pending_proposal: dict[str, Any] | None = None  # TS PendingProposalData (camelCase, checkpointed)
+    should_gather_evidence: bool = False
+    last_gate_result: str = "PASS"
     semantic_hypotheses_asked: bool = False
     last_judged_observation_count: int = 0
     reviewer_revision_done: bool = False
@@ -377,6 +384,118 @@ class HarnessRunResult:
     init_result: HarnessInitResult
     node_execution_order: list[str]
     context: LoopContext
+
+
+@dataclass
+class HarnessRunOutcome:
+    """`status == "complete"` carries the result; `"paused"` carries the checkpoint `resume()` continues from."""
+
+    status: Literal["complete", "paused"]
+    result: HarnessRunResult | None
+    checkpoint: dict[str, Any] | None
+
+
+# ── checkpoints (TS toCheckpoint / buildResumedContext) ──────────────────────
+
+
+def to_checkpoint(ctx: LoopContext) -> dict[str, Any]:
+    """The TS-shaped checkpoint of the run so far (see `harness.checkpoint`)."""
+    store = ctx.experience_store
+    experience = store.to_dict() if _is_ts_store(store) else UnavailableExperienceStore().to_dict()
+    verdict = ctx.pending_reviewer_verdict
+    return {
+        "runId": ctx.run_id,
+        "runState": {
+            "worldModel": ctx.world_model.to_dict(),
+            "callerState": ctx.caller_state.to_dict(),
+            "controlState": ctx.control_state.to_dict(),
+            "diagnostics": ctx.diagnostics.to_dict(),
+            "taskGraph": ctx.task_graph.to_dict(),
+            "outputContract": ctx.output_contract.to_dict(),
+            "evidenceStore": ctx.evidence_store.to_dict(),
+            "hypothesisSet": ctx.hypothesis_set.to_dict(),
+            "memoryState": ctx.memory_state.to_dict(),
+            "strategyState": ctx.strategy_state.to_dict(),
+            "failureDiagnostics": ctx.failure_diagnostics.to_dict(),
+            "experienceStore": experience,
+            "beliefDepGraph": ctx.belief_dep_graph.to_dict(),
+        },
+        "runConfig": {
+            "objective": ctx.objective,
+            "successCriteria": list(ctx.success_criteria),
+            "maxSteps": ctx.max_steps,
+            "depGraphBudget": ctx.dep_graph_budget.to_dict(),
+            "processConceptId": ctx.init.process_concept_id,
+        },
+        "progress": {
+            "stepsUsed": ctx.steps_used,
+            "nodeExecutionOrder": list(ctx.node_execution_order),
+            "finalResult": ctx.final_result,
+            "consecutiveReviewFailures": [[k, v] for k, v in ctx.consecutive_review_failures.items()],
+            "propagationQueue": {"reopenedTaskIds": list(ctx.propagation_queue.reopened_task_ids)},
+            "pendingProposal": dict(ctx.pending_proposal) if ctx.pending_proposal is not None else None,
+            "pendingReviewerVerdict": verdict.to_dict() if verdict is not None else None,
+            "supervisorAskUserCount": ctx.supervisor_ask_user_count,
+        },
+        "schemaVersion": CHECKPOINT_SCHEMA_VERSION,
+    }
+
+
+def build_resumed_context(raw_checkpoint: dict[str, Any], options: HarnessRunOptions) -> LoopContext:
+    """Rebuild a LoopContext from a checkpoint (TS buildResumedContext). Raises CheckpointSchemaError for a schema
+    this build cannot read. No warm start: the run is already under way."""
+    from .reviewer import ReviewerVerdict
+
+    cp = assert_checkpoint_schema_current(raw_checkpoint)
+    rs, cfg, progress = cp["runState"], cp["runConfig"], cp["progress"]
+    world_model = WorldModel.from_dict(rs["worldModel"])
+    control_state = ControlState.from_dict(rs["controlState"])
+    init = HarnessInitResult(
+        world_model=world_model,
+        caller_state=CallerState.from_dict(rs["callerState"]),
+        control_state=control_state,
+        task_graph=TaskGraph.from_dict(rs["taskGraph"]),
+        diagnostics=Diagnostics.from_dict(rs["diagnostics"]),
+        hypothesis_set=HypothesisSet.from_dict(rs["hypothesisSet"]),
+        evidence_store=EvidenceStore.from_dict(rs["evidenceStore"]),
+        memory_state=MemoryState.from_dict(rs["memoryState"]),
+        strategy_state=StrategyState.from_dict(rs["strategyState"]),
+        failure_diagnostics=FailureDiagnostics.from_dict(rs["failureDiagnostics"]),
+        output_contract=OutputContract.from_dict(rs["outputContract"]),
+        belief_dep_graph=BeliefDepGraph.from_dict(rs["beliefDepGraph"]),
+        dep_graph_budget=DepGraphBudget.from_dict(cfg["depGraphBudget"]),
+        max_steps=cfg["maxSteps"],
+        decomposition_gate=control_state.permission != "DENY",
+        valid=True,
+        errors=[],
+        process_concept_id=cfg.get("processConceptId"),
+    )
+    verdict = progress.get("pendingReviewerVerdict")
+    return LoopContext(
+        run_id=cp["runId"],
+        objective=cfg["objective"],
+        success_criteria=list(cfg["successCriteria"]),
+        max_steps=cfg["maxSteps"],
+        options=options,
+        init=init,
+        experience_store=options.experience_store
+        if options.experience_store is not None
+        else UnavailableExperienceStore(),
+        update_channel=options.update_channel or NoOpUpdateChannel(),
+        task_graph=init.task_graph,
+        strategy_state=init.strategy_state,
+        world_model=world_model,
+        control_state=control_state,
+        steps_used=progress["stepsUsed"],
+        node_execution_order=list(progress["nodeExecutionOrder"]),
+        final_result=progress.get("finalResult"),
+        consecutive_review_failures={k: v for k, v in progress.get("consecutiveReviewFailures", [])},
+        propagation_queue=PropagationQueue(reopened_task_ids=list(progress["propagationQueue"]["reopenedTaskIds"])),
+        pending_reviewer_verdict=ReviewerVerdict.from_dict(verdict) if verdict else None,
+        pending_proposal=dict(progress["pendingProposal"]) if progress.get("pendingProposal") else None,
+        supervisor_ask_user_count=progress.get("supervisorAskUserCount", 0),
+        recovery_budget=options.recovery_budget,
+    )
 
 
 # ── helpers ──────────────────────────────────────────────────────────────────
@@ -788,7 +907,7 @@ def _select_and_gate(ctx: LoopContext) -> tuple[str, Task | None, Task | None]:
     voi = estimate_voi(
         ctx.diagnostics, ctx.world_model, ctx.hypothesis_set, ctx.evidence_store.tool_availability_manifest
     )
-    del voi  # TS only feeds this into layer-policy gating (not ported); the estimate still runs for its side effect
+    ctx.should_gather_evidence = voi.should_gather_evidence
 
     _node(ctx, "review_proposed_change")
     review = review_proposed_change(
@@ -840,7 +959,7 @@ def _select_and_gate(ctx: LoopContext) -> tuple[str, Task | None, Task | None]:
         return "restart", None, None
 
     _node(ctx, "action_gate")
-    gate_result = action_gate(
+    ctx.last_gate_result = action_gate(
         {"required_resources": []},
         control_state=ctx.control_state,
         world_model=ctx.world_model,
@@ -848,49 +967,56 @@ def _select_and_gate(ctx: LoopContext) -> tuple[str, Task | None, Task | None]:
         failure_diagnostics=ctx.failure_diagnostics,
         resolver=_resolver_for(ctx),
     )
-    if gate_result in ("ESCALATE", "BLOCK"):
-        apply_task_outcome(ctx.task_graph, current.id, TaskOutcome(status="PENDING", from_execution_layer=False))
-        from .progress import cannot_make_progress
-
-        stalled = cannot_make_progress(ctx.strategy_state, ctx.failure_diagnostics)
-        _safe(
-            opts.on_gate_decision,
-            {
-                "task_id": current.id,
-                "result": gate_result,
-                "reason": ctx.control_state.escalation_reason,
-                "halted_run": stalled,
-            },
-        )
-        if stalled:
-            raise _blocker(
-                ctx,
-                "cannot_make_progress",
-                [ctx.strategy_state.stall_reason or "unknown"],
-                current.description,
-            )
-        return "restart", None, None
-    return "run", current, concurrent
+    return "proposal", current, concurrent
 
 
-def drive_main_loop(ctx: LoopContext) -> None:
-    """Run iterations until every task is complete, none can be selected, or an escalation raises EscalationHalt."""
+def _handle_blocked_gate(ctx: LoopContext, current: Task, gate_result: str) -> bool:
+    """BLOCK / ESCALATE: the task goes back to PENDING; a stalled run halts (TS). True means "restart the iteration"."""
+    from .progress import cannot_make_progress
+
+    apply_task_outcome(ctx.task_graph, current.id, TaskOutcome(status="PENDING", from_execution_layer=False))
+    stalled = cannot_make_progress(ctx.strategy_state, ctx.failure_diagnostics)
+    _safe(
+        ctx.options.on_gate_decision,
+        {
+            "task_id": current.id,
+            "result": gate_result,
+            "reason": ctx.control_state.escalation_reason,
+            "halted_run": stalled,
+        },
+    )
+    if stalled:
+        raise _blocker(ctx, "cannot_make_progress", [ctx.strategy_state.stall_reason or "unknown"], current.description)
+    return True
+
+
+def drive_main_loop(ctx: LoopContext) -> Iterator[dict[str, Any]]:
+    """Run iterations until every task is complete, none can be selected, or an escalation raises EscalationHalt.
+
+    A generator like TS `driveMainLoop`: it yields a checkpoint at each suspend point (a proposed action before it
+    executes, a continuable execution, the end of an iteration), so the driver can persist it or pause the run.
+    """
     opts = ctx.options
 
     while True:
-        pending = ctx.pending_continuation
-        ctx.pending_continuation = None
+        pending = ctx.pending_proposal
         current: Task | None
         concurrent: Task | None = None
         if pending is not None:
-            # A continuable execution: the same task runs again without re-running Sub-step A (TS pendingProposal).
-            current = ctx.task_graph.get_task(pending)
+            # Resuming at a suspend point: skip Sub-step A and replay the decision the caller already saw.
+            ctx.pending_proposal = None
+            current = ctx.task_graph.get_task(pending["taskId"])
             if current is None:
-                continue
-            _node(ctx, "action_gate_replay_continuation")
-            ctx.steps_used += 1
-            if ctx.steps_used > ctx.max_steps:
-                raise _budget_halt(ctx, f"Exhausted at step {ctx.steps_used} (no iteration reached completion)")
+                continue  # stale proposal for a task that no longer exists — replan fresh next iteration
+            gate_result = pending["gateResult"]
+            ctx.should_gather_evidence = bool(pending.get("shouldGatherEvidence"))
+            if pending["kind"] == "continuation":
+                _node(ctx, "action_gate_replay_continuation")
+                ctx.steps_used += 1
+                if ctx.steps_used > ctx.max_steps:
+                    raise _budget_halt(ctx, f"Exhausted at step {ctx.steps_used} (no iteration reached completion)")
+            else:
+                _node(ctx, "action_gate_replay")
         else:
             status, current, concurrent = _select_and_gate(ctx)
             if status == "restart":
@@ -898,6 +1024,19 @@ def drive_main_loop(ctx: LoopContext) -> None:
             if status == "done":
                 return
             assert current is not None
+            gate_result = ctx.last_gate_result
+            # The pause point between an action proposal and its execution (TS "NEW SUSPEND POINT").
+            ctx.pending_proposal = {
+                "taskId": current.id,
+                "gateResult": gate_result,
+                "shouldGatherEvidence": ctx.should_gather_evidence,
+                "kind": "proposal",
+            }
+            yield to_checkpoint(ctx)
+            ctx.pending_proposal = None
+
+        if gate_result in ("ESCALATE", "BLOCK") and _handle_blocked_gate(ctx, current, gate_result):
+            continue
 
         _node(ctx, "execute")
         proposed = {"description": current.description, "change_type": "file_mutation"}
@@ -918,7 +1057,13 @@ def drive_main_loop(ctx: LoopContext) -> None:
 
         # The tool reported "more work to do": the task stays RUNNING and is executed again next iteration.
         if exec_result.status == "continue":
-            ctx.pending_continuation = current.id
+            ctx.pending_proposal = {
+                "taskId": current.id,
+                "gateResult": gate_result,
+                "shouldGatherEvidence": ctx.should_gather_evidence,
+                "kind": "continuation",
+            }
+            yield to_checkpoint(ctx)
             continue
 
         task_accomplished = True
@@ -1174,6 +1319,8 @@ def drive_main_loop(ctx: LoopContext) -> None:
         if ctx.steps_used >= ctx.max_steps and not _nothing_left_to_run(ctx):
             raise _budget_halt(ctx, f"Exhausted at step {ctx.steps_used}")
 
+        yield to_checkpoint(ctx)
+
 
 def _default_tool() -> dict[str, bool]:
     return {"completed": True}
@@ -1313,8 +1460,22 @@ def _learn_from_run(ctx: LoopContext) -> None:
         pass  # learning is best-effort
 
 
-def _drive_to_completion(ctx: LoopContext) -> HarnessRunResult:
-    drive_main_loop(ctx)
+def _run_main_loop(ctx: LoopContext) -> dict[str, Any] | None:
+    """Drive the main loop, handing each checkpoint to `on_checkpoint`; returns the checkpoint it paused at, if any
+    (TS runMainLoopWithCheckpoints)."""
+    opts = ctx.options
+    for checkpoint in drive_main_loop(ctx):
+        if opts.on_checkpoint is not None:
+            opts.on_checkpoint(checkpoint)
+        if opts.should_pause is not None and opts.should_pause(checkpoint):
+            return checkpoint
+    return None
+
+
+def _drive_to_completion(ctx: LoopContext) -> HarnessRunOutcome:
+    paused = _run_main_loop(ctx)
+    if paused is not None:
+        return HarnessRunOutcome(status="paused", result=None, checkpoint=paused)
 
     if not ctx.options.skip_reviewer_pass:
         _node(ctx, "reviewer_pass")
@@ -1329,7 +1490,9 @@ def _drive_to_completion(ctx: LoopContext) -> HarnessRunResult:
                 if task is not None:
                     task.status = "PENDING"
                     ctx.task_graph.changed = True
-            drive_main_loop(ctx)
+            paused = _run_main_loop(ctx)
+            if paused is not None:
+                return HarnessRunOutcome(status="paused", result=None, checkpoint=paused)
             _node(ctx, "reviewer_pass_2")
             ctx.pending_reviewer_verdict = _run_reviewer_pass(ctx).pending_verdict
 
@@ -1359,7 +1522,7 @@ def _drive_to_completion(ctx: LoopContext) -> HarnessRunResult:
                 ],
             )
 
-    return HarnessRunResult(
+    result = HarnessRunResult(
         final_result=ctx.final_result,
         output_validation=validation,
         steps_used=ctx.steps_used,
@@ -1367,17 +1530,21 @@ def _drive_to_completion(ctx: LoopContext) -> HarnessRunResult:
         node_execution_order=ctx.node_execution_order,
         context=ctx,
     )
+    if ctx.options.on_checkpoint is not None:
+        ctx.options.on_checkpoint(to_checkpoint(ctx))
+    return HarnessRunOutcome(status="complete", result=result, checkpoint=None)
 
 
 class HarnessRuntime:
-    """Synchronous twin of the TS HarnessRuntime (no checkpoints / pause / resume)."""
+    """Synchronous twin of the TS HarnessRuntime: `start()` / `resume()` return an outcome (complete or paused at a
+    checkpoint), `run()` is the convenience form that returns the result directly."""
 
-    def run(
+    def start(
         self,
         objective: str,
         success_criteria: Sequence[str],
         options: HarnessRunOptions | None = None,
-    ) -> HarnessRunResult:
+    ) -> HarnessRunOutcome:
         opts = options or HarnessRunOptions()
         criteria = list(success_criteria)
         init = initialize_harness_state(
@@ -1427,14 +1594,33 @@ class HarnessRuntime:
                     opts.task_class or None,
                     ctx.dep_graph_budget,
                 )
+        return _drive(ctx)
 
-        try:
-            result = _drive_to_completion(ctx)
-        except BaseException:
-            _learn_from_run(ctx)
-            raise
+    def resume(self, checkpoint: dict[str, Any], options: HarnessRunOptions | None = None) -> HarnessRunOutcome:
+        """Continue a run from a checkpoint written by this runtime or by the TS one."""
+        return _drive(build_resumed_context(checkpoint, options or HarnessRunOptions()))
+
+    def run(
+        self,
+        objective: str,
+        success_criteria: Sequence[str],
+        options: HarnessRunOptions | None = None,
+    ) -> HarnessRunResult:
+        outcome = self.start(objective, success_criteria, options)
+        if outcome.result is None:
+            raise RuntimeError("HarnessRuntime.run(): the run paused at a checkpoint; use start()/resume() instead")
+        return outcome.result
+
+
+def _drive(ctx: LoopContext) -> HarnessRunOutcome:
+    try:
+        outcome = _drive_to_completion(ctx)
+    except BaseException:
         _learn_from_run(ctx)
-        return result
+        raise
+    if outcome.status != "paused":
+        _learn_from_run(ctx)
+    return outcome
 
 
 def build_harness_run_state(run_id: str) -> Any:
