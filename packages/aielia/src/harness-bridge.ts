@@ -511,8 +511,11 @@ export class HarnessBridge {
         // AUDIT_REVIEWER_REVISION (default off): let a reviewer finding at the end of a run send the last answer back once.
         // Only where there is a proposer to re-ask — a tool-less turn's reply is already drafted, so a second run would return
         // the same text.
+        // The generic default criterion is never checkable, so the implementer lens always flagged it "not covered" (243 of 243
+        // reviewer findings across the eval transcripts) — skipped in the default flow too, not only with the flag on.
+        isCheckableCriterion,
         ...(reviewerRevisionEnabled() && oneLoopProposer
-          ? { reviewerRevision: reviewerRevisionNote, onReviewerRevision, isCheckableCriterion }
+          ? { reviewerRevision: reviewerRevisionNote, onReviewerRevision }
           : {}),
         ...(semanticHypothesesEnabled() && classification.isUnderdetermined === true
           ? {

@@ -56,9 +56,9 @@ async function run(extra: Partial<HarnessRunParams> = {}) {
 describe('reviewer revision through the bridge', () => {
   afterEach(() => { delete process.env.AUDIT_REVIEWER_REVISION })
 
-  it('flag off (the default): the default criterion is reported as not covered, as it always was, and the answer is not revised', async () => {
+  it('flag off (the default): the non-checkable default criterion produces no finding either, and the answer is not revised', async () => {
     const { calls, notes, reviewer } = await run()
-    expect(reviewer.some((r) => r.startsWith('Success criterion not covered by any belief'))).toBe(true)
+    expect(reviewer.some((r) => r.startsWith('Success criterion not covered by any belief'))).toBe(false)
     expect(calls).toBe(1)
     expect(notes).toEqual([])
   })
@@ -86,8 +86,9 @@ describe('reviewer revision through the bridge', () => {
     expect(notes[0]).toContain('[revision] Success criterion not covered by any belief: "the migration is verified against production"')
   })
 
-  it('the same run with the flag off is not revised', async () => {
-    const { calls, notes } = await run({ activePlan: plan, initialTasks: [{ ...planTask }] })
+  it('the same run with the flag off is not revised, but the real criterion is still reported', async () => {
+    const { calls, notes, reviewer } = await run({ activePlan: plan, initialTasks: [{ ...planTask }] })
+    expect(reviewer.some((r) => r.startsWith('Success criterion not covered by any belief: "the migration'))).toBe(true)
     expect(calls).toBe(1)
     expect(notes).toEqual([])
   })

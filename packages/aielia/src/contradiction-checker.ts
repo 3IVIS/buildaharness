@@ -155,6 +155,16 @@ function isCheckWorthy(statement: string): boolean {
   return !looksLikeCodingFact(statement) && !TASK_COMPLETION_TRAIL_PREFIX.test(statement)
 }
 
+function contradictionSchema(withSeverity: boolean) {
+  if (!withSeverity) return CONTRADICTION_SCHEMA
+  const schema = structuredClone(CONTRADICTION_SCHEMA) as typeof CONTRADICTION_SCHEMA
+  ;(schema.properties.contradictions.items.properties as Record<string, unknown>).severity = {
+    type: 'string',
+    enum: ['MEDIUM', 'HIGH'],
+  }
+  return schema
+}
+
 const CONTRADICTION_SCHEMA = {
   type: 'object',
   properties: {
@@ -282,6 +292,23 @@ export function semanticContradictionEnabled(env?: Record<string, string | undef
   return !['0', 'false', 'off', 'no', 'disabled'].includes(raw)
 }
 
+/**
+ * `AUDIT_SEMANTIC_CONTRADICTION_SEVERITY` (default OFF). The checker used to set no severity, so every semantic
+ * contradiction recorded as MEDIUM and Tier 1 (DENY) was unreachable through it. On: the judgment also grades each
+ * contradiction, and only "HIGH" (two claims that directly and explicitly cannot both hold) is passed on — anything
+ * else, or a missing/unknown value, stays MEDIUM. Never LOW or SYSTEM_BREAKING.
+ */
+export function semanticContradictionSeverityEnabled(env?: Record<string, string | undefined>): boolean {
+  const source = env ?? (typeof process !== 'undefined' ? process.env : {})
+  const raw = String(source.AUDIT_SEMANTIC_CONTRADICTION_SEVERITY ?? '').trim().toLowerCase()
+  return ['1', 'true', 'on', 'yes', 'enabled'].includes(raw)
+}
+
+const SEVERITY_PROMPT_ADDENDUM =
+  ' Also give each contradiction a "severity": "HIGH" only when the two claims directly and explicitly cannot both ' +
+  'be true and acting on the wrong one would be costly (e.g. two different home cities, opposite answers to the same ' +
+  'yes/no question); otherwise "MEDIUM". When unsure, "MEDIUM".'
+
 /** A newBelief restating/reinforcing an uncertainFacts or rejectedFacts entry in different words — see checkForContradictions' doc comment. Caller resolves which pool `existingId` came from by id membership (both ids are always from this call's own known-id set, filtered below). */
 export interface Corroboration {
   existingId: string
@@ -315,14 +342,15 @@ export async function checkForContradictions(
   if (newBeliefs.length === 0) return EMPTY_RESULT
   if (newBeliefs.every((b) => !isCheckWorthy(b.statement))) return EMPTY_RESULT
 
+  const withSeverity = semanticContradictionSeverityEnabled()
   try {
     const response = await llmClient.callChatStructured(
       [
-        { role: 'system', content: SYSTEM_PROMPT },
+        { role: 'system', content: withSeverity ? SYSTEM_PROMPT + SEVERITY_PROMPT_ADDENDUM : SYSTEM_PROMPT },
         { role: 'user', content: JSON.stringify({ newBeliefs, existingBeliefs, uncertainFacts, rejectedFacts }) },
       ],
       undefined,
-      { model, onUsage, structuredOutput: { schema: CONTRADICTION_SCHEMA } },
+      { model, onUsage, structuredOutput: { schema: contradictionSchema(withSeverity) } },
     )
     const parsed = parseModelJson(response.content) as {
       contradictions?: ExternalContradictionInput[]
@@ -339,7 +367,11 @@ export async function checkForContradictions(
         typeof c.existingId === 'string' && typeof c.newId === 'string' && knownIdSet.has(c.existingId) && knownIdSet.has(c.newId),
     )
     return {
-      contradictions: contradictions.map((c) => ({ ...c, description: stripBeliefIds(c.description, knownIds) })),
+      contradictions: contradictions.map((c) => {
+        const { severity, ...rest } = c
+        const graded = withSeverity && severity === 'HIGH' ? { severity } : {}
+        return { ...rest, ...graded, description: stripBeliefIds(c.description, knownIds) }
+      }),
       corroborations,
     }
   } catch {

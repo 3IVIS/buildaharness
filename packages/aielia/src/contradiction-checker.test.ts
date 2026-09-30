@@ -469,3 +469,40 @@ describe('semanticContradictionEnabled (AUDIT_SEMANTIC_CONTRADICTION gate — Ph
     expect(llm.calls).toBe(1)
   })
 })
+
+describe('AUDIT_SEMANTIC_CONTRADICTION_SEVERITY', () => {
+  const reply = (severity: string) =>
+    JSON.stringify({ contradictions: [{ beliefIds: ['b1', 'b2'], description: 'Boston and Seattle cannot both be home.', severity }] })
+  const args = [
+    [{ id: 'b2', statement: 'the user lives in Seattle' }],
+    [{ id: 'b1', statement: 'the user lives in Boston' }],
+  ] as const
+  const withFlag = async <T>(value: string | undefined, fn: () => Promise<T>): Promise<T> => {
+    const prior = process.env.AUDIT_SEMANTIC_CONTRADICTION_SEVERITY
+    if (value === undefined) delete process.env.AUDIT_SEMANTIC_CONTRADICTION_SEVERITY
+    else process.env.AUDIT_SEMANTIC_CONTRADICTION_SEVERITY = value
+    try {
+      return await fn()
+    } finally {
+      if (prior === undefined) delete process.env.AUDIT_SEMANTIC_CONTRADICTION_SEVERITY
+      else process.env.AUDIT_SEMANTIC_CONTRADICTION_SEVERITY = prior
+    }
+  }
+
+  it('off (default): a HIGH grade from the model is ignored, so the contradiction records as MEDIUM', async () => {
+    const result = await withFlag(undefined, () => checkForContradictions([...args[0]], [...args[1]], new StructuredOnlyLLMClient(reply('HIGH'))))
+    expect(result.contradictions[0]).not.toHaveProperty('severity')
+  })
+
+  it('on: HIGH is passed on', async () => {
+    const result = await withFlag('on', () => checkForContradictions([...args[0]], [...args[1]], new StructuredOnlyLLMClient(reply('HIGH'))))
+    expect(result.contradictions[0].severity).toBe('HIGH')
+  })
+
+  it('on: MEDIUM, missing and unknown grades (SYSTEM_BREAKING, LOW) never escalate', async () => {
+    for (const grade of ['MEDIUM', 'SYSTEM_BREAKING', 'LOW', 'banana']) {
+      const result = await withFlag('on', () => checkForContradictions([...args[0]], [...args[1]], new StructuredOnlyLLMClient(reply(grade))))
+      expect(result.contradictions[0]).not.toHaveProperty('severity')
+    }
+  })
+})
