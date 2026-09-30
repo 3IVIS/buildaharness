@@ -505,7 +505,11 @@ export async function fetchUrlSafely(url) {
       currentUrl = new URL(location, currentUrl).toString()
       continue
     }
-    return truncateFetchedText(await response.text())
+    const body = await response.text()
+    // Same rule as web-tools.ts's fetchUrlSafely: a 5xx is a server fault, not page content — an error the model and the
+    // parent's ControlState can see (a 4xx page stays content).
+    if (response.status >= 500) throw new Error(`HTTP ${response.status} from ${url}: ${body.slice(0, 200).trim()}`)
+    return truncateFetchedText(body)
   }
   throw new Error(`Too many redirects while fetching "${url}"`)
 }
@@ -928,6 +932,9 @@ async function main() {
           const record = await createReminder(remindersFile, text)
           return { content: [{ type: 'text', text: `Reminder created: "${record.rawText}" (id ${record.id}).` }] }
         } catch (err) {
+          // A genuine error is a failed call the parent's ControlState should see; the deliberate refusal above (a
+          // fact-shaped "reminder") returns before this and is NOT reported — declining is the tool working.
+          await reportToolResult('create_reminder', { text }, `Error: ${err instanceof Error ? err.message : String(err)}`, false)
           return { content: [{ type: 'text', text: `Error: ${err instanceof Error ? err.message : String(err)}` }], isError: true }
         }
       },
@@ -951,6 +958,7 @@ async function main() {
             : reminders.map((r) => `- ${r.rawText}${r.done ? ' (done)' : ''}`).join('\n')
           return { content: [{ type: 'text', text }] }
         } catch (err) {
+          await reportToolResult('list_reminders', {}, `Error: ${err instanceof Error ? err.message : String(err)}`, false)
           return { content: [{ type: 'text', text: `Error: ${err instanceof Error ? err.message : String(err)}` }], isError: true }
         }
       },

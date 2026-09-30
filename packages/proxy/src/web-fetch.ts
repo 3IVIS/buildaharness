@@ -1,5 +1,5 @@
 import type { Context } from 'hono'
-import { fetchTextSafely, PrivateNetworkTargetError, UnsupportedContentTypeError } from './web-fetch-core'
+import { fetchTextSafely, PrivateNetworkTargetError, UnsupportedContentTypeError, type DnsResolver } from './web-fetch-core'
 import { verifyFetchTag } from './web-fetch-tag'
 import { byteCounter, fetchConcurrency, getWebRateLimitConfig, hostCounter, HOUR_MS, logWebRequest, recordGuardRejection } from './rate-limit'
 import { subjectOf } from './web-quota-middleware'
@@ -15,6 +15,33 @@ function hostOf(url: string): string | undefined {
   } catch {
     return undefined
   }
+}
+
+/** The upstream site answered with an HTTP 5xx — a server fault, not page content. */
+export class UpstreamServerError extends Error {
+  constructor(readonly status: number) {
+    super(`upstream responded HTTP ${status}`)
+    this.name = 'UpstreamServerError'
+  }
+}
+
+/**
+ * fetchTextSafely returns whatever body was served, whatever the status, so a 503 used to come back to the caller as
+ * a 200 carrying the error page's text — indistinguishable from content, and counted as a success by the caller's
+ * own tool-failure accounting. A 5xx is turned into an error here (a 4xx page stays content). The status of the final
+ * response is read through a wrapped fetch so the guard/redirect core stays byte-identical with the aielia copy.
+ */
+export async function fetchTextRejectingServerErrors(url: string, opts: { fetchImpl?: typeof fetch; dns?: DnsResolver } = {}) {
+  const fetchImpl = opts.fetchImpl ?? fetch
+  let lastStatus = 200
+  const wrapped = (async (...args: Parameters<typeof fetch>) => {
+    const response = await fetchImpl(...args)
+    lastStatus = response.status
+    return response
+  }) as typeof fetch
+  const result = await fetchTextSafely({ url, fetchImpl: wrapped, dns: opts.dns })
+  if (lastStatus >= 500) throw new UpstreamServerError(lastStatus)
+  return result
 }
 
 export async function handleWebFetch(c: Context): Promise<Response> {
@@ -65,11 +92,15 @@ export async function handleWebFetch(c: Context): Promise<Response> {
   }
 
   try {
-    const result = await fetchTextSafely({ url: body.url })
+    const result = await fetchTextRejectingServerErrors(body.url)
     byteCounter.consume(byteQuotaKey, new TextEncoder().encode(result.text).length, config.bytesPerHour, HOUR_MS)
     logWebRequest({ ts: new Date().toISOString(), sub, route: '/web/fetch', host, status: 200, bytes: new TextEncoder().encode(result.text).length })
     return c.json(result)
   } catch (err) {
+    if (err instanceof UpstreamServerError) {
+      logWebRequest({ ts: new Date().toISOString(), sub, route: '/web/fetch', host, status: 502 })
+      return c.json({ error: err.message }, 502)
+    }
     if (err instanceof PrivateNetworkTargetError) {
       recordGuardRejection(sub, config.guardRejectAlertThreshold)
       logWebRequest({ ts: new Date().toISOString(), sub, route: '/web/fetch', host, status: 400, guardRejectReason: err.detail })
