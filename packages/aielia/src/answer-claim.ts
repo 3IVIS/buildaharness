@@ -1,4 +1,5 @@
 import type { Evidence, VerificationResult } from '@buildaharness/harness'
+import type { GroundingResult } from './grounding-check.js'
 
 /**
  * Where the evidence backing a reply actually came from — 'tool_evidence' when at least one
@@ -12,7 +13,9 @@ export type AnswerClaimSourceType = 'tool_evidence' | 'model_reasoning'
  * The four branches this plan's Validation section names explicitly — each backed by a real,
  * mechanically-derived signal (see buildAnswerClaim), never guessed from the reply text itself:
  * - 'verified': the verification layer found no critical failure and at least one layer
- *   actually PASSed (not just SKIPPED) against real evidence.
+ *   actually PASSed (not just SKIPPED) against real evidence — and, when the grounding check is
+ *   on, the reply itself was compared against the raw tool results and matched them. The
+ *   mechanical layers alone never look at the reply's content, so they cannot earn this.
  * - 'unverified_attempted': evidence was gathered, but no layer could independently confirm it
  *   (all SKIPPED/no tool to check with) — an honest "couldn't verify," not a fake PASS.
  * - 'contradicted': the Contradiction layer flagged a conflict with an existing belief this turn.
@@ -35,6 +38,8 @@ export interface AnswerClaim {
   freshness: string | null
   source_type: AnswerClaimSourceType
   verification_status: AnswerClaimVerificationStatus
+  /** One sentence naming what in the reply didn't match the tool results — set only when the grounding check found a discrepancy. */
+  grounding_note?: string
 }
 
 /**
@@ -49,14 +54,22 @@ export function buildAnswerClaim(input: {
   verification: VerificationResult | null
   contradicted: boolean
   verificationHealth: { strength: number; feasibility: number }
+  /**
+   * The reply-vs-tool-results check (grounding-check.ts). `undefined` means the check is switched
+   * off (`AUDIT_SEMANTIC_GROUNDING`) and `verified` keeps its mechanical-only meaning; any
+   * `GroundingResult` — including `not_checked` — means the check is on, so `verified` requires
+   * `grounded`.
+   */
+  grounding?: GroundingResult
 }): AnswerClaim {
-  const { evidence, verification, contradicted, verificationHealth } = input
+  const { evidence, verification, contradicted, verificationHealth, grounding } = input
+  const mechanicallyVerified = !!verification && !verification.has_critical_failure && verification.layer_results.some((lr) => lr.status === 'PASS')
 
   const verification_status: AnswerClaimVerificationStatus = contradicted
     ? 'contradicted'
     : evidence.length === 0
       ? 'no_evidence'
-      : verification && !verification.has_critical_failure && verification.layer_results.some((lr) => lr.status === 'PASS')
+      : mechanicallyVerified && (grounding === undefined || grounding.verdict === 'grounded')
         ? 'verified'
         : 'unverified_attempted'
 
@@ -70,5 +83,6 @@ export function buildAnswerClaim(input: {
     freshness,
     source_type: evidence.length > 0 ? 'tool_evidence' : 'model_reasoning',
     verification_status,
+    ...(grounding?.verdict === 'ungrounded' && grounding.discrepancy ? { grounding_note: grounding.discrepancy } : {}),
   }
 }

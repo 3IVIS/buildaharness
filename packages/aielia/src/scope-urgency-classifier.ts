@@ -1,4 +1,5 @@
 import type { ILLMClient, TokenUsage } from '@buildaharness/runtime'
+import { parseModelJson } from './model-json.js'
 
 // Phase 4 of plans/hierarchical_goal_tree_and_steering_plan.html — R4's scope×urgency classifier.
 // Every incoming mid-task steering message (drained from a LiveSteeringChannel, Phase 3) is
@@ -80,7 +81,7 @@ export async function classifyScopeUrgency(
       undefined,
       { model, onUsage, structuredOutput: { schema: SCOPE_URGENCY_SCHEMA } },
     )
-    const parsed = JSON.parse(response.content) as { scopeRelation?: unknown; urgency?: unknown }
+    const parsed = parseModelJson(response.content) as { scopeRelation?: unknown; urgency?: unknown }
     const scopeRelation = SCOPE_RELATIONS.includes(parsed.scopeRelation as ScopeRelation) ? (parsed.scopeRelation as ScopeRelation) : null
     const urgency = URGENCIES.includes(parsed.urgency as Urgency) ? (parsed.urgency as Urgency) : null
     if (!scopeRelation || !urgency) return FAIL_SAFE_CLASSIFICATION

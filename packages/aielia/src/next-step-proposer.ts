@@ -2,6 +2,7 @@ import type { ILLMClient, TokenUsage } from '@buildaharness/runtime'
 import type { GoalThread } from './goal-graph-store.js'
 import type { GoalGraphSuggestMode } from './goal-graph-suggest-flag.js'
 import type { NextStepContext } from './next-step-context.js'
+import { parseModelJson } from './model-json.js'
 
 // Phase 6 of plans/hierarchical_goal_tree_and_steering_plan.html — Tier 1.5's "next-step
 // proposer" (R7): when a GoalThread reaches DONE, propose plausible next steps as persistent
@@ -123,7 +124,7 @@ async function generateNextStepSuggestions(
       undefined,
       { model, onUsage, structuredOutput: { schema: NEXT_STEP_SCHEMA } },
     )
-    const parsed = JSON.parse(response.content) as { suggestions?: unknown }
+    const parsed = parseModelJson(response.content) as { suggestions?: unknown }
     return Array.isArray(parsed.suggestions) ? parsed.suggestions.filter(isSuggestion) : EMPTY_SUGGESTIONS
   } catch {
     return EMPTY_SUGGESTIONS

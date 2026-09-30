@@ -1,5 +1,6 @@
 import { looksLikeCodingFact } from './contradiction-checker.js'
 import { getFactMarkerPatterns, testAny, splitOnAny } from './lexical/patterns.js'
+import { lexicalActive } from './lexical/lexical-mode.js'
 import type { FactConfidence, FactCategory } from './turn-intent-classifier.js'
 
 const factPatterns = getFactMarkerPatterns()
@@ -177,6 +178,18 @@ export function tierForFact(fact: UserFact): MemoryTier {
     if (PREFERENCE_TIER_PATTERN.test(fact.text)) return 'preference'
   }
   return 'semantic'
+}
+
+/**
+ * The reliability the harness's world model should give this fact's belief — 'HIGH' (confidence
+ * 1.0, the >= 0.8 bar the change reviewer and contradiction severity read) for a fact the user
+ * stated directly or that has been externally verified, and for a `model_inferred` one that
+ * cleared the same durable + high-confidence bar `tierForFact` uses to treat it as Knowledge;
+ * everything else stays 'MEDIUM' (0.5), so an unconfirmed guess never reads as an established fact.
+ */
+export function factReliability(fact: UserFact): 'HIGH' | 'MEDIUM' {
+  if (fact.source === 'model_inferred') return fact.durable && fact.confidence === 'high' ? 'HIGH' : 'MEDIUM'
+  return fact.source === 'user_asserted' || fact.source === 'externally_verified' ? 'HIGH' : 'MEDIUM'
 }
 
 /** Whether `tier` counts as the Knowledge tier for contradiction-detection purposes — see harness-bridge.ts's factExtractor and TIER_RULES.*.contradictionChecked. */
@@ -420,6 +433,9 @@ function splitClauses(text: string): string[] {
  * and thus zero contradiction detection at any layer, lexical or LLM.
  */
 export function extractFactsFromTurn(userMessage: string, sourceTurn: string): UserFact[] {
+  // lexicalMode: with the fact-marker family off, this lexical pass admits nothing — only the LLM
+  // `statesDurableFacts` path (classifyTurnIntent) forms beliefs. See lexical/lexical-mode.ts.
+  if (!lexicalActive('fact-markers')) return []
   const trimmed = userMessage.trim()
   const admit = (): UserFact[] => [{ text: trimmed, extractedAt: new Date().toISOString(), sourceTurn, durable: isDurable(trimmed), source: 'user_asserted' }]
   // FACT_MARKERS' phrases are declarative by construction and matched against the whole message,

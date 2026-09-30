@@ -8,6 +8,7 @@ from __future__ import annotations
 
 CRITICAL_THRESHOLD: float = 0.2
 CAUTION_THRESHOLD: float = 0.4
+EXECUTION_RATIO_MIN_ATTEMPTS: int = 3
 
 RECOVERY_ACTION_DEPENDENCIES: dict[str, set[str]] = {
     "dep_graph_refresh": {"verification_strength"},

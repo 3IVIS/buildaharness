@@ -186,6 +186,38 @@ describe('updatePlanFromRun', () => {
     expect(updated.mode).toBe('active')
   })
 
+  describe('statusNote (why a task was not accepted as done)', () => {
+    const graph = (t1: 'FAILED' | 'COMPLETE' | 'PENDING') => [
+      { id: 't1', status: t1 },
+      { id: 't2', status: 'PENDING' as const },
+      { id: 't3', status: 'PENDING' as const },
+    ]
+
+    it('records a note on the task it is given for', () => {
+      const updated = updatePlanFromRun(createPlanRecord(makePlan()), graph('FAILED'), { t1: 'the reply refused' })
+      expect(updated.tasks.find((t) => t.id === 't1')!.statusNote).toBe('the reply refused')
+      expect(updated.tasks.find((t) => t.id === 't2')!.statusNote).toBeUndefined()
+    })
+
+    it('keeps an earlier note while the task stays FAILED and no new note arrives', () => {
+      const failed = updatePlanFromRun(createPlanRecord(makePlan()), graph('FAILED'), { t1: 'the reply refused' })
+      const again = updatePlanFromRun(failed, graph('FAILED'))
+      expect(again.tasks.find((t) => t.id === 't1')!.statusNote).toBe('the reply refused')
+    })
+
+    it('drops the note once the task completes, or is reset to PENDING', () => {
+      const failed = updatePlanFromRun(createPlanRecord(makePlan()), graph('FAILED'), { t1: 'the reply refused' })
+      expect(updatePlanFromRun(failed, graph('COMPLETE')).tasks.find((t) => t.id === 't1')!.statusNote).toBeUndefined()
+      expect(updatePlanFromRun(failed, graph('PENDING')).tasks.find((t) => t.id === 't1')!.statusNote).toBeUndefined()
+    })
+
+    it('a run that does not include the task leaves its status and note alone (a plan-question turn)', () => {
+      const failed = updatePlanFromRun(createPlanRecord(makePlan()), graph('FAILED'), { t1: 'the reply refused' })
+      const untouched = updatePlanFromRun(failed, [{ id: 'respond', status: 'COMPLETE' }])
+      expect(untouched.tasks.find((t) => t.id === 't1')).toMatchObject({ status: 'FAILED', statusNote: 'the reply refused' })
+    })
+  })
+
   it('flips mode to done once every task is COMPLETE', () => {
     const record = createPlanRecord(makePlan())
     const updated = updatePlanFromRun(record, record.tasks.map((t) => ({ id: t.id, status: 'COMPLETE' })))

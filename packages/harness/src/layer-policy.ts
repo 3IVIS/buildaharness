@@ -26,15 +26,23 @@ export const ESCALATION_LAYERS = [
   'semantic_contradiction', 'failure_match', 'criterion_coverage', 'change_review', 'injection_detection',
   'decomposition_reframe', 'model_inferred_facts', 'reviewer_adversarial',
 ] as const
+/**
+ * Layers that ship OFF and exist only when the host turned them on (an `AUDIT_*` flag). Unlike every
+ * other class their static baseline is `off`, not `full`: the policy is restrict-only (AL-1), so it can
+ * never switch one on — it can only degrade an enabled one (no `cheap` form, so to `off`) when the
+ * per-turn call budget cannot pay for it. The host says which are enabled (`enabledOptIn`).
+ */
+export const OPT_IN_LAYERS = ['source_reliability', 'semantic_hypotheses', 'reviewer_revision', 'experience_learning'] as const
 export const EVENT_LAYERS = ['supervisor'] as const
 export const PRESENTATION_LAYERS = ['next_step_options', 'goal_graph', 'steering'] as const
 
 export type FloorLayer = (typeof FLOOR_LAYERS)[number]
 export type EscalationLayer = (typeof ESCALATION_LAYERS)[number]
+export type OptInLayer = (typeof OPT_IN_LAYERS)[number]
 export type EventLayer = (typeof EVENT_LAYERS)[number]
 export type PresentationLayer = (typeof PRESENTATION_LAYERS)[number]
-export type Layer = FloorLayer | EscalationLayer | EventLayer | PresentationLayer
-export type LayerClass = 'floor' | 'escalation' | 'event' | 'presentation'
+export type Layer = FloorLayer | EscalationLayer | OptInLayer | EventLayer | PresentationLayer
+export type LayerClass = 'floor' | 'escalation' | 'opt_in' | 'event' | 'presentation'
 
 /** The one table declaring every layer's class. */
 export const LAYER_CLASS: Readonly<Record<Layer, LayerClass>> = {
@@ -52,6 +60,10 @@ export const LAYER_CLASS: Readonly<Record<Layer, LayerClass>> = {
   decomposition_reframe: 'escalation',
   model_inferred_facts: 'escalation',
   reviewer_adversarial: 'escalation',
+  source_reliability: 'opt_in',
+  semantic_hypotheses: 'opt_in',
+  reviewer_revision: 'opt_in',
+  experience_learning: 'opt_in',
   supervisor: 'event',
   next_step_options: 'presentation',
   goal_graph: 'presentation',
@@ -72,6 +84,34 @@ export const HAS_CHEAP_FORM: Readonly<Record<EscalationLayer, boolean>> = {
   model_inferred_facts: false,
   reviewer_adversarial: false,
 }
+
+/** How well each opt-in layer is known to work. None has a certified benefit; this is the record, not a promise. */
+export type OptInEvidence = 'mechanism_verified' | 'suggestive' | 'untested_with_real_model'
+
+export const OPT_IN_EVIDENCE: Readonly<Record<OptInLayer, OptInEvidence>> = {
+  source_reliability: 'mechanism_verified',
+  semantic_hypotheses: 'suggestive',
+  reviewer_revision: 'untested_with_real_model',
+  experience_learning: 'untested_with_real_model',
+}
+
+/** The operator flag that turns each opt-in layer on (read once, in the host). */
+export const OPT_IN_FLAG: Readonly<Record<OptInLayer, string>> = {
+  source_reliability: 'AUDIT_SEMANTIC_SOURCE_RELIABILITY',
+  semantic_hypotheses: 'AUDIT_SEMANTIC_HYPOTHESES',
+  reviewer_revision: 'AUDIT_REVIEWER_REVISION',
+  experience_learning: 'AUDIT_EXPERIENCE_LEARNING',
+}
+
+/** Worst-case LLM calls an enabled opt-in layer draws in one turn (`experience_learning` makes none). */
+export const OPT_IN_CALL_COST: Readonly<Record<OptInLayer, number>> = {
+  source_reliability: 2,
+  semantic_hypotheses: 2,
+  reviewer_revision: 1,
+  experience_learning: 0,
+}
+
+export const OPT_IN_DISABLED_TRIGGER = 'opt_in_disabled'
 
 export interface LayerDecision {
   decision: Decision
@@ -143,11 +183,22 @@ export function injectionSkipProvenSafe(ctx: PolicyContext): boolean {
   return noUntrusted || noToolCapableStep
 }
 
-/** Today's behaviour: every layer at `full`. */
-export function staticLayerPolicy(): LayerPolicy {
+function isEnabledOptIn(enabled: Iterable<OptInLayer> | undefined, layer: OptInLayer): boolean {
+  if (enabled === undefined) return false
+  for (const l of enabled) if (l === layer) return true
+  return false
+}
+
+/** Today's behaviour: every layer at `full`, except an opt-in layer the host has not enabled (`off`, trigger `opt_in_disabled`). */
+export function staticLayerPolicy(enabledOptIn?: Iterable<OptInLayer>): LayerPolicy {
   const out = {} as LayerPolicy
   for (const layer of Object.keys(LAYER_CLASS) as Layer[]) {
     out[layer] = { decision: 'full', trigger: STATIC_TRIGGER, reason: 'static policy: today\'s behaviour' }
+  }
+  for (const layer of OPT_IN_LAYERS) {
+    if (!isEnabledOptIn(enabledOptIn, layer)) {
+      out[layer] = { decision: 'off', trigger: OPT_IN_DISABLED_TRIGGER, reason: `opt-in layer, ${OPT_IN_FLAG[layer]} is not set` }
+    }
   }
   return out
 }
@@ -175,16 +226,17 @@ export function resolveLayerPolicy(
   state: RunState | undefined,
   budget: PolicyBudget,
   rules: PolicyRules = {},
+  enabledOptIn?: Iterable<OptInLayer>,
 ): LayerPolicy {
   try {
     const ctx: PolicyContext = { signals, state, budget }
-    const out = staticLayerPolicy()
+    const out = staticLayerPolicy(enabledOptIn)
     const proposedByLayer = new Map<EscalationLayer, LayerDecision | null>()
     for (const layer of ESCALATION_LAYERS) {
       const rule = rules[layer]
       const proposed = rule ? rule(ctx) : null
       if (proposed) {
-        if (!isDecision(proposed.decision) || typeof proposed.trigger !== 'string') return staticLayerPolicy()
+        if (!isDecision(proposed.decision) || typeof proposed.trigger !== 'string') return staticLayerPolicy(enabledOptIn)
         proposedByLayer.set(layer, { decision: proposed.decision, trigger: proposed.trigger, reason: proposed.reason ?? proposed.trigger })
       } else {
         proposedByLayer.set(layer, null)
@@ -209,9 +261,20 @@ export function resolveLayerPolicy(
       if (remaining !== null && next.decision === 'full') remaining = Math.max(0, remaining - cost)
       out[layer] = next
     }
+    // Enabled opt-in layers draw on what the escalations left. They have no `cheap` form, so one that cannot be
+    // paid for goes `off`; a disabled one is already `off` and is never raised.
+    for (const layer of OPT_IN_LAYERS) {
+      if (!isEnabledOptIn(enabledOptIn, layer)) continue
+      const cost = OPT_IN_CALL_COST[layer]
+      if (remaining !== null && remaining < cost) {
+        out[layer] = { decision: 'off', trigger: 'budget_exhausted', reason: 'per-turn LLM-call budget exhausted' }
+      } else if (remaining !== null) {
+        remaining = Math.max(0, remaining - cost)
+      }
+    }
     return out
   } catch {
-    return staticLayerPolicy()
+    return staticLayerPolicy(enabledOptIn)
   }
 }
 

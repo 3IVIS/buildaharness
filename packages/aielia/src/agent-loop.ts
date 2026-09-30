@@ -19,7 +19,7 @@ import type { DebugLogEntry } from './debug-log.js'
 import type { TraceEvent } from './trace-events.js'
 import type { TurnIntentClassification, RiskLevel } from './turn-intent-classifier.js'
 import { evaluateToolPolicy } from './tool-policy.js'
-import { createTurnControlPlaneState, recordToolOutcome, moreRestrictiveControlState, type TurnControlPlaneState } from './tool-control-plane.js'
+import { createTurnControlPlaneState, recordToolOutcome, moreRestrictiveControlState, controlStateToolPolicyEnabled, type TurnControlPlaneState } from './tool-control-plane.js'
 import { classifyToolYield, type ToolYield } from './tool-yield-classifier.js'
 import { FILE_TOOLS, executeFileTool, readCurrentFileContent, type FileToolsContext } from './file-tools.js'
 import { formatWriteDiff } from './diff-format.js'
@@ -28,8 +28,16 @@ import { SHELL_TOOLS, executeShellTool, commandMayLeaveWorkspace, type ShellTool
 import { ACTION_TOOLS, executeActionTool, type ActionToolsContext } from './action-tools.js'
 import { formatEmailApprovalReason } from './email.js'
 import { REMINDER_TOOLS, executeReminderTool } from './reminder-tools.js'
+
+/** How much of each tool result is kept on its AssistantSource for the answer-claim grounding check. */
+const GROUNDING_EXCERPT_CHARS = 6000
 import { wrapUntrusted, detectInjectionLikelyWithLLM } from './trust-tagging.js'
 import { summarizeToolStep, type AssistantToolStep } from './tool-step.js'
+import { REVIEW_NOTE_PREFIX } from './review-checker.js'
+import { sourceReliabilityEnabled, assessSourceReliability, recordSourceAssessments, renderSourceNote } from './source-reliability.js'
+import { RECOVERY_NOTE_PREFIX } from './recovery-note.js'
+import { HYPOTHESIS_NOTE_PREFIX, hypothesisContextMessage } from './semantic-hypotheses.js'
+import { REVISION_NOTE_PREFIX, revisionContextMessage } from './reviewer-revision.js'
 
 export type ToolLoopResult =
   | { kind: 'final'; content: string; sources: AssistantSource[]; batchBudget?: BatchBudgetTrace }
@@ -223,6 +231,9 @@ function shellApprovalReason(command: string, cwd: string): string {
  * per Phase 4's design: a deterministic, harness-state-informed check before each call executes,
  * not just advisory classification checked after the fact.
  */
+/** See createOneLoopProposer's maxIterations doc comment. */
+const RECOVERY_HEADROOM = 4
+
 export class AgentLoop {
   constructor(
     private readonly memory: MemoryAdapter,
@@ -255,7 +266,8 @@ export class AgentLoop {
       ...(this.actionTools ? ACTION_TOOLS : []),
       ...REMINDER_TOOLS,
     ].map((tool) => tool.name)
-    return createTurnControlPlaneState(toolNames)
+    // AUDIT_CONTROL_STATE_TOOL_POLICY (feature-value audit, eval-only): the one read site.
+    return createTurnControlPlaneState(toolNames, { pinNormal: !controlStateToolPolicyEnabled() })
   }
 
   /**
@@ -299,18 +311,63 @@ export class AgentLoop {
      * caller-constraint output contract.
      */
     takeSteeringNotes?: () => string[]
+    /**
+     * Plan steps: the instruction to give the model when the harness starts working on `taskId`, or
+     * undefined for a task that is just "answer the user's message" (every ordinary turn). Sent once per
+     * task; the step's final answer is then kept in the conversation so a later step can build on it.
+     */
+    stepInstruction?: (taskId: string) => string | undefined
+    /**
+     * True while the harness is running several subtasks that all stand for ONE answer to the user's
+     * message (an ordinary decomposed turn, not a plan). The first subtask to finish produces the answer;
+     * the rest reuse it instead of asking the model the same question again. A task the harness runs a
+     * second time (a retry after a rejection) gets a fresh call, never the answer that was rejected.
+     */
+    shareAnswer?: () => boolean
   }): (toolCtx: ToolExecutorContext) => Promise<unknown> {
     let dispatchedAnyToolCall = false
+    const instructedSteps = new Set<string>()
+    let sharedOutput: string | undefined
+    const servedTaskIds = new Set<string>()
     let iteration = 0
     // One real, turn-scoped live ControlState for the whole proposer (= the whole turn) — see this
     // method's doc comment. recordToolOutcome dereferences state.evidenceStore, so this must be a
     // real createControlPlaneState() object, never a synthetic { controlState }-only wrapper.
     const controlPlaneState = this.createControlPlaneState()
     const seenInvestigationObs = new Set<string>()
+    // AUDIT_SEMANTIC_SOURCE_RELIABILITY: the single read site. The sources are weighed at most once per
+    // turn, and an answer that did not weigh them is revised at most once.
+    const weighSources = sourceReliabilityEnabled()
+    let sourcesWeighed = false
+    // The last answer this proposer produced — a reviewer revision asks for a new one, so the model has to see the old one.
+    let lastFinalContent: string | undefined
 
-    return async (toolCtx: ToolExecutorContext): Promise<unknown> => {
+    const proposer = async (toolCtx: ToolExecutorContext): Promise<unknown> => {
+      const sharing = input.shareAnswer?.() === true && toolCtx.currentTaskId !== undefined
+      if (sharing && sharedOutput !== undefined) {
+        if (servedTaskIds.has(toolCtx.currentTaskId!)) {
+          // The same task again means the answer was not accepted: ask the model afresh.
+          sharedOutput = undefined
+          servedTaskIds.clear()
+        } else {
+          servedTaskIds.add(toolCtx.currentTaskId!)
+          return { __harnessExecutionStatus: 'complete', output: sharedOutput }
+        }
+      }
+
       if (iteration >= input.maxIterations) {
-        throw new OneLoopPause({ kind: 'escalated', reason: `Tool loop exceeded ${input.maxIterations} iterations without producing a final answer.` })
+        // A genuine harness-level failure (not a pause/approval) — see execute.ts's
+        // isHarnessPauseSignal special-case, which used to make this throw bypass
+        // recordFailure()/rollbackAndReplan() entirely, leaving failure_match structurally
+        // unreachable from a real turn (the layer_conversations audit's finding). Reset to 0
+        // (not left at the ceiling) so a requeued retry (see rollback-replan.ts's
+        // failureModeSwitch requeue) gets a genuine fresh per-attempt budget instead of
+        // immediately re-tripping this same check on its very first call.
+        iteration = 0
+        return {
+          __harnessExecutionStatus: 'failed',
+          error: `Tool loop exceeded ${input.maxIterations} iterations without producing a final answer.`,
+        }
       }
       iteration++
 
@@ -330,11 +387,44 @@ export class AgentLoop {
         })
       }
 
-      const steeringNotes = input.takeSteeringNotes?.() ?? []
+      const stepInstruction = toolCtx.currentTaskId ? input.stepInstruction?.(toolCtx.currentTaskId) : undefined
+      if (stepInstruction && toolCtx.currentTaskId && !instructedSteps.has(toolCtx.currentTaskId)) {
+        instructedSteps.add(toolCtx.currentTaskId)
+        input.messages.push({ role: 'user', content: stepInstruction })
+        // The per-attempt iteration budget is per step: it otherwise counts across the whole turn, so a
+        // long plan of tool-using steps would trip it partway through for no fault of the step in hand.
+        iteration = 1
+      }
+
+      const allNotes = input.takeSteeringNotes?.() ?? []
+      const reviewNotes = allNotes.filter((n) => n.startsWith(REVIEW_NOTE_PREFIX)).map((n) => n.slice(REVIEW_NOTE_PREFIX.length))
+      const recoveryNotes = allNotes.filter((n) => n.startsWith(RECOVERY_NOTE_PREFIX)).map((n) => n.slice(RECOVERY_NOTE_PREFIX.length))
+      const hypothesisNotes = allNotes.filter((n) => n.startsWith(HYPOTHESIS_NOTE_PREFIX)).map((n) => n.slice(HYPOTHESIS_NOTE_PREFIX.length))
+      const revisionNotes = allNotes.filter((n) => n.startsWith(REVISION_NOTE_PREFIX)).map((n) => n.slice(REVISION_NOTE_PREFIX.length))
+      const steeringNotes = allNotes.filter((n) => !n.startsWith(REVIEW_NOTE_PREFIX) && !n.startsWith(RECOVERY_NOTE_PREFIX) && !n.startsWith(HYPOTHESIS_NOTE_PREFIX) && !n.startsWith(REVISION_NOTE_PREFIX))
       if (steeringNotes.length > 0) {
         input.messages.push({
           role: 'user',
           content: `[the user sent the following while you were working on the request above — apply it to your answer]\n${steeringNotes.map((n) => `- ${n}`).join('\n')}`,
+        })
+      }
+      for (const body of revisionNotes) {
+        if (lastFinalContent !== undefined) input.messages.push({ role: 'assistant', content: lastFinalContent })
+        input.messages.push({ role: 'user', content: revisionContextMessage(body) })
+      }
+      for (const body of hypothesisNotes) {
+        input.messages.push({ role: 'user', content: hypothesisContextMessage(body) })
+      }
+      if (reviewNotes.length > 0) {
+        input.messages.push({
+          role: 'user',
+          content: `[a pre-check found the request above may conflict with something the user told you earlier — say so plainly in your answer (flag it, or ask how to proceed) rather than silently going along with it]\n${reviewNotes.map((n) => `- ${n}`).join('\n')}`,
+        })
+      }
+      if (recoveryNotes.length > 0) {
+        input.messages.push({
+          role: 'user',
+          content: `[the previous attempt just failed]\n${recoveryNotes.map((n) => `- ${n}`).join('\n')}`,
         })
       }
 
@@ -344,7 +434,7 @@ export class AgentLoop {
       // restrictive — an overwrite here would let a fresh harness ALLOW silently erase a DENY
       // this turn's own repeated tool failures already earned (Phase 4c's same-turn
       // failure-pattern gate).
-      if (toolCtx.controlState) {
+      if (toolCtx.controlState && !controlPlaneState.pinNormal) {
         controlPlaneState.controlState = moreRestrictiveControlState(controlPlaneState.controlState, toolCtx.controlState)
       }
 
@@ -358,12 +448,45 @@ export class AgentLoop {
         return { __harnessExecutionStatus: 'continue' }
       }
 
+      if (step.result.kind === 'final' && weighSources && !sourcesWeighed) {
+        // Under claude-cli the tool loop runs inside the subprocess, so no source note can be spliced in
+        // before the answer exists; the sources are weighed after it instead, and an answer that leaned on a
+        // less reliable one is asked for again once with the assessment in front of the model.
+        const weighing = await assessSourceReliability(
+          { question: input.userMessage, sources: input.sources, reply: step.result.content },
+          this.llmClient, this.model(), input.onUsage,
+        )
+        if (weighing) {
+          sourcesWeighed = true
+          // Both evidence stores carry the judgment: the harness's (what answerClaim reads) and this
+          // turn's own (what the tool-control plane reasons over).
+          if (weighing.assessments.length > 0) {
+            recordSourceAssessments(controlPlaneState.evidenceStore, weighing.assessments)
+            if (typeof toolCtx.evidenceStore?.addObservation === 'function') recordSourceAssessments(toolCtx.evidenceStore, weighing.assessments)
+          }
+          if (!weighing.weighed) {
+            input.messages.push({ role: 'assistant', content: step.result.content })
+            input.messages.push({ role: 'user', content: renderSourceNote(weighing) })
+            return proposer(toolCtx)
+          }
+        }
+      }
+
       if (step.result.kind === 'final') {
+        lastFinalContent = step.result.content
+        // A plan step's answer is part of the conversation the next step continues from.
+        if (stepInstruction) input.messages.push({ role: 'assistant', content: step.result.content })
+        if (sharing) {
+          sharedOutput = step.result.content
+          servedTaskIds.clear()
+          servedTaskIds.add(toolCtx.currentTaskId!)
+        }
         return { __harnessExecutionStatus: 'complete', output: step.result.content }
       }
 
       throw new OneLoopPause(step.result, toolCtx.currentTaskId)
     }
+    return proposer
   }
 
   /**
@@ -387,6 +510,8 @@ export class AgentLoop {
     onUsage?: (usage: TokenUsage) => void,
     riskHint: TurnIntentClassification['riskLevel'] = 'LOW',
     takeSteeringNotes?: () => string[],
+    stepInstruction?: (taskId: string) => string | undefined,
+    shareAnswer?: () => boolean,
   ): { proposer: (toolCtx: ToolExecutorContext) => Promise<unknown>; sources: AssistantSource[] } {
     const tools = [
       ...(this.fileTools ? FILE_TOOLS : []),
@@ -402,7 +527,22 @@ export class AgentLoop {
     ]
     const sources: AssistantSource[] = []
     const proposer = this.createHarnessProposer({
-      messages, tools, sessionId, userMessage, maxIterations: this.maxSteps, sources, onToken, onToolStep, onUsage, riskHint, takeSteeringNotes,
+      messages, tools, sessionId, userMessage,
+      // Per-attempt budget, smaller than the harness's own outer step ceiling
+      // (harness-bridge.ts's max_steps) on purpose — see rollback-replan.ts's
+      // requeueLeafOnLocal/failureModeSwitch. A normal turn (1-4 tool calls) never gets close,
+      // so this changes nothing for the common case; it exists to give a genuinely stuck
+      // attempt real headroom under the outer ceiling for one recovery-driven retry.
+      //
+      // Reserves a fixed RECOVERY_HEADROOM (not a fraction of this.maxSteps): tool-control-
+      // plane.ts's own same-turn DENY (repeated same-tool failures within ~9-10 calls, an
+      // independently-tuned fixed-count threshold, not scaled to maxSteps) must get a genuine
+      // chance to fire first — a fractional split (half of maxSteps=15 -> 8) sat BELOW that
+      // threshold and silently preempted it before it ever ran. A fixed, small reservation
+      // stays out of that mechanism's way for any maxSteps large enough for it to matter, at
+      // the cost of a genuinely small maxSteps (e.g. 6) leaving little room for either.
+      maxIterations: Math.max(3, this.maxSteps - RECOVERY_HEADROOM),
+      sources, onToken, onToolStep, onUsage, riskHint, takeSteeringNotes, stepInstruction, shareAnswer,
     })
     return { proposer, sources }
   }
@@ -710,6 +850,27 @@ export class AgentLoop {
           reportDenied(tool, input, policy.reason)
           return { decision: 'deny', reason: policy.reason }
         },
+        // The report half: a backend that runs its own tool loop (claude-cli) hands back what each
+        // read-only call returned, so this turn's sources carry the raw text the grounding check
+        // compares the reply to — the manual dispatch loop below does the same for the calls it
+        // makes itself. Same tools and same `path` meaning as that loop's own source push.
+        // Run fetch_url / web_search on this side when web tools are configured, so a claude-cli
+        // fetch gets the same SSRF guard, injected fetch and LLM injection check the manual dispatch
+        // loop gives the proxy backend (executeToolCall). Declines (undefined) without webTools —
+        // the MCP server then fetches for itself, as before.
+        onToolExecute: async (tool, input) => {
+          if (!this.webTools || (tool !== 'fetch_url' && tool !== 'web_search')) return undefined
+          const text = await this.executeToolCall(tool, input, userMessage, onUsage)
+          sources.push({ tool, path: String(input.query ?? input.url), excerpt: text.slice(0, GROUNDING_EXCERPT_CHARS) })
+          return text
+        },
+        onToolResult: (tool, input, resultText) => {
+          if (tool === 'read_file' || tool === 'list_directory') {
+            sources.push({ tool, path: String(input.path), excerpt: resultText.slice(0, GROUNDING_EXCERPT_CHARS) })
+          } else if (tool === 'web_search' || tool === 'fetch_url') {
+            sources.push({ tool, path: String(input.query ?? input.url), excerpt: resultText.slice(0, GROUNDING_EXCERPT_CHARS) })
+          }
+        },
       })
 
       if (!response.toolCalls || response.toolCalls.length === 0) {
@@ -907,9 +1068,9 @@ export class AgentLoop {
           // real — a rejected path/URL or tool error below is reported to the
           // model but isn't a source.
           if (call.name === 'read_file' || call.name === 'list_directory') {
-            sources.push({ tool: call.name, path: String(call.input.path) })
+            sources.push({ tool: call.name, path: String(call.input.path), excerpt: resultText.slice(0, GROUNDING_EXCERPT_CHARS) })
           } else if (call.name === 'web_search' || call.name === 'fetch_url') {
-            sources.push({ tool: call.name, path: String(call.input.query ?? call.input.url) })
+            sources.push({ tool: call.name, path: String(call.input.query ?? call.input.url), excerpt: resultText.slice(0, GROUNDING_EXCERPT_CHARS) })
           }
         } catch (err) {
           // A rejected path or tool error is reported back to the model as a

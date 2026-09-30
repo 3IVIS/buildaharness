@@ -7,6 +7,11 @@
     "caution": 0.4
   },
 
+  "execution_ratio_min_attempts": {
+    "_README": "Minimum number of attempted tasks before the two task-ratio execution_health dimensions (progress_rate = completed/attempted, and the TS oscillation_score = failed/total) leave their neutral values (1.0 and 0.0). With a denominator of 1 — every ordinary single-task turn — one failed attempt reads as 0 and 1, both past CRITICAL_THRESHOLD, so Tier 2 DENYs and the gate blocks before the recovery ladder can retry once. Below this many attempts the ratios carry no trend, so failure_recurrence and the stall rule (cannotMakeProgress) govern instead.",
+    "value": 3
+  },
+
   "recovery_action_dependencies": {
     "_README": "recovery_action_class -> dimension names that class requires to be unblocked. Cross-dimension only: a recovery action must never depend on the dimension it is recovering, or a single blocked dimension would always detect as a deadlock self-loop.",
     "dep_graph_refresh": ["verification_strength"],

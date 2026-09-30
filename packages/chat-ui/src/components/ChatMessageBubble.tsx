@@ -3,6 +3,7 @@ import ReactMarkdown, { type Components } from 'react-markdown'
 import remarkGfm from 'remark-gfm'
 import {
   buildWhyChain,
+  lowerConfidenceSourceLines,
   LAYER_ORDER,
   LAYER_SHORT_CODE,
   LAYER_DISPLAY_NAME,
@@ -68,8 +69,9 @@ function verificationHealthLabel({ strength, feasibility }: AssistantTrace['veri
 export function answerClaimLabel(claim: AnswerClaim): string {
   switch (claim.verification_status) {
     case 'verified':
-      return 'This is true — grounded in evidence that was independently verified.'
+      return 'Checked against the source material I read — the reply matches it.'
     case 'unverified_attempted':
+      if (claim.grounding_note) return `I found evidence for this, but the reply doesn't fully match it: ${claim.grounding_note}`
       return "I found evidence for this, but couldn't independently verify it."
     case 'contradicted':
       return 'This conflicts with something I already believe — worth double-checking.'
@@ -201,6 +203,9 @@ export function ChatMessageBubble({ role, content, riskLevel, trace, harnessSkip
                 <>
                   <div className="bubble__why-confidence">{verificationHealthLabel(trace.verificationHealth)}</div>
                   {answerClaim && <div className="bubble__why-confidence">{answerClaimLabel(answerClaim)}</div>}
+                  {answerClaim && lowerConfidenceSourceLines(answerClaim).map((line) => (
+                    <div key={line} className="bubble__why-confidence">{line}</div>
+                  ))}
                   {/* Only layers that actually fired, chained in the order they fired — quiet
                       otherwise (Phase 3.1 of the harness layer activation plan: the common,
                       unremarkable turn stays quiet, matching the "don't badge LOW risk"
@@ -284,6 +289,7 @@ export function ChatMessageBubble({ role, content, riskLevel, trace, harnessSkip
                   {planStatus.tasks.map((t) => (
                     <li key={t.id} className={t.status === 'RUNNING' ? 'bubble__plan-checklist-item--active' : undefined}>
                       {PLAN_TASK_STATUS_ICON[t.status] ?? '?'} {t.description}
+                      {t.note && <span className="bubble__plan-checklist-note"> — not accepted as done: {t.note}</span>}
                     </li>
                   ))}
                 </ul>

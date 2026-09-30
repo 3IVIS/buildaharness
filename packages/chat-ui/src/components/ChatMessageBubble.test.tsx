@@ -18,7 +18,7 @@ function claim(verification_status: AnswerClaim['verification_status']): AnswerC
 describe('answerClaimLabel', () => {
   it('renders distinct, non-overlapping phrasing for each verification_status branch', () => {
     expect(answerClaimLabel(claim('verified'))).toBe(
-      'This is true — grounded in evidence that was independently verified.',
+      'Checked against the source material I read — the reply matches it.',
     )
     expect(answerClaimLabel(claim('unverified_attempted'))).toBe(
       "I found evidence for this, but couldn't independently verify it.",
@@ -31,7 +31,36 @@ describe('answerClaimLabel', () => {
     )
   })
 
+  it('surfaces the grounding discrepancy when the reply did not match the tool results', () => {
+    expect(answerClaimLabel({ ...claim('unverified_attempted'), grounding_note: 'the stated total 4058 is not the sum of the line items (4508)' })).toBe(
+      "I found evidence for this, but the reply doesn't fully match it: the stated total 4058 is not the sum of the line items (4508)",
+    )
+  })
+
   it('never lets "verified" and "unverified_attempted" collapse to the same phrasing', () => {
     expect(answerClaimLabel(claim('verified'))).not.toBe(answerClaimLabel(claim('unverified_attempted')))
+  })
+})
+
+describe('ChatMessageBubble — lower-confidence source line', () => {
+  const trace = { layerActivity: [], verificationHealth: { strength: 1, feasibility: 1 } } as never
+  const withEvidence = (evidence: AnswerClaim['evidence']): AnswerClaim => ({ ...claim('unverified_attempted'), evidence })
+
+  async function whyText(answerClaim: AnswerClaim): Promise<string> {
+    const { render, screen, fireEvent } = await import('@testing-library/react')
+    const { ChatMessageBubble } = await import('./ChatMessageBubble')
+    const { container } = render(<ChatMessageBubble role="assistant" content="hi" trace={trace} answerClaim={answerClaim} />)
+    fireEvent.click(screen.getByText('Why?'))
+    return container.textContent ?? ''
+  }
+
+  it('shows a LOW-assessed source in the Why? panel', async () => {
+    const text = await whyText(withEvidence([{ id: 'source-reliability:notes/old-wiki.md', obs: 'notes/old-wiki.md — archived forum copy', reliability: 'LOW', source: 'notes/old-wiki.md', evidence_type: 'OBSERVATION', freshness: '2026-09-29T00:00:00.000Z' }]))
+    expect(text).toContain('Less reliable source: notes/old-wiki.md — archived forum copy')
+  })
+
+  it('stays quiet when no source was judged LOW', async () => {
+    const text = await whyText(withEvidence([]))
+    expect(text).not.toContain('Less reliable source')
   })
 })

@@ -725,12 +725,12 @@
         {
           "layer": "diagnostics",
           "fired": true,
-          "reason": "a sub-dimension crossed the caution threshold"
+          "reason": "Health: nominal"
         },
         {
           "layer": "control_state",
-          "fired": true,
-          "reason": "Pausing — blocked"
+          "fired": false,
+          "reason": "NORMAL"
         },
         {
           "layer": "recovery",
@@ -1400,6 +1400,11 @@
           "layer": "world_model",
           "fired": false,
           "reason": "single LOW-risk task, no durable fact stated — observation only"
+        },
+        {
+          "layer": "diagnostics",
+          "fired": true,
+          "reason": "Health: nominal"
         },
         {
           "layer": "verification",

@@ -1,5 +1,6 @@
 import type { ILLMClient, TokenUsage } from '@buildaharness/runtime'
 import type { PlanTaskRecord } from './plan-store.js'
+import { parseModelJson } from './model-json.js'
 
 /**
  * P6 of the internal plan — runs between drafting (P1/P3) and staging
@@ -124,7 +125,7 @@ async function reviewPlanForCompleteness(
       undefined,
       { model, onUsage, structuredOutput: { schema: VERIFY_SCHEMA } },
     )
-    const parsed = JSON.parse(response.content) as { findings?: unknown }
+    const parsed = parseModelJson(response.content) as { findings?: unknown }
     if (!Array.isArray(parsed.findings)) return []
     return parsed.findings.filter((f): f is string => typeof f === 'string')
   } catch {

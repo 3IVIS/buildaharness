@@ -11,4 +11,11 @@
 export interface AssistantSource {
   tool: 'read_file' | 'list_directory' | 'web_search' | 'fetch_url'
   path: string
+  /**
+   * The (truncated) raw text the tool returned — what the answer-claim grounding check compares the reply against
+   * (grounding-check.ts). Internal only: ResponseService strips it before a source reaches AssistantTurnResult, so it
+   * never lands in a transcript, a trace or the UI. Absent when the result text isn't visible to the parent process
+   * (claude-cli runs the tool loop inside its own subprocess).
+   */
+  excerpt?: string
 }

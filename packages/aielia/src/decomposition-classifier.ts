@@ -1,5 +1,7 @@
 import type { ILLMClient, TokenUsage } from '@buildaharness/runtime'
 import { getEnumerationPatterns, testAny } from './lexical/patterns.js'
+import { lexicalActive } from './lexical/lexical-mode.js'
+import { parseModelJson } from './model-json.js'
 
 const enumeration = getEnumerationPatterns()
 
@@ -131,6 +133,15 @@ function isFactThenSingleReminder(trimmed: string): boolean {
  * silently create several reminders in one turn.
  */
 export function looksLikeEnumeratedItems(message: string): boolean {
+  // lexicalMode: with the enumeration family off this decomposition heuristic reports nothing and
+  // only the LLM's own `decomposedTasks` split applies. The bulk-reminder safety gate uses the
+  // un-gated `looksLikeEnumeratedItemsLexical` below, so turning this family off never removes it.
+  if (!lexicalActive('enumeration')) return false
+  return looksLikeEnumeratedItemsLexical(message)
+}
+
+/** The raw lexical enumeration check — never switched off by `lexicalMode` (risk-classifier's bulk-reminder gate depends on it). */
+export function looksLikeEnumeratedItemsLexical(message: string): boolean {
   const trimmed = message.trim()
   if (isFactThenSingleReminder(trimmed)) return false
   return testAny(SEQUENCING_MARKERS, trimmed) || isEnumeratedListShape(trimmed) || testAny(SEMICOLON_LIST_MARKER, trimmed) || hasNumberedList(trimmed)
@@ -195,7 +206,7 @@ export async function reframeTaskDescriptionWithLLM(
       undefined,
       { model, onUsage, structuredOutput: { schema: REFRAME_SCHEMA } },
     )
-    const parsed = JSON.parse(response.content) as { description?: unknown }
+    const parsed = parseModelJson(response.content) as { description?: unknown }
     if (typeof parsed.description !== 'string' || !parsed.description.trim()) return null
     return parsed.description.trim()
   } catch {

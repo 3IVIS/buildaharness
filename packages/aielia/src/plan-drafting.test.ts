@@ -45,6 +45,64 @@ describe('draftPlanRevision', () => {
     expect(llm.calls).toBe(1)
   })
 
+  describe('tolerant parse and retry', () => {
+    const draft = {
+      reply: 'Drafted two steps.',
+      success_criteria: 'Ships on time.',
+      rationale: 'Research first.',
+      tasks: [
+        { id: 't1', description: 'Research', depends_on: [], risk_level: 'LOW' },
+        { id: 't2', description: 'Write', depends_on: ['t1'], risk_level: 'LOW' },
+      ],
+    }
+
+    class SequencedLLMClient extends StructuredOnlyLLMClient {
+      constructor(private readonly contents: string[]) {
+        super('')
+      }
+      async callChatStructured(messages: ChatMessage[]): Promise<LLMStructuredResponse> {
+        this.calls++
+        this.receivedMessages.push(messages)
+        return { content: this.contents[Math.min(this.calls - 1, this.contents.length - 1)] }
+      }
+    }
+
+    it('reads a fenced draft behind a stray tag, and returns the whole draft rather than a nested task', async () => {
+      const llm = new StructuredOnlyLLMClient('<invoke name="none">\n</invoke>\n```json\n' + JSON.stringify(draft) + '\n```')
+      const revision = await draftPlanRevision(llm, 'Plan.', [], '', '')
+      expect(revision!.tasks.map((t) => t.id)).toEqual(['t1', 't2'])
+      expect(llm.calls).toBe(1)
+    })
+
+    it('retries once with a JSON-only reminder when the first response is prose, and uses the second', async () => {
+      const llm = new SequencedLLMClient(['Here is the plan:\n- id: t1\n  description: Research', JSON.stringify(draft)])
+      const revision = await draftPlanRevision(llm, 'Plan.', [], '', '')
+      expect(revision!.tasks).toHaveLength(2)
+      expect(llm.calls).toBe(2)
+      expect(llm.receivedMessages[0].some((m) => m.content.includes('not the required JSON'))).toBe(false)
+      expect(llm.receivedMessages[1].at(-1)!.content).toContain('not the required JSON')
+    })
+
+    it('gives up after one retry and returns null', async () => {
+      const llm = new StructuredOnlyLLMClient('still prose')
+      expect(await draftPlanRevision(llm, 'Plan.', [], '', '')).toBeNull()
+      expect(llm.calls).toBe(2)
+    })
+
+    it('does not retry a call that throws', async () => {
+      let calls = 0
+      const llm = {
+        ...new StructuredOnlyLLMClient(''),
+        callChatStructured: async () => {
+          calls++
+          throw new Error('network')
+        },
+      } as unknown as ILLMClient
+      expect(await draftPlanRevision(llm, 'Plan.', [], '', '')).toBeNull()
+      expect(calls).toBe(1)
+    })
+  })
+
   it('returns null on malformed JSON', async () => {
     const llm = new StructuredOnlyLLMClient('not json')
     expect(await draftPlanRevision(llm, 'Plan something.', [], '', '')).toBeNull()

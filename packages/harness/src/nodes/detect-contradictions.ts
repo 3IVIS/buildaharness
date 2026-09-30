@@ -3,6 +3,7 @@ import type { EvidenceStore } from '../state/evidence-store.js'
 import type { HypothesisSet } from '../state/hypothesis-set.js'
 import { getNegationPairs, getGranularityMarkers } from '../lexical/patterns.js'
 import { sharedTokens, tokenize } from '../lexical/script-utils.js'
+import { harnessLexicalActive } from '../lexical/lexical-off.js'
 
 export type Severity = 'LOW' | 'MEDIUM' | 'HIGH' | 'SYSTEM_BREAKING'
 type ConfidenceClass = 'HIGH' | 'MEDIUM' | 'LOW'
@@ -311,7 +312,7 @@ export function detectContradictions(
   const envLog = worldModel.environment_change_log
 
   let all: Contradiction[] = [
-    ...detectPairwiseContradictions(beliefs),
+    ...(harnessLexicalActive('negation-pairs') ? detectPairwiseContradictions(beliefs) : []),
     ...detectSetLevelContradictions(beliefs),
     ...detectTemporalContradictions(beliefs, envLog),
     ...detectAbstractionContradictions(beliefs, abstractionContext),

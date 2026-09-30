@@ -564,3 +564,33 @@ def test_T25_risk_summary_derives_legacy_three_way_reading():
     assert risk_summary(ControlState(permission="ALLOW", execution_mode="NORMAL")) == "NORMAL"
     # DENY wins over execution_mode regardless of what mode accompanies it.
     assert risk_summary(ControlState(permission="DENY", execution_mode="NORMAL")) == "BLOCKED"
+
+
+# ── execution_ratio_min_attempts (spec/harness-core.json; twin of update-diagnostics.ts) ─────────
+
+
+def _journal(statuses: list[str]) -> list[dict]:
+    return [{"status": s} for s in statuses]
+
+
+def test_progress_rate_stays_neutral_below_the_minimum_number_of_attempts():
+    """One failed attempt (denominator 1) must not read as progress 0 — that is past CRITICAL_THRESHOLD and
+    would DENY at the next gate before the recovery ladder can retry once."""
+    from harness._core_generated import EXECUTION_RATIO_MIN_ATTEMPTS
+
+    assert EXECUTION_RATIO_MIN_ATTEMPTS == 3
+    for statuses in (["failed"], ["failed", "failed"]):
+        d = Diagnostics()
+        update_diagnostics(d, WorldModel(), HypothesisSet(), EvidenceStore(), execution_journal=_journal(statuses))
+        assert d.execution_health.progress_rate == 1.0, statuses
+
+
+def test_progress_rate_applies_from_the_minimum_number_of_attempts():
+    d = Diagnostics()
+    update_diagnostics(d, WorldModel(), HypothesisSet(), EvidenceStore(), execution_journal=_journal(["failed"] * 3))
+    assert d.execution_health.progress_rate == 0.0
+
+    d = Diagnostics()
+    journal = _journal(["completed", "completed", "failed"])
+    update_diagnostics(d, WorldModel(), HypothesisSet(), EvidenceStore(), execution_journal=journal)
+    assert abs(d.execution_health.progress_rate - 2 / 3) < 1e-9

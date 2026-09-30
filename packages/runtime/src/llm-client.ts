@@ -49,6 +49,26 @@ export interface ChatOptions {
    * every proposal is allowed, i.e. today's behavior, unchanged.
    */
   onToolProposal?: (tool: string, input: Record<string, unknown>) => Promise<ToolProposalDecision>
+  /**
+   * The propose→gate→execute→**report** half: called AFTER a backend's own internal agentic loop
+   * executed a read-only tool call, with the raw text the tool returned (truncated by the sender).
+   * Without it a caller sees such a call only as an `onToolStep` announcement — the result stays
+   * inside the backend, so nothing downstream (e.g. the answer-claim grounding check) can compare a
+   * reply to what the tool actually said. Informational only: the return value is ignored and a
+   * throw is swallowed. A backend that hands every tool result to the caller directly (the proxy
+   * client) never calls this.
+   */
+  onToolResult?: (tool: string, input: Record<string, unknown>, resultText: string) => void | Promise<void>
+  /**
+   * Lets the caller execute a read-only network tool (fetch_url / web_search) itself instead of the
+   * backend doing it inside its own subprocess. Return the text the model should see as the tool's
+   * result — already trust-wrapped and injection-checked by the caller — or `undefined` to decline,
+   * in which case the backend runs the tool itself exactly as before. Throwing reports the tool as
+   * failed with the thrown message. Why: a backend-side fetch bypasses the caller's own web stack
+   * (its SSRF guard, its injected `fetchImpl`, its LLM injection classifier), so those only applied
+   * on backends that hand tool calls back one at a time. The proxy client never calls this.
+   */
+  onToolExecute?: (tool: string, input: Record<string, unknown>) => Promise<string | undefined>
 }
 
 export interface ToolStepEvent {

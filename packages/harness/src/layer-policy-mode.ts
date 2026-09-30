@@ -1,4 +1,4 @@
-import { resolveLayerPolicy, staticLayerPolicy, type LayerPolicy, type PolicyBudget, type PolicyRules } from './layer-policy.js'
+import { resolveLayerPolicy, staticLayerPolicy, type LayerPolicy, type OptInLayer, type PolicyBudget, type PolicyRules } from './layer-policy.js'
 import type { RunState, TurnSignals } from './turn-signals.js'
 
 /**
@@ -66,20 +66,21 @@ export function resolveModedLayerPolicy(
   state: RunState | undefined,
   budget: PolicyBudget,
   rules: PolicyRules = {},
+  enabledOptIn?: Iterable<OptInLayer>,
 ): ModedLayerPolicy {
   const staticTier = resolveTurnTier(signals, state, 'static')
   if (mode === 'adaptive') {
     return {
       mode,
-      executed: resolveLayerPolicy(signals, state, budget, rules),
+      executed: resolveLayerPolicy(signals, state, budget, rules, enabledOptIn),
       executedTier: resolveTurnTier(signals, state, 'adaptive'),
     }
   }
-  const out: ModedLayerPolicy = { mode: mode === 'shadow' ? 'shadow' : 'static', executed: staticLayerPolicy(), executedTier: staticTier }
+  const out: ModedLayerPolicy = { mode: mode === 'shadow' ? 'shadow' : 'static', executed: staticLayerPolicy(enabledOptIn), executedTier: staticTier }
   if (mode === 'shadow') {
     try {
       out.shadow = {
-        policy: resolveLayerPolicy(signals, state, budget, rules),
+        policy: resolveLayerPolicy(signals, state, budget, rules, enabledOptIn),
         tier: resolveTurnTier(signals, state, 'adaptive'),
       }
     } catch {

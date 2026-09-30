@@ -1,7 +1,8 @@
-import type { ILLMClient, TokenUsage } from '@buildaharness/runtime'
+import type { ChatMessage, ILLMClient, TokenUsage } from '@buildaharness/runtime'
 import { validateAskQuestion, type AskQuestion } from '@buildaharness/harness'
 import type { DecomposedTaskSpec } from './decomposition-classifier.js'
 import type { PlanTaskRecord } from './plan-store.js'
+import { parseModelJson } from './model-json.js'
 
 /**
  * P1 of the internal plan — the "plan-drafting revision call" P1's
@@ -150,21 +151,43 @@ export async function draftPlanRevision(
    */
   groundingContext?: string,
 ): Promise<PlanDraftTurn | null> {
+  const groundingMessages: { role: 'user'; content: string }[] = groundingContext
+    ? [{ role: 'user', content: `Grounding — real repo state found while preparing this draft:\n${groundingContext}` }]
+    : []
+  const baseMessages: ChatMessage[] = [
+    { role: 'system', content: buildSystemPrompt() },
+    { role: 'user', content: describeDraft(currentTasks, currentSuccessCriteria, currentRationale) },
+    ...groundingMessages,
+    { role: 'user', content: userMessage },
+  ]
+  // A response that isn't a usable draft is a formatting miss, not a verdict: the claude-cli backend
+  // in particular sometimes answers in prose or wraps the JSON in stray markup, and a null here exits
+  // plan mode for the whole turn. One retry with a JSON-only reminder recovers most of those; a call
+  // that throws (transport/abort) is not retried.
+  for (let attempt = 0; attempt < DRAFT_MAX_ATTEMPTS; attempt++) {
+    const messages: ChatMessage[] = attempt === 0 ? baseMessages : [...baseMessages, { role: 'user', content: DRAFT_RETRY_REMINDER }]
+    let content: string
+    try {
+      const response = await llmClient.callChatStructured(messages, undefined, { model, onUsage, structuredOutput: { schema: DRAFT_SCHEMA } })
+      content = response.content
+    } catch {
+      return null
+    }
+    const draft = parseDraftTurn(content)
+    if (draft) return draft
+  }
+  return null
+}
+
+const DRAFT_MAX_ATTEMPTS = 2
+const DRAFT_RETRY_REMINDER =
+  'Your previous reply was not the required JSON object. Respond again with ONLY the JSON object described ' +
+  'above — no prose, no markdown, no tags around it — revising the draft for the same user message.'
+
+/** Parses one drafting response; null for anything that isn't a usable draft (unparseable, missing fields, zero valid tasks). */
+function parseDraftTurn(content: string): PlanDraftTurn | null {
   try {
-    const groundingMessages: { role: 'user'; content: string }[] = groundingContext
-      ? [{ role: 'user', content: `Grounding — real repo state found while preparing this draft:\n${groundingContext}` }]
-      : []
-    const response = await llmClient.callChatStructured(
-      [
-        { role: 'system', content: buildSystemPrompt() },
-        { role: 'user', content: describeDraft(currentTasks, currentSuccessCriteria, currentRationale) },
-        ...groundingMessages,
-        { role: 'user', content: userMessage },
-      ],
-      undefined,
-      { model, onUsage, structuredOutput: { schema: DRAFT_SCHEMA } },
-    )
-    const parsed = JSON.parse(response.content) as {
+    const parsed = parseModelJson(content) as {
       reply?: unknown
       success_criteria?: unknown
       rationale?: unknown

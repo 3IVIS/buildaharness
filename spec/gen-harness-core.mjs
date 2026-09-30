@@ -51,6 +51,7 @@ function stripReadme(value) {
 
 const {
   thresholds,
+  execution_ratio_min_attempts: executionRatioMinAttempts,
   recovery_action_dependencies: recoveryDeps,
   dimension_recovery: dimensionRecovery,
   sub_dimension_order: subDimensionOrder,
@@ -102,6 +103,7 @@ function renderPy() {
   lines.push('')
   lines.push(`CRITICAL_THRESHOLD: float = ${thresholds.critical}`)
   lines.push(`CAUTION_THRESHOLD: float = ${thresholds.caution}`)
+  lines.push(`EXECUTION_RATIO_MIN_ATTEMPTS: int = ${executionRatioMinAttempts.value}`)
   lines.push('')
   lines.push('RECOVERY_ACTION_DEPENDENCIES: dict[str, set[str]] = {')
   for (const [k, v] of Object.entries(recoveryDeps)) {
@@ -157,6 +159,7 @@ function renderTs() {
   lines.push('')
   lines.push(`export const CRITICAL_THRESHOLD = ${thresholds.critical}`)
   lines.push(`export const CAUTION_THRESHOLD = ${thresholds.caution}`)
+  lines.push(`export const EXECUTION_RATIO_MIN_ATTEMPTS = ${executionRatioMinAttempts.value}`)
   lines.push('')
   lines.push('export const RECOVERY_ACTION_DEPENDENCIES: Record<string, string[]> = {')
   for (const [k, v] of Object.entries(recoveryDeps)) {

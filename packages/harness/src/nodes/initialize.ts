@@ -7,7 +7,7 @@ import { HypothesisSet } from '../state/hypothesis-set.js'
 import { EvidenceStore, type ToolAvailability } from '../state/evidence-store.js'
 import { MemoryState } from '../state/memory-state.js'
 import { StrategyState } from '../state/strategy-state.js'
-import { FailureDiagnostics } from '../state/failure-diagnostics.js'
+import { FailureDiagnostics, FailureModeLibrary, DEFAULT_FAILURE_MODE_ENTRIES } from '../state/failure-diagnostics.js'
 import { OutputContract } from '../state/output-contract.js'
 import { resolveControlState, RECOVERY_ACTION_DEPENDENCIES } from './resolve-control-state.js'
 import { normalise, DimensionType } from '../normalise.js'
@@ -176,7 +176,9 @@ export function initializeHarness(
   })
 
   const strategyState = new StrategyState()
-  const failureDiagnostics = new FailureDiagnostics()
+  // A fresh run starts with the curated seed patterns — see DEFAULT_FAILURE_MODE_ENTRIES's doc
+  // comment. A resumed run keeps whatever its checkpoint persisted (FailureDiagnostics.fromJSON).
+  const failureDiagnostics = new FailureDiagnostics({ failure_mode_library: new FailureModeLibrary(DEFAULT_FAILURE_MODE_ENTRIES) })
 
   const outputContract = new OutputContract(outputContractOptions ?? {})
 

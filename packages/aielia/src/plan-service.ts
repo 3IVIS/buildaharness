@@ -86,8 +86,8 @@ export class PlanService {
     return createPlanRecord(plan)
   }
 
-  updatePlanFromRun(plan: PlanRecord, taskGraphTasks: { id: string; status: TaskStatus }[]): PlanRecord {
-    return updatePlanFromRun(plan, taskGraphTasks)
+  updatePlanFromRun(plan: PlanRecord, taskGraphTasks: { id: string; status: TaskStatus }[], taskNotes?: Record<string, string>): PlanRecord {
+    return updatePlanFromRun(plan, taskGraphTasks, taskNotes)
   }
 
   planCompletionPct(plan: PlanRecord): number {
@@ -103,8 +103,8 @@ export class PlanService {
   }
 
   /** Persists `plan`'s current task statuses and returns the AssistantTurnResult.planStatus shape both the paused and success branches of ResponseService build identically. */
-  async saveAndSummarize(sessionId: string, plan: PlanRecord, taskGraphTasks: { id: string; status: TaskStatus }[]): Promise<{ plan: PlanRecord; completionPct: number; planStatus: { templateName: string | null; successCriteria: string; completionPct: number; tasks: { id: string; description: string; status: string }[] } }> {
-    const updated = this.updatePlanFromRun(plan, taskGraphTasks)
+  async saveAndSummarize(sessionId: string, plan: PlanRecord, taskGraphTasks: { id: string; status: TaskStatus }[], taskNotes?: Record<string, string>): Promise<{ plan: PlanRecord; completionPct: number; planStatus: { templateName: string | null; successCriteria: string; completionPct: number; tasks: { id: string; description: string; status: string; note?: string }[] } }> {
+    const updated = this.updatePlanFromRun(plan, taskGraphTasks, taskNotes)
     await this.savePlan(sessionId, updated)
     const completionPct = this.planCompletionPct(updated)
     return {
@@ -114,7 +114,7 @@ export class PlanService {
         templateName: updated.templateName,
         successCriteria: updated.successCriteria,
         completionPct,
-        tasks: updated.tasks.map((t) => ({ id: t.id, description: t.description, status: t.status })),
+        tasks: updated.tasks.map((t) => (t.statusNote ? { id: t.id, description: t.description, status: t.status, note: t.statusNote } : { id: t.id, description: t.description, status: t.status })),
       },
     }
   }

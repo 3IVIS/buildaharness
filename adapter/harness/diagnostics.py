@@ -13,6 +13,8 @@ import math
 from dataclasses import dataclass, field
 from typing import Any, Literal
 
+from ._core_generated import EXECUTION_RATIO_MIN_ATTEMPTS
+
 DimensionType = Literal["ratio", "composite", "entropy", "match_confidence"]
 
 # Provenance of a diagnostic sub-dimension value (INV-11 — criticism001 #3;
@@ -243,7 +245,12 @@ def update_diagnostics(
     if execution_journal:
         total = len(execution_journal)
         completed = sum(1 for e in execution_journal if e.get("status") == "completed")
-        diagnostics.execution_health.progress_rate = completed / max(1, total)
+        # Below EXECUTION_RATIO_MIN_ATTEMPTS attempts the ratio stays neutral: with one attempt a single
+        # failure reads 0/1 = 0, past CRITICAL_THRESHOLD, so Tier 2 DENYs before recovery can retry once
+        # (spec/harness-core.json "execution_ratio_min_attempts"; twin of update-diagnostics.ts).
+        diagnostics.execution_health.progress_rate = (
+            completed / max(1, total) if total >= EXECUTION_RATIO_MIN_ATTEMPTS else 1.0
+        )
 
         failure_modes = [e.get("failure_mode") for e in execution_journal if e.get("failure_mode")]
         if failure_modes:

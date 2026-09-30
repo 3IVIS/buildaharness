@@ -15,6 +15,14 @@ export interface RollbackReplanResult {
   newStrategyState: StrategyState
   newTaskGraph: TaskGraph
   replanScope: ReplanScope | null
+  /**
+   * Set only when failureModeHint (not the supervisor's redirectHint) picked the next strategy —
+   * see harness-runtime.ts's onFailureModeSwitch. The bias alone changes bookkeeping only
+   * (current_strategy, switch_triggers); nothing in this harness reads a task's chosen strategy
+   * during execution, so this is what lets a host surface the classification to the proposer as
+   * something to actually act on.
+   */
+  failureModeSwitch?: { failure_class: string; strategy: StrategyType }
 }
 
 export const STALL_WINDOW = 5
@@ -197,6 +205,9 @@ function rebuildTaskGraph(worldModel: WorldModel, callerState: CallerState, plan
   return new TaskGraph({ tasks: [...newTasks, ...beliefTasks], changed: true })
 }
 
+/** Mirrors adapter/harness/recovery.py's apply_failure_mode_bias() threshold. */
+const FAILURE_MODE_BIAS_MIN_CONFIDENCE = 0.7
+
 export function rollbackAndReplan(
   currentTask: Task,
   strategyState: StrategyState,
@@ -237,6 +248,20 @@ export function rollbackAndReplan(
       ? (supervisorDirective.strategy_hint as StrategyType)
       : null
 
+  // Failure-mode bias — mirrors adapter/harness/recovery.py's apply_failure_mode_bias(): a
+  // confident match (>= 0.7, same threshold as Python) whose curated entry names a preferred
+  // strategy (strategy_affinity) jumps straight to it instead of walking the ordering one step
+  // at a time. Advisory, same as the supervisor's redirect — and lower precedence than it: the
+  // supervisor already reasoned about this specific stall with an LLM call, where this is a
+  // static lookup from a curated pattern.
+  const failureModeHint =
+    !redirectHint && !isReframe && failureDiagnostics.matched_pattern &&
+    failureDiagnostics.matched_pattern.confidence >= FAILURE_MODE_BIAS_MIN_CONFIDENCE &&
+    failureDiagnostics.matched_pattern.strategy_affinity &&
+    (DEFAULT_STRATEGY_ORDER as readonly string[]).includes(failureDiagnostics.matched_pattern.strategy_affinity)
+      ? failureDiagnostics.matched_pattern.strategy_affinity
+      : null
+
   let ordering: StrategyType[]
   if (experienceStore !== null && experienceStore.available) {
     ordering = buildStrategyOrdering(failureClass, experienceStore, strategyState.current_strategy)
@@ -248,6 +273,7 @@ export function rollbackAndReplan(
     `supervisor:${tag} ${supervisorDirective?.rationale ?? ''}`.trim().slice(0, 200)
 
   let newStrategyState: StrategyState
+  let failureModeSwitch: RollbackReplanResult['failureModeSwitch']
   if (isReframe) {
     // REFRAME does not advance the strategy ladder (parity with loop.py's S1 behaviour).
     newStrategyState = new StrategyState({
@@ -257,14 +283,22 @@ export function rollbackAndReplan(
       risk_state_history: [...strategyState.risk_state_history],
     })
   } else {
-    const nextStrategy = redirectHint ?? getNextStrategy(strategyState.current_strategy, ordering)
+    const nextStrategy = redirectHint ?? failureModeHint ?? getNextStrategy(strategyState.current_strategy, ordering)
+    failureModeSwitch =
+      !redirectHint && failureModeHint && failureDiagnostics.matched_pattern
+        ? { failure_class: failureDiagnostics.matched_pattern.failure_class, strategy: failureModeHint }
+        : undefined
     newStrategyState = new StrategyState({
       ...strategyState.toJSON(),
       current_strategy: nextStrategy,
       switch_count: strategyState.switch_count + 1,
       switch_triggers: [
         ...strategyState.switch_triggers,
-        redirectHint ? supTrigger('REDIRECT_STRATEGY') : `task_failed: ${currentTask.id}`,
+        redirectHint
+          ? supTrigger('REDIRECT_STRATEGY')
+          : failureModeHint
+            ? `failure_mode:${failureDiagnostics.matched_pattern?.failure_class} -> ${failureModeHint}`
+            : `task_failed: ${currentTask.id}`,
       ],
       stall_reason: strategyState.stall_reason,
       completion_history: [...strategyState.completion_history],
@@ -297,7 +331,11 @@ export function rollbackAndReplan(
     // (REDIRECT_STRATEGY, or a completed GATHER_EVIDENCE investigation). diagnoseAndReplan
     // only re-queued dependents, so if that left nothing runnable (one-node turn graph),
     // re-queue the failed leaf so the redirect / new evidence actually gets an attempt.
-    if (requeueLeafOnLocal && !newTaskGraph.tasks.some(t => t.status === 'PENDING')) {
+    // A confident failure-mode-biased switch (failureModeSwitch, computed above) earns the
+    // same requeue on its own — a curated pattern match is as good a reason to give this leaf
+    // one more attempt as a supervisor directive is, and without it the classification + bias
+    // + retry-hint chain has a real decision but nothing left PENDING to apply it to.
+    if ((requeueLeafOnLocal || failureModeSwitch) && !newTaskGraph.tasks.some(t => t.status === 'PENDING')) {
       if (requeueFailedLeaves(newTaskGraph)) {
         newStrategyState.switch_triggers.push(
           `supervisor:requeue_leaf ${supervisorDirective?.rationale ?? ''}`.trim().slice(0, 200),
@@ -312,5 +350,6 @@ export function rollbackAndReplan(
     newStrategyState,
     newTaskGraph,
     replanScope,
+    failureModeSwitch,
   }
 }

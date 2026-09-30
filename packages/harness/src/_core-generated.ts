@@ -6,6 +6,7 @@
 
 export const CRITICAL_THRESHOLD = 0.2
 export const CAUTION_THRESHOLD = 0.4
+export const EXECUTION_RATIO_MIN_ATTEMPTS = 3
 
 export const RECOVERY_ACTION_DEPENDENCIES: Record<string, string[]> = {
   "dep_graph_refresh": ["verification_strength"],

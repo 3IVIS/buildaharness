@@ -32,11 +32,13 @@ import {
 import { decideSupervisorDirective } from './supervisor-decider.js'
 import type { ILLMClient, MemoryAdapter, TokenUsage } from '@buildaharness/runtime'
 import { DEFAULT_ONE_LOOP_MODE, type OneLoopMode } from './one-loop-flag.js'
-import { tierForFact, isKnowledgeTier, type UserFact } from './fact-extraction.js'
+import { tierForFact, isKnowledgeTier, factReliability, type UserFact } from './fact-extraction.js'
 import { checkForContradictions, type BeliefCandidate } from './contradiction-checker.js'
+import { syncHarnessLexicalEnv } from './lexical/lexical-mode.js'
 import { checkSemanticReviewConflict } from './review-checker.js'
 import { checkSemanticFailureMatch } from './failure-mode-matcher.js'
 import { checkSemanticCriterionCoverage, NON_CHECKABLE_DEFAULT_CRITERION } from './semantic-criterion-coverage.js'
+import { checkTaskCompletion, semanticTaskCompletionEnabled } from './task-completion-check.js'
 import { toTaskRiskLevel } from './task-mapping.js'
 import { TOOL_EFFECT_CLASS } from './tool-effect-class.js'
 import { FACT_CAP } from './memory-service.js'
@@ -48,6 +50,10 @@ import type { AssistantSource } from './assistant-source.js'
 import type { AssistantProgress } from './assistant-types.js'
 import type { TraceEvent } from './trace-events.js'
 import { resolveSupervisorEnabled } from './supervisor-flag.js'
+import { controlStateGateEnabled } from './tool-control-plane.js'
+import { reviewerRevisionEnabled, reviewerRevisionNote, isCheckableCriterion } from './reviewer-revision.js'
+import { semanticHypothesesEnabled, proposeCompetingExplanations, judgeHypothesesAgainstEvidence } from './semantic-hypotheses.js'
+import type { SemanticHypothesisEvent, SemanticHypothesisProposal } from '@buildaharness/harness'
 import { recordLayerTelemetry } from './layer-telemetry.js'
 import { resolveEscalationPlan, escalationEnabled, harnessGatePolicy, turnPolicyBudget, type EscalationPlan } from './layer-policy-wiring.js'
 import type { LayerPolicyMode } from '@buildaharness/harness'
@@ -64,6 +70,18 @@ export function verificationEnabled(env?: Record<string, string | undefined>): b
   const raw = String(source.AUDIT_VERIFICATION ?? '').trim().toLowerCase()
   if (raw === '') return true
   return !['0', 'false', 'off', 'no', 'disabled'].includes(raw)
+}
+
+/**
+ * `AUDIT_EXPERIENCE_LEARNING` gate. Default **OFF**: the harness never writes its journal or updates the experience store, so
+ * `warmStart` / the recovery ladder keep reading an empty store, exactly as before. A truthy value (`1` / `true` / `on` / `yes` /
+ * `enabled`) makes HarnessBridge.run pass `experienceLearning: true` — see packages/harness/src/experience-learning.ts. It changes
+ * how a LATER run orders its recovery strategies, so it ships off until a benchmark shows it helps. Read at one site (below).
+ */
+export function experienceLearningEnabled(env?: Record<string, string | undefined>): boolean {
+  const source = env ?? (typeof process !== 'undefined' ? process.env : {})
+  const raw = String(source.AUDIT_EXPERIENCE_LEARNING ?? '').trim().toLowerCase()
+  return ['1', 'true', 'on', 'yes', 'enabled'].includes(raw)
 }
 
 /**
@@ -92,8 +110,8 @@ export function reviewerPassEnabled(env?: Record<string, string | undefined>): b
 const PLAN_AUTO_ADVANCE_TASK_CEILING = 10
 
 export type HarnessOutcome =
-  | { status: 'paused'; checkpoint: HarnessCheckpoint; lastVerification: VerificationResult | null; layerActivity: LayerActivityEvent[] }
-  | { status: 'completed'; result: HarnessRunResult; lastVerification: VerificationResult | null; layerActivity: LayerActivityEvent[] }
+  | { status: 'paused'; checkpoint: HarnessCheckpoint; lastVerification: VerificationResult | null; layerActivity: LayerActivityEvent[]; taskNotes: Record<string, string> }
+  | { status: 'completed'; result: HarnessRunResult; lastVerification: VerificationResult | null; layerActivity: LayerActivityEvent[]; taskNotes: Record<string, string> }
 
 export interface HarnessRunParams {
   sessionId: string
@@ -127,6 +145,16 @@ export interface HarnessRunParams {
    * flag is on is R3's scope.
    */
   oneLoopProposer?: (toolCtx: ToolExecutorContext) => unknown | Promise<unknown>
+  /** Semantic change reviewer found a conflict — advisory (see HarnessRunOptions.onReviewConflict). The caller decides how to surface it. */
+  onReviewConflict?: (event: { taskId: string; reason: string }) => void
+  /** Competing explanations were generated for an underdetermined request, or one was eliminated by evidence (AUDIT_SEMANTIC_HYPOTHESES). The caller decides how to surface it. */
+  onSemanticHypothesis?: (event: SemanticHypothesisEvent) => void
+  /** The competing explanations were already asked for (a tool-less turn drafts its reply first): the harness registers this answer instead of making a second call. `null` = asked, none. `undefined` = not asked. */
+  precomputedHypotheses?: SemanticHypothesisProposal[] | null
+  /** The reviewer pass's verdict sent the last answer back for one revision (AUDIT_REVIEWER_REVISION): the note to put in front of the proposer. */
+  onReviewerRevision?: (event: { taskId: string; note: string }) => void
+  /** A confident failure-mode match picked the recovery strategy — advisory (see HarnessRunOptions.onFailureModeSwitch). The caller decides how to surface it. */
+  onFailureModeSwitch?: (event: { taskId: string; failure_class: string; strategy: string }) => void
   /**
    * Trajectory Supervisor GATHER_EVIDENCE host (S5 of
    * the internal plan) — AgentLoop.runSupervisorInvestigation bound
@@ -231,7 +259,7 @@ export class HarnessBridge {
   }
 
   async run(params: HarnessRunParams): Promise<HarnessOutcome> {
-    const { sessionId, userMessage, facts, currentTurnFacts = [], draftReply, classification, initialTasks, activePlan, sources, onProgress, onUsage, oneLoopProposer, runInvestigation, askModeEnabled = false, updateChannel } = params
+    const { sessionId, userMessage, facts, currentTurnFacts = [], draftReply, classification, initialTasks, activePlan, sources, onProgress, onUsage, oneLoopProposer, runInvestigation, askModeEnabled = false, updateChannel, onReviewConflict, onFailureModeSwitch, onSemanticHypothesis, precomputedHypotheses, onReviewerRevision } = params
     const runtime = new HarnessRuntime()
     // One harness run per (session, turn) — a run_id a resumed run can be found under if this
     // turn's process died mid-run before reaching the `finally` cleanup below.
@@ -292,6 +320,8 @@ export class HarnessBridge {
     // more than once; the last one reflects the final task's outcome) — feeds buildAnswerClaim
     // (ResponseService). null if verify() never ran at all this turn.
     let lastVerification: VerificationResult | null = null
+    // Task id → why the completion check judged it not done, so the plan can remember it across turns.
+    const taskNotes: Record<string, string> = {}
 
     let pausedThisTurn = false
     // Q2 — set (in the catch below) when a thrown EscalationHalt carries a populated
@@ -322,6 +352,22 @@ export class HarnessBridge {
     // user_asserted facts stay); env override and static default keep today's list.
     const seedFacts = escalationEnabled('model_inferred_facts', escalationPlan) ? currentTurnFacts : currentTurnFacts.filter(f => f.source !== 'model_inferred')
     const currentTurnFactStatements = seedFacts.map(f => ({ statement: f.text, isNew: true }))
+    // Facts the semantic change reviewer checks a proposed change against (see the harness's
+    // changeReviewFacts): Knowledge-tier facts from EARLIER turns, and only the ones the user
+    // stated directly / that earned HIGH trust (factReliability) — an unconfirmed model_inferred
+    // guess is not something to hold a change up against. This turn's own facts are deliberately
+    // left out: the reviewer would compare a message with the statement it just made (a wasted
+    // call, and a candidate false positive), and a same-turn fact plus request is already in front
+    // of the model. Computed once per run; deliberately not routed through the world model (see
+    // changeReviewFacts' doc comment).
+    const changeReviewFactList = (() => {
+      const seen = new Set<string>()
+      return facts
+        .filter(f => isKnowledgeTier(tierForFact(f)) && factReliability(f) === 'HIGH')
+        .slice(-FACT_CAP)
+        .map(f => ({ statement: f.text }))
+        .filter(f => (seen.has(f.statement) ? false : (seen.add(f.statement), true)))
+    })()
     let priorFactsSeeded = false
     const factExtractor = (_objective: string): Array<{ statement: string; isNew?: boolean }> => {
       // Prior facts are re-seeded so the contradiction checker has something to compare against,
@@ -337,6 +383,8 @@ export class HarnessBridge {
       return [...priorFacts, ...currentTurnFactStatements]
     }
 
+    // lexicalMode → HARNESS_LEXICAL_OFF, so the harness's own lexical floors follow the same switch.
+    syncHarnessLexicalEnv()
     try {
       const runOptions = {
         initialTasks,
@@ -395,6 +443,11 @@ export class HarnessBridge {
         // (and any reviewer_pass_2 re-run) entirely, including its C1/C2 sub-mechanisms. Default
         // ON — unchanged shipped behaviour; skipReviewerPass stays undefined.
         skipReviewerPass: reviewerPassEnabled() ? undefined : true,
+        // AUDIT_CONTROL_STATE_GATE (feature-value audit, control_state, eval-only) → the harness's
+        // own ControlState stays ALLOW/NORMAL (no gate BLOCK/ESCALATE). Default ON — unchanged.
+        skipControlState: controlStateGateEnabled() ? undefined : true,
+        // AUDIT_EXPERIENCE_LEARNING (default off): journal every executed task and teach the experience store when the run ends.
+        experienceLearning: experienceLearningEnabled() ? true : undefined,
         // Trajectory Supervisor GATHER_EVIDENCE host (S5). Inert unless a supervisorDecider is
         // also wired and returns a GATHER_EVIDENCE directive at a stall edge; absent → the
         // harness degrades GATHER_EVIDENCE to CONTINUE.
@@ -449,6 +502,32 @@ export class HarnessBridge {
         // no host semanticChangeReviewer is wired at all, so the harness's mechanical
         // reviewProposedChange (lexical isNegation) is the only conflict check. Default ON —
         // unchanged shipped behaviour.
+        changeReviewFacts: () => changeReviewFactList,
+        onReviewConflict,
+        onFailureModeSwitch,
+        // AUDIT_SEMANTIC_HYPOTHESES (default off): ask once for competing explanations, but only for a request the
+        // classifier judged underdetermined — every other turn keeps the template seeds and pays for no call.
+        // The judge is wired alongside, and the harness only consults it once semantic hypotheses exist.
+        // AUDIT_REVIEWER_REVISION (default off): let a reviewer finding at the end of a run send the last answer back once.
+        // Only where there is a proposer to re-ask — a tool-less turn's reply is already drafted, so a second run would return
+        // the same text.
+        // The generic default criterion is never checkable, so the implementer lens always flagged it "not covered" (243 of 243
+        // reviewer findings across the eval transcripts) — skipped in the default flow too, not only with the flag on.
+        isCheckableCriterion,
+        ...(reviewerRevisionEnabled() && oneLoopProposer
+          ? { reviewerRevision: reviewerRevisionNote, onReviewerRevision }
+          : {}),
+        ...(semanticHypothesesEnabled() && classification.isUnderdetermined === true
+          ? {
+              semanticHypotheses: (input: { objective: string; observations: string[]; beliefs: string[] }) =>
+                precomputedHypotheses !== undefined
+                  ? Promise.resolve(precomputedHypotheses)
+                  : proposeCompetingExplanations({ request: userMessage, observations: input.observations, beliefs: input.beliefs }, this.llmClient, this.model(), onUsage),
+              semanticHypothesisJudge: (input: { hypotheses: Array<{ id: string; explanation: string; predicted_observations: string[] }>; observations: string[] }) =>
+                judgeHypothesesAgainstEvidence(input, this.llmClient, this.model(), onUsage),
+              onSemanticHypothesis,
+            }
+          : {}),
         semanticChangeReviewer: escalationEnabled('change_review', escalationPlan)
           ? (input: { changeDescription: string; highConfidenceBeliefs: BeliefCandidate[]; hypothesisPredictions: string[] }) =>
               checkSemanticReviewConflict(input.changeDescription, input.highConfidenceBeliefs, input.hypothesisPredictions, this.llmClient, this.model(), onUsage)
@@ -473,6 +552,15 @@ export class HarnessBridge {
           ? (criterion: string, beliefs: Belief[]) =>
               checkSemanticCriterionCoverage(criterion, beliefs, this.llmClient, this.model(), onUsage)
           : undefined,
+        // A plan task is complete only if its output actually did the task — without this the harness
+        // completes it as soon as a reply is produced, so a run of refusals reads as a 100%-done plan.
+        // Scoped to an approved plan's execution (not an ordinary single-task turn) and off by default:
+        // AUDIT_SEMANTIC_TASK_COMPLETION. See task-completion-check.ts.
+        onTaskNotAccomplished: (e: { taskId: string; reason: string }) => { taskNotes[e.taskId] = e.reason },
+        semanticTaskCompletion:
+          activePlan?.executingOnPlan && semanticTaskCompletionEnabled()
+            ? (input: { taskDescription: string; output: unknown }) => checkTaskCompletion(input, this.llmClient, this.model(), onUsage)
+            : undefined,
         // Stop right after a MEDIUM/HIGH-risk plan step resolves (COMPLETE or FAILED), before
         // the loop would go pick the next one — undefined for a non-plan turn, so shouldPause is
         // simply never checked and behavior is unchanged.
@@ -551,7 +639,11 @@ export class HarnessBridge {
         ? await runtime.resume(priorCheckpoint, runOptions)
         : await runtime.run(
             userMessage,
-            [NON_CHECKABLE_DEFAULT_CRITERION],
+            // The plan's own criterion when a durable plan is driving this run — without it the
+            // reviewer's implementer lens only ever saw the non-checkable default (which
+            // checkSemanticCriterionCoverage skips on sight), so the criterion-coverage hook was
+            // unreachable for real traffic. Ad hoc turns keep the default, byte-identical.
+            activePlan?.successCriteria.trim() ? [activePlan.successCriteria.trim()] : [NON_CHECKABLE_DEFAULT_CRITERION],
             runOptions,
           )
       // resume() (if that's the path taken above) returned normally — paused or completed,
@@ -564,11 +656,11 @@ export class HarnessBridge {
         // via the priorCheckpoint branch above on the next turn() call).
         pausedThisTurn = true
         this.recordTurnTelemetry(runId, escalationPlan, layerActivityThisTurn, lastVerification, false)
-        return { status: 'paused', checkpoint: outcome.checkpoint, lastVerification, layerActivity: layerActivityThisTurn }
+        return { status: 'paused', checkpoint: outcome.checkpoint, lastVerification, layerActivity: layerActivityThisTurn, taskNotes }
       }
 
       this.recordTurnTelemetry(runId, escalationPlan, layerActivityThisTurn, lastVerification, true)
-      return { status: 'completed', result: outcome.result, lastVerification, layerActivity: layerActivityThisTurn }
+      return { status: 'completed', result: outcome.result, lastVerification, layerActivity: layerActivityThisTurn, taskNotes }
     } catch (err) {
       // Q2 — inspected only to decide checkpoint retention below, never transformed or
       // swallowed: EscalationHalt still propagates out of run() unexamined otherwise, exactly as

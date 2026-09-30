@@ -2,7 +2,8 @@ import { type ExperienceStore, UnavailableExperienceStore } from './state/experi
 import { gatherEvidence } from './nodes/gather-evidence.js'
 import { applyToolReliability } from './nodes/apply-tool-reliability.js'
 import { resolveControlState, CAUTION_THRESHOLD } from './nodes/resolve-control-state.js'
-import { riskSummary } from './state/control-state.js'
+import { riskSummary, ControlState } from './state/control-state.js'
+import type { ControlStateResolverFn } from './generation-id.js'
 import { updateDiagnostics } from './nodes/update-diagnostics.js'
 import { detectContradictions, recordExternalContradiction, type ExternalContradictionInput } from './nodes/detect-contradictions.js'
 import { generateUpdateHypotheses } from './nodes/generate-update-hypotheses.js'
@@ -16,10 +17,10 @@ import { estimateRisk, type RiskableAction } from './nodes/estimate-risk.js'
 import { estimateVOI } from './nodes/estimate-voi.js'
 import {
   reviewProposedChange,
-  applyReviewOutcome,
   diagnoseReviewFailureOptions,
   buildReviewFailureQuestion,
 } from './nodes/review-proposed-change.js'
+import { resolveSemanticMatchStrategy } from './state/failure-diagnostics.js'
 import { actionGate, postExecGate } from './nodes/policy-gates.js'
 import { execute, type ProposedExecutionChange, type ToolExecutorContext } from './nodes/execute.js'
 import { verify, type VerificationResult } from './nodes/verify.js'
@@ -49,7 +50,8 @@ import { askQuestion, buildBudgetExhaustedQuestion, resolveAskMode } from './ask
 import { checkCallerUpdates, NoOpUpdateChannel, type UpdateChannel, RESTART_ITERATION } from './nodes/check-caller-updates.js'
 import { contextCompression } from './nodes/context-compression.js'
 import { warmStart } from './nodes/warm-start.js'
-import { reviewerPass, type PropagationQueue, type SemanticCriterionCoverage, type ReviewerVerdict } from './nodes/reviewer-pass.js'
+import { journalEntryFor, learnFromJournal } from './experience-learning.js'
+import { reviewerPass, type PropagationQueue, type SemanticCriterionCoverage, type ReviewerVerdict, type CriterionCheckable } from './nodes/reviewer-pass.js'
 import { outputValidation, type OutputValidationResult } from './nodes/output-validation.js'
 import { initializeHarness, type HarnessInitOptions, type HarnessInitResult } from './nodes/initialize.js'
 import { HarnessRunState } from './harness-run-state.js'
@@ -74,6 +76,59 @@ export const BUDGET_WARNING_FLOOR = 0.5
  * caller's tool names — well-known values in personal-assistant are 'read_file',
  * 'list_directory', 'web_search', 'fetch_url', 'write_file', 'run_shell_command'.
  */
+/**
+ * Host hook: did this task's output actually accomplish the task? The harness otherwise marks a task
+ * COMPLETE as soon as its executor returns without throwing, so a reply that refuses or asks a
+ * question completes the task all the same. `done: false` sends the task down the same failure path
+ * a thrown executor takes (recovery ladder, bounded retries, stall escalation) instead of COMPLETE.
+ * Absent ⇒ today's behaviour. A hook that throws is treated as `done: true`.
+ */
+export type SemanticTaskCompletion = (input: { taskDescription: string; output: unknown }) => Promise<{ done: boolean; reason?: string }>
+
+/** One competing explanation a host proposes for the request (see `SemanticHypothesesHook`). */
+export interface SemanticHypothesisProposal {
+  explanation: string
+  /** What you would expect to see if this explanation were true. */
+  predicted_observations: string[]
+  /** The check or observation that would separate this explanation from the others. */
+  separating_check?: string
+  confidence?: number
+}
+
+/**
+ * Optional host hook (an LLM call, in aielia): propose 2+ competing explanations for an underdetermined request.
+ * Called at most once per run, at the hypothesis step, only when the host wired it. Returning null or an empty list —
+ * or throwing — leaves the run exactly as it was: the template seeds `generateUpdateHypotheses` produces stay, nothing
+ * else changes. The proposals join the active set tagged `generation_sources: ['semantic']`.
+ */
+export type SemanticHypothesesHook = (input: {
+  objective: string
+  observations: string[]
+  beliefs: string[]
+}) => Promise<SemanticHypothesisProposal[] | null>
+
+/**
+ * Optional host hook: given the semantic hypotheses still active and the observations gathered since it last ran, say which
+ * ones the evidence contradicts. Replaces the negation-word overlap the Python twin uses for the same job. Fails open like
+ * the other hooks (null / throw ⇒ nothing is eliminated).
+ */
+export type SemanticHypothesisJudge = (input: {
+  hypotheses: Array<{ id: string; explanation: string; predicted_observations: string[] }>
+  observations: string[]
+}) => Promise<{ contradicted: Array<{ id: string; reason?: string }> } | null>
+
+export type SemanticHypothesisEvent =
+  | { kind: 'generated'; hypotheses: Array<{ id: string; explanation: string; predicted_observations: string[]; separating_check?: string }> }
+  | { kind: 'eliminated'; id: string; explanation: string; reason?: string }
+
+/**
+ * Optional host hook: given the reviewer pass's pending verdict at the END of a run (every task done, nothing already
+ * reopened), return the text to put in front of the proposer, or null to leave the answer alone. Returning text reopens
+ * the last task to complete so it runs once more — at most once per run — and fires `onReviewerRevision` with that text
+ * so the host can deliver it. Absent ⇒ today's behaviour: the verdict only feeds the next resolver call.
+ */
+export type ReviewerRevision = (verdict: ReviewerVerdict) => string | null
+
 export interface TurnComplexitySignal {
   riskLevel: 'LOW' | 'MEDIUM' | 'HIGH'
   taskCount: number
@@ -187,6 +242,35 @@ export interface HarnessRunOptions extends HarnessInitOptions {
    * equivalent — the ablation arm is PA-only.
    */
   skipReviewerPass?: boolean
+  /**
+   * EVAL-ONLY ablation seam (feature-value audit, control_state) — default absent/false = today's
+   * behaviour. When true, `resolveAndStamp()` returns without resolving, so the harness's own
+   * ControlState stays at its initial ALLOW/NORMAL: no gate BLOCK/ESCALATE from a resolver DENY, no
+   * reviewer-verdict CAUTIOUS. The pending reviewer verdict is still consumed so it cannot pile up.
+   * Stall detection (`cannotMakeProgress`) reads strategy/failure state, not ControlState, so it is
+   * unaffected. No product path sets this: the only caller is the benchmark arm's env flag in
+   * aielia's harness-bridge. The Python twin has no equivalent — the ablation arm is PA-only.
+   */
+  skipControlState?: boolean
+  /**
+   * Opt-in cross-run learning (the feed for `warmStart` / `buildStrategyOrdering`): every executed task appends a journal entry,
+   * and when the run ends (completes, or halts) the journal updates the experience store's strategy weights and failure-class
+   * priors — see experience-learning.ts. A paused run does not learn (it resumes and would count its earlier entries twice).
+   * Absent/false ⇒ the journal is never written and the store is never updated, exactly as before.
+   */
+  experienceLearning?: boolean
+  /** See `ReviewerRevision`. */
+  reviewerRevision?: ReviewerRevision
+  /** Fired when a reviewer revision reopens a task, with the task id and the text `reviewerRevision` returned. A throwing handler never breaks the run. */
+  onReviewerRevision?: (event: { taskId: string; note: string }) => void
+  /** See `CriterionCheckable`: a success criterion this says is not checkable is skipped by the implementer lens instead of being reported as uncovered. */
+  isCheckableCriterion?: CriterionCheckable
+  /** See `SemanticHypothesesHook`. Absent ⇒ hypotheses are exactly the template seeds. */
+  semanticHypotheses?: SemanticHypothesesHook
+  /** See `SemanticHypothesisJudge`. Only consulted when semantic hypotheses exist. */
+  semanticHypothesisJudge?: SemanticHypothesisJudge
+  /** Fired when semantic hypotheses are generated and when one is eliminated. Observability / a host's note channel; a throwing handler never breaks the run. */
+  onSemanticHypothesis?: (event: SemanticHypothesisEvent) => void
   /** See GateDecisionEvent — fired when action_gate returns BLOCK or ESCALATE, right before the run either loops or halts. */
   onGateDecision?: (event: GateDecisionEvent) => void
   /**
@@ -227,6 +311,27 @@ export interface HarnessRunOptions extends HarnessInitOptions {
     highConfidenceBeliefs: Array<{ id: string; statement: string }>
     hypothesisPredictions: string[]
   }) => Promise<{ conflict: boolean; reason?: string }>
+  semanticTaskCompletion?: SemanticTaskCompletion
+  /** Called when the completion check judged a task's output did not do the task — the host can persist why (e.g. on a durable plan's task). Observability only: a throwing handler never breaks the run. */
+  onTaskNotAccomplished?: (event: { taskId: string; reason: string }) => void
+  /**
+   * Optional: facts the caller already trusts (e.g. things the user stated in earlier turns) for
+   * the semantic change reviewer to check the proposed change against, alongside the world
+   * model's own >= 0.8 beliefs. Deliberately NOT written into the world model: beliefs are only
+   * created after a task executes, so on a single-task turn the reviewer would otherwise see an
+   * empty world model — and seeding them earlier would also pull contradiction detection ahead
+   * of the first answer, blocking a turn in which the user is merely correcting a fact.
+   */
+  changeReviewFacts?: () => Array<{ statement: string }>
+  /**
+   * Called when the semantic change reviewer finds a conflict between the task and something the
+   * caller/world model holds as true. The review is ADVISORY: the task is not failed or retried
+   * (a retry would see identical input and get the identical verdict), it proceeds, and the host
+   * decides how to surface the reason — e.g. as a note the proposer reads and a notice to the user.
+   */
+  onReviewConflict?: (event: { taskId: string; reason: string }) => void
+  /** A confident failure-mode match picked the next recovery strategy — see nodes/rollback-replan.ts's RollbackReplanResult.failureModeSwitch. Bookkeeping only unless the host surfaces this to the proposer. */
+  onFailureModeSwitch?: (event: { taskId: string; failure_class: string; strategy: string }) => void
   /**
    * Optional semantic escalation layered on top of FailureModeLibrary's own exact-string-
    * overlap `match()` — called only when the exact match found nothing (matched_pattern is
@@ -314,6 +419,18 @@ function summariseExecutionOutput(output: unknown): string {
   }
 }
 
+/**
+ * The world-model trail belief for a finished task. The bare "Completed: <description>" it used to
+ * be recorded only that a task got a reply, so a downstream check (criterion coverage) that read it
+ * as evidence the work happened could judge a criterion covered while the reply itself said nothing
+ * had started. Carrying what the task produced lets that check judge the substance. The
+ * "Completed: " prefix is kept: contradiction-checker.ts filters trail beliefs on it.
+ */
+function completedTrailStatement(description: string, output: unknown): string {
+  const produced = summariseExecutionOutput(output).trim()
+  return produced ? `Completed: ${description} — produced: ${produced}` : `Completed: ${description}`
+}
+
 function generateRunId(): string {
   const g = globalThis as { crypto?: { randomUUID?: () => string } }
   if (g.crypto?.randomUUID) return g.crypto.randomUUID()
@@ -359,6 +476,22 @@ interface LoopContext {
   onVerification?: (result: VerificationResult) => void
   skipVerification?: boolean
   skipReviewerPass?: boolean
+  skipControlState?: boolean
+  experienceLearning?: boolean
+  reviewerRevision?: ReviewerRevision
+  onReviewerRevision?: (event: { taskId: string; note: string }) => void
+  isCheckableCriterion?: CriterionCheckable
+  /** The last task to reach COMPLETE — the one a reviewer revision reopens. Not persisted. */
+  lastCompletedTaskId?: string
+  /** True once a reviewer revision has reopened a task this run (it happens at most once). */
+  reviewerRevisionDone?: boolean
+  semanticHypotheses?: SemanticHypothesesHook
+  semanticHypothesisJudge?: SemanticHypothesisJudge
+  onSemanticHypothesis?: (event: SemanticHypothesisEvent) => void
+  /** How many evidence observations the hypothesis judge has already seen (not persisted; a resumed run re-judges at most once). */
+  lastJudgedObservationCount?: number
+  /** True once the semantic-hypotheses hook has been asked this run (it is asked once, whatever it answers). */
+  semanticHypothesesAsked?: boolean
   onGateDecision?: (event: GateDecisionEvent) => void
   rollbackExecutors?: Record<string, () => void>
   contradictionChecker?: (
@@ -372,6 +505,17 @@ interface LoopContext {
     highConfidenceBeliefs: Array<{ id: string; statement: string }>
     hypothesisPredictions: string[]
   }) => Promise<{ conflict: boolean; reason?: string }>
+  semanticTaskCompletion?: SemanticTaskCompletion
+  /** Called when the completion check judged a task's output did not do the task — the host can persist why (e.g. on a durable plan's task). Observability only: a throwing handler never breaks the run. */
+  onTaskNotAccomplished?: (event: { taskId: string; reason: string }) => void
+  /** The most recent task the completion check judged not done — read only by stalledTurnFallbackResult so the stranded reply can say why. Not checkpointed. */
+  lastNotAccomplished?: { taskDescription: string; reason: string }
+  /** What the `diagnostics` layer last told the caller (true = caution, false = nominal) — lets the post-exec pass report only a change. Not persisted. */
+  lastReportedDiagnosticsCautious?: boolean
+  changeReviewFacts?: () => Array<{ statement: string }>
+  onReviewConflict?: (event: { taskId: string; reason: string }) => void
+  /** A confident failure-mode match picked the next recovery strategy — see nodes/rollback-replan.ts's RollbackReplanResult.failureModeSwitch. Bookkeeping only unless the host surfaces this to the proposer. */
+  onFailureModeSwitch?: (event: { taskId: string; failure_class: string; strategy: string }) => void
   semanticFailureMatcher?: (
     symptoms: string[],
     libraryEntries: readonly FailureModeEntry[],
@@ -444,11 +588,24 @@ function buildInitialContext(
     onVerification: options.onVerification,
     skipVerification: options.skipVerification,
     skipReviewerPass: options.skipReviewerPass,
+    skipControlState: options.skipControlState,
+    experienceLearning: options.experienceLearning,
+    reviewerRevision: options.reviewerRevision,
+    onReviewerRevision: options.onReviewerRevision,
+    isCheckableCriterion: options.isCheckableCriterion,
+    semanticHypotheses: options.semanticHypotheses,
+    semanticHypothesisJudge: options.semanticHypothesisJudge,
+    onSemanticHypothesis: options.onSemanticHypothesis,
     onGateDecision: options.onGateDecision,
     rollbackExecutors: options.rollbackExecutors,
     contradictionChecker: options.contradictionChecker,
     lastContradictionCheckCount: 0,
     semanticChangeReviewer: options.semanticChangeReviewer,
+    semanticTaskCompletion: options.semanticTaskCompletion,
+    onTaskNotAccomplished: options.onTaskNotAccomplished,
+    changeReviewFacts: options.changeReviewFacts,
+    onReviewConflict: options.onReviewConflict,
+    onFailureModeSwitch: options.onFailureModeSwitch,
     semanticFailureMatcher: options.semanticFailureMatcher,
     semanticCriterionCoverage: options.semanticCriterionCoverage,
     supervisorDecider: options.supervisorDecider,
@@ -517,6 +674,14 @@ function buildResumedContext(rawCheckpoint: HarnessCheckpoint, options: HarnessR
     onVerification: options.onVerification,
     skipVerification: options.skipVerification,
     skipReviewerPass: options.skipReviewerPass,
+    skipControlState: options.skipControlState,
+    experienceLearning: options.experienceLearning,
+    reviewerRevision: options.reviewerRevision,
+    onReviewerRevision: options.onReviewerRevision,
+    isCheckableCriterion: options.isCheckableCriterion,
+    semanticHypotheses: options.semanticHypotheses,
+    semanticHypothesisJudge: options.semanticHypothesisJudge,
+    onSemanticHypothesis: options.onSemanticHypothesis,
     onGateDecision: options.onGateDecision,
     rollbackExecutors: options.rollbackExecutors,
     contradictionChecker: options.contradictionChecker,
@@ -526,6 +691,11 @@ function buildResumedContext(rawCheckpoint: HarnessCheckpoint, options: HarnessR
     // just costs one slightly larger delta on the first post-resume check, never a duplicate.
     lastContradictionCheckCount: 0,
     semanticChangeReviewer: options.semanticChangeReviewer,
+    semanticTaskCompletion: options.semanticTaskCompletion,
+    onTaskNotAccomplished: options.onTaskNotAccomplished,
+    changeReviewFacts: options.changeReviewFacts,
+    onReviewConflict: options.onReviewConflict,
+    onFailureModeSwitch: options.onFailureModeSwitch,
     semanticFailureMatcher: options.semanticFailureMatcher,
     semanticCriterionCoverage: options.semanticCriterionCoverage,
     supervisorDecider: options.supervisorDecider,
@@ -624,7 +794,16 @@ function reportLayer(ctx: LoopContext, layer: LayerActivityEvent['layer'], fired
  * silent no-op. This gives them an explicit, honest "couldn't complete" line instead. Only used
  * when `ctx.finalResult` is not already a usable string.
  */
+/** Opens the stranded-turn reply naming a step the completion check rejected; hosts test for it to avoid repeating that news. */
+export const NOT_ACCOMPLISHED_REPLY_PREFIX = "I didn't complete this step — "
+
 function stalledTurnFallbackResult(ctx: LoopContext): string {
+  // The completion check judged a task's output did not do the task: say which and why, rather than a
+  // generic "ran into a problem" — that reason is what the user needs to steer the next step.
+  if (ctx.lastNotAccomplished) {
+    const { taskDescription, reason } = ctx.lastNotAccomplished
+    return `${NOT_ACCOMPLISHED_REPLY_PREFIX}${taskDescription.slice(0, 200)}: ${reason.slice(0, 300)} Nothing after it has run. Tell me how you'd like to proceed, or rephrase what you need.`
+  }
   const lastFailure = ctx.failureDiagnostics.failure_history.at(-1)?.description ?? ''
   const detail = lastFailure.replace(/^Task failed:\s*/i, '').trim()
   return detail
@@ -644,6 +823,138 @@ function anyDiagnosticSubDimensionCautious(diagnostics: LoopContext['diagnostics
   return healthy.some(v => v < CAUTION_THRESHOLD) || inverted.some(v => v > 1 - CAUTION_THRESHOLD)
 }
 
+/**
+ * Eval-only ablation (control_state): what `skipControlState` substitutes for the resolver — a
+ * default ALLOW/NORMAL state stamped with the WorldModel's current generation_id, so the staleness
+ * check in `_maybeResolve` stays satisfied without any tier ever firing.
+ */
+function pinnedNormalControlState(worldModel: WorldModel): ControlState {
+  const cs = new ControlState()
+  cs.generation_id = worldModel.generation_id
+  return cs
+}
+
+/** The resolver the action/post-exec gates and parallel reconcile re-resolve with when stale. */
+function controlStateResolverFor(ctx: LoopContext): ControlStateResolverFn {
+  return ctx.skipControlState ? (_diagnostics, worldModel) => pinnedNormalControlState(worldModel) : resolveControlState
+}
+
+const SEMANTIC_SOURCE = 'semantic'
+
+function hasSemanticHypotheses(ctx: LoopContext): boolean {
+  return ctx.hypothesisSet.active.some((h) => h.generation_sources.includes(SEMANTIC_SOURCE))
+}
+
+function emitSemanticHypothesis(ctx: LoopContext, event: SemanticHypothesisEvent): void {
+  try {
+    ctx.onSemanticHypothesis?.(event)
+  } catch {
+    /* an observability handler must never break the run */
+  }
+}
+
+/**
+ * Asks the host, once per run, for competing explanations of an underdetermined request and adds them to the active set.
+ * Fails open: a missing hook, a null/empty answer or a throw changes nothing.
+ */
+async function generateSemanticHypotheses(ctx: LoopContext): Promise<void> {
+  if (!ctx.semanticHypotheses || hasSemanticHypotheses(ctx) || ctx.semanticHypothesesAsked) return
+  ctx.semanticHypothesesAsked = true
+  let proposals: SemanticHypothesisProposal[] | null = null
+  try {
+    proposals = await ctx.semanticHypotheses({
+      objective: ctx.objective,
+      observations: ctx.evidenceStore.observations.map((o) => o.obs),
+      beliefs: ctx.worldModel.beliefs.map((b) => b.statement),
+    })
+  } catch {
+    return
+  }
+  const usable = (proposals ?? []).filter((p) => typeof p?.explanation === 'string' && p.explanation.trim() !== '')
+  if (usable.length === 0) return
+  const created = usable.map((p, i) => ({
+    id: `sem_${[...ctx.hypothesisSet.active, ...ctx.hypothesisSet.eliminated].filter((h) => h.generation_sources.includes(SEMANTIC_SOURCE)).length + i}`,
+    explanation: p.explanation.trim(),
+    confidence: typeof p.confidence === 'number' && p.confidence >= 0 && p.confidence <= 1 ? p.confidence : 1 / usable.length,
+    predicted_observations: (p.predicted_observations ?? []).filter((x) => typeof x === 'string' && x.trim() !== ''),
+    discriminating_evidence: [] as string[],
+    generation_sources: [SEMANTIC_SOURCE],
+    diversity_score: 0,
+    ...(typeof p.separating_check === 'string' && p.separating_check.trim() ? { separating_check: p.separating_check.trim() } : {}),
+  }))
+  ctx.hypothesisSet.active.push(...created)
+  emitSemanticHypothesis(ctx, {
+    kind: 'generated',
+    hypotheses: created.map((h) => ({ id: h.id, explanation: h.explanation, predicted_observations: h.predicted_observations, ...(h.separating_check ? { separating_check: h.separating_check } : {}) })),
+  })
+}
+
+/**
+ * After an execution's evidence is recorded: ask the host which semantic hypotheses the new observations contradict and
+ * eliminate them. Fails open (no hook, nothing new, null, throw ⇒ nothing is eliminated).
+ */
+async function judgeSemanticHypotheses(ctx: LoopContext): Promise<void> {
+  if (!ctx.semanticHypothesisJudge || !hasSemanticHypotheses(ctx)) return
+  const observations = ctx.evidenceStore.observations
+  const from = ctx.lastJudgedObservationCount ?? 0
+  const fresh = observations.slice(from)
+  ctx.lastJudgedObservationCount = observations.length
+  if (fresh.length === 0) return
+  const live = ctx.hypothesisSet.active.filter((h) => h.generation_sources.includes(SEMANTIC_SOURCE))
+  let verdict: { contradicted: Array<{ id: string; reason?: string }> } | null = null
+  try {
+    verdict = await ctx.semanticHypothesisJudge({
+      hypotheses: live.map((h) => ({ id: h.id, explanation: h.explanation, predicted_observations: h.predicted_observations })),
+      observations: fresh.map((o) => o.obs),
+    })
+  } catch {
+    return
+  }
+  for (const c of verdict?.contradicted ?? []) {
+    const h = live.find((x) => x.id === c?.id)
+    if (!h) continue
+    ctx.hypothesisSet.eliminate(h)
+    emitSemanticHypothesis(ctx, { kind: 'eliminated', id: h.id, explanation: h.explanation, ...(c.reason ? { reason: c.reason } : {}) })
+  }
+}
+
+/**
+ * Returns the id of the task to reopen when the host's `reviewerRevision` turns the pass's verdict into a note; otherwise
+ * undefined. Only at the end of a run (every task COMPLETE), only when the pass reopened nothing itself, and
+ * only once.
+ */
+function maybeReopenForReviewerRevision(ctx: LoopContext, result: { pending_verdict: ReviewerVerdict | null; reopened_task_ids: string[] }): string | undefined {
+  if (!ctx.reviewerRevision || ctx.reviewerRevisionDone || !result.pending_verdict || result.reopened_task_ids.length > 0) return undefined
+  if (!ctx.taskGraph.tasks.every((t) => t.status === 'COMPLETE')) return undefined
+  const taskId = ctx.lastCompletedTaskId
+  if (!taskId || !ctx.taskGraph.getTask(taskId)) return undefined
+  let note: string | null = null
+  try {
+    note = ctx.reviewerRevision(result.pending_verdict)
+  } catch {
+    return undefined
+  }
+  if (!note || !note.trim()) return undefined
+  ctx.reviewerRevisionDone = true
+  try {
+    ctx.onReviewerRevision?.({ taskId, note })
+  } catch {
+    /* an observability handler must never break the run */
+  }
+  return taskId
+}
+
+/**
+ * Reports the `diagnostics` layer. `onlyOnChange` (the post-execution pass) reports nothing unless the
+ * verdict differs from what this run last reported, so a quiet iteration adds no second line.
+ */
+function reportDiagnosticsHealth(ctx: LoopContext, onlyOnChange = false): void {
+  const cautious = anyDiagnosticSubDimensionCautious(ctx.diagnostics)
+  if (onlyOnChange && ctx.lastReportedDiagnosticsCautious === cautious) return
+  ctx.lastReportedDiagnosticsCautious = cautious
+  reportLayer(ctx, 'diagnostics', true, cautious ? 'a sub-dimension crossed the caution threshold' : 'Health: nominal')
+}
+
 function resolveAndStamp(ctx: LoopContext): void {
   // Phase I / INV-18: one-shot — whatever pendingReviewerVerdict is currently set (if
   // any) is consumed by this one resolve call and cleared immediately after, so a stale
@@ -651,7 +962,9 @@ function resolveAndStamp(ctx: LoopContext): void {
   // it occurs) sees nothing pending.
   const verdict = ctx.pendingReviewerVerdict
   ctx.pendingReviewerVerdict = undefined
-  const newCS = resolveControlState(ctx.diagnostics, ctx.worldModel, ctx.failureDiagnostics, undefined, verdict)
+  const newCS = ctx.skipControlState
+    ? pinnedNormalControlState(ctx.worldModel)
+    : resolveControlState(ctx.diagnostics, ctx.worldModel, ctx.failureDiagnostics, undefined, verdict)
   ctx.controlState.generation_id = newCS.generation_id
   ctx.controlState.permission = newCS.permission
   ctx.controlState.execution_mode = newCS.execution_mode
@@ -821,15 +1134,21 @@ async function* driveMainLoop(ctx: LoopContext): AsyncGenerator<HarnessCheckpoin
     // signal and can wedge the whole run in BLOCKED. What's actually gated per Phase 2, layer 3
     // is only whether this is worth surfacing to the user, not whether the computation runs.
     generateUpdateHypotheses(ctx.worldModel, ctx.evidenceStore, ctx.hypothesisSet, ctx.failureDiagnostics, ctx.memoryState)
-    reportLayer(ctx, 'hypothesis', hypothesisNotable && ctx.hypothesisSet.active.length > 1,
-      hypothesisNotable && ctx.hypothesisSet.active.length > 1
-        ? `Considered ${ctx.hypothesisSet.active.length} ways this request could be understood; going with the most direct one`
-        : 'single clear LOW-risk task — no competing explanation worth surfacing', hypothesisGate)
+    await generateSemanticHypotheses(ctx)
+    const semanticActive = ctx.hypothesisSet.active.filter((h) => h.generation_sources.includes(SEMANTIC_SOURCE)).length
+    if (semanticActive > 0) {
+      reportLayer(ctx, 'hypothesis', true, `Weighing ${semanticActive} competing explanation${semanticActive === 1 ? '' : 's'} for this request`, hypothesisGate)
+    } else {
+      reportLayer(ctx, 'hypothesis', hypothesisNotable && ctx.hypothesisSet.active.length > 1,
+        hypothesisNotable && ctx.hypothesisSet.active.length > 1
+          ? `Considered ${ctx.hypothesisSet.active.length} ways this request could be understood; going with the most direct one`
+          : 'single clear LOW-risk task — no competing explanation worth surfacing', hypothesisGate)
+    }
 
     ctx.nodeExecutionOrder.push('update_diagnostics')
     updateDiagnostics(ctx.worldModel, ctx.hypothesisSet, ctx.taskGraph, ctx.failureDiagnostics, ctx.beliefDepGraph, ctx.diagnostics)
     reevaluatePolicy(ctx)
-    reportLayer(ctx, 'diagnostics', true, anyDiagnosticSubDimensionCautious(ctx.diagnostics) ? 'a sub-dimension crossed the caution threshold' : 'Health: nominal')
+    reportDiagnosticsHealth(ctx)
 
     ctx.worldModel.incrementGenerationId()
     ctx.nodeExecutionOrder.push('resolve_control_state')
@@ -911,6 +1230,13 @@ async function* driveMainLoop(ctx: LoopContext): AsyncGenerator<HarnessCheckpoin
       const highConfidenceBeliefs = ctx.worldModel.beliefs
         .filter(b => b.confidence >= 0.8)
         .map(b => ({ id: b.id, statement: b.statement }))
+      // Caller-trusted facts (see changeReviewFacts) — same shape, deduped against the beliefs above.
+      const known = new Set(highConfidenceBeliefs.map(b => b.statement))
+      ;(ctx.changeReviewFacts?.() ?? []).forEach((f, i) => {
+        if (known.has(f.statement)) return
+        known.add(f.statement)
+        highConfidenceBeliefs.push({ id: `known-fact-${i}`, statement: f.statement })
+      })
       const hypothesisPredictions = ctx.hypothesisSet.active.flatMap(h => h.predicted_observations)
       if (highConfidenceBeliefs.length > 0 || hypothesisPredictions.length > 0) {
         const semanticResult = await ctx.semanticChangeReviewer({
@@ -919,9 +1245,12 @@ async function* driveMainLoop(ctx: LoopContext): AsyncGenerator<HarnessCheckpoin
           hypothesisPredictions,
         })
         if (semanticResult.conflict) {
-          reviewResult = applyReviewOutcome(currentTask.id, false, ctx.consecutiveReviewFailures, {
-            dimension: 'world_model_consistency',
-            passed: false,
+          // Advisory, not a gate: failing the review here would re-run the identical task against
+          // the identical beliefs (same verdict every time) until the step budget ran out — and
+          // would throw away a draft that may already address the conflict. The host decides how
+          // to surface the reason instead (see onReviewConflict).
+          ctx.onReviewConflict?.({
+            taskId: currentTask.id,
             reason: semanticResult.reason ?? 'Semantic review found a conflict with known context',
           })
         }
@@ -967,7 +1296,7 @@ async function* driveMainLoop(ctx: LoopContext): AsyncGenerator<HarnessCheckpoin
       ctx.worldModel,
       ctx.diagnostics,
       ctx.failureDiagnostics,
-      resolveControlState,
+      controlStateResolverFor(ctx),
     )
 
     // ─── NEW SUSPEND POINT ──────────────────────────────────────────────
@@ -1039,6 +1368,43 @@ async function* driveMainLoop(ctx: LoopContext): AsyncGenerator<HarnessCheckpoin
       ctx.pendingProposal = { taskId: currentTask.id, gateResult, shouldGatherEvidence, kind: 'continuation' }
       yield toCheckpoint(ctx)
       continue
+    }
+
+    // The executor returning is not the same as the task being done: ask the host whether the output
+    // accomplished it. Not done ⇒ the task takes the failure branch below, exactly as a failed executor
+    // would, and no "Completed:" belief is written for it.
+    let taskAccomplished = true
+    if (execResult.success && ctx.semanticTaskCompletion) {
+      let verdict: { done: boolean; reason?: string } = { done: true }
+      try {
+        verdict = await ctx.semanticTaskCompletion({ taskDescription: currentTask.description, output: execResult.output })
+      } catch {
+        /* a failing check must never block a task the executor completed */
+      }
+      if (!verdict.done) {
+        taskAccomplished = false
+        const why = verdict.reason ?? 'the output did not do what the task asked'
+        ctx.lastNotAccomplished = { taskDescription: currentTask.description, reason: why }
+        // Mirror execute()'s own failure bookkeeping (nodes/execute.ts recordFailure), minus the
+        // SYSTEM_ERROR evidence item — the tool worked, so tool reliability must not be dinged.
+        ctx.worldModel.observations.push({
+          id: `not-done-${currentTask.id}-${ctx.stepsUsed}`,
+          content: `TASK_NOT_ACCOMPLISHED: ${why}`,
+          source: 'task_completion_check',
+          recorded_at: new Date().toISOString(),
+        })
+        try {
+          applyTaskOutcome(ctx.taskGraph, currentTask.id, { status: 'FAILED', fromExecutionLayer: true })
+        } catch {
+          /* task may already be in another state */
+        }
+        try {
+          ctx.onTaskNotAccomplished?.({ taskId: currentTask.id, reason: why })
+        } catch {
+          /* an observability handler must never break the run */
+        }
+        reportLayer(ctx, 'verification', true, `task not accomplished — ${why}`)
+      }
     }
 
     // Phase 2, layer 7 (plan sub-item 2.7): dispatch select_task's concurrentTask instead of
@@ -1192,11 +1558,11 @@ async function* driveMainLoop(ctx: LoopContext): AsyncGenerator<HarnessCheckpoin
           // No extracted fact, but the turn is consequential/multi-step enough to warrant a
           // trail — derive a belief from the task's own execution observation instead.
           const trailSource = executed ?? outcome
-          if (trailSource) {
+          if (trailSource && taskAccomplished) {
             const trailEvidence = gatherEvidence(
               {
                 id: `belief-${currentTask.id}-${ctx.stepsUsed}`,
-                obs: `Completed: ${currentTask.description}`,
+                obs: completedTrailStatement(currentTask.description, execResult.output),
                 source: 'world_model_trail',
                 evidence_type: 'INFERENCE',
                 reliability: 'MEDIUM',
@@ -1205,8 +1571,8 @@ async function* driveMainLoop(ctx: LoopContext): AsyncGenerator<HarnessCheckpoin
             )
             if (trailEvidence) {
               updateWorldModel(trailEvidence, ctx.worldModel, ctx.diagnostics, {
-                statement: `Completed: ${currentTask.description}`,
-                derived_from: [trailSource.id],
+                statement: completedTrailStatement(currentTask.description, execResult.output),
+                derived_from: outcome ? [trailSource.id, outcome.id] : [trailSource.id],
               })
             }
           }
@@ -1243,15 +1609,25 @@ async function* driveMainLoop(ctx: LoopContext): AsyncGenerator<HarnessCheckpoin
       }
     }
 
+    await judgeSemanticHypotheses(ctx)
     ctx.nodeExecutionOrder.push('update_diagnostics_post_exec')
     updateDiagnostics(ctx.worldModel, ctx.hypothesisSet, ctx.taskGraph, ctx.failureDiagnostics, ctx.beliefDepGraph, ctx.diagnostics)
     reevaluatePolicy(ctx)
+    // The line above the execute step reports health from before this iteration's execution was recorded.
+    // Say so again only if this iteration's execution changed the verdict — a failure that tips a run into
+    // caution is otherwise not reported until the next iteration, if that iteration is ever reached.
+    reportDiagnosticsHealth(ctx, true)
 
     // Semantic escalation layered on top of FailureModeLibrary's own exact-string-overlap
     // match() above — only when the exact match found nothing, there are symptoms and library
-    // entries to check, and the symptom set actually changed since the last attempt (avoids
-    // re-asking the same question every iteration when nothing new happened).
-    if (ctx.semanticFailureMatcher && ctx.failureDiagnostics.matched_pattern === null) {
+    // entries to check, the symptom set actually changed since the last attempt (avoids
+    // re-asking the same question every iteration when nothing new happened), AND a real failure
+    // has actually been recorded this run. That last condition didn't exist before the library
+    // gained default seed entries (see initialize.ts): with an always-empty library,
+    // `libraryEntries.length > 0` alone was already a de facto kill switch, so it went
+    // unnoticed that "there's at least one observation" is true on almost any turn with a tool
+    // call, seeded library or not — this is FAILURE match, not observation match.
+    if (ctx.semanticFailureMatcher && ctx.failureDiagnostics.matched_pattern === null && ctx.failureDiagnostics.failure_history.length > 0) {
       const libraryEntries = ctx.failureDiagnostics.failure_mode_library.getEntries()
       const symptoms = ctx.worldModel.observations.map(o => o.content)
       if (symptoms.length > 0 && libraryEntries.length > 0 && symptoms.length !== ctx.lastFailureMatchSymptomCount) {
@@ -1261,6 +1637,7 @@ async function* driveMainLoop(ctx: LoopContext): AsyncGenerator<HarnessCheckpoin
           ctx.failureDiagnostics.matched_pattern = {
             ...semanticMatch,
             confidence: normalise(semanticMatch.confidence, DimensionType.match_confidence),
+            strategy_affinity: resolveSemanticMatchStrategy(semanticMatch, libraryEntries),
           }
         }
       }
@@ -1302,12 +1679,24 @@ async function* driveMainLoop(ctx: LoopContext): AsyncGenerator<HarnessCheckpoin
       ctx.diagnostics,
       ctx.failureDiagnostics,
       ctx.outputContract,
-      resolveControlState,
+      controlStateResolverFor(ctx),
     )
 
     ctx.nodeExecutionOrder.push('update_task_state')
-    if (postGatePassed && execResult.success) {
+    if (ctx.experienceLearning) {
+      const taskSucceeded = postGatePassed && execResult.success && taskAccomplished
+      ctx.memoryState.journal.push(journalEntryFor({
+        step: ctx.stepsUsed,
+        strategy: ctx.strategyState.current_strategy,
+        success: taskSucceeded,
+        // '' for an unmatched failure — the same class buildStrategyOrdering looks up for it.
+        failureClass: taskSucceeded ? undefined : (ctx.failureDiagnostics.matched_pattern?.failure_class ?? ''),
+        output: execResult.output,
+      }))
+    }
+    if (postGatePassed && execResult.success && taskAccomplished) {
       applyTaskOutcome(ctx.taskGraph, currentTask.id, { status: 'COMPLETE', fromExecutionLayer: true })
+      ctx.lastCompletedTaskId = currentTask.id
       ctx.finalResult = execResult.output
 
       if (ctx.experienceStore.available) {
@@ -1318,6 +1707,8 @@ async function* driveMainLoop(ctx: LoopContext): AsyncGenerator<HarnessCheckpoin
       }
       reportLayer(ctx, 'recovery', false, 'task completed — nothing to recover from')
     } else {
+      // A failure from any other cause supersedes a stale "not accomplished" note.
+      if (taskAccomplished) ctx.lastNotAccomplished = undefined
       ctx.nodeExecutionOrder.push('rollback_replan')
       // Phase 2, layer 10: a real per-task rollback hook instead of the no-op the harness ran
       // before — a caller can restore real state (e.g. a memoryState.rollback_points snapshot)
@@ -1446,6 +1837,9 @@ async function* driveMainLoop(ctx: LoopContext): AsyncGenerator<HarnessCheckpoin
       ctx.strategyState = rollbackResult.newStrategyState
       if (rollbackResult.replanScope === 'GLOBAL') ctx.taskGraph = rollbackResult.newTaskGraph
       reportLayer(ctx, 'recovery', true, `Trying a different approach — switched to "${rollbackResult.newStrategyState.current_strategy}" (${rollbackResult.replanScope ?? 'local'} replan)`)
+      if (rollbackResult.failureModeSwitch) {
+        ctx.onFailureModeSwitch?.({ taskId: currentTask.id, ...rollbackResult.failureModeSwitch })
+      }
     }
 
     // Reconcile the concurrent-task branch forked off above (layer 7) — done after this
@@ -1462,7 +1856,7 @@ async function* driveMainLoop(ctx: LoopContext): AsyncGenerator<HarnessCheckpoin
         ctx.failureDiagnostics,
         ctx.evidenceStore,
         ctx.hypothesisSet,
-        resolveControlState,
+        controlStateResolverFor(ctx),
         currentTask.parallel_write_domains.flatMap(
           (da): Array<[string, string]> => (concurrentTask.parallel_write_domains.map(db => [da, db])),
         ),
@@ -1534,6 +1928,29 @@ async function runMainLoopWithCheckpoints(
 }
 
 async function drive(ctx: LoopContext, options: HarnessRunOptions): Promise<HarnessRunOutcome> {
+  let outcome: HarnessRunOutcome
+  try {
+    outcome = await driveToCompletion(ctx, options)
+  } catch (err) {
+    // A halted run is the most informative one — learn from it, then let the halt propagate.
+    learnFromRun(ctx)
+    throw err
+  }
+  if (outcome.status !== 'paused') learnFromRun(ctx)
+  return outcome
+}
+
+/** Cross-run learning from this run's journal (HarnessRunOptions.experienceLearning). Never throws: learning must not break a run. */
+function learnFromRun(ctx: LoopContext): void {
+  if (!ctx.experienceLearning || !ctx.experienceStore.available) return
+  try {
+    learnFromJournal(ctx.memoryState.journal, ctx.experienceStore)
+  } catch {
+    /* a failing store must not turn a finished run into a failed one */
+  }
+}
+
+async function driveToCompletion(ctx: LoopContext, options: HarnessRunOptions): Promise<HarnessRunOutcome> {
   const first = await runMainLoopWithCheckpoints(ctx, options)
   if (first.status === 'paused') return first
 
@@ -1556,7 +1973,7 @@ async function drive(ctx: LoopContext, options: HarnessRunOptions): Promise<Harn
     const reviewPassResult = await reviewerPass(
       ctx.worldModel, ctx.successCriteria, ctx.failureDiagnostics, ctx.beliefDepGraph,
       ctx.depGraphBudget, ctx.hypothesisSet, ctx.taskGraph, ctx.diagnostics, ctx.evidenceStore, ctx.propagationQueue,
-      runAdversarialLens, ctx.semanticCriterionCoverage,
+      runAdversarialLens, ctx.semanticCriterionCoverage, ctx.isCheckableCriterion,
     )
     const allFindings = [...reviewPassResult.implementer_findings, ...reviewPassResult.reviewer_findings, ...reviewPassResult.adversarial_findings]
     reportLayer(ctx, 'reviewer_pass', allFindings.length > 0, allFindings.length > 0 ? allFindings[0] : 'self-review found nothing to flag')
@@ -1566,6 +1983,12 @@ async function drive(ctx: LoopContext, options: HarnessRunOptions): Promise<Harn
     // iteration" within one drive() call is the reopened-tasks second main-loop pass below;
     // if nothing reopened, this just rides along in the final checkpoint unconsumed.
     ctx.pendingReviewerVerdict = reviewPassResult.pending_verdict
+
+    // Make a finding act: at the end of a run, with nothing already reopened, the host may turn the verdict into a
+    // revision note. The last task to complete is reopened so it runs once more (the reopened-tasks pass below), and the
+    // host delivers the note to whatever produces the answer. At most once per run; every failure path is a no-op.
+    const revisionReopened = maybeReopenForReviewerRevision(ctx, reviewPassResult)
+    if (revisionReopened) reviewPassResult.reopened_task_ids.push(revisionReopened)
 
     if (reviewPassResult.reopened_task_ids.length > 0) {
       for (const taskId of reviewPassResult.reopened_task_ids) {
@@ -1583,7 +2006,7 @@ async function drive(ctx: LoopContext, options: HarnessRunOptions): Promise<Harn
       const reviewPassResult2 = await reviewerPass(
         ctx.worldModel, ctx.successCriteria, ctx.failureDiagnostics, ctx.beliefDepGraph,
         ctx.depGraphBudget, ctx.hypothesisSet, ctx.taskGraph, ctx.diagnostics, ctx.evidenceStore, ctx.propagationQueue,
-        runAdversarialLens, ctx.semanticCriterionCoverage,
+        runAdversarialLens, ctx.semanticCriterionCoverage, ctx.isCheckableCriterion,
       )
       ctx.pendingReviewerVerdict = reviewPassResult2.pending_verdict
     }

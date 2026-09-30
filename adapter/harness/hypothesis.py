@@ -16,6 +16,7 @@ from datetime import UTC, datetime
 from typing import TYPE_CHECKING, Any, Literal
 
 from .evidence import EvidenceStore
+from .lexical_off import harness_lexical_active
 from .lexical_patterns import get_evidence_negation_words
 
 if TYPE_CHECKING:
@@ -41,9 +42,12 @@ class Hypothesis:
     predicted_observations: list[str]
     discriminating_evidence: list[str]
     generation_sources: list[str]
+    # Semantic hypotheses only: the check or observation that would tell this explanation apart from its rivals.
+    # Empty for every other source, and then absent from to_dict(), so existing payloads are byte-identical.
+    separating_check: str = ""
 
     def to_dict(self) -> dict[str, Any]:
-        return {
+        d: dict[str, Any] = {
             "id": self.id,
             "explanation": self.explanation,
             "confidence": self.confidence,
@@ -51,6 +55,9 @@ class Hypothesis:
             "discriminating_evidence": list(self.discriminating_evidence),
             "generation_sources": list(self.generation_sources),
         }
+        if self.separating_check:
+            d["separating_check"] = self.separating_check
+        return d
 
     @classmethod
     def from_dict(cls, d: dict[str, Any]) -> Hypothesis:
@@ -61,6 +68,7 @@ class Hypothesis:
             predicted_observations=d.get("predicted_observations", []),
             discriminating_evidence=d.get("discriminating_evidence", []),
             generation_sources=d.get("generation_sources", []),
+            separating_check=d.get("separating_check", ""),
         )
 
 
@@ -156,7 +164,13 @@ def symptom_inference(
     world_model: WorldModel,
     evidence_store: EvidenceStore,
 ) -> list[Hypothesis]:
-    """Generate hypotheses by clustering raw observations via word-overlap."""
+    """Generate hypotheses by clustering raw observations via word-overlap.
+
+    Lexical: with HARNESS_LEXICAL_OFF naming `hypothesis-clustering` this produces nothing, and the
+    semantic hypotheses (semantic_hypotheses.py) are the only source of explanations built from content.
+    """
+    if not harness_lexical_active("hypothesis-clustering"):
+        return []
     observations = evidence_store.query(evidence_type="OBSERVATION")
     all_texts = [e.obs for e in observations] + [o.content for o in world_model.observations]
 
@@ -326,6 +340,7 @@ def generate_hypotheses(
 
     used = [False] * len(all_hypotheses)
     merged: list[Hypothesis] = []
+    dedupe = harness_lexical_active("hypothesis-clustering")
 
     for i, h_i in enumerate(all_hypotheses):
         if used[i]:
@@ -334,7 +349,7 @@ def generate_hypotheses(
         for j in range(i + 1, len(all_hypotheses)):
             if used[j]:
                 continue
-            if _jaccard(h_i.explanation, all_hypotheses[j].explanation) > 0.8:
+            if dedupe and _jaccard(h_i.explanation, all_hypotheses[j].explanation) > 0.8:
                 for src in all_hypotheses[j].generation_sources:
                     if src not in combined_sources:
                         combined_sources.append(src)
@@ -361,7 +376,13 @@ def check_contradicting_evidence(
     hypothesis: Hypothesis,
     evidence_store: EvidenceStore,
 ) -> bool:
-    """Return True if any HIGH-reliability evidence contradicts a predicted observation."""
+    """Return True if any HIGH-reliability evidence contradicts a predicted observation.
+
+    Lexical (shared word + a negation word); off under HARNESS_LEXICAL_OFF=hypothesis-negation-elimination,
+    where semantic_hypotheses.eliminate_contradicted, fed by an LLM judgment, does the job instead.
+    """
+    if not harness_lexical_active("hypothesis-negation-elimination"):
+        return False
     for entry in evidence_store.entries:
         if entry.reliability != "HIGH":
             continue

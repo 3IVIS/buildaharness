@@ -1,5 +1,6 @@
 import type { ILLMClient, TokenUsage } from '@buildaharness/runtime'
-import { looksLikeCodingFact, type BeliefCandidate } from './contradiction-checker.js'
+import type { BeliefCandidate } from './contradiction-checker.js'
+import { parseModelJson } from './model-json.js'
 
 const REVIEW_SCHEMA = {
   type: 'object',
@@ -26,13 +27,23 @@ export function semanticChangeReviewEnabled(env?: Record<string, string | undefi
   return !['0', 'false', 'off', 'no', 'disabled'].includes(raw)
 }
 
+/** Marks a steering note as coming from the change reviewer rather than from the user — agent-loop.ts gives it its own header so the proposer isn't told the user said it. */
+export const REVIEW_NOTE_PREFIX = '[review] '
+
+/** The user-facing line for a conflict the reviewer found — see AssistantTurnResult.reviewNotice. */
+export function reviewNoticeText(reasons: string[]): string {
+  const unique = [...new Set(reasons.map((r) => r.trim()).filter((r) => r.length > 0))]
+  return `Heads up — this may conflict with something you told me earlier: ${unique.join(' ')}`
+}
+
 const SYSTEM_PROMPT =
   'You check whether a proposed action genuinely conflicts with something already known to be ' +
   'true (a high-confidence belief) or predicted (an active hypothesis\'s predicted observation) ' +
   '— a real logical conflict, not just a superficially related topic (e.g. proposing to remove ' +
   'something a belief says is required, or an action that presumes the opposite of what\'s ' +
-  'predicted). You are given "changeDescription", "highConfidenceBeliefs", and ' +
-  '"hypothesisPredictions" as JSON. Respond with JSON only: {"conflict": boolean, "reason": ' +
+  'predicted). A user correcting a fact they stated earlier about themselves ("actually I ' +
+  'moved to Berlin") is not a conflict — the new statement supersedes the old one. You are ' +
+  'given "changeDescription", "highConfidenceBeliefs", and "hypothesisPredictions" as JSON. Respond with JSON only: {"conflict": boolean, "reason": ' +
   'string}. reason only needs to be set when conflict is true.'
 
 /**
@@ -44,10 +55,12 @@ const SYSTEM_PROMPT =
  * which is why decomposition-classifier.ts and plan-builder.ts prompt task descriptions to lead
  * with their subject. A
  * paraphrased conflict ("we're dropping the login feature" vs. a belief that login is required)
- * slips past that phrase list entirely. Skipped when the change description itself reads like a
- * structured/technical (coding) action — see looksLikeCodingFact's doc comment for why that's
- * exactly the domain the lexical check already handles reasonably well; this is worth spending a
- * call on for a natural-language-shaped change instead. Falls back to "no conflict" on any parse
+ * slips past that phrase list entirely. It runs for every change, coding-shaped or not: it used to
+ * skip a description that looked like a coding action on the theory that the lexical check
+ * covers that domain, but that gate was a keyword list ("build", "test"…) that also matched
+ * ordinary requests ("Build the offsite catering plan…"), and the lexical checks are being rolled
+ * back — the semantic check must not depend on them. The host only wires this when there is a
+ * trusted fact or prediction to check against, which is what bounds its cost. Falls back to "no conflict" on any parse
  * failure or LLM error, matching this codebase's other LLM-backed classifiers — a missed conflict
  * costs nothing worse than the lexical-only behavior this is layered on top of.
  */
@@ -59,8 +72,6 @@ export async function checkSemanticReviewConflict(
   model?: string,
   onUsage?: (usage: TokenUsage) => void,
 ): Promise<{ conflict: boolean; reason?: string }> {
-  if (looksLikeCodingFact(changeDescription)) return { conflict: false }
-
   try {
     const response = await llmClient.callChatStructured(
       [
@@ -70,7 +81,7 @@ export async function checkSemanticReviewConflict(
       undefined,
       { model, onUsage, structuredOutput: { schema: REVIEW_SCHEMA } },
     )
-    const parsed = JSON.parse(response.content) as { conflict?: unknown; reason?: unknown }
+    const parsed = parseModelJson(response.content) as { conflict?: unknown; reason?: unknown }
     if (parsed.conflict !== true) return { conflict: false }
     return { conflict: true, reason: typeof parsed.reason === 'string' ? parsed.reason : undefined }
   } catch {

@@ -1,4 +1,18 @@
-import { describe, it, expect } from 'vitest'
+import { describe, it, expect, beforeEach, afterEach } from 'vitest'
+// This file tests the LEXICAL mechanism's own regex/pattern behavior directly — its correctness
+// is independent of whatever the runtime default happens to be (lexicalMode's own default/
+// rollback behavior is lexical-mode.test.ts's job). Forced enabled file-wide so these ~100+
+// pattern-coverage cases (including the native-speaker-reviewed Chinese fixtures) keep testing
+// what they were written to test.
+const PRIOR_LEXICAL_MODE = process.env.ASSISTANT_LEXICAL_MODE
+beforeEach(() => {
+  process.env.ASSISTANT_LEXICAL_MODE = 'enabled'
+})
+afterEach(() => {
+  if (PRIOR_LEXICAL_MODE === undefined) delete process.env.ASSISTANT_LEXICAL_MODE
+  else process.env.ASSISTANT_LEXICAL_MODE = PRIOR_LEXICAL_MODE
+})
+
 import type { ChatMessage, ChatOptions, ILLMClient, LLMStructuredResponse, ToolDefinition } from '@buildaharness/runtime'
 import { looksLikeCodingFact, checkForContradictions, semanticContradictionEnabled } from './contradiction-checker.js'
 
@@ -453,5 +467,42 @@ describe('semanticContradictionEnabled (AUDIT_SEMANTIC_CONTRADICTION gate — Ph
       await checkForContradictions(beliefs, existing, llm)
     }
     expect(llm.calls).toBe(1)
+  })
+})
+
+describe('AUDIT_SEMANTIC_CONTRADICTION_SEVERITY', () => {
+  const reply = (severity: string) =>
+    JSON.stringify({ contradictions: [{ beliefIds: ['b1', 'b2'], description: 'Boston and Seattle cannot both be home.', severity }] })
+  const args = [
+    [{ id: 'b2', statement: 'the user lives in Seattle' }],
+    [{ id: 'b1', statement: 'the user lives in Boston' }],
+  ] as const
+  const withFlag = async <T>(value: string | undefined, fn: () => Promise<T>): Promise<T> => {
+    const prior = process.env.AUDIT_SEMANTIC_CONTRADICTION_SEVERITY
+    if (value === undefined) delete process.env.AUDIT_SEMANTIC_CONTRADICTION_SEVERITY
+    else process.env.AUDIT_SEMANTIC_CONTRADICTION_SEVERITY = value
+    try {
+      return await fn()
+    } finally {
+      if (prior === undefined) delete process.env.AUDIT_SEMANTIC_CONTRADICTION_SEVERITY
+      else process.env.AUDIT_SEMANTIC_CONTRADICTION_SEVERITY = prior
+    }
+  }
+
+  it('off (default): a HIGH grade from the model is ignored, so the contradiction records as MEDIUM', async () => {
+    const result = await withFlag(undefined, () => checkForContradictions([...args[0]], [...args[1]], new StructuredOnlyLLMClient(reply('HIGH'))))
+    expect(result.contradictions[0]).not.toHaveProperty('severity')
+  })
+
+  it('on: HIGH is passed on', async () => {
+    const result = await withFlag('on', () => checkForContradictions([...args[0]], [...args[1]], new StructuredOnlyLLMClient(reply('HIGH'))))
+    expect(result.contradictions[0].severity).toBe('HIGH')
+  })
+
+  it('on: MEDIUM, missing and unknown grades (SYSTEM_BREAKING, LOW) never escalate', async () => {
+    for (const grade of ['MEDIUM', 'SYSTEM_BREAKING', 'LOW', 'banana']) {
+      const result = await withFlag('on', () => checkForContradictions([...args[0]], [...args[1]], new StructuredOnlyLLMClient(reply(grade))))
+      expect(result.contradictions[0]).not.toHaveProperty('severity')
+    }
   })
 })

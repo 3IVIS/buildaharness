@@ -483,7 +483,10 @@ export async function runCli(options: RunCliOptions = {}): Promise<CliInstance> 
     const lines = [
       PLAN_LINE_PREFIX,
       `Plan: ${lastPlanStatus.templateName ?? 'custom plan'} (${lastPlanStatus.completionPct.toFixed(1)}% complete)`,
-      ...lastPlanStatus.tasks.map((task) => `  ${PLAN_TASK_STATUS_ICON[task.status] ?? '?'} [${task.status}] ${task.id} — ${task.description}`),
+      ...lastPlanStatus.tasks.flatMap((task) => [
+        `  ${PLAN_TASK_STATUS_ICON[task.status] ?? '?'} [${task.status}] ${task.id} — ${task.description}`,
+        ...(task.note ? [`      not accepted as done: ${task.note}`] : []),
+      ]),
       `Success criteria: ${lastPlanStatus.successCriteria}`,
     ]
     console.log(`\n${lines.join('\n')}\n`)
@@ -1284,6 +1287,8 @@ export async function runCli(options: RunCliOptions = {}): Promise<CliInstance> 
       // is only known once HarnessRuntime.run() finishes, well after writeToken already streamed
       // `reply` itself to the screen — see assistant.ts's findContradictionNotice doc comment.
       const contradictionNotice = result.contradictionNotice ? `\n\n${result.contradictionNotice}` : ''
+      // Same treatment for the change reviewer's advisory notice (see AssistantTurnResult.reviewNotice).
+      const reviewNotice = result.reviewNotice ? `\n\n${result.reviewNotice}` : ''
       // R7: the turn-end next-step options, under the reply. Remembered so a bare 1/2/3 typed as
       // the very next input runs that option (see dispatchOne); any other input clears them.
       lastNextSteps = result.nextSteps && result.nextSteps.length > 0 ? result.nextSteps : undefined
@@ -1293,9 +1298,9 @@ export async function runCli(options: RunCliOptions = {}): Promise<CliInstance> 
         // onToken only ever saw draftReply, not a Phase 4.1 pausedNote appended afterward (see
         // AssistantTurnResult.pausedNote's doc comment), so that part still needs printing here.
         const pausedNoteText = result.pausedNote ? `\n\n${result.pausedNote}` : ''
-        process.stdout.write(`${pausedNoteText}${riskSuffix}${sourcesHint}${planHint}${contradictionNotice}${nextStepsBlock}\n\n`)
+        process.stdout.write(`${pausedNoteText}${riskSuffix}${sourcesHint}${planHint}${contradictionNotice}${reviewNotice}${nextStepsBlock}\n\n`)
       } else {
-        console.log(`\nAielia>${riskSuffix} ${result.reply}${sourcesHint}${planHint}${contradictionNotice}${nextStepsBlock}\n`)
+        console.log(`\nAielia>${riskSuffix} ${result.reply}${sourcesHint}${planHint}${contradictionNotice}${reviewNotice}${nextStepsBlock}\n`)
       }
     } catch (err) {
       // Mirrors chat-ui's error bubble: a failed turn (e.g. proxy down) shouldn't

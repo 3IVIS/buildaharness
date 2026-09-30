@@ -1,5 +1,6 @@
 import type { ILLMClient, TokenUsage } from '@buildaharness/runtime'
 import type { FailureModeEntry } from '@buildaharness/harness'
+import { parseModelJson } from './model-json.js'
 
 const MATCH_SCHEMA = {
   type: 'object',
@@ -70,7 +71,7 @@ export async function checkSemanticFailureMatch(
       undefined,
       { model, onUsage, structuredOutput: { schema: MATCH_SCHEMA } },
     )
-    const parsed = JSON.parse(response.content) as {
+    const parsed = parseModelJson(response.content) as {
       matched?: unknown
       failure_class?: unknown
       matched_pattern?: unknown

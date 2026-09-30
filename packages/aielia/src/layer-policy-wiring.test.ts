@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest'
 import type { PolicyRules, RunState, TurnSignals } from '@buildaharness/harness'
-import { resolveEscalationPlan, turnPolicyBudget, escalationEnabled, explicitEnvOverride, SEMANTIC_ESCALATIONS, ESCALATION_ENV } from './layer-policy-wiring.js'
+import { resolveEscalationPlan, enabledOptInLayers, turnPolicyBudget, escalationEnabled, explicitEnvOverride, SEMANTIC_ESCALATIONS, ESCALATION_ENV } from './layer-policy-wiring.js'
 import { buildTurnFacts } from './memory-service.js'
 
 const routineSignals: TurnSignals = {
@@ -161,5 +161,32 @@ describe('AL9a: per-turn call budget through resolveEscalationPlan', () => {
     const plan = resolveEscalationPlan('shadow', signals, state, {}, turnPolicyBudget(signals))
     expect(plan.policy.decomposition_reframe.trigger).toBe('static')
     expect(plan.shadow?.policy.decomposition_reframe.trigger).toBe('budget_exhausted')
+  })
+})
+
+describe('enabledOptInLayers / the opt-in category in the recorded plan', () => {
+  const FLAGS = ['AUDIT_SEMANTIC_SOURCE_RELIABILITY', 'AUDIT_SEMANTIC_HYPOTHESES', 'AUDIT_REVIEWER_REVISION', 'AUDIT_EXPERIENCE_LEARNING']
+  it('nothing is enabled by default, and each flag enables exactly its own layer', () => {
+    expect(enabledOptInLayers({})).toEqual([])
+    const byFlag: Record<string, string> = {
+      AUDIT_SEMANTIC_SOURCE_RELIABILITY: 'source_reliability',
+      AUDIT_SEMANTIC_HYPOTHESES: 'semantic_hypotheses',
+      AUDIT_REVIEWER_REVISION: 'reviewer_revision',
+      AUDIT_EXPERIENCE_LEARNING: 'experience_learning',
+    }
+    for (const f of FLAGS) expect(enabledOptInLayers({ [f]: '1' })).toEqual([byFlag[f]])
+  })
+
+  it('the plan the assistant records shows an enabled opt-in layer as full and the rest as off', () => {
+    const prior = process.env.AUDIT_REVIEWER_REVISION
+    process.env.AUDIT_REVIEWER_REVISION = '1'
+    try {
+      const plan = resolveEscalationPlan('static', { riskLevel: 'LOW', taskCount: 1, hasDurablePlan: false, consequentialTools: new Set() }, undefined)
+      expect(plan.policy.reviewer_revision.decision).toBe('full')
+      expect(plan.policy.source_reliability).toMatchObject({ decision: 'off', trigger: 'opt_in_disabled' })
+    } finally {
+      if (prior === undefined) delete process.env.AUDIT_REVIEWER_REVISION
+      else process.env.AUDIT_REVIEWER_REVISION = prior
+    }
   })
 })

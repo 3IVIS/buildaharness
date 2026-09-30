@@ -5,6 +5,7 @@ import type { Diagnostics } from '../state/diagnostics.js'
 import type { FailureDiagnostics } from '../state/failure-diagnostics.js'
 import { propagateBeliefs } from './update-world-model.js'
 import { detectContradictions } from './detect-contradictions.js'
+import { harnessLexicalActive } from '../lexical/lexical-off.js'
 import { generateUpdateHypotheses } from './generate-update-hypotheses.js'
 import type { EvidenceStore } from '../state/evidence-store.js'
 import { MemoryState } from '../state/memory-state.js'
@@ -162,17 +163,23 @@ function seedAdversarialPrior(
  */
 export type SemanticCriterionCoverage = (criterion: string, beliefs: Belief[]) => Promise<boolean>
 
+/** A host's way to say a success criterion is a meta-instruction ("respond helpfully") that no belief could ever state — it is skipped, not reported as uncovered. Default: every criterion is checkable. */
+export type CriterionCheckable = (criterion: string) => boolean
+
 async function implementerLens(
   worldModel: WorldModel,
   successCriteria: string[],
   semanticCriterionCoverage?: SemanticCriterionCoverage,
+  isCheckableCriterion?: CriterionCheckable,
 ): Promise<ReviewLensResult> {
   const findings: string[] = []
   const reopened: string[] = []
 
   // "Did I do what I intended?" — check beliefs cover success criteria
   for (const criterion of successCriteria) {
-    const covered = worldModel.beliefs.some(b =>
+    if (isCheckableCriterion && !isCheckableCriterion(criterion)) continue
+    // HARNESS_LEXICAL_OFF=criterion-substring: no substring shortcut, the semantic hook decides alone.
+    const covered = harnessLexicalActive('criterion-substring') && worldModel.beliefs.some(b =>
       b.statement.toLowerCase().includes(criterion.toLowerCase()),
     )
     if (!covered) {
@@ -289,9 +296,10 @@ export async function reviewerPass(
   // Defaults true so every existing call site keeps running all 3 lenses unchanged.
   runAdversarialLens = true,
   semanticCriterionCoverage?: SemanticCriterionCoverage,
+  isCheckableCriterion?: CriterionCheckable,
 ): Promise<ReviewPassResult> {
   // 3 lenses in fixed sequence (adversarial conditionally)
-  const implResult = await implementerLens(worldModel, successCriteria, semanticCriterionCoverage)
+  const implResult = await implementerLens(worldModel, successCriteria, semanticCriterionCoverage, isCheckableCriterion)
   const reviewResult = reviewerLens(worldModel, successCriteria)
   const adversarialResult = runAdversarialLens
     ? adversarialLens(worldModel, successCriteria, failureDiagnostics, beliefDepGraph)
@@ -312,8 +320,13 @@ export async function reviewerPass(
     ...adversarialResult.reopened_task_ids,
   ]
 
-  // Mark findings as tasks to reopen if tasks are referenced
-  for (const finding of [...implResult.findings, ...reviewResult.findings]) {
+  // Mark findings as tasks to reopen if tasks are referenced. Only the reviewer lens's findings are
+  // matched: the implementer lens's findings quote a success criterion ("Success criterion not covered
+  // by any belief: <criterion text>"), which is user- or plan-authored prose and never a task reference.
+  // Matching it reopened any finished step whose id merely appeared in the criterion's wording (a step
+  // with the id "schedule" against a criterion saying "a schedule is in place"), re-ran it, and could
+  // regress a step that had been accepted.
+  for (const finding of reviewResult.findings) {
     // Look for task IDs in findings referencing specific tasks
     for (const task of taskGraph.tasks) {
       if (finding.includes(task.id) && task.status === 'COMPLETE') {

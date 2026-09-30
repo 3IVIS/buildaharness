@@ -133,22 +133,26 @@ test.describe('flag OFF vs ON parity matrix', () => {
     expect(on.proposerKind).toBe('flat-oneloop')
   })
 
-  test('escalation — a model stuck in a tool loop halts in the UI, never hangs silently', async ({ chat }) => {
-    // The model never produces a final answer — it just keeps calling the same tool. The flat
-    // loop's maxIterations cap (or the turn-scoped ControlState gate escalating first) turns that
-    // into a clean `escalated` result, surfaced as the "Halted — needs your input" banner.
+  test('a model stuck in a tool loop ends cleanly in the UI, never hangs silently', async ({ chat }) => {
+    // The model never produces a final answer — it just keeps calling the same tool. Where the flat loop
+    // drives the turn (oneLoopMode disabled) its maxIterations cap turns that into a clean `escalated` result,
+    // surfaced as the "Halted — needs your input" banner. Under one-loop (e5780668) an exhausted attempt is a
+    // real task failure: the harness retries it with a fresh budget, and when that fails too the turn completes
+    // with an honest could-not-complete reply (status ok, real trace) instead of a halt.
     const bootstrap = {
       fsSeed: { [`${WORKSPACE}/report.txt`]: 'quarterly numbers: 42' },
       script: {
         responses: Array.from({ length: 20 }, () => toolCall('read_file', { path: 'report.txt' })),
       },
     }
-    for (const mode of ['disabled', 'enabled'] as const) {
-      const run = await runScenario(chat, mode, 'Keep reading report.txt forever', bootstrap, 'halt')
-      expect(run.sawHalt).toBe(true)
-      await expect(run.page.haltBanner()).toContainText('Halted')
-      await expect(run.page.lastAssistantBubble()).toHaveCount(0) // no fabricated answer
-    }
+    const off = await runScenario(chat, 'disabled', 'Keep reading report.txt forever', bootstrap, 'halt')
+    expect(off.sawHalt).toBe(true)
+    await expect(off.page.haltBanner()).toContainText('Halted')
+    await expect(off.page.lastAssistantBubble()).toHaveCount(0) // no fabricated answer
+
+    const on = await runScenario(chat, 'enabled', 'Keep reading report.txt forever', bootstrap, 'reply')
+    expect(on.sawHalt).toBe(false)
+    expect(on.reply).toContain("couldn't complete")
   })
 })
 

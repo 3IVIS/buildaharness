@@ -47,6 +47,8 @@ function response(overrides: Record<string, unknown> = {}): string {
     isReminderRequest: false,
     isBulkReminderRequest: false,
     isAbandonRequest: false,
+    isPlanQuestion: false,
+    isUnderdetermined: false,
     matchedPlanTemplate: null,
     needsMultiStepPlan: false,
     statesDurableFacts: [],
@@ -74,6 +76,8 @@ describe('classifyTurnIntent — happy path field derivation', () => {
       isReminderRequest: false,
       isBulkReminderRequest: false,
       isAbandonRequest: false,
+      isPlanQuestion: false,
+      isUnderdetermined: false,
       matchedPlanTemplate: null,
       needsMultiStepPlan: false,
       statesDurableFacts: [],
@@ -394,6 +398,8 @@ describe('classifyTurnIntent — fail-safe fallback', () => {
     isReminderRequest: false,
     isBulkReminderRequest: false,
     isAbandonRequest: false,
+    isPlanQuestion: false,
+    isUnderdetermined: false,
     matchedPlanTemplate: null,
     needsMultiStepPlan: false,
     statesDurableFacts: [],
@@ -482,4 +488,78 @@ describe('classifyTurnIntent — representative English regression parity', () =
       expect(result.riskLevel).toBe((JSON.parse(scriptedResponse) as { riskLevel: string }).riskLevel)
     })
   }
+})
+
+describe('classifyTurnIntent — isPlanQuestion', () => {
+  it('is true only when a plan is active and the model says the message only asks about it', async () => {
+    const llm = new StructuredOnlyLLMClient(response({ isTrivial: false, isPlanQuestion: true }))
+    expect((await classifyTurnIntent('Where does the plan stand?', llm, ACTIVE_PLAN)).isPlanQuestion).toBe(true)
+  })
+
+  it('is forced false when no plan is active, whatever the model said', async () => {
+    const llm = new StructuredOnlyLLMClient(response({ isTrivial: false, isPlanQuestion: true }))
+    expect((await classifyTurnIntent('Where does the plan stand?', llm, NO_PLAN)).isPlanQuestion).toBe(false)
+  })
+
+  it('is false when the message is an abandon request (abandon wins)', async () => {
+    const llm = new StructuredOnlyLLMClient(response({ isTrivial: false, isAbandonRequest: true, isPlanQuestion: true }))
+    const result = await classifyTurnIntent('Scrap the plan.', llm, ACTIVE_PLAN)
+    expect(result.isAbandonRequest).toBe(true)
+    expect(result.isPlanQuestion).toBe(false)
+  })
+
+  it('a response that omits the field is false, not a rejected classification', async () => {
+    const raw = JSON.parse(response({ isTrivial: false })) as Record<string, unknown>
+    delete raw.isPlanQuestion
+    const result = await classifyTurnIntent('Go ahead.', new StructuredOnlyLLMClient(JSON.stringify(raw)), ACTIVE_PLAN)
+    expect(result.riskLevel).toBe('LOW')
+    expect(result.isPlanQuestion).toBe(false)
+  })
+})
+
+describe('classifyTurnIntent — isUnderdetermined', () => {
+  it('is true only when the model says the message asks why / which and nothing settles it', async () => {
+    const llm = new StructuredOnlyLLMClient(response({ isTrivial: false, isUnderdetermined: true }))
+    expect((await classifyTurnIntent('Export says 4,212 rows, dashboard 3,980 — why?', llm, NO_PLAN)).isUnderdetermined).toBe(true)
+  })
+
+  it('a response that omits the field, or sends a non-boolean, is false — never a rejected classification', async () => {
+    const raw = JSON.parse(response({ isTrivial: false })) as Record<string, unknown>
+    delete raw.isUnderdetermined
+    expect((await classifyTurnIntent('Hi.', new StructuredOnlyLLMClient(JSON.stringify(raw)), NO_PLAN)).isUnderdetermined).toBe(false)
+    const odd = await classifyTurnIntent('Hi.', new StructuredOnlyLLMClient(response({ isTrivial: false, isUnderdetermined: 'yes' })), NO_PLAN)
+    expect(odd.riskLevel).toBe('LOW')
+    expect(odd.isUnderdetermined).toBe(false)
+  })
+
+  it('a classifier failure never claims the request is underdetermined', async () => {
+    const result = await classifyTurnIntent('Hi.', new ThrowingLLMClient(), NO_PLAN)
+    expect(result.isUnderdetermined).toBe(false)
+  })
+
+  it('asks for the judgment: fifteen judgments in the prompt, and the field in the schema and the answer shape', async () => {
+    const llm = new StructuredOnlyLLMClient(response({ isTrivial: false }))
+    await classifyTurnIntent('Hi.', llm, NO_PLAN)
+    const system = llm.receivedMessages[0].find((m) => m.role === 'system')?.content ?? ''
+    expect(system).toContain('fifteen independent judgments')
+    expect(system).toContain('15. isUnderdetermined')
+    expect(system).toContain('"isUnderdetermined": boolean')
+  })
+})
+
+describe('classifyTurnIntent — output a backend could not constrain to bare JSON', () => {
+  it('classifies a reply wrapped in a code fence or behind stray text, instead of falling back to UNKNOWN risk', async () => {
+    const body = response({ isTrivial: false })
+    for (const content of ['```json\n' + body + '\n```', '<invoke name="none"></invoke>\n```json\n' + body + '\n```', 'Classifying now.\n' + body]) {
+      const result = await classifyTurnIntent('Where does the plan stand?', new StructuredOnlyLLMClient(content), NO_PLAN)
+      expect(result.riskLevel).toBe('LOW')
+      expect(result.requiresApproval).toBe(false)
+    }
+  })
+
+  it('still falls back to the fail-safe when there is no JSON at all', async () => {
+    const result = await classifyTurnIntent('Where does the plan stand?', new StructuredOnlyLLMClient('I cannot classify that.'), NO_PLAN)
+    expect(result.riskLevel).toBe('UNKNOWN')
+    expect(result.requiresApproval).toBe(true)
+  })
 })

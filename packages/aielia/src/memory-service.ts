@@ -2,7 +2,7 @@ import type { ExperienceStore, StrategyWeightKey, DecompositionEntry, RecoverySe
 import type { MemoryAdapter, ReminderStore, ReminderRecord, ILLMClient, TokenUsage } from '@buildaharness/runtime'
 import { explicitEnvOverride } from './layer-policy-wiring.js'
 import { extractFactsFromTurn, migrateFact, tierForFact, isKnowledgeTier, type UserFact } from './fact-extraction.js'
-import { checkForContradictions, type BeliefCandidate, type Corroboration } from './contradiction-checker.js'
+import { checkForContradictions, semanticContradictionEnabled, type BeliefCandidate, type Corroboration } from './contradiction-checker.js'
 import type { StatedFact, FactCategory, FactConfidence } from './turn-intent-classifier.js'
 
 // Most-recent facts (and, separately, active reminders) injected into the system prompt each
@@ -372,9 +372,11 @@ export class MemoryService {
     const uncertainBeliefs = toBeliefCandidates(uncertainPool, 'uncertain')
     const rejectedBeliefs = rejectedPool.map((f, i) => ({ id: `rejected-${i}`, statement: f.text }))
 
-    const { contradictions, corroborations } = await checkForContradictions(
-      newBeliefs, existingBeliefs, this.llmClient, this.model(), onUsage, uncertainBeliefs, rejectedBeliefs,
-    )
+    // AUDIT_SEMANTIC_CONTRADICTION gates this call site too (it used to gate only the harness-bridge
+    // hook, so the `contradictionOff` arm still made this same LLM call every turn). Unset ⇒ enabled.
+    const { contradictions, corroborations } = semanticContradictionEnabled()
+      ? await checkForContradictions(newBeliefs, existingBeliefs, this.llmClient, this.model(), onUsage, uncertainBeliefs, rejectedBeliefs)
+      : { contradictions: [], corroborations: [] }
 
     const uncertainIdIndex = new Map(uncertainBeliefs.map((b, i) => [b.id, i]))
     const rejectedIdIndex = new Map(rejectedBeliefs.map((b, i) => [b.id, i]))
@@ -519,13 +521,15 @@ export class MemoryService {
   private async promoteConfirmedFact(fact: PendingFact, onUsage?: (usage: TokenUsage) => void): Promise<PendingConfirmationOutcome> {
     const durableFacts = (((await this.memory.get(DURABLE_FACTS_KEY)) as UserFact[] | undefined) ?? []).map(migrateFact)
     const knowledgePool = durableFacts.filter((f) => isKnowledgeTier(tierForFact(f))).slice(-FACT_CAP)
-    const { contradictions } = await checkForContradictions(
-      [{ id: 'confirm-0', statement: fact.text }],
-      toBeliefCandidates(knowledgePool, 'existing'),
-      this.llmClient,
-      this.model(),
-      onUsage,
-    )
+    const { contradictions } = semanticContradictionEnabled()
+      ? await checkForContradictions(
+          [{ id: 'confirm-0', statement: fact.text }],
+          toBeliefCandidates(knowledgePool, 'existing'),
+          this.llmClient,
+          this.model(),
+          onUsage,
+        )
+      : { contradictions: [] }
     // Phase 4: re-sourced to `externally_verified` (a user confirmation is exactly that source's
     // definition) rather than just bumping confidence to 'high' — tierForFact()'s model_inferred
     // branch additionally requires `durable: true`, which a fact queued via the low-confidence

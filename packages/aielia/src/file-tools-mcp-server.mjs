@@ -260,9 +260,50 @@ function getGateSocket(port) {
  * rest of this subprocess's life the way a permanently-wedged shared socket would.
  */
 export async function requestToolGate(tool, input) {
+  return gateRoundTrip({ tool, input })
+}
+
+// How much of a tool's result text is reported to the parent — enough for the answer-claim
+// grounding check (agent-loop.ts / grounding-check.ts caps what it keeps anyway) without pushing a
+// whole large file down the loopback socket.
+const REPORTED_RESULT_CHARS = 6000
+
+/**
+ * Tells the parent what a read-only tool just returned (ChatOptions.onToolResult), over the same
+ * gate socket and through the same one-in-flight queue as requestToolGate — the wire protocol has
+ * no request ids, so the parent's ack has to be read in order. Best-effort and informational: the
+ * ack is ignored and every transport failure is swallowed, exactly like the gate's own fail-open
+ * posture, so a dead parent can never fail a tool call that already succeeded.
+ */
+export async function reportToolResult(tool, input, text) {
+  await gateRoundTrip({ kind: 'result', tool, input, text: String(text).slice(0, REPORTED_RESULT_CHARS) })
+}
+
+// A delegated fetch/search runs a real network round trip on the parent side — far longer than a
+// gate decision — so it gets its own budget. Silence past it means "not handled", and the caller
+// falls back to fetching locally.
+const EXECUTE_REQUEST_TIMEOUT_MS = 60000
+
+/**
+ * Asks the parent to run a network tool itself (ChatOptions.onToolExecute) so the fetch goes
+ * through the parent's own web stack: its SSRF guard, its injected fetch, and its LLM injection
+ * classifier. Resolves to the text the model should see, `undefined` when the parent declines or is
+ * unreachable (the caller then runs the tool locally, the pre-delegation behaviour), or throws the
+ * parent's error message when the parent ran the tool and it failed.
+ */
+export async function requestToolExecution(tool, input) {
+  const reply = await gateRoundTrip({ kind: 'execute', tool, input }, { timeoutMs: EXECUTE_REQUEST_TIMEOUT_MS, failValue: { handled: false } })
+  if (reply && reply.handled === true) {
+    if (typeof reply.error === 'string') throw new Error(reply.error)
+    if (typeof reply.text === 'string') return reply.text
+  }
+  return undefined
+}
+
+async function gateRoundTrip(payload, options) {
   const port = process.env.TOOL_GATE_PORT ? Number(process.env.TOOL_GATE_PORT) : undefined
-  if (!port) return { decision: 'allow' }
-  const result = gateRequestChain.then(() => doRequestToolGate(port, tool, input))
+  if (!port) return options?.failValue ?? { decision: 'allow' }
+  const result = gateRequestChain.then(() => doRequestToolGate(port, payload, options))
   // However this round trip turns out, the chain must advance — a rejection here would wedge
   // every subsequent call behind it forever.
   gateRequestChain = result.then(
@@ -272,13 +313,15 @@ export async function requestToolGate(tool, input) {
   return result
 }
 
-function doRequestToolGate(port, tool, input) {
+function doRequestToolGate(port, payload, options) {
+  const failValue = options?.failValue ?? { decision: 'allow' }
+  const timeoutMs = options?.timeoutMs ?? GATE_REQUEST_TIMEOUT_MS
   return new Promise((resolve) => {
     let socket
     try {
       socket = getGateSocket(port)
     } catch {
-      resolve({ decision: 'allow' })
+      resolve(failValue)
       return
     }
     let buffer = ''
@@ -298,24 +341,24 @@ function doRequestToolGate(port, tool, input) {
       try {
         finish(JSON.parse(buffer.slice(0, newlineIndex)))
       } catch {
-        finish({ decision: 'allow' })
+        finish(failValue)
       }
     }
     const onError = () => {
       gateSocket = null // drop the broken connection — the next call gets a fresh one
-      finish({ decision: 'allow' })
+      finish(failValue)
     }
     const timer = setTimeout(() => {
       // See GATE_REQUEST_TIMEOUT_MS's comment — no error/data ever arrived, so this side has no
       // way to know if the socket is genuinely dead; evict it rather than risk reusing it again.
       if (gateSocket === socket) gateSocket = null
       socket.destroy()
-      finish({ decision: 'allow' })
-    }, GATE_REQUEST_TIMEOUT_MS)
+      finish(failValue)
+    }, timeoutMs)
     timer.unref?.()
     socket.on('data', onData)
     socket.on('error', onError)
-    const send = () => socket.write(`${JSON.stringify({ tool, input })}\n`)
+    const send = () => socket.write(`${JSON.stringify(payload)}\n`)
     if (socket.connecting) socket.once('connect', send)
     else send()
   })
@@ -539,7 +582,14 @@ const REMINDER_REQUEST_MARKER = new RegExp(
   'i',
 )
 
+// lexicalMode: the parent hands the resolved off-families in as ASSISTANT_LEXICAL_OFF (see
+// lexical/lexical-mode.ts). Only the fact-marker family is honoured here — this script's injection
+// regex deliberately stays on, because for fetched pages under the claude-cli backend it is the only
+// injection check they get (the LLM check never sees these results).
+const LEXICAL_OFF_FAMILIES = new Set(String(process.env.ASSISTANT_LEXICAL_OFF ?? '').split(',').map((s) => s.trim().toLowerCase()).filter(Boolean))
+
 function looksLikeDurableFact(text) {
+  if (LEXICAL_OFF_FAMILIES.has('fact-markers')) return false
   return testAny(FACT_MARKERS, text) || testAny(HEALTH_OR_DIETARY_MARKERS, text)
 }
 
@@ -597,6 +647,7 @@ async function main() {
           throw err
         })
         if (content === undefined) return { content: [{ type: 'text', text: `File not found: ${path}` }], isError: true }
+        await reportToolResult('read_file', { path }, content)
         return { content: [{ type: 'text', text: content }] }
       } catch (err) {
         return { content: [{ type: 'text', text: `Error: ${err instanceof Error ? err.message : String(err)}` }], isError: true }
@@ -623,6 +674,7 @@ async function main() {
           if (isEnoent(err)) return []
           throw err
         })
+        await reportToolResult('list_directory', { path }, names.join('\n'))
         return { content: [{ type: 'text', text: names.join('\n') }] }
       } catch (err) {
         return { content: [{ type: 'text', text: `Error: ${err instanceof Error ? err.message : String(err)}` }], isError: true }
@@ -769,7 +821,13 @@ async function main() {
         if (gate.decision === 'deny') {
           return { content: [{ type: 'text', text: `Denied: ${gate.reason ?? 'not permitted by tool policy'}` }], isError: true }
         }
+        // Delegated first: the parent's web stack (SSRF guard, injected fetch, LLM injection check)
+        // runs the fetch and hands back the finished, trust-wrapped text. `undefined` = it declined
+        // (or is unreachable) — fetch here, as before.
+        const delegated = await requestToolExecution('fetch_url', { url })
+        if (delegated !== undefined) return { content: [{ type: 'text', text: delegated }] }
         const text = await fetchUrlSafely(url)
+        await reportToolResult('fetch_url', { url }, text)
         return { content: [{ type: 'text', text: tagFetchedContent(text) }] }
       } catch (err) {
         return { content: [{ type: 'text', text: `Error: ${err instanceof Error ? err.message : String(err)}` }], isError: true }
@@ -792,7 +850,11 @@ async function main() {
           if (gate.decision === 'deny') {
             return { content: [{ type: 'text', text: `Denied: ${gate.reason ?? 'not permitted by tool policy'}` }], isError: true }
           }
-          return { content: [{ type: 'text', text: await runWebSearch(query) }] }
+          const delegated = await requestToolExecution('web_search', { query })
+          if (delegated !== undefined) return { content: [{ type: 'text', text: delegated }] }
+          const searchText = await runWebSearch(query)
+          await reportToolResult('web_search', { query }, searchText)
+          return { content: [{ type: 'text', text: searchText }] }
         } catch (err) {
           return { content: [{ type: 'text', text: `Error: ${err instanceof Error ? err.message : String(err)}` }], isError: true }
         }

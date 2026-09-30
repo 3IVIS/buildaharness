@@ -37,12 +37,19 @@ import type { AssistantToolStep } from './tool-step.js'
 import type { LayerPolicyMode } from '@buildaharness/harness'
 import { MemoryService, buildTurnFacts, type MemorySummary, type MemoryExport, type PendingFact } from './memory-service.js'
 import type { UserFact } from './fact-extraction.js'
+import { REVIEW_NOTE_PREFIX, reviewNoticeText } from './review-checker.js'
+import { renderHypothesisNote, hypothesisContextMessage, proposeCompetingExplanations, semanticHypothesesEnabled, HYPOTHESIS_NOTE_PREFIX } from './semantic-hypotheses.js'
+import type { SemanticHypothesisProposal } from '@buildaharness/harness'
+import { RECOVERY_NOTE_PREFIX, recoveryNoteText } from './recovery-note.js'
 import { AssistantSession, type IndexedMessage, type TranscriptSearchHit } from './assistant-session.js'
 import { AgentLoop, OneLoopPause, type BatchBudgetState, type BatchBudgetTrace, type ToolLoopResult, trimmedAverage, nextItemBudget } from './agent-loop.js'
 import type { TurnIntentClassification, FactCategory } from './turn-intent-classifier.js'
 import { ActionApprovalService } from './action-approval-service.js'
 import { PlanService } from './plan-service.js'
 import { PlanDraftingService } from './plan-drafting-service.js'
+import { planQuestionRoutingMode, renderPlanStateBlock, shouldRoutePlanQuestion } from './plan-question.js'
+import { buildStepInstruction, planStepPromptEnabled } from './plan-step-prompt.js'
+import { decomposedAnswerOnceEnabled } from './decomposed-answer.js'
 import { PlanApprovalService, type PlanDecision, type PlanApprovalEdits } from './plan-approval-service.js'
 import { PlanSketchService } from './plan-sketch-service.js'
 import type { PlanRecord } from './plan-store.js'
@@ -58,6 +65,7 @@ import { ResponseService } from './response-service.js'
 import { createSteeringReconcileChannel } from './goal-graph-reconcile.js'
 import { loadGoalGraphRecord, saveGoalGraphRecord, createEmptyGoalGraphRecord } from './goal-graph-store.js'
 import { proposeNextSteps, proposeTurnNextSteps } from './next-step-proposer.js'
+import { checkReplyGrounding, semanticGroundingEnabled } from './grounding-check.js'
 import { buildNextStepContext, type NextStepContext } from './next-step-context.js'
 import type { GoalGraphSuggestMode } from './goal-graph-suggest-flag.js'
 import { selectActiveThread } from './goal-thread-scheduler.js'
@@ -476,6 +484,9 @@ export class PersonalAssistant {
             const bigPicture = await this.nextStepContext(sessionId, { focusThreadId: thread.id })
             return (await proposeNextSteps(thread, this.llmClient, goalGraphSuggestMode, this.model, onUsage, bigPicture)).map(({ goalThreadId: _goalThreadId, ...suggestion }) => suggestion)
           }
+        : undefined,
+      semanticGroundingEnabled()
+        ? (input, onUsage) => checkReplyGrounding(input, this.llmClient, this.model, onUsage)
         : undefined,
     )
     this.askClarification = new AskClarificationService(this.memory, this.session, this.harnessBridge, this.responseService, this.onTrace)
@@ -903,7 +914,7 @@ export class PersonalAssistant {
     const transcript = await this.session.loadAndCompactTranscript(sessionId)
     const { facts, factsBlock } = await this.memoryService.loadFacts(sessionId)
     const { remindersBlock } = await this.memoryService.loadActiveReminders()
-    const systemPrompt = `${SYSTEM_PROMPT}${factsBlock}${remindersBlock}`
+    let systemPrompt = `${SYSTEM_PROMPT}${factsBlock}${remindersBlock}`
 
     const interpretation = await this.turnInterpreter.interpretIntent({
       userMessage,
@@ -940,6 +951,11 @@ export class PersonalAssistant {
     }
 
     const { classification, planForCancelCheck } = interpretation
+
+    // A message that only asks about the active plan is answered from the plan's recorded state; the
+    // plan is not handed to the harness, so asking where it stands can never re-run (or strand) its tasks.
+    const planQuestionPlan = shouldRoutePlanQuestion({ mode: planQuestionRoutingMode(), plan: planForCancelCheck, isPlanQuestion: classification.isPlanQuestion }) ? planForCancelCheck : null
+    if (planQuestionPlan) systemPrompt += renderPlanStateBlock(planQuestionPlan)
 
     // P3 of the internal plan — the generalized, judgment-based auto-entry
     // into plan mode's exclusive drafting loop (P1/P2), replacing the old direct-to-active
@@ -1020,11 +1036,40 @@ export class PersonalAssistant {
         })
       : undefined
 
+    // The semantic change reviewer is advisory (see HarnessRunOptions.onReviewConflict): a conflict
+    // it finds becomes (a) a note the one-loop proposer reads on its next call, which drains
+    // `reviewNotes`, and (b) — only if no proposer ever read it (a tool-less turn's draft already
+    // exists) — a `reviewNotice` shown to the user after the reply.
+    const reviewReasons: string[] = []
+    const reviewNotes: string[] = []
+    // A failure-mode-biased recovery switch is proposer-facing only, never shown to the user
+    // directly (unlike reviewNotice) — see recovery-note.ts's doc comment.
+    const recoveryNotes: string[] = []
+    // Competing explanations for an underdetermined request (AUDIT_SEMANTIC_HYPOTHESES) — proposer-facing too.
+    const hypothesisNotes: string[] = []
+    // A reviewer finding that sent the last answer back for one revision (AUDIT_REVIEWER_REVISION).
+    const revisionNotes: string[] = []
+    // Set on a tool-less turn, where the reply is drafted BEFORE the harness runs: the explanations are asked for up front so the
+    // draft can see them, and the harness is handed the same answer instead of asking again. undefined = not asked.
+    let precomputedHypotheses: SemanticHypothesisProposal[] | null | undefined
+    const takeProposerNotes = (): string[] => [...(steeringAdapter?.takeNotes() ?? []), ...reviewNotes.splice(0), ...recoveryNotes.splice(0), ...hypothesisNotes.splice(0), ...revisionNotes.splice(0)]
     // R3 of the internal plan: set only on the flag-ON, non-batch,
     // non-trivial path below — passed to harnessBridge.run() as the toolExecutors 'default' entry
     // instead of precomputing draftReply via AgentLoop.runToolLoop up front, so the harness's own
     // driveMainLoop drives the actual tool calls one iteration at a time.
     let oneLoopProposer: ((toolCtx: ToolExecutorContext) => Promise<unknown>) | undefined
+    // Step id → description for a turn an approved plan drives; filled in once the plan's tasks are known
+    // (resolveTasks, below) and read lazily by the proposer, which only runs during the harness run.
+    let planStepDescriptions: Map<string, string> | undefined
+    // True while several ordinary subtasks stand for one answer (set with the tasks, below).
+    let shareAnswerAcrossTasks = false
+    const shareAnswer = decomposedAnswerOnceEnabled() ? () => shareAnswerAcrossTasks : undefined
+    const stepInstruction = planStepPromptEnabled()
+      ? (taskId: string): string | undefined => {
+          const description = planStepDescriptions?.get(taskId)
+          return description ? buildStepInstruction(description) : undefined
+        }
+      : undefined
     // The mutable array AgentLoop.createOneLoopProposer's proposer pushes to as it dispatches
     // tool calls during the harness run — read back into `sources` once that run finishes (see
     // below), mirroring `loopResult.sources` on the flag-OFF path.
@@ -1063,7 +1108,7 @@ export class PersonalAssistant {
         this.lastProposerKind = 'flat-oneloop'
         const built = this.agentLoop.createOneLoopProposer(
           sessionId, transcript, userMessage, systemPrompt, options.onToken, options.onToolStep, accumulateUsage, classification.riskLevel,
-          steeringAdapter?.takeNotes,
+          takeProposerNotes, stepInstruction, shareAnswer,
         )
         oneLoopProposer = built.proposer
         oneLoopSources = built.sources
@@ -1095,8 +1140,15 @@ export class PersonalAssistant {
       // accumulating here gives the exact same final string callChatSync would have returned
       // when no listener is attached.
       draftReply = ''
+      let draftSystemPrompt = systemPrompt
+      if (semanticHypothesesEnabled() && classification.isUnderdetermined === true && !classification.isTrivial) {
+        precomputedHypotheses = await proposeCompetingExplanations({ request: userMessage, observations: [], beliefs: [] }, this.llmClient, this.model, accumulateUsage)
+        if (precomputedHypotheses) {
+          draftSystemPrompt = `${systemPrompt}\n\n${hypothesisContextMessage(renderHypothesisNote(precomputedHypotheses).slice(HYPOTHESIS_NOTE_PREFIX.length))}`
+        }
+      }
       for await (const token of this.llmClient.callChat(
-        [{ role: 'system', content: systemPrompt }, ...transcript, { role: 'user', content: userMessage }],
+        [{ role: 'system', content: draftSystemPrompt }, ...transcript, { role: 'user', content: userMessage }],
         { model: this.model, onUsage: accumulateUsage },
       )) {
         draftReply += token
@@ -1147,10 +1199,14 @@ export class PersonalAssistant {
     // A compound-looking request decomposes into multiple tasks, and/or an active/matched
     // durable plan drives this turn's task graph instead — see TurnInterpreter.resolveTasks.
     const { initialTasks, activePlan, planClassifiedTrace } =
-      await this.turnInterpreter.resolveTasks({ userMessage, sessionId, classification, planForCancelCheck, onUsage: accumulateUsage })
+      await this.turnInterpreter.resolveTasks({ userMessage, sessionId, classification, planForCancelCheck, onUsage: accumulateUsage, planQuestion: planQuestionPlan !== null })
     if (planClassifiedTrace) {
       this.onTrace?.({ kind: 'plan_classified', isCandidate: planClassifiedTrace.isCandidate, matchedTemplate: planClassifiedTrace.matchedTemplate })
     }
+    // An approved plan drives this turn: each of its steps is its own piece of work for the model.
+    if (activePlan && !planQuestionPlan) planStepDescriptions = new Map(initialTasks.map((t) => [t.id, t.description]))
+    // A request split into subtasks without a plan is still ONE answer to the user.
+    shareAnswerAcrossTasks = !activePlan && initialTasks.length > 1
 
     // Eval harness only — see benchmark-injected-failure.ts. Wraps the one-loop proposer to
     // force a stall so the Trajectory Supervisor's stall edge is exercised in one turn.
@@ -1172,7 +1228,8 @@ export class PersonalAssistant {
         draftReply,
         classification,
         initialTasks,
-        activePlan,
+        // Null for a plan question: the harness must not execute, pace or check the plan's tasks.
+        activePlan: planQuestionPlan ? null : activePlan,
         sources,
         onProgress: options.onProgress,
         onUsage: accumulateUsage,
@@ -1185,7 +1242,23 @@ export class PersonalAssistant {
           ? (req) => this.agentLoop.runSupervisorInvestigation(req, { riskHint: classification.riskLevel })
           : undefined,
         updateChannel: steeringAdapter?.channel,
+        precomputedHypotheses,
+        onReviewerRevision: (e) => { revisionNotes.push(e.note) },
+        onSemanticHypothesis: (e) => {
+          if (e.kind === 'generated') hypothesisNotes.push(renderHypothesisNote(e.hypotheses))
+        },
+        onReviewConflict: (e) => {
+          reviewReasons.push(e.reason)
+          reviewNotes.push(`${REVIEW_NOTE_PREFIX}${e.reason}`)
+        },
+        onFailureModeSwitch: (e) => {
+          recoveryNotes.push(`${RECOVERY_NOTE_PREFIX}${recoveryNoteText(e.failure_class, e.strategy)}`)
+        },
       })
+
+      // Only a note no proposer drained needs to reach the user directly — see reviewNotes above.
+      const withReviewNotice = <T extends AssistantTurnResult>(built: T): T =>
+        reviewNotes.length > 0 ? { ...built, reviewNotice: reviewNoticeText(reviewReasons) } : built
 
       // R3: oneLoopSources is only set on the flag-ON path above, and only gets pushed to once
       // the harness run just awaited has actually dispatched tool calls through the proposer — so
@@ -1197,7 +1270,7 @@ export class PersonalAssistant {
       if (oneLoopBatchBudget) batchBudgetTrace = oneLoopBatchBudget()
 
       if (outcome.status === 'paused') {
-        return this.responseService.buildPausedResult({
+        return withReviewNotice(await this.responseService.buildPausedResult({
           sessionId,
           transcriptKey,
           userMessage,
@@ -1212,10 +1285,11 @@ export class PersonalAssistant {
           usageTotal,
           onUsage: accumulateUsage,
           goalThreadId,
-        })
+          taskNotes: outcome.taskNotes,
+        }))
       }
 
-      return this.responseService.buildSuccessResult({
+      return withReviewNotice(await this.responseService.buildSuccessResult({
         sessionId,
         transcriptKey,
         userMessage,
@@ -1230,7 +1304,8 @@ export class PersonalAssistant {
         usageTotal,
         onUsage: accumulateUsage,
         goalThreadId,
-      })
+        taskNotes: outcome.taskNotes,
+      }))
     } catch (err) {
       if (err instanceof EscalationHalt) {
         // Q2 — a populated `blocker.questions` (Q0) with the effective askMode enabled promotes
