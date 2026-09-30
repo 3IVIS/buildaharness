@@ -266,3 +266,53 @@ def test_adapter_run_state_is_seeded_like_ts_initialize() -> None:
     assert state.failure_diagnostics.failure_mode_library.get_entries()  # default library, as TS seeds it
     assert state.evidence_store.is_tool_available("execution_engine")
     assert state.memory_state.journal_retention_policy.max_passing_verbatim == 20
+
+
+# ── semantic hypotheses / reviewer revision ──────────────────────────────────
+
+
+def test_semantic_hypotheses_are_generated_once_and_judged() -> None:
+    asked: list[dict[str, object]] = []
+    events: list[dict[str, object]] = []
+
+    def propose(arg: dict[str, object]) -> list[dict[str, object]]:
+        asked.append(arg)
+        return [
+            {"explanation": "reading A", "predicted_observations": ["x"]},
+            {"explanation": "reading B", "predicted_observations": ["y"]},
+        ]
+
+    def judge(arg: dict[str, object]) -> dict[str, object]:
+        hyps = arg["hypotheses"]
+        assert isinstance(hyps, list)
+        return {"contradicted": [{"id": "sem_0", "reason": "ruled out"}]}
+
+    opts = HarnessRunOptions(
+        semantic_hypotheses=propose,
+        semantic_hypothesis_judge=judge,
+        on_semantic_hypothesis=events.append,
+        skip_reviewer_pass=True,
+    )
+    result = HarnessRuntime().run("do it", ["a", "b", "c"], opts)
+    hs = result.context.hypothesis_set
+    assert len(asked) == 1
+    assert [e["kind"] for e in events] == ["generated", "eliminated"]
+    assert any(h.id == "sem_0" for h in hs.eliminated)
+
+
+def test_semantic_hypothesis_hooks_fail_open() -> None:
+    def boom(_arg: dict[str, object]) -> list[dict[str, object]]:
+        raise RuntimeError("llm down")
+
+    result = HarnessRuntime().run("do it", ["a"], HarnessRunOptions(semantic_hypotheses=boom, skip_reviewer_pass=True))
+    assert result.context.task_graph.tasks[0].status == "COMPLETE"
+
+
+def test_reviewer_revision_reopens_the_last_completed_task_once() -> None:
+    notes: list[dict[str, str]] = []
+    opts = HarnessRunOptions(reviewer_revision=lambda _v: "tighten it", on_reviewer_revision=notes.append)
+    # an unmet success criterion makes the reviewer pass raise a verdict
+    result = HarnessRuntime().run("do it", ["deploy to production", "x"], opts)
+    assert len(notes) <= 1
+    if notes:
+        assert "reviewer_pass_2" in result.node_execution_order

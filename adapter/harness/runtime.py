@@ -285,6 +285,13 @@ class HarnessRunOptions:
     semantic_constraint_judge: Callable[[dict[str, Any]], dict[str, Any]] | None = None
     decider: Callable[[dict[str, Any]], Any] | None = None
     run_investigation: Callable[[dict[str, Any]], list[Any]] | None = None
+    # semantic hypotheses (TS semanticHypotheses / semanticHypothesisJudge / onSemanticHypothesis)
+    semantic_hypotheses: Callable[[dict[str, Any]], list[dict[str, Any]] | None] | None = None
+    semantic_hypothesis_judge: Callable[[dict[str, Any]], dict[str, Any] | None] | None = None
+    on_semantic_hypothesis: Callable[[dict[str, Any]], None] | None = None
+    # reviewer revision (TS reviewerRevision / onReviewerRevision): a note reopens the last completed task once
+    reviewer_revision: Callable[[Any], str | None] | None = None
+    on_reviewer_revision: Callable[[dict[str, str]], None] | None = None
     # Python-only features carried over from loop.run_one_iteration (off unless given)
     recovery_budget: RecoveryBudget | None = None  # bounds stall recovery; exhaustion halts with "recovery_budget"
     plan_template: Any | None = None  # PlanTemplate: the task graph is exported via plan_store.save_plan each iteration
@@ -318,6 +325,10 @@ class LoopContext:
     last_failure_match_symptom_count: int = 0
     supervisor_ask_user_count: int = 0
     pending_continuation: str | None = None
+    semantic_hypotheses_asked: bool = False
+    last_judged_observation_count: int = 0
+    reviewer_revision_done: bool = False
+    last_completed_task_id: str | None = None
     recovery_budget: RecoveryBudget | None = None
     last_not_accomplished: dict[str, str] | None = None
 
@@ -384,6 +395,93 @@ def _node(ctx: LoopContext, name: str) -> None:
 def _is_ts_store(store: Any) -> bool:
     """True for TS-shaped stores (InMemory/Unavailable); the DB-backed ExperienceStore is handled by its own API."""
     return hasattr(store, "get_strategy_weights")
+
+
+def _generate_semantic_hypotheses(ctx: LoopContext) -> None:
+    """Once per run, ask the host for competing explanations of the request (TS generateSemanticHypotheses)."""
+    from .semantic_hypotheses import add_semantic_hypotheses, has_semantic_hypotheses
+
+    opts = ctx.options
+    if opts.semantic_hypotheses is None or ctx.semantic_hypotheses_asked or has_semantic_hypotheses(ctx.hypothesis_set):
+        return
+    ctx.semantic_hypotheses_asked = True
+    try:
+        proposals = opts.semantic_hypotheses(
+            {
+                "objective": ctx.objective,
+                "observations": [o.obs for o in ctx.evidence_store.observations],
+                "beliefs": [b.statement for b in ctx.world_model.beliefs],
+            }
+        )
+    except Exception:
+        return  # fails open
+    created = add_semantic_hypotheses(ctx.hypothesis_set, proposals)
+    if created:
+        _safe(
+            opts.on_semantic_hypothesis,
+            {"kind": "generated", "hypotheses": [{"id": h.id, "explanation": h.explanation} for h in created]},
+        )
+
+
+def _judge_semantic_hypotheses(ctx: LoopContext) -> None:
+    """Judge semantic hypotheses against the observations gathered since the last call (TS judgeSemanticHypotheses)."""
+    from .semantic_hypotheses import SEMANTIC_SOURCE, eliminate_contradicted, has_semantic_hypotheses
+
+    opts = ctx.options
+    if opts.semantic_hypothesis_judge is None or not has_semantic_hypotheses(ctx.hypothesis_set):
+        return
+    observations = ctx.evidence_store.observations
+    fresh = observations[ctx.last_judged_observation_count :]
+    ctx.last_judged_observation_count = len(observations)
+    if not fresh:
+        return
+    live = [h for h in ctx.hypothesis_set.active if SEMANTIC_SOURCE in h.generation_sources]
+    try:
+        verdict = opts.semantic_hypothesis_judge(
+            {
+                "hypotheses": [
+                    {"id": h.id, "explanation": h.explanation, "predicted_observations": h.predicted_observations}
+                    for h in live
+                ],
+                "observations": [o.obs for o in fresh],
+            }
+        )
+    except Exception:
+        return  # fails open
+    contradicted = (verdict or {}).get("contradicted") or []
+    reasons = {c.get("id"): c.get("reason") for c in contradicted}
+    for h in eliminate_contradicted(ctx.hypothesis_set, contradicted):
+        _safe(
+            opts.on_semantic_hypothesis,
+            {"kind": "eliminated", "id": h.id, "explanation": h.explanation, "reason": reasons.get(h.id)},
+        )
+
+
+def _maybe_reopen_for_reviewer_revision(ctx: LoopContext, review: Any) -> str | None:
+    """A reviewer finding on an otherwise finished run reopens the last completed task once with a revision note
+    (TS maybeReopenForReviewerRevision)."""
+    opts = ctx.options
+    if (
+        opts.reviewer_revision is None
+        or ctx.reviewer_revision_done
+        or review.pending_verdict is None
+        or review.reopened_task_ids
+    ):
+        return None
+    if not all(t.status == "COMPLETE" for t in ctx.task_graph.tasks):
+        return None
+    task_id = ctx.last_completed_task_id
+    if not task_id or ctx.task_graph.get_task(task_id) is None:
+        return None
+    try:
+        note = opts.reviewer_revision(review.pending_verdict)
+    except Exception:
+        return None
+    if not note or not note.strip():
+        return None
+    ctx.reviewer_revision_done = True
+    _safe(opts.on_reviewer_revision, {"task_id": task_id, "note": note})
+    return task_id
 
 
 def _record_completion(ctx: LoopContext, task: Task) -> None:
@@ -641,6 +739,7 @@ def _select_and_gate(ctx: LoopContext) -> tuple[str, Task | None, Task | None]:
     generate_update_hypotheses(
         ctx.world_model, ctx.evidence_store, ctx.hypothesis_set, ctx.failure_diagnostics, ctx.memory_state
     )
+    _generate_semantic_hypotheses(ctx)
 
     _node(ctx, "update_diagnostics")
     update_diagnostics(
@@ -944,6 +1043,7 @@ def drive_main_loop(ctx: LoopContext) -> None:
                 tool, ToolAvailability(available=False, fallback_tool=None)
             )
 
+        _judge_semantic_hypotheses(ctx)
         _node(ctx, "update_diagnostics_post_exec")
         update_diagnostics(
             ctx.world_model,
@@ -1018,6 +1118,7 @@ def drive_main_loop(ctx: LoopContext) -> None:
         if succeeded:
             apply_task_outcome(ctx.task_graph, current.id, TaskOutcome(status="COMPLETE", from_execution_layer=True))
             ctx.final_result = exec_result.output
+            ctx.last_completed_task_id = current.id
             _record_completion(ctx, current)
         else:
             if task_accomplished:
@@ -1219,6 +1320,9 @@ def _drive_to_completion(ctx: LoopContext) -> HarnessRunResult:
         _node(ctx, "reviewer_pass")
         review = _run_reviewer_pass(ctx)
         ctx.pending_reviewer_verdict = review.pending_verdict
+        revision_reopened = _maybe_reopen_for_reviewer_revision(ctx, review)
+        if revision_reopened:
+            review.reopened_task_ids.append(revision_reopened)
         if review.reopened_task_ids:
             for task_id in review.reopened_task_ids:
                 task = ctx.task_graph.get_task(task_id)
