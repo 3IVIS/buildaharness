@@ -32,7 +32,7 @@ export const ESCALATION_LAYERS = [
  * never switch one on — it can only degrade an enabled one (no `cheap` form, so to `off`) when the
  * per-turn call budget cannot pay for it. The host says which are enabled (`enabledOptIn`).
  */
-export const OPT_IN_LAYERS = ['source_reliability', 'semantic_hypotheses', 'reviewer_revision', 'experience_learning'] as const
+export const OPT_IN_LAYERS = ['source_reliability', 'semantic_hypotheses', 'reviewer_revision', 'experience_learning', 'semantic_compaction'] as const
 export const EVENT_LAYERS = ['supervisor'] as const
 export const PRESENTATION_LAYERS = ['next_step_options', 'goal_graph', 'steering'] as const
 
@@ -64,6 +64,7 @@ export const LAYER_CLASS: Readonly<Record<Layer, LayerClass>> = {
   semantic_hypotheses: 'opt_in',
   reviewer_revision: 'opt_in',
   experience_learning: 'opt_in',
+  semantic_compaction: 'opt_in',
   supervisor: 'event',
   next_step_options: 'presentation',
   goal_graph: 'presentation',
@@ -93,6 +94,7 @@ export const OPT_IN_EVIDENCE: Readonly<Record<OptInLayer, OptInEvidence>> = {
   semantic_hypotheses: 'suggestive',
   reviewer_revision: 'untested_with_real_model',
   experience_learning: 'untested_with_real_model',
+  semantic_compaction: 'mechanism_verified',
 }
 
 /** The operator flag that turns each opt-in layer on (read once, in the host). */
@@ -101,6 +103,7 @@ export const OPT_IN_FLAG: Readonly<Record<OptInLayer, string>> = {
   semantic_hypotheses: 'AUDIT_SEMANTIC_HYPOTHESES',
   reviewer_revision: 'AUDIT_REVIEWER_REVISION',
   experience_learning: 'AUDIT_EXPERIENCE_LEARNING',
+  semantic_compaction: 'AUDIT_SEMANTIC_COMPACTION',
 }
 
 /** Worst-case LLM calls an enabled opt-in layer draws in one turn (`experience_learning` makes none). */
@@ -109,6 +112,7 @@ export const OPT_IN_CALL_COST: Readonly<Record<OptInLayer, number>> = {
   semantic_hypotheses: 2,
   reviewer_revision: 1,
   experience_learning: 0,
+  semantic_compaction: 1,
 }
 
 export const OPT_IN_DISABLED_TRIGGER = 'opt_in_disabled'

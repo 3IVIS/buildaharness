@@ -42,6 +42,7 @@ import { renderHypothesisNote, hypothesisContextMessage, proposeCompetingExplana
 import type { SemanticHypothesisProposal } from '@buildaharness/harness'
 import { RECOVERY_NOTE_PREFIX, recoveryNoteText } from './recovery-note.js'
 import { AssistantSession, type IndexedMessage, type TranscriptSearchHit } from './assistant-session.js'
+import { semanticCompactionEnabled, summarizeOlderMessages } from './semantic-compaction.js'
 import { AgentLoop, OneLoopPause, type BatchBudgetState, type BatchBudgetTrace, type ToolLoopResult, trimmedAverage, nextItemBudget } from './agent-loop.js'
 import type { TurnIntentClassification, FactCategory } from './turn-intent-classifier.js'
 import { ActionApprovalService } from './action-approval-service.js'
@@ -911,7 +912,10 @@ export class PersonalAssistant {
       if (!('fallThrough' in draftOutcome)) return draftOutcome
     }
 
-    const transcript = await this.session.loadAndCompactTranscript(sessionId)
+    const transcript = await this.session.loadAndCompactTranscript(
+      sessionId,
+      semanticCompactionEnabled() ? (older) => summarizeOlderMessages(older, this.llmClient, this.model, accumulateUsage) : undefined,
+    )
     const { facts, factsBlock } = await this.memoryService.loadFacts(sessionId)
     const { remindersBlock } = await this.memoryService.loadActiveReminders()
     let systemPrompt = `${SYSTEM_PROMPT}${factsBlock}${remindersBlock}`
