@@ -192,3 +192,67 @@ def test_resolve_gather_evidence_paths() -> None:
         raise RuntimeError("x")
 
     assert "[investigation failed]" in resolve_gather_evidence(WorldModel(), directive, broken).rationale
+
+
+# ── Python-only features bridged into the runtime ────────────────────────────
+
+
+def test_on_node_hook_sees_every_node_and_cannot_break_the_run() -> None:
+    seen: list[str] = []
+
+    def hook(name: str, _ctx: object) -> None:
+        seen.append(name)
+        raise RuntimeError("tracing down")
+
+    result = HarnessRuntime().run("do it", ["one"], HarnessRunOptions(on_node=hook, skip_reviewer_pass=True))
+    assert seen == result.node_execution_order
+
+
+def test_exhausted_recovery_budget_halts_a_stalled_run(monkeypatch: pytest.MonkeyPatch) -> None:
+    import harness.progress as progress
+
+    monkeypatch.setattr(progress, "cannot_make_progress", lambda *_a, **_k: True)
+    from harness.recovery import RecoveryBudget
+
+    def boom() -> dict[str, bool]:
+        raise RuntimeError("boom")
+
+    tasks = [Task(id=f"t{i}", description=f"step {i}") for i in range(6)]
+    exhausted = RecoveryBudget(max_plan_revisions=0)
+    opts = HarnessRunOptions(
+        initial_tasks=tasks, tool_executors={"default": boom}, recovery_budget=exhausted, skip_reviewer_pass=True
+    )
+    with pytest.raises(EscalationHalt) as exc:
+        HarnessRuntime().run("do it", [], opts)
+    assert exc.value.blocker.missing_info == ["recovery_budget"]
+
+
+def test_plan_export_runs_each_iteration_and_never_raises(monkeypatch: pytest.MonkeyPatch) -> None:
+    import harness.plan_store as plan_store
+
+    calls: list[int] = []
+
+    def fake_save(**kw: object) -> None:
+        calls.append(int(kw["turn"]))  # type: ignore[call-overload]
+        raise OSError("disk full")
+
+    monkeypatch.setattr(plan_store, "save_plan", fake_save)
+    result = HarnessRuntime().run(
+        "do it", ["a", "b"], HarnessRunOptions(plan_template=object(), skip_reviewer_pass=True)
+    )
+    assert calls and calls[0] == 1 and result.context.task_graph.tasks[1].status == "COMPLETE"
+
+
+def test_db_shaped_experience_store_is_warm_started_and_captures_completions(monkeypatch: pytest.MonkeyPatch) -> None:
+    import harness.experience_store as es
+
+    class DbStore:  # no get_strategy_weights: the DB-backed API shape
+        available = True
+
+    warm: list[object] = []
+    captured: list[str] = []
+    monkeypatch.setattr(es, "warm_start", lambda store, *a: warm.append(a[-2]))
+    monkeypatch.setattr(es, "update_experience_store", lambda **kw: captured.append(kw["completed_task"].id))
+    opts = HarnessRunOptions(experience_store=DbStore(), task_class="docs", skip_reviewer_pass=True)
+    HarnessRuntime().run("do it", ["a"], opts)
+    assert warm == ["docs"] and captured == ["task-0"]

@@ -28,7 +28,7 @@ from __future__ import annotations
 import json
 from collections.abc import Callable, Mapping, Sequence
 from dataclasses import dataclass, field
-from typing import Any
+from typing import Any, cast
 from uuid import uuid4
 
 from ._core_generated import RECOVERY_ACTION_DEPENDENCIES
@@ -73,7 +73,7 @@ from .memory import JournalRetentionPolicy, MemoryState, context_compression
 from .output_contract import OutputContract, OutputContractError, output_validation
 from .parallel_merge import ParallelBranch, reconcile_parallel_branches
 from .process_registry import DEFAULT_REGISTRY, ProcessRegistry
-from .recovery import StrategyState
+from .recovery import RecoveryBudget, StrategyState
 from .replanning import rollback_and_replan
 from .review_gate import review_proposed_change
 from .reviewer import PropagationQueue, reviewer_pass
@@ -285,6 +285,13 @@ class HarnessRunOptions:
     semantic_constraint_judge: Callable[[dict[str, Any]], dict[str, Any]] | None = None
     decider: Callable[[dict[str, Any]], Any] | None = None
     run_investigation: Callable[[dict[str, Any]], list[Any]] | None = None
+    # Python-only features carried over from loop.run_one_iteration (off unless given)
+    recovery_budget: RecoveryBudget | None = None  # bounds stall recovery; exhaustion halts with "recovery_budget"
+    plan_template: Any | None = None  # PlanTemplate: the task graph is exported via plan_store.save_plan each iteration
+    plan_snapshot_dir: Any | None = None
+    task_class: str = ""  # keys the DB-backed ExperienceStore warm start
+    execution_context: Any | None = None  # ExecutionContext handed to the DB-backed update_experience_store
+    on_node: Callable[[str, LoopContext], None] | None = None  # tracing hook: called as each TS node starts
 
 
 @dataclass
@@ -311,6 +318,7 @@ class LoopContext:
     last_failure_match_symptom_count: int = 0
     supervisor_ask_user_count: int = 0
     pending_continuation: str | None = None
+    recovery_budget: RecoveryBudget | None = None
     last_not_accomplished: dict[str, str] | None = None
 
     @property
@@ -361,6 +369,64 @@ class HarnessRunResult:
 
 
 # ── helpers ──────────────────────────────────────────────────────────────────
+
+
+def _node(ctx: LoopContext, name: str) -> None:
+    """Record that TS node `name` ran; the optional `on_node` hook (tracing) never breaks the run."""
+    ctx.node_execution_order.append(name)
+    if ctx.options.on_node is not None:
+        try:
+            ctx.options.on_node(name, ctx)
+        except Exception:
+            pass
+
+
+def _is_ts_store(store: Any) -> bool:
+    """True for TS-shaped stores (InMemory/Unavailable); the DB-backed ExperienceStore is handled by its own API."""
+    return hasattr(store, "get_strategy_weights")
+
+
+def _record_completion(ctx: LoopContext, task: Task) -> None:
+    """Write a completed task to the experience store: TS `updateExperienceStore` for TS-shaped stores, the DB-backed
+    store's `update_experience_store(completed_task, ...)` capture otherwise."""
+    store = ctx.experience_store
+    if not getattr(store, "available", False):
+        return
+    if _is_ts_store(store):
+        store.update_experience_store(
+            f"{task.id}-step-{ctx.steps_used}",
+            {"task_id": task.id, "outcome": "COMPLETE", "step": ctx.steps_used},
+        )
+        return
+    try:
+        from .experience_store import update_experience_store as capture
+
+        capture(
+            completed_task=task,
+            strategy_state=ctx.strategy_state,
+            execution_context=ctx.options.execution_context,
+            experience_store=store,
+        )
+    except Exception:
+        pass  # experience capture is best-effort
+
+
+def _export_plan(ctx: LoopContext) -> None:
+    """Snapshot the task graph through plan_store.save_plan (never raises — INV-10 spirit)."""
+    if ctx.options.plan_template is None:
+        return
+    try:
+        from .plan_store import DEFAULT_SNAPSHOT_DIR, save_plan
+
+        save_plan(
+            run_id=ctx.run_id,
+            turn=ctx.steps_used,
+            task_graph=ctx.task_graph,
+            template=ctx.options.plan_template,
+            snapshot_dir=ctx.options.plan_snapshot_dir or DEFAULT_SNAPSHOT_DIR,
+        )
+    except Exception:
+        pass
 
 
 def _ask_enabled(ctx: LoopContext) -> bool:
@@ -526,13 +592,12 @@ def _select_and_gate(ctx: LoopContext) -> tuple[str, Task | None, Task | None]:
     a failed review / blocked gate), "done" ends the loop, "run" hands the task to `execute`.
     """
     opts = ctx.options
-    order = ctx.node_execution_order
 
     ctx.steps_used += 1
     if ctx.steps_used > ctx.max_steps and not _nothing_left_to_run(ctx):
         raise _budget_halt(ctx, f"Exhausted at step {ctx.steps_used} (no iteration reached completion)")
 
-    order.append("context_compression")
+    _node(ctx, "context_compression")
     context_compression(
         ctx.memory_state,
         ctx.world_model,
@@ -545,13 +610,13 @@ def _select_and_gate(ctx: LoopContext) -> tuple[str, Task | None, Task | None]:
         ctx.caller_state,
     )
 
-    order.append("check_caller_updates")
+    _node(ctx, "check_caller_updates")
     if _poll_caller_updates(ctx):
         _resolve_and_stamp(ctx)
         return "restart", None, None
 
     # ── Sub-step A ──────────────────────────────────────────────────────
-    order.append("detect_contradictions")
+    _node(ctx, "detect_contradictions")
     detect_contradictions(ctx.world_model, ctx.evidence_store, ctx.hypothesis_set, None, ctx.belief_dep_graph)
     if opts.contradiction_checker is not None:
         beliefs = ctx.world_model.beliefs
@@ -572,12 +637,12 @@ def _select_and_gate(ctx: LoopContext) -> tuple[str, Task | None, Task | None]:
                 )
         ctx.last_contradiction_check_count = len(ctx.world_model.beliefs)
 
-    order.append("generate_update_hypotheses")
+    _node(ctx, "generate_update_hypotheses")
     generate_update_hypotheses(
         ctx.world_model, ctx.evidence_store, ctx.hypothesis_set, ctx.failure_diagnostics, ctx.memory_state
     )
 
-    order.append("update_diagnostics")
+    _node(ctx, "update_diagnostics")
     update_diagnostics(
         ctx.world_model,
         ctx.hypothesis_set,
@@ -588,16 +653,16 @@ def _select_and_gate(ctx: LoopContext) -> tuple[str, Task | None, Task | None]:
     )
 
     increment_generation_id(ctx.world_model)
-    order.append("resolve_control_state")
+    _node(ctx, "resolve_control_state")
     _resolve_and_stamp(ctx)
 
     if ctx.task_graph.tasks and all(t.status == "COMPLETE" for t in ctx.task_graph.tasks):
         return "done", None, None
 
-    order.append("update_task_graph")
+    _node(ctx, "update_task_graph")
     update_task_graph(ctx.objective, ctx.world_model, ctx.hypothesis_set, ctx.task_graph)
 
-    order.append("select_task")
+    _node(ctx, "select_task")
     selected = select_task(ctx.task_graph, ctx.control_state)
     if selected.escalate:
         raise _blocker(
@@ -616,17 +681,17 @@ def _select_and_gate(ctx: LoopContext) -> tuple[str, Task | None, Task | None]:
     concurrent = selected.concurrent_task
     apply_task_outcome(ctx.task_graph, current.id, TaskOutcome(status="RUNNING"))
 
-    order.append("estimate_risk")
+    _node(ctx, "estimate_risk")
     risk_action = RiskableAction(module_type="business_logic", metadata={})
     estimate_risk(risk_action, ctx.task_graph, ctx.world_model)
 
-    order.append("estimate_voi")
+    _node(ctx, "estimate_voi")
     voi = estimate_voi(
         ctx.diagnostics, ctx.world_model, ctx.hypothesis_set, ctx.evidence_store.tool_availability_manifest
     )
     del voi  # TS only feeds this into layer-policy gating (not ported); the estimate still runs for its side effect
 
-    order.append("review_proposed_change")
+    _node(ctx, "review_proposed_change")
     review = review_proposed_change(
         {"description": current.description},
         current,
@@ -675,7 +740,7 @@ def _select_and_gate(ctx: LoopContext) -> tuple[str, Task | None, Task | None]:
             )
         return "restart", None, None
 
-    order.append("action_gate")
+    _node(ctx, "action_gate")
     gate_result = action_gate(
         {"required_resources": []},
         control_state=ctx.control_state,
@@ -712,7 +777,6 @@ def _select_and_gate(ctx: LoopContext) -> tuple[str, Task | None, Task | None]:
 def drive_main_loop(ctx: LoopContext) -> None:
     """Run iterations until every task is complete, none can be selected, or an escalation raises EscalationHalt."""
     opts = ctx.options
-    order = ctx.node_execution_order
 
     while True:
         pending = ctx.pending_continuation
@@ -724,7 +788,7 @@ def drive_main_loop(ctx: LoopContext) -> None:
             current = ctx.task_graph.get_task(pending)
             if current is None:
                 continue
-            order.append("action_gate_replay_continuation")
+            _node(ctx, "action_gate_replay_continuation")
             ctx.steps_used += 1
             if ctx.steps_used > ctx.max_steps:
                 raise _budget_halt(ctx, f"Exhausted at step {ctx.steps_used} (no iteration reached completion)")
@@ -736,7 +800,7 @@ def drive_main_loop(ctx: LoopContext) -> None:
                 return
             assert current is not None
 
-        order.append("execute")
+        _node(ctx, "execute")
         proposed = {"description": current.description, "change_type": "file_mutation"}
         tool_fn = opts.tool_executors.get(current.id) or opts.tool_executors.get("default") or _default_tool
         exec_result = execute(
@@ -823,7 +887,8 @@ def drive_main_loop(ctx: LoopContext) -> None:
 
         # ── Sub-step B ──────────────────────────────────────────────────────
         increment_generation_id(ctx.world_model)
-        order.extend(["gather_evidence", "apply_tool_reliability", "update_world_model_post_exec"])
+        for name in ("gather_evidence", "apply_tool_reliability", "update_world_model_post_exec"):
+            _node(ctx, name)
         if exec_result.success:
             executed = _record_evidence(
                 ctx,
@@ -879,7 +944,7 @@ def drive_main_loop(ctx: LoopContext) -> None:
                 tool, ToolAvailability(available=False, fallback_tool=None)
             )
 
-        order.append("update_diagnostics_post_exec")
+        _node(ctx, "update_diagnostics_post_exec")
         update_diagnostics(
             ctx.world_model,
             ctx.hypothesis_set,
@@ -905,10 +970,10 @@ def drive_main_loop(ctx: LoopContext) -> None:
                         strategy_affinity=resolve_semantic_match_strategy(m, entries),
                     )
 
-        order.append("resolve_control_state_b")
+        _node(ctx, "resolve_control_state_b")
         _resolve_and_stamp(ctx)
 
-        order.append("verify")
+        _node(ctx, "verify")
         if opts.skip_verification:
             verify_result = VerificationResult(layer_results=[], has_critical_failure=False, adversarial_passed=None)
         else:
@@ -925,7 +990,7 @@ def drive_main_loop(ctx: LoopContext) -> None:
             )
             _safe(opts.on_verification, verify_result)
 
-        order.append("post_exec_gate")
+        _node(ctx, "post_exec_gate")
         post_gate_passed = post_exec_gate(
             exec_result.output,
             verify_result,
@@ -937,7 +1002,7 @@ def drive_main_loop(ctx: LoopContext) -> None:
             resolver=_resolver_for(ctx),
         )
 
-        order.append("update_task_state")
+        _node(ctx, "update_task_state")
         succeeded = post_gate_passed and exec_result.success and task_accomplished
         if opts.experience_learning:
             matched = ctx.failure_diagnostics.matched_pattern
@@ -953,11 +1018,7 @@ def drive_main_loop(ctx: LoopContext) -> None:
         if succeeded:
             apply_task_outcome(ctx.task_graph, current.id, TaskOutcome(status="COMPLETE", from_execution_layer=True))
             ctx.final_result = exec_result.output
-            if getattr(ctx.experience_store, "available", False):
-                ctx.experience_store.update_experience_store(
-                    f"{current.id}-step-{ctx.steps_used}",
-                    {"task_id": current.id, "outcome": "COMPLETE", "step": ctx.steps_used},
-                )
+            _record_completion(ctx, current)
         else:
             if task_accomplished:
                 ctx.last_not_accomplished = None
@@ -999,6 +1060,7 @@ def drive_main_loop(ctx: LoopContext) -> None:
 
         ctx.strategy_state.completion_history.append(sum(1 for t in ctx.task_graph.tasks if t.status == "COMPLETE"))
         ctx.strategy_state.risk_state_history.append(risk_summary(ctx.control_state))
+        _export_plan(ctx)
 
         if ctx.steps_used >= int(0.8 * ctx.max_steps):
             vh = ctx.diagnostics.verification_health
@@ -1021,7 +1083,7 @@ def _rollback_and_replan(ctx: LoopContext, current: Task) -> None:
     from .progress import cannot_make_progress
 
     opts = ctx.options
-    ctx.node_execution_order.append("rollback_replan")
+    _node(ctx, "rollback_replan")
     rollback_fn = opts.rollback_executors.get(current.id) or opts.rollback_executors.get("default")
 
     directive: Any = None
@@ -1081,6 +1143,18 @@ def _rollback_and_replan(ctx: LoopContext, current: Task) -> None:
         and directive is not None
         and str(directive.rationale).startswith(INVESTIGATION_DONE_PREFIX)
     )
+    budget = ctx.recovery_budget
+    if (
+        budget is not None
+        and budget.is_exhausted()
+        and cannot_make_progress(ctx.strategy_state, ctx.failure_diagnostics)
+    ):
+        raise _blocker(
+            ctx,
+            "cannot_make_progress",
+            ["recovery_budget"],
+            f"{current.description} | recovery budget exhausted".strip()[:500],
+        )
     result = rollback_and_replan(
         current,
         ctx.strategy_state,
@@ -1088,7 +1162,9 @@ def _rollback_and_replan(ctx: LoopContext, current: Task) -> None:
         ctx.task_graph,
         ctx.world_model,
         ctx.caller_state,
-        ctx.experience_store if getattr(ctx.experience_store, "available", False) else None,
+        ctx.experience_store
+        if getattr(ctx.experience_store, "available", False) and _is_ts_store(ctx.experience_store)
+        else None,
         rollback_fn,
         directive,
         requeue_leaf_on_local,
@@ -1096,6 +1172,10 @@ def _rollback_and_replan(ctx: LoopContext, current: Task) -> None:
     ctx.strategy_state = result.new_strategy_state
     if result.replan_scope == "GLOBAL":
         ctx.task_graph = result.new_task_graph
+    if ctx.recovery_budget is not None and (
+        result.replan_scope == "GLOBAL" or getattr(directive, "action", None) in ("REFRAME_PLAN", "REDIRECT_STRATEGY")
+    ):
+        ctx.recovery_budget = ctx.recovery_budget.consume(plan_revisions=1)
     if result.failure_mode_switch:
         _safe(opts.on_failure_mode_switch, {"task_id": current.id, **result.failure_mode_switch})
 
@@ -1123,7 +1203,8 @@ def _run_reviewer_pass(ctx: LoopContext) -> Any:
 
 
 def _learn_from_run(ctx: LoopContext) -> None:
-    if not ctx.options.experience_learning or not getattr(ctx.experience_store, "available", False):
+    store = ctx.experience_store
+    if not ctx.options.experience_learning or not getattr(store, "available", False) or not _is_ts_store(store):
         return
     try:
         learn_from_journal(ctx.memory_state.journal, ctx.experience_store)
@@ -1135,7 +1216,7 @@ def _drive_to_completion(ctx: LoopContext) -> HarnessRunResult:
     drive_main_loop(ctx)
 
     if not ctx.options.skip_reviewer_pass:
-        ctx.node_execution_order.append("reviewer_pass")
+        _node(ctx, "reviewer_pass")
         review = _run_reviewer_pass(ctx)
         ctx.pending_reviewer_verdict = review.pending_verdict
         if review.reopened_task_ids:
@@ -1145,10 +1226,10 @@ def _drive_to_completion(ctx: LoopContext) -> HarnessRunResult:
                     task.status = "PENDING"
                     ctx.task_graph.changed = True
             drive_main_loop(ctx)
-            ctx.node_execution_order.append("reviewer_pass_2")
+            _node(ctx, "reviewer_pass_2")
             ctx.pending_reviewer_verdict = _run_reviewer_pass(ctx).pending_verdict
 
-    ctx.node_execution_order.append("output_validation")
+    _node(ctx, "output_validation")
     judge = ctx.options.semantic_constraint_judge
     validation = output_validation(
         ctx.final_result, ctx.output_contract, ctx.caller_state, skip_caller_constraints=judge is not None
@@ -1224,11 +1305,24 @@ class HarnessRuntime:
             strategy_state=init.strategy_state,
             world_model=init.world_model,
             control_state=init.control_state,
+            recovery_budget=opts.recovery_budget,
         )
         if getattr(store, "available", False):
-            warm_start_from_store(
-                store, ctx.strategy_state, ctx.failure_diagnostics, ctx.dep_graph_budget, ctx.task_graph
-            )
+            if _is_ts_store(store):
+                warm_start_from_store(
+                    store, ctx.strategy_state, ctx.failure_diagnostics, ctx.dep_graph_budget, ctx.task_graph
+                )
+            else:  # the DB-backed ExperienceStore seeds through its own warm_start
+                from .experience_store import warm_start
+
+                warm_start(
+                    cast(Any, store),
+                    ctx.strategy_state,
+                    ctx.failure_diagnostics,
+                    ctx.task_graph,
+                    opts.task_class or None,
+                    ctx.dep_graph_budget,
+                )
 
         try:
             result = _drive_to_completion(ctx)

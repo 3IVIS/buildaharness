@@ -28,6 +28,7 @@ its tests rewritten to the TS behaviour; new coverage is in `adapter/tests/test_
 | 0 | checkpoints (`harness-checkpoint`), pause/resume/`pendingProposal` replay, layer policy/budget/outcome, turn signals, golden baseline, `semantic_compaction` layer, semantic hypotheses, `reviewerRevision` | ⬜ out of scope: live in the TS async/checkpointing layer |
 | 0 | `semanticConstraintJudge` hook | ✅ (`HarnessRunOptions.semantic_constraint_judge`) |
 | 20 | Runtime-vs-loop ordering audit, `resolve_supervisor_directive`, `coerce_for_wired_actions`, `resolve_gather_evidence`, `validate_recovery_action_dependencies` | ✅ |
+| 20 | Python-only features bridged into `HarnessRuntime` (phase 1): `RecoveryBudget` (stall halt + plan-revision consumption), `plan_store.save_plan` export each iteration, `on_node` tracing hook, DB-backed `ExperienceStore` (warm start + completion capture), `task_class`/`execution_context` | ✅ |
 | 20 | Legacy `loop.run_one_iteration` kept as the old skeleton (not the TS order); no adapter calls it | 🟡 deliberate: use `HarnessRuntime` for TS-order runs |
 | 1 | `update_diagnostics` (all ten dimensions, dep-class-gap annotation, matched pattern, TS signature, `normalise` input forms) | ✅ (function ported; the Python loop still does not call it per iteration — it never did) |
 | 2 | Belief graph (`derived_from_edges`, `verified`, list frontier, `{source,target}` queue, decay 0.05, single-pass `propagate_beliefs`) | ✅ |
