@@ -422,3 +422,43 @@ async def await_clarification(run_id: str, db: AsyncSession) -> Any | None:
     await _save(run_id, state, db)
 
     return PendingUpdate(update_type=update_type, payload=payload)
+
+
+def handle_escalation_response(
+    caller_state: Any,
+    human_response: dict[str, Any],
+    world_model: Any,
+    task_graph: Any,
+    output_contract: Any,
+    diagnostics: Any,
+    evidence_store: Any | None = None,
+    hypothesis_set: Any | None = None,
+) -> None:
+    """Apply a human's answer to an escalation (TS handleEscalationResponse).
+
+    Feeds the response through CallerState.inject_clarification and, when that flags a constraint
+    change, through the same shared apply_constraint_change_propagation() the external-update poll uses.
+    """
+    from .caller_state import inject_clarification
+    from .constraint_propagation import apply_constraint_change_propagation
+
+    inject_clarification(caller_state, human_response)
+    if caller_state.constraints_changed:
+        apply_constraint_change_propagation(
+            caller_state,
+            world_model,
+            task_graph,
+            output_contract,
+            diagnostics,
+            evidence_store=evidence_store,
+            hypothesis_set=hypothesis_set,
+        )
+
+
+def escalate_budget_exhausted(step_count: int, max_steps: int) -> dict[str, Any]:
+    """TS escalateBudgetExhausted: the plain-data description of a budget-exhaustion escalation."""
+    return {
+        "escalated": True,
+        "reason": "budget_exhausted",
+        "missing_info": [f"Step count {step_count} reached max_steps limit of {max_steps}"],
+    }

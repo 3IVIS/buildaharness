@@ -145,7 +145,8 @@ def test_T02_constraint_update_propagates():
     result = check_external_updates(channel, cs, wm, tg, diag)
 
     assert result is True, "Must return True when an update is processed"
-    assert cs.constraints_changed is True, "constraints_changed must be True after update"
+    # TS applyConstraintChangePropagation clears the flag itself once propagation has run.
+    assert cs.constraints_changed is False, "constraints_changed is cleared after propagation"
     assert wm.generation_id > initial_gen, "generation_id must be incremented"
     # Task t1 (database) should remain; t2 (frontend) should be BLOCKED
     t2_after = next(t for t in tg.tasks if t.id == "t2")

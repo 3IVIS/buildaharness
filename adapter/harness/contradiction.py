@@ -110,6 +110,7 @@ def detect_pairwise_contradictions(beliefs: list[Belief]) -> list[Contradiction]
                     severity=cast(ContradictionSeverity, severity),
                     scope="local",
                     involved_belief_ids=[b_a.id, b_b.id],
+                    description=f'Pairwise contradiction between "{b_a.id}" and "{b_b.id}"',
                 )
             )
     return results
@@ -152,7 +153,8 @@ def detect_set_level_contradictions(beliefs: list[Belief]) -> list[Contradiction
                         type="set-level",
                         severity="HIGH",
                         scope="task",
-                        involved_belief_ids=list(triple),
+                        involved_belief_ids=[id_a, id_b, id_c],
+                        description=f"Set-level contradiction in triple [{id_a}, {id_b}, {id_c}]",
                     )
                 )
     return results
@@ -175,8 +177,13 @@ def detect_temporal_contradictions(
         # Gather source references from the belief's derivation chain and evidence IDs
         belief_sources = set(belief.derived_from) | set(belief.supporting_evidence)
         for change in environment_change_log:
-            affected_source = change.get("affected_source", "")
-            if not affected_source or affected_source not in belief_sources:
+            # TS EnvironmentChange.affected_paths: string[] (detect-contradictions.ts). The legacy
+            # single-string `affected_source` key is still read so older change-log entries keep working.
+            affected = list(change.get("affected_paths") or [])
+            legacy = change.get("affected_source")
+            if legacy:
+                affected.append(legacy)
+            if not any(p in belief_sources for p in affected):
                 continue
             change_ts_raw = change.get("timestamp") or change.get("recorded_at")
             if change_ts_raw is None:
@@ -206,6 +213,9 @@ def detect_temporal_contradictions(
                     severity=cast(ContradictionSeverity, severity),
                     scope="local",
                     involved_belief_ids=[belief.id],
+                    description=(
+                        f'Temporal contradiction: belief "{belief.id}" invalidated by change "{change.get("id", "")}"'
+                    ),
                 )
             )
     return results
@@ -241,6 +251,7 @@ def detect_abstraction_contradictions(
                         severity="LOW",
                         scope="local",
                         involved_belief_ids=[belief.id],
+                        description=f'Abstraction contradiction: belief "{belief.id}" stated at line-level granularity',
                     )
                 )
     return results
@@ -289,8 +300,11 @@ def detect_contradictions(
     evidence_store: EvidenceStore,
     hypothesis_set: HypothesisSet,
     task_graph: dict[str, Any] | None = None,
+    belief_dep_graph: Any | None = None,
 ) -> list[Contradiction]:
-    """Orchestrate all four detection functions and store results on the world model.
+    """Orchestrate all four detection functions, store results on the world model and apply the
+    resolution policy to each (TS detectContradictions does both: it pushes the contradiction and
+    calls applyResolutionPolicy).
 
     Never raises — SYSTEM_BREAKING contradictions enter world_model.contradictions[]
     via the same add_contradiction() path as LOW contradictions (INV-05).
@@ -308,6 +322,7 @@ def detect_contradictions(
 
     for c in all_contradictions:
         world_model.add_contradiction(c)
+        apply_resolution_policy(c, world_model, belief_dep_graph=belief_dep_graph)
 
     return all_contradictions
 
@@ -320,13 +335,11 @@ def _resolve_low(contradiction: Contradiction, world_model: WorldModel) -> None:
     for belief in world_model.beliefs:
         if belief.id not in contradiction.involved_belief_ids:
             continue
-        applied_ids: set[str] = getattr(belief, "applied_contradiction_ids", set())
-        if contradiction.id in applied_ids:
+        if contradiction.id in belief.applied_contradiction_ids:
             continue
         belief.confidence = max(0.0, belief.confidence * 0.9)
-        applied_ids.add(contradiction.id)
-        belief.applied_contradiction_ids = applied_ids  # type: ignore[attr-defined]
-        belief.pending_sweep = True  # type: ignore[attr-defined]
+        belief.applied_contradiction_ids.append(contradiction.id)
+        belief.pending_sweep = True
 
 
 def _resolve_medium(
@@ -338,13 +351,11 @@ def _resolve_medium(
     for belief in world_model.beliefs:
         if belief.id not in contradiction.involved_belief_ids:
             continue
-        applied_ids: set[str] = getattr(belief, "applied_contradiction_ids", set())
-        if contradiction.id in applied_ids:
+        if contradiction.id in belief.applied_contradiction_ids:
             continue
         belief.confidence = max(0.0, belief.confidence * 0.75)
-        applied_ids.add(contradiction.id)
-        belief.applied_contradiction_ids = applied_ids  # type: ignore[attr-defined]
-        belief.pending_sweep = True  # type: ignore[attr-defined]
+        belief.applied_contradiction_ids.append(contradiction.id)
+        belief.pending_sweep = True
         if belief_dep_graph is not None and belief.id not in belief_dep_graph.propagation_queue:
             belief_dep_graph.propagation_queue.append(belief.id)
 
@@ -355,26 +366,20 @@ def _resolve_high(
     task_graph: dict[str, Any] | None,
     belief_dep_graph: Any | None = None,
 ) -> None:
-    """Block all task_graph tasks that depend on involved beliefs; add to invalidation frontier."""
+    """Mark involved beliefs applied and add them to the invalidation frontier (no task blocking, as TS)."""
     for belief in world_model.beliefs:
         if belief.id not in contradiction.involved_belief_ids:
             continue
-        applied_ids: set[str] = getattr(belief, "applied_contradiction_ids", set())
-        if contradiction.id in applied_ids:
+        if contradiction.id in belief.applied_contradiction_ids:
             continue
-        applied_ids.add(contradiction.id)
-        belief.applied_contradiction_ids = applied_ids  # type: ignore[attr-defined]
+        belief.applied_contradiction_ids.append(contradiction.id)
+        belief.pending_sweep = True
         if belief_dep_graph is not None:
             belief_dep_graph.invalidation_frontier.add(belief.id)
 
-    if task_graph:
-        for task in task_graph.values():
-            if not isinstance(task, dict):
-                continue
-            task_belief_deps = task.get("belief_dependencies", [])
-            if any(bid in contradiction.involved_belief_ids for bid in task_belief_deps):
-                task["status"] = "BLOCKED"
-                task["block_reason"] = "high_contradiction"
+    # TS resolveHigh only marks the belief applied and grows the invalidation frontier; it never blocks
+    # tasks. `task_graph` is kept in the signature for callers but is intentionally unused.
+    del task_graph
 
 
 def _resolve_system_breaking(

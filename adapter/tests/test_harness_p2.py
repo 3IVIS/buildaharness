@@ -396,9 +396,9 @@ def test_t13_low_severity_reduces_confidence_10_percent():
     assert task_graph["task-1"]["status"] == "pending"  # task graph untouched
 
 
-def test_t14_high_severity_blocks_dependent_tasks():
-    """T14: HIGH severity contradiction flags all task_graph tasks that depend on the
-    involved beliefs as BLOCKED."""
+def test_t14_high_severity_does_not_block_tasks():
+    """T14: HIGH severity contradiction only marks the beliefs applied / grows the invalidation
+    frontier — it never blocks task_graph tasks (twin of TS resolveHigh in detect-contradictions.ts)."""
     wm = WorldModel()
     belief = _belief("component Y is running", confidence=0.9)
     wm.beliefs.append(belief)
@@ -417,9 +417,10 @@ def test_t14_high_severity_blocks_dependent_tasks():
     }
     apply_resolution_policy(contradiction, wm, task_graph=task_graph)
 
-    assert task_graph["task-a"]["status"] == "BLOCKED"
-    assert task_graph["task-a"]["block_reason"] == "high_contradiction"
-    assert task_graph["task-b"]["status"] == "pending"  # unrelated task untouched
+    assert task_graph["task-a"]["status"] == "pending"
+    assert "block_reason" not in task_graph["task-a"]
+    assert task_graph["task-b"]["status"] == "pending"
+    assert contradiction.id in wm.beliefs[0].applied_contradiction_ids
 
 
 def test_t15_resolution_policy_idempotent():

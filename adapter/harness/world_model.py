@@ -53,6 +53,11 @@ class Belief:
     # E42/E51, contradicts B13") queryable from the belief itself, not only recoverable
     # by scanning world_model.contradictions[].involved_belief_ids for this id.
     contradicts: list[str] = field(default_factory=list)
+    # Twin of TS Belief.applied_contradiction_ids / pending_sweep (state/world-model.ts): the resolution
+    # policy's idempotency ledger. Persisted (it used to be a transient attribute that a to_dict/from_dict
+    # round-trip dropped, so a restored run would double-penalise the same contradiction).
+    applied_contradiction_ids: list[str] = field(default_factory=list)
+    pending_sweep: bool = False
 
     def to_dict(self) -> dict[str, Any]:
         return {
@@ -61,8 +66,11 @@ class Belief:
             "confidence": self.confidence,
             "derived_from": self.derived_from,
             "supporting_evidence": self.supporting_evidence,
+            "reliability": self.reliability,
             "recorded_at": self.recorded_at.isoformat(),
             "contradicts": self.contradicts,
+            "applied_contradiction_ids": list(self.applied_contradiction_ids),
+            "pending_sweep": self.pending_sweep,
         }
 
     @classmethod
@@ -73,8 +81,11 @@ class Belief:
             confidence=d["confidence"],
             derived_from=d["derived_from"],
             supporting_evidence=d.get("supporting_evidence", []),
+            reliability=d.get("reliability", ""),
             recorded_at=datetime.fromisoformat(d["recorded_at"]) if "recorded_at" in d else datetime.now(UTC),
             contradicts=d.get("contradicts", []),
+            applied_contradiction_ids=list(d.get("applied_contradiction_ids", [])),
+            pending_sweep=bool(d.get("pending_sweep", False)),
         )
 
 

@@ -11,6 +11,24 @@ Only `resolve_control_state`, `verify` (status only), `ask_question` and `superv
 * **RESOLVED (mechanism):** `HARNESS_LEXICAL` switches (`harness_lexical_active` / `harnessLexicalActive`) now exist on both sides for: `negation-pairs` (pairwise **and** set-level), `granularity-markers`, `criterion-scope`, `system-error-symptoms`, `failure-exact-match`, `review-negation`, `review-phrases`, `constraint-negation`, `required-sections`, `criterion-substring`, `criterion-proximity` (TS) / `assumption-overlap`, `evidence-negation`, `failure-class-seed` (Py), `change-scope-keywords` (Py, returns 0.0 to mimic TS). **Still to align:** the key sets are not identical (Python-only: `assumption-overlap`, `evidence-negation`, `failure-class-seed`, `change-scope-keywords`, `required-sections`; TS-only: `criterion-proximity`), and the gated code paths they protect still differ as described below.
 * **NEW TS-only (add to Python):** `semanticConstraintJudge` hook + `outputValidation(..., {skipCallerConstraints})`; budget-answer handling (`takeBudgetAnswers`, `DEFAULT_BUDGET_EXTENSION=10` exported from `ask-question.ts`, "Continue" extends `maxSteps`, "Stop" cancels); `semantic_compaction` opt-in layer in `layer-policy.ts` (`AUDIT_SEMANTIC_COMPACTION`); false-budget-halt fix when all tasks COMPLETE; resume polls the budget answer before halting. Python `build_budget_exhausted_question` should share the same constant and equivalent resume handling in its outer driver.
 
+## Fix status (Python brought in line with TS)
+
+Legend: ✅ fixed on this branch · ⏳ in progress · ⬜ not started
+
+| § | Item | Status |
+|---|---|---|
+| 6 | `split(/\s+/)` tokenisation (`split_ws`) in success-criteria / scope checks | ✅ |
+| 6 | `add_constraint` / `add_success_criteria` in `inject_clarification` | ✅ |
+| 6 | `cancel_task_graph` + `cancel_current` handling in `check_external_updates` | ✅ |
+| 6 | `apply_constraint_change_propagation` bumps generation + clears `constraints_changed`; dedupes contradictions by id | ✅ |
+| 0/18 | `handle_escalation_response`, `escalate_budget_exhausted` | ✅ |
+| 5 | Detectors set `description` (same text as TS) | ✅ |
+| 5 | `detect_contradictions` applies the resolution policy | ✅ |
+| 5 | Temporal detection reads `affected_paths` (legacy `affected_source` still accepted) | ✅ |
+| 5 | HIGH resolution no longer blocks tasks | ✅ |
+| 2 | `Belief.applied_contradiction_ids` / `pending_sweep` / `reliability` persisted | ✅ |
+| 6 | Kept on purpose: Python `user_clarification` observation (TS documents the same outcome for its resumed run) | note |
+
 Legend: **[B]** behaviour differs (outputs diverge), **[M]** missing in Python, **[S]** shape/API/default differs.
 
 ---

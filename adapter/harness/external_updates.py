@@ -126,10 +126,9 @@ def check_external_updates(
     Transport or parse failures return False silently — the loop never crashes
     due to channel unavailability.
     """
-    from .caller_state import inject_clarification
-    from .constraint_propagation import apply_constraint_change_propagation
+    from .caller_state import inject_clarification, reset_constraints_changed
+    from .constraint_propagation import apply_constraint_change_propagation, cancel_task_graph
     from .output_contract import OutputContract
-    from .staleness import increment_generation_id
     from .world_model import Observation
 
     try:
@@ -142,11 +141,8 @@ def check_external_updates(
 
     inject_clarification(caller_state, update.payload)
 
-    # Trajectory Supervisor ASK_USER (S3) — a clarification answer is also recorded as a
-    # first-class world-model Observation with source="user_clarification", so staleness
-    # and contradiction detection re-run over it. (The Python Observation has no
-    # derived_from field — INV-01 is belief-level; provenance here is source +
-    # caller_state.clarification_history, which inject_clarification() just appended to.)
+    # Python-only: the resumed answer is also recorded as a HIGH-provenance user_clarification
+    # observation (harness-runtime.ts documents the same outcome for its resumed run).
     if update.update_type == "clarification" and world_model is not None and hasattr(world_model, "add_observation"):
         answer = _clarification_answer_text(update.payload)
         if answer:
@@ -160,9 +156,17 @@ def check_external_updates(
                 )
             )
 
+    if not caller_state.constraints_changed:
+        return False
+
+    # TS checkCallerUpdates: `cancel_current: true` cancels the whole graph instead of re-scoping it.
+    if update.payload.get("cancel_current") is True:
+        cancel_task_graph(task_graph)
+        world_model.generation_id += 1
+        reset_constraints_changed(caller_state)
+        return True
+
     oc = output_contract if output_contract is not None else OutputContract()
+    # apply_constraint_change_propagation bumps generation_id and clears constraints_changed itself.
     apply_constraint_change_propagation(caller_state, world_model, task_graph, oc, diagnostics)
-
-    increment_generation_id(world_model)
-
     return True

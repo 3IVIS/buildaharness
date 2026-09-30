@@ -43,8 +43,14 @@ from .belief_graph import (
     propagate_beliefs,
     propagate_single_update,
 )
-from .caller_state import CallerState, inject_clarification, reset_constraints_changed, update_success_criteria
-from .constraint_propagation import apply_constraint_change_propagation, revalidate_task_graph
+from .caller_state import (
+    CallerState,
+    inject_clarification,
+    reset_constraints_changed,
+    split_ws,
+    update_success_criteria,
+)
+from .constraint_propagation import apply_constraint_change_propagation, cancel_task_graph, revalidate_task_graph
 from .contradiction import (
     apply_resolution_policy,
     assign_system_breaking_severity,
@@ -90,6 +96,8 @@ from .escalation import (
     await_clarification,
     batch_questions,
     escalate,
+    escalate_budget_exhausted,
+    handle_escalation_response,
     make_questions_batch,
     refine_deferred_batch,
     validate_ask_response,
@@ -512,6 +520,7 @@ __all__ = [
     "build_manifest",
     "build_review_failure_question",
     "build_strategy_ordering",
+    "cancel_task_graph",
     "cannot_make_progress",
     "check_abstraction_alignment",
     "check_caller_specific_constraints",
@@ -569,6 +578,7 @@ __all__ = [
     "eliminate",
     "enforce_diversity",
     "escalate",
+    "escalate_budget_exhausted",
     "estimate_risk",
     "estimate_value_of_information",
     "evaluate_candidate_strategy_weights",
@@ -581,6 +591,7 @@ __all__ = [
     "get_envelope",
     "get_next_strategy",
     "get_strategy_with_experience",
+    "handle_escalation_response",
     "increment_generation_id",
     "initialize_harness",
     "inject_clarification",
@@ -627,6 +638,7 @@ __all__ = [
     "should_compress",
     "should_use_pessimistic_blocking",
     "softmax_strategy_policy",
+    "split_ws",
     "staleness_check",
     "staleness_sweep",
     "supervisor_enabled",
