@@ -415,3 +415,11 @@ Result: **49 PASS, 0 tracked discrepancies, 0 untracked.**
 ```bash
 node scripts/harness-conformance/compare-ask-question.mjs   # cross-language diff (CI gate)
 ```
+
+
+## Checkpoint cross-resume (`compare-checkpoint.mjs`)
+
+A run paused by one runtime must resume in the other and finish exactly as an uninterrupted run does. The script pauses
+each runtime at a proposal and at an iteration end, feeds the checkpoint to the other one and compares a projection of the
+outcome (final result, task statuses, last node). Run it with `PYTHON=<python with the adapter deps> node
+scripts/harness-conformance/compare-checkpoint.mjs` after `npm ci --workspace=packages/harness`.

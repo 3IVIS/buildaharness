@@ -3,7 +3,7 @@
 **Branch: `semantic-constraint-check`** (latest remote branch, 2026-09-30 10:12 UTC). The first pass was written on `main`; every item was re-checked against this branch's diff (`main...HEAD`, incl. its Python changes) and is marked below. Items marked **RESOLVED on this branch** no longer need action.
 
 Scope: `adapter/harness/*.py` vs `packages/harness/src/**`. TS is the reference.
-Method: static, side-by-side read of each paired module. I did **not** run `scripts/harness-conformance/*` (no `node_modules` in this checkout).
+Method: static, side-by-side read of each paired module, then verified against the real TS: `npm ci --workspace=packages/harness` (Node 22 is installed; only `node_modules` was missing), TS harness tests 751/751, and `scripts/harness-conformance/compare{,-verify,-ask-question,-supervisor,-checkpoint}.mjs` all green (53 + 25 + 49 + 20 fixtures, 0 tracked, 0 untracked, plus the cross-runtime checkpoint resume).
 Only `resolve_control_state`, `verify` (status only), `ask_question` and `supervisor` have cross-language fixtures today. Everything below outside those is unguarded.
 
 ### Changes on this branch that affect this list
@@ -35,6 +35,7 @@ its tests rewritten to the TS behaviour; new coverage is in `adapter/tests/test_
 | 20 | Phase 4: semantic hypotheses (`semantic_hypotheses` / `semantic_hypothesis_judge` hooks, once-per-run generation, per-iteration judging, fail-open) and `reviewer_revision` (reopens the last completed task once) in `HarnessRuntime` | ✅ |
 | 20 | Phase 5a (wire shapes): every state structure's `to_dict()` now validates against a mirror of the TS zod schemas (`adapter/tests/ts_state_schemas.py`, 39 checks incl. populated state and round trips). Fixed: `Belief.contradicts` (Python-only, now rebuilt by `WorldModel.from_dict`), `BeliefDepGraph.dep_graph_quality`, `Task.completed_evidence` no longer serialised; `Task.block_reason` omitted when unset; `CallerState.last_update` and `Diagnostics.dep_class_gap_annotation` never null | ✅ |
 | 20 | Phase 5b: `harness/checkpoint.py` (TS `harness-checkpoint.ts`: schema v2, v1 migration, `CheckpointSchemaError`, store save/load/delete) and `HarnessRuntime.start()/resume()`; `drive_main_loop` is a generator yielding at the TS suspend points (proposal before execute, continuation, end of iteration). Wire format is the TS one (camelCase top level, TS state shapes), so a checkpoint can be resumed by either runtime. `run()` stays the no-pause convenience | ✅ |
+| 20 | Phase 5c: `scripts/harness-conformance/compare-checkpoint.mjs` (+ `run-ts-checkpoint.mts`, `run_py_checkpoint.py`): a checkpoint paused by TS resumes in Python and vice versa (pause at proposal and at iteration end) and ends identically to an uninterrupted run — verified, both directions | ✅ |
 | 1 | `update_diagnostics` (all ten dimensions, dep-class-gap annotation, matched pattern, TS signature, `normalise` input forms) | ✅ (function ported; the Python loop still does not call it per iteration — it never did) |
 | 2 | Belief graph (`derived_from_edges`, `verified`, list frontier, `{source,target}` queue, decay 0.05, single-pass `propagate_beliefs`) | ✅ |
 | 2 | `update_world_model` / `recompute_belief_health`, staleness sweep on `affected_paths`, `Belief.applied_contradiction_ids`/`pending_sweep`/`reliability` persisted | ✅ |
@@ -284,4 +285,4 @@ New Python helpers for the runtime: `supervisor.resolve_supervisor_directive` / 
 * ~~`harness-runtime.ts` vs `loop.py` step ordering~~ → audited in §20.
 * Primitives (`blend_engine`, `multi_source_reducer`, `taxonomy_classifier`, `turn_context`, `preference_extractor`), `lexical_*`, `process_*`, `script_utils`, `normalise` (entropy), `ask_question.py`, `trajectory_digest`, `investigation` details: spot-checked, look mirrored; not line-audited.
 * Python-only modules with no TS twin (`plan_store`, `plan_schema`, `execution_boundary`, `provenance`, `semantic_checks`, `langfuse_tracing`, `tool_manifest`, `node_compilers`, `state_store`): decide per module whether TS should gain them or Python should drop them.
-* Conformance suites were not executed (no `node_modules`); run `node scripts/harness-conformance/compare*.mjs` to confirm the tracked items are still the only red ones.
+* Conformance suites: executed, all green (see the Method line at the top).
