@@ -25,8 +25,8 @@ its tests rewritten to the TS behaviour; new coverage is in `adapter/tests/test_
 | 0 | `_maybe_resolve` resolves in place + `resolver` argument | ✅ |
 | 0 | Budget-answer handling (`take_budget_answers`, `DEFAULT_BUDGET_EXTENSION`) | ✅ |
 | 0 | `HarnessRuntime` / `driveMainLoop` (sync twin in `harness/runtime.py`, see §20), `initialize_harness` building all state (`initialize_harness_state`) | ✅ |
-| 0 | layer policy/budget/outcome, turn signals, golden baseline, `semantic_compaction` layer |
-| 0 | checkpoints (`harness-checkpoint`), pause/resume, `pendingProposal` replay | ✅ see §20 phase 5b | ⬜ out of scope: live in the TS async/checkpointing layer |
+| 0 | layer policy/budget/outcome, turn signals, golden baseline, `semantic_compaction` layer | ⬜ out of scope: TS app-layer concerns (see §20) |
+| 0 | checkpoints (`harness-checkpoint`), pause/resume, `pendingProposal` replay | ✅ see §20 phase 5b |
 | 0 | `semanticConstraintJudge` hook | ✅ (`HarnessRunOptions.semantic_constraint_judge`) |
 | 20 | Runtime-vs-loop ordering audit, `resolve_supervisor_directive`, `coerce_for_wired_actions`, `resolve_gather_evidence`, `validate_recovery_action_dependencies` | ✅ |
 | 20 | Python-only features bridged into `HarnessRuntime` (phase 1): `RecoveryBudget` (stall halt + plan-revision consumption), `plan_store.save_plan` export each iteration, `on_node` tracing hook, DB-backed `ExperienceStore` (warm start + completion capture), `task_class`/`execution_context` | ✅ |
