@@ -67,7 +67,7 @@ def _evidence(obs: str = "test obs", reliability: ReliabilityClass = "HIGH", sou
         reliability=reliability,
         source=source,
         evidence_type="OBSERVATION",
-        freshness=1.0,
+        freshness="2026-01-01T00:00:00+00:00",
     )
 
 

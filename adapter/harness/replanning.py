@@ -13,7 +13,7 @@ from collections.abc import Callable
 from dataclasses import dataclass, replace
 from typing import TYPE_CHECKING, Any, Literal
 
-from .recovery import StrategyState
+from .recovery import StrategyState, StrategyType
 from .task_graph import Task, TaskGraph, validate_task_graph
 
 if TYPE_CHECKING:
@@ -207,7 +207,7 @@ def rollback_and_replan(
             idx = ordering.index(strategy_state.current_strategy)
         except ValueError:
             idx = -1
-        next_strategy = redirect_hint or failure_mode_hint or ordering[min(idx + 1, len(ordering) - 1)]
+        next_strategy: StrategyType = redirect_hint or failure_mode_hint or ordering[min(idx + 1, len(ordering) - 1)]  # type: ignore[assignment]
         if not redirect_hint and failure_mode_hint and matched is not None:
             failure_mode_switch = {"failure_class": matched.failure_class, "strategy": failure_mode_hint}
         if redirect_hint:

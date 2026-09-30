@@ -18,7 +18,7 @@ Two nodes are covered so far:
   Fixtures in `fixtures-verify/`, runner pair
   `run-ts-verify.mts` / `run_py_verify.py`, diff via `compare-verify.mjs`.
   See "VERIFY-EQUIVALENCE CONTRACT" below — a deliberately narrower
-  contract (layer *status*, not `detail` prose) that has surfaced two
+  contract (layer *status*, not `detail` prose) that has surfaced (and now resolved) two
   tracked divergences.
 
 Extending this pattern (new fixtures + a `run-ts*`/`run_py*` pair) to
@@ -297,36 +297,18 @@ reason (a human owns resolving it).
   `critical_failure_tiers == ['environmental','mechanical']` (N same-tier
   FAILs count once — INV-12).
 
-Result: **23 PASS, 2 tracked discrepancies, 0 untracked.**
+Result: **25 PASS, 0 tracked discrepancies, 0 untracked** (expected; run `compare-verify.mjs` to confirm).
 
-### What this pass found
+### What this pass found (resolved)
 
-**`output_contract_partial` checks different contract fields on each
-runtime.** `fixtures-verify/output-contract-required-sections-only` and
-`…-required-interface-fields-only` pin it:
-
-- TS `verify_output_contract_partial` → `contractShadowCheck`
-  (`packages/harness/src/nodes/policy-gates.ts`) inspects
-  `outputContract.required_sections`.
-- Python `verify_output_contract_partial` → `contract_shadow_check`
-  (`adapter/harness/output_contract.py`) inspects
-  `required_interface_fields` + `interface_constraints`, and never looks
-  at `required_sections`.
-
-Root cause: the **TS `OutputContract` class only carries
-`required_sections`**; the Python `OutputContract` carries
-`required_sections` *and* `required_interface_fields` *and*
-`interface_constraints` (Python also has a standalone
-`check_required_sections()` that `verify()` does not call). So a contract
-that specifies only sections FAILs on TS / PASSes on Python, and one that
-specifies only interface fields does the reverse.
-
-Reconciling this is a **maintainer decision** — enrich the TS
-`OutputContract` + `contractShadowCheck` to match Python, or make
-`required_sections` canonical and change Python — and it has a knock-on
-effect on `postExecGate` / `post_exec_gate`, which also call
-`contractShadowCheck`. Tracked in `known-discrepancies-verify.json`; not
-a regression.
+**`output_contract_partial` used to check different contract fields on each runtime.** TS
+`verify_output_contract_partial` → `contractShadowCheck` inspects `outputContract.required_sections`;
+Python's `contract_shadow_check` used to inspect `required_interface_fields` + `interface_constraints` and never
+looked at `required_sections`. Resolved by making Python follow TS: `contract_shadow_check` now checks
+`required_sections` only (a missing key of a dict result → `Missing required field: <section>`), and the fuller
+checks (format, interface constraints, validation rules, caller constraints) live in `output_validation()`,
+the twin of TS `outputValidation`. `known-discrepancies-verify.json` is now empty; the two
+`output-contract-*-only` fixtures stay as regression fixtures.
 
 ### Usage
 

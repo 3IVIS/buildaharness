@@ -43,7 +43,7 @@ def _evidence(obs: str, reliability: str = "HIGH") -> Evidence:
         source="test",
         reliability=cast(ReliabilityClass, reliability),
         evidence_type=cast(EvidenceType, "OBSERVATION"),
-        freshness=1.0,
+        freshness="2026-01-01T00:00:00+00:00",
     )
 
 

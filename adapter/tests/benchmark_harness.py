@@ -32,8 +32,8 @@ from harness.contradiction import detect_contradictions
 from harness.control_state import resolve_control_state
 from harness.diagnostics import BeliefHealth, CoverageHealth, Diagnostics, ExecutionHealth, VerificationHealth
 from harness.evidence import Evidence, EvidenceStore
-from harness.failure_modes import FailureDiagnostics
-from harness.hypothesis import HypothesisSet, generate_hypotheses
+from harness.failure_modes import FailureDiagnostics, build_default_library
+from harness.hypothesis import HypothesisSet, generate_update_hypotheses
 from harness.loop import run_one_iteration
 from harness.memory import MemoryState
 from harness.recovery import StrategyState
@@ -72,7 +72,7 @@ def _make_run_state() -> HarnessRunState:
         diagnostics=_make_diagnostics(),
         task_graph=TaskGraph(
             tasks=[
-                Task(id="t1", description="task", status="ACTIVE", completed_evidence=[], abstraction_level=0),
+                Task(id="t1", description="task", status="RUNNING", completed_evidence=[], abstraction_level=0),
             ]
         ),
         hypothesis_set=HypothesisSet(active=[], eliminated=[]),
@@ -132,7 +132,7 @@ def benchmark_full_loop() -> tuple[float, float, float]:
 
 
 def benchmark_generate_hypotheses() -> tuple[float, float, float]:
-    """generate_hypotheses(world_model, evidence_store) — target <200ms."""
+    """generate_update_hypotheses(world_model, evidence_store, ...) — target <200ms."""
     wm = _make_world_model(10)
     store = EvidenceStore()
     for i in range(5):
@@ -143,12 +143,16 @@ def benchmark_generate_hypotheses() -> tuple[float, float, float]:
                 reliability="HIGH",
                 source="test",
                 evidence_type="OBSERVATION",
-                freshness=1.0,
+                freshness="2026-01-01T00:00:00+00:00",
             )
         )
 
     def gen():
-        return generate_hypotheses(wm, store)
+        hs = HypothesisSet()
+        generate_update_hypotheses(
+            wm, store, hs, FailureDiagnostics(failure_mode_library=build_default_library()), MemoryState()
+        )
+        return hs.active
 
     return _timeit(gen)
 

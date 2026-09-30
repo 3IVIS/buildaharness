@@ -99,7 +99,8 @@ def test_T01_complete_is_terminal_and_failed_needs_execution_layer() -> None:
     with pytest.raises(ValueError, match="execution layer"):
         graph.set_status("B", "FAILED")
     graph.set_status("B", "FAILED", from_execution_layer=True)
-    assert graph.get_task("B").status == "FAILED"
+    task_b = graph.get_task("B")
+    assert task_b is not None and task_b.status == "FAILED"
     assert graph.changed is True
     with pytest.raises(ValueError, match="not found"):
         graph.set_status("nope", "RUNNING")
@@ -160,14 +161,16 @@ def test_T06_select_task_runs_second_task_concurrently_unless_pessimistic() -> N
     low = _task("L", risk_level="LOW", write_domains=["y"])
     graph = TaskGraph(tasks=[low, high])
     result = select_task(graph, ControlState())
+    assert result.task is not None and result.concurrent_task is not None
     assert (result.task.id, result.concurrent_task.id, result.escalate) == ("H", "L", False)
 
     overlap = TaskGraph(tasks=[_task("A", risk_level="HIGH", write_domains=["s"]), _task("B", write_domains=["s"])])
     overlap.set_conflict_probability("s", "s", 0.8)
     result = select_task(overlap, ControlState())
-    assert (result.task.id, result.concurrent_task) == ("A", None)
+    assert result.task is not None and (result.task.id, result.concurrent_task) == ("A", None)
     overlap.set_conflict_probability("s", "s", 0.4)
-    assert select_task(overlap, ControlState()).concurrent_task.id == "B"
+    concurrent = select_task(overlap, ControlState()).concurrent_task
+    assert concurrent is not None and concurrent.id == "B"
 
     assert select_task(graph, ControlState(escalation_reason="HUMAN_REQUIRED")).escalate is True
     assert select_task(TaskGraph(), ControlState()).task is None

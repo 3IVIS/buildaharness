@@ -195,9 +195,8 @@ class TestRecoveryStrategies:
         # then DIRECT_EDIT / ESCALATE — the next strategy is the one after the current in that ordering.
         ordering = ["TRACE_EXEC", "BROADER_SEARCH", "REIMPLEMENT", "MINIMAL_FIX", "DIRECT_EDIT", "ESCALATE"]
         for current, expected in zip(ordering, [*ordering[1:], "ESCALATE"], strict=True):
-            assert (
-                get_strategy_with_experience(StrategyState(current_strategy=current), failure_class, store) == expected
-            )
+            state = StrategyState(current_strategy=current)  # type: ignore[arg-type]
+            assert get_strategy_with_experience(state, failure_class, store) == expected
 
         # Unavailable store falls back transparently
         fallback = get_strategy_with_experience(ss, failure_class, UnavailableExperienceStore())
@@ -322,7 +321,7 @@ class TestReplanning:
         tg = _make_task_graph(3)
         tg.tasks[0].status = "COMPLETE"
         tg.tasks[1].status = "FAILED"
-        tg.tasks[2].status = "ACTIVE"
+        tg.tasks[2].status = "RUNNING"
 
         wm = WorldModel()
         cs = self._make_caller_state(["criterion A", "criterion B"])
@@ -333,8 +332,8 @@ class TestReplanning:
 
     def test_T11_local_scope_preserves_unrelated_tasks(self) -> None:
         """T11: LOCAL replan only touches current_task dependents; unrelated tasks keep status."""
-        current = Task(id="t_current", description="current", status="ACTIVE")
-        dependent = Task(id="t_dep", description="dep", status="ACTIVE", depends_on=["t_current"])
+        current = Task(id="t_current", description="current", status="RUNNING")
+        dependent = Task(id="t_dep", description="dep", status="RUNNING", depends_on=["t_current"])
         unrelated = Task(id="t_unrelated", description="unrelated", status="COMPLETE")
 
         tg = TaskGraph(tasks=[current, dependent, unrelated])

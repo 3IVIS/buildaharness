@@ -55,7 +55,8 @@ class Evidence:
     def from_dict(cls, d: dict[str, Any]) -> Evidence:
         freshness = d.get("freshness")
         if not isinstance(freshness, str):
-            freshness = d.get("recorded_at") if isinstance(d.get("recorded_at"), str) else _now_iso()
+            recorded_at = d.get("recorded_at")
+            freshness = recorded_at if isinstance(recorded_at, str) else _now_iso()
         return cls(
             id=d["id"],
             obs=d["obs"],

@@ -354,9 +354,9 @@ def run_one_iteration(
     if memory_state is not None:
         # P6.5 — compression trigger
         if should_compress(memory_state):
-            result = compress_memory(memory_state)
-            memory_state.compression_risk.compressed_structures.extend(result.dropped)
-            memory_state.compression_risk.pruned_regions.extend(result.pruned)
+            compression = compress_memory(memory_state)
+            memory_state.compression_risk.compressed_structures.extend(compression.dropped)
+            memory_state.compression_risk.pruned_regions.extend(compression.pruned)
             increment_generation_id(world_model)
             memory_state.journal.append(
                 JournalEntry(step=step_count, action_class="compression", outcome="completed", success=True)

@@ -131,7 +131,7 @@ def test_escalate_review_failure_ask_mode_on_two_dimensions_builds_a_question(mo
     assert blocker.reason == "review_failure"
     assert blocker.questions is not None
     assert len(blocker.questions) == 1
-    assert len(blocker.questions[0].options) == 2
+    assert len(blocker.questions[0].options or []) == 2
 
 
 def test_escalate_review_failure_single_dimension_or_not_triggered_falls_back(monkeypatch) -> None:

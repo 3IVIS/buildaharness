@@ -101,7 +101,7 @@ def _make_run_state() -> HarnessRunState:
         diagnostics=_make_diagnostics(),
         task_graph=TaskGraph(
             tasks=[
-                Task(id="t1", description="task", status="ACTIVE", completed_evidence=[], abstraction_level=0),
+                Task(id="t1", description="task", status="RUNNING", completed_evidence=[], abstraction_level=0),
             ]
         ),
         hypothesis_set=HypothesisSet(active=[], eliminated=[]),
@@ -476,7 +476,7 @@ def test_inv_10_run_one_iteration_identical_without_experience_store():
             diagnostics=_make_diagnostics(),
             task_graph=TaskGraph(
                 tasks=[
-                    Task(id="t1", description="task", status="ACTIVE", completed_evidence=[], abstraction_level=0),
+                    Task(id="t1", description="task", status="RUNNING", completed_evidence=[], abstraction_level=0),
                 ]
             ),
             hypothesis_set=HypothesisSet(active=[], eliminated=[]),
@@ -631,7 +631,7 @@ def test_inv_task_graph_to_dict_unchanged():
     tg = TaskGraph(
         tasks=[
             Task(id="t1", description="Task 1", status="PENDING"),
-            Task(id="t2", description="Task 2", status="ACTIVE", depends_on=["t1"]),
+            Task(id="t2", description="Task 2", status="RUNNING", depends_on=["t1"]),
         ]
     )
     baseline = json.dumps(tg.to_dict(), sort_keys=True)
@@ -666,7 +666,7 @@ def _run_stall_iteration(directive, *, strategy_state=None, supervisor_on=True, 
             world_model=wm,
             diagnostics=_make_diagnostics(),
             hypothesis_set=HypothesisSet(active=[], eliminated=[]),
-            task_graph=TaskGraph(tasks=[Task(id="t1", description="task", status="ACTIVE", abstraction_level=0)]),
+            task_graph=TaskGraph(tasks=[Task(id="t1", description="task", status="RUNNING", abstraction_level=0)]),
             failure_diagnostics=FailureDiagnostics(),
             memory_state=MemoryState(),
             strategy_state=ss,

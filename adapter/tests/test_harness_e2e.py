@@ -90,7 +90,7 @@ def _make_harness_run_state(run_id: str = "") -> HarnessRunState:
                 Task(
                     id="t1",
                     description="primary task",
-                    status="ACTIVE",
+                    status="RUNNING",
                     completed_evidence=[],
                     abstraction_level=0,
                 ),

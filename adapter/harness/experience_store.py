@@ -42,7 +42,7 @@ from __future__ import annotations
 import math
 import uuid
 from collections import namedtuple
-from collections.abc import Callable
+from collections.abc import Callable, Mapping
 from dataclasses import dataclass, field
 from datetime import UTC, datetime
 from enum import StrEnum
@@ -523,6 +523,15 @@ def warm_start(
     if experience_store is None or not experience_store.available:
         return WarmStartResult(loaded=False)
 
+    if hasattr(experience_store, "get_class_priors"):
+        # A TS-shaped store (InMemoryExperienceStore): apply TS warmStart semantics.
+        warm_start_from_store(experience_store, strategy_state, failure_diagnostics, dep_graph_budget, task_graph)
+        return WarmStartResult(
+            loaded=True,
+            strategy_weights_loaded=bool(experience_store.get_strategy_weights()),
+            class_priors_loaded=bool(experience_store.get_class_priors()),
+        )
+
     weights_loaded = load_strategy_priors(experience_store, strategy_state)
     decompositions_seeded = load_structural_decompositions(experience_store, task_graph, task_class)
     tool_workflows = load_tool_workflow_seeds(experience_store)
@@ -713,7 +722,7 @@ def update_experience_store(
 
 
 def softmax_strategy_policy(
-    strategy_weights: dict[StrategyWeightKey | str, float],
+    strategy_weights: Mapping[Any, float],
     failure_class: str,
     temperature: float = 1.0,
 ) -> list[str]:

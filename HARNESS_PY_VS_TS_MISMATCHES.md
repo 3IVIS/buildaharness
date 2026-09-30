@@ -8,26 +8,57 @@ Only `resolve_control_state`, `verify` (status only), `ask_question` and `superv
 
 ### Changes on this branch that affect this list
 * **RESOLVED:** TS `reviewProposedChange` now runs all 5 dimensions and collects every failure (matches Python). Python's docstring/§9 note "TS short-circuits" is obsolete. `applyReviewOutcome` accepts a list in both.
-* **RESOLVED (mechanism):** `HARNESS_LEXICAL` switches (`harness_lexical_active` / `harnessLexicalActive`) now exist on both sides for: `negation-pairs` (pairwise **and** set-level), `granularity-markers`, `criterion-scope`, `system-error-symptoms`, `failure-exact-match`, `review-negation`, `review-phrases`, `constraint-negation`, `required-sections`, `criterion-substring`, `criterion-proximity` (TS) / `assumption-overlap`, `evidence-negation`, `failure-class-seed` (Py), `change-scope-keywords` (Py, returns 0.0 to mimic TS). **Still to align:** the key sets are not identical (Python-only: `assumption-overlap`, `evidence-negation`, `failure-class-seed`, `change-scope-keywords`, `required-sections`; TS-only: `criterion-proximity`), and the gated code paths they protect still differ as described below.
-* **NEW TS-only (add to Python):** `semanticConstraintJudge` hook + `outputValidation(..., {skipCallerConstraints})`; budget-answer handling (`takeBudgetAnswers`, `DEFAULT_BUDGET_EXTENSION=10` exported from `ask-question.ts`, "Continue" extends `maxSteps`, "Stop" cancels); `semantic_compaction` opt-in layer in `layer-policy.ts` (`AUDIT_SEMANTIC_COMPACTION`); false-budget-halt fix when all tasks COMPLETE; resume polls the budget answer before halting. Python `build_budget_exhausted_question` should share the same constant and equivalent resume handling in its outer driver.
+* **RESOLVED (mechanism):** `HARNESS_LEXICAL` switches (`harness_lexical_active` / `harnessLexicalActive`) now exist on both sides for: `negation-pairs` (pairwise **and** set-level), `granularity-markers`, `criterion-scope`, `system-error-symptoms`, `failure-exact-match`, `review-negation`, `review-phrases`, `constraint-negation`, `required-sections`, `criterion-substring`, `criterion-proximity` (TS) / `assumption-overlap`, `evidence-negation`, `failure-class-seed` (Py), `change-scope-keywords` (Py, returns 0.0 to mimic TS). **Now aligned (this work):** the Python-only switches (`assumption-overlap`, `evidence-negation`, `failure-class-seed`, `change-scope-keywords`, `required-sections`, `hypothesis-*`) were removed together with the Python-only checks they guarded, and `criterion-proximity` was added, so both runtimes expose the same 12 checks.
+* **NEW TS-only (add to Python):** `semanticConstraintJudge` hook + `outputValidation(..., {skipCallerConstraints})`; budget-answer handling (`takeBudgetAnswers`, `DEFAULT_BUDGET_EXTENSION=10` exported from `ask-question.ts`, "Continue" extends `maxSteps`, "Stop" cancels); `semantic_compaction` opt-in layer in `layer-policy.ts` (`AUDIT_SEMANTIC_COMPACTION`); false-budget-halt fix when all tasks COMPLETE; resume polls the budget answer before halting. Ported: `DEFAULT_BUDGET_EXTENSION` and `external_updates.take_budget_answers`. Not ported: the semantic constraint judge, the `semantic_compaction` layer and the all-tasks-COMPLETE budget shortcut (they live in the async runtime).
 
 ## Fix status (Python brought in line with TS)
 
-Legend: ✅ fixed on this branch · ⏳ in progress · ⬜ not started
+Legend: ✅ fixed on this branch · 🟡 done with a documented, deliberate difference · ⬜ not done (needs a decision or is out of scope)
+
+Verified with `adapter/tests` (harness suites: 950+ passing; the one pre-existing failure `test_inv_plan_export_never_raises`
+is unrelated and fails identically on the base branch). The old Python-only behaviour that TS does not have was removed and
+its tests rewritten to the TS behaviour; new coverage is in `adapter/tests/test_harness_ts_parity.py`.
 
 | § | Item | Status |
 |---|---|---|
-| 6 | `split(/\s+/)` tokenisation (`split_ws`) in success-criteria / scope checks | ✅ |
-| 6 | `add_constraint` / `add_success_criteria` in `inject_clarification` | ✅ |
-| 6 | `cancel_task_graph` + `cancel_current` handling in `check_external_updates` | ✅ |
-| 6 | `apply_constraint_change_propagation` bumps generation + clears `constraints_changed`; dedupes contradictions by id | ✅ |
-| 0/18 | `handle_escalation_response`, `escalate_budget_exhausted` | ✅ |
-| 5 | Detectors set `description` (same text as TS) | ✅ |
-| 5 | `detect_contradictions` applies the resolution policy | ✅ |
-| 5 | Temporal detection reads `affected_paths` (legacy `affected_source` still accepted) | ✅ |
-| 5 | HIGH resolution no longer blocks tasks | ✅ |
-| 2 | `Belief.applied_contradiction_ids` / `pending_sweep` / `reliability` persisted | ✅ |
-| 6 | Kept on purpose: Python `user_clarification` observation (TS documents the same outcome for its resumed run) | note |
+| 0 | `handle_escalation_response`, `escalate_budget_exhausted`, `cancel_task_graph`, `experience_learning` (`learn_from_journal`…), `output_validation`, `context_compression`, `estimate_voi`, `select_task`, `update_task_graph`, `rollback_and_replan`, `StrategyState.recovery_strategy_order` | ✅ |
+| 0 | `_maybe_resolve` resolves in place + `resolver` argument | ✅ |
+| 0 | Budget-answer handling (`take_budget_answers`, `DEFAULT_BUDGET_EXTENSION`) | ✅ |
+| 0 | `HarnessRuntime` / `driveMainLoop`, checkpoints (`harness-checkpoint`), layer policy/budget/outcome, turn signals, golden baseline, `semantic_compaction` layer, `semanticConstraintJudge` hook, `initialize_harness` building all state | ⬜ out of scope: needs the async runtime restructure; Python keeps its synchronous `run_one_iteration` and outer drivers |
+| 1 | `update_diagnostics` (all ten dimensions, dep-class-gap annotation, matched pattern, TS signature, `normalise` input forms) | ✅ (function ported; the Python loop still does not call it per iteration — it never did) |
+| 2 | Belief graph (`derived_from_edges`, `verified`, list frontier, `{source,target}` queue, decay 0.05, single-pass `propagate_beliefs`) | ✅ |
+| 2 | `update_world_model` / `recompute_belief_health`, staleness sweep on `affected_paths`, `Belief.applied_contradiction_ids`/`pending_sweep`/`reliability` persisted | ✅ |
+| 2 | ISO-string vs `datetime` timestamps (`Belief.recorded_at`, `Observation.recorded_at`) | 🟡 wire format is ISO in both; Python keeps `datetime` in memory. `Evidence.freshness` is now an ISO string as in TS |
+| 3 | `estimate_risk` (module type, file centrality, change scope), `estimate_voi` | ✅ (Python-only `verification_adequacy_critic` etc. removed) |
+| 4 | `HypothesisSet` (`active`/`eliminated`/`elimination_policy`), `generate_update_hypotheses`, diversity loop, pruning, `separating_check` | ✅ |
+| 5 | Contradictions: descriptions, policy applied by `detect_contradictions`, `affected_paths`, HIGH no longer blocks tasks, lexical gates | ✅ |
+| 6 | `split_ws`, `add_constraint`/`add_success_criteria`, `cancel_current`, propagation bumps generation + clears flag, dedupe | ✅ |
+| 6 | Python `user_clarification` observation | 🟡 kept (TS documents the same outcome for its resumed run) |
+| 6 | `format` string on `OutputContract` (legacy `format_requirements` still read) | ✅ |
+| 7 | Task graph: TS statuses, `set_status` rules, conflict cache on the graph, `select_task`, `GraphCycleError`, orphan-only `validate_task_graph` | ✅ |
+| 8 | Parallel merge (`ParallelBranch`, later-wins union, resolver injection, ×0.9 decay) | ✅ |
+| 9 | Review gate: confidence ≥ 0.8, `required_sections`, `hypothesis_set.active`, JSON-quoted reasons; `escalate_review_failure`; `diagnose_review_failure_options` per review dimension | ✅ |
+| 9 | Review gate is not called by the Python loop (there is no "proposed change" step) | ⬜ available as a function only |
+| 10 | `execute`: change-type strategy, rollback points, continuable outcomes, pause signal, symptom regexes, change-log shape, `ToolExecutorContext` | ✅ |
+| 11 | Verify `output_contract_partial` (tracked discrepancy), evidence `.observations`, hypotheses `.active` | ✅ — `known-discrepancies-verify.json` is now `{}` |
+| 12 | Fixed stall constants, `cannot_make_progress(strategy, failure)`, `diagnose_and_replan`/`rebuild_task_graph`/`requeue_failed_leaves`, `rollback_and_replan`, next-strategy index −1, experience ordering with `"<strategy>:<class>"` keys | ✅ |
+| 12 | Python-only `RecoveryBudget` (plan revisions) alongside the TS-shaped `Budget` | 🟡 kept (drives escalation in the Python loop) |
+| 12 | Python loop replans GLOBAL on a stall (TS `rollbackAndReplan`'s `noProgress` branch) | ✅ |
+| 13 | `MemoryState` shape (token budget object 200000, dependent_tasks, typed journal, rollback points), pressure-based compression, retention order, feasibility cap at 0.5 | ✅ |
+| 14 | `InMemoryExperienceStore` / `UnavailableExperienceStore`, `warm_start_from_store`, `learn_from_journal` | ✅ |
+| 14 | DB-backed `ExperienceStore` (promotion boundary, offline eval) | 🟡 kept: it is Python's production store; `warm_start` dispatches to the TS semantics for TS-shaped stores |
+| 15 | Reviewer pass: three string-finding lenses, BFS adversarial seeding, pending verdict, reopened ids returned (caller reopens) | ✅ |
+| 16 | `FailureModeLibrary` (entries/symptoms/class priors), `MatchResult`, `FailureRecord`, evidence store with envelopes/manifest, `apply_tool_reliability`, `gather_evidence` | ✅ |
+| 17 | `contract_shadow_check` (`required_sections`), `output_validation` + `OutputContractError`, `update_output_contract` quote stripping | ✅ |
+| 18 | Ask-question: review-failure question text and dimension options; `completion_check_final` halts plainly | ✅ |
+| 19 | Supervisor: `decide_supervisor_directive` (litellm) is Python-only; `coerce_for_wired_actions` has no twin | 🟡 |
+| — | Python-only modules (`plan_store`, `plan_schema`, `execution_boundary`, `provenance`, `semantic_checks`, `langfuse_tracing`, `tool_manifest`, `node_compilers`, `state_store`) | ⬜ decide per module whether TS should gain them |
+| — | `harness-runtime.ts` vs `loop.py` step ordering | ⬜ not audited line by line |
+
+### Changes on this branch that affect this list
+* **RESOLVED:** TS `reviewProposedChange` now runs all 5 dimensions and collects every failure (matches Python). Python's docstring/§9 note "TS short-circuits" is obsolete. `applyReviewOutcome` accepts a list in both.
+* **RESOLVED (mechanism):** `HARNESS_LEXICAL` switches (`harness_lexical_active` / `harnessLexicalActive`) now exist on both sides for: `negation-pairs` (pairwise **and** set-level), `granularity-markers`, `criterion-scope`, `system-error-symptoms`, `failure-exact-match`, `review-negation`, `review-phrases`, `constraint-negation`, `required-sections`, `criterion-substring`, `criterion-proximity` (TS) / `assumption-overlap`, `evidence-negation`, `failure-class-seed` (Py), `change-scope-keywords` (Py, returns 0.0 to mimic TS). **Now aligned (this work):** the Python-only switches (`assumption-overlap`, `evidence-negation`, `failure-class-seed`, `change-scope-keywords`, `required-sections`, `hypothesis-*`) were removed together with the Python-only checks they guarded, and `criterion-proximity` was added, so both runtimes expose the same 12 checks.
+* **NEW TS-only (add to Python):** `semanticConstraintJudge` hook + `outputValidation(..., {skipCallerConstraints})`; budget-answer handling (`takeBudgetAnswers`, `DEFAULT_BUDGET_EXTENSION=10` exported from `ask-question.ts`, "Continue" extends `maxSteps`, "Stop" cancels); `semantic_compaction` opt-in layer in `layer-policy.ts` (`AUDIT_SEMANTIC_COMPACTION`); false-budget-halt fix when all tasks COMPLETE; resume polls the budget answer before halting. Ported: `DEFAULT_BUDGET_EXTENSION` and `external_updates.take_budget_answers`. Not ported: the semantic constraint judge, the `semantic_compaction` layer and the all-tasks-COMPLETE budget shortcut (they live in the async runtime).
 
 Legend: **[B]** behaviour differs (outputs diverge), **[M]** missing in Python, **[S]** shape/API/default differs.
 

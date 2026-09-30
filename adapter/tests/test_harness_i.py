@@ -181,7 +181,7 @@ def _make_state() -> HarnessRunState:
         diagnostics=_healthy_diagnostics(),
         task_graph=TaskGraph(
             tasks=[
-                Task(id="t1", description="primary task", status="ACTIVE", completed_evidence=[], abstraction_level=0)
+                Task(id="t1", description="primary task", status="RUNNING", completed_evidence=[], abstraction_level=0)
             ]
         ),
         hypothesis_set=HypothesisSet(active=[], eliminated=[]),
