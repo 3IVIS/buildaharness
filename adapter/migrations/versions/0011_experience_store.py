@@ -11,6 +11,7 @@ Creates two tables:
 """
 
 import uuid
+from typing import Any
 
 import sqlalchemy as sa
 from alembic import op
@@ -25,7 +26,7 @@ depends_on = None
 def upgrade() -> None:
     bind = op.get_bind()
     is_postgres = bind.dialect.name == "postgresql"
-    jsonb_type = JSONB() if is_postgres else sa.Text()
+    jsonb_type: sa.types.TypeEngine[Any] = JSONB() if is_postgres else sa.Text()
     uuid_type: sa.types.TypeEngine[str] = UUID(as_uuid=False) if is_postgres else sa.String(36)
 
     op.create_table(
