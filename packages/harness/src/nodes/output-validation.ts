@@ -24,10 +24,20 @@ export interface OutputValidationResult {
   violations: string[]
 }
 
+export interface OutputValidationOptions {
+  /**
+   * Skip the lexical `caller_specific_constraints` word match. Set when the host judges the constraints itself
+   * (`semanticConstraintJudge`): that match fires on a reply that merely mentions the constraint's subject
+   * ("I will not use tabs" against "do not use tabs"), and it throws.
+   */
+  skipCallerConstraints?: boolean
+}
+
 export function outputValidation(
   finalResult: unknown,
   outputContract: OutputContract,
   callerState: CallerState,
+  options: OutputValidationOptions = {},
 ): OutputValidationResult {
   const violations: string[] = []
 
@@ -81,7 +91,7 @@ export function outputValidation(
     Object.values(result).map(v => String(v)).join(' ')
   ).toLowerCase()
 
-  for (const constraint of callerState.current_constraints) {
+  for (const constraint of options.skipCallerConstraints ? [] : callerState.current_constraints) {
     const constraintLower = constraint.toLowerCase()
     const constraintTokens = new Set(constraintLower.split(/\s+/))
     if (![...constraintTokens].some(t => NEGATION_KEYWORDS.has(t))) continue

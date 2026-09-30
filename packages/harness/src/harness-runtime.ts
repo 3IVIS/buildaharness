@@ -52,7 +52,7 @@ import { contextCompression } from './nodes/context-compression.js'
 import { warmStart } from './nodes/warm-start.js'
 import { journalEntryFor, learnFromJournal } from './experience-learning.js'
 import { reviewerPass, type PropagationQueue, type SemanticCriterionCoverage, type ReviewerVerdict, type CriterionCheckable } from './nodes/reviewer-pass.js'
-import { outputValidation, type OutputValidationResult } from './nodes/output-validation.js'
+import { outputValidation, OutputContractError, type OutputValidationResult } from './nodes/output-validation.js'
 import { initializeHarness, type HarnessInitOptions, type HarnessInitResult } from './nodes/initialize.js'
 import { HarnessRunState } from './harness-run-state.js'
 import { DepGraphBudget, WorldModel } from './state/world-model.js'
@@ -83,6 +83,12 @@ export const BUDGET_WARNING_FLOOR = 0.5
  * a thrown executor takes (recovery ladder, bounded retries, stall escalation) instead of COMPLETE.
  * Absent ⇒ today's behaviour. A hook that throws is treated as `done: true`.
  */
+/**
+ * The host's judgment of whether a finished reply breaks a constraint the caller set mid-run. When supplied it
+ * REPLACES the lexical word match in output validation; a positive violation fails validation exactly as the
+ * lexical check did, and a judge that throws or answers nothing passes the reply (fail-open).
+ */
+export type SemanticConstraintJudge = (input: { constraints: string[]; reply: string }) => Promise<{ violated: Array<{ constraint: string; reason?: string }> }>
 export type SemanticTaskCompletion = (input: { taskDescription: string; output: unknown }) => Promise<{ done: boolean; reason?: string }>
 
 /** One competing explanation a host proposes for the request (see `SemanticHypothesesHook`). */
@@ -312,6 +318,7 @@ export interface HarnessRunOptions extends HarnessInitOptions {
     hypothesisPredictions: string[]
   }) => Promise<{ conflict: boolean; reason?: string }>
   semanticTaskCompletion?: SemanticTaskCompletion
+  semanticConstraintJudge?: SemanticConstraintJudge
   /** Called when the completion check judged a task's output did not do the task — the host can persist why (e.g. on a durable plan's task). Observability only: a throwing handler never breaks the run. */
   onTaskNotAccomplished?: (event: { taskId: string; reason: string }) => void
   /**
@@ -506,6 +513,7 @@ interface LoopContext {
     hypothesisPredictions: string[]
   }) => Promise<{ conflict: boolean; reason?: string }>
   semanticTaskCompletion?: SemanticTaskCompletion
+  semanticConstraintJudge?: SemanticConstraintJudge
   /** Called when the completion check judged a task's output did not do the task — the host can persist why (e.g. on a durable plan's task). Observability only: a throwing handler never breaks the run. */
   onTaskNotAccomplished?: (event: { taskId: string; reason: string }) => void
   /** The most recent task the completion check judged not done — read only by stalledTurnFallbackResult so the stranded reply can say why. Not checkpointed. */
@@ -602,6 +610,7 @@ function buildInitialContext(
     lastContradictionCheckCount: 0,
     semanticChangeReviewer: options.semanticChangeReviewer,
     semanticTaskCompletion: options.semanticTaskCompletion,
+    semanticConstraintJudge: options.semanticConstraintJudge,
     onTaskNotAccomplished: options.onTaskNotAccomplished,
     changeReviewFacts: options.changeReviewFacts,
     onReviewConflict: options.onReviewConflict,
@@ -692,6 +701,7 @@ function buildResumedContext(rawCheckpoint: HarnessCheckpoint, options: HarnessR
     lastContradictionCheckCount: 0,
     semanticChangeReviewer: options.semanticChangeReviewer,
     semanticTaskCompletion: options.semanticTaskCompletion,
+    semanticConstraintJudge: options.semanticConstraintJudge,
     onTaskNotAccomplished: options.onTaskNotAccomplished,
     changeReviewFacts: options.changeReviewFacts,
     onReviewConflict: options.onReviewConflict,
@@ -2015,7 +2025,25 @@ async function driveToCompletion(ctx: LoopContext, options: HarnessRunOptions): 
   }
 
   ctx.nodeExecutionOrder.push('output_validation')
-  const validationResult = outputValidation(ctx.finalResult, ctx.outputContract, ctx.callerState)
+  const judge = ctx.semanticConstraintJudge
+  const validationResult = outputValidation(ctx.finalResult, ctx.outputContract, ctx.callerState, { skipCallerConstraints: judge !== undefined })
+  if (judge && ctx.callerState.current_constraints.length > 0) {
+    const reply = typeof ctx.finalResult === 'string' ? ctx.finalResult : ctx.finalResult == null ? '' : JSON.stringify(ctx.finalResult)
+    let violated: Array<{ constraint: string; reason?: string }> = []
+    if (reply.trim() !== '') {
+      try {
+        violated = (await judge({ constraints: [...ctx.callerState.current_constraints], reply })).violated ?? []
+      } catch {
+        /* a failing check must never fail a reply that would have passed */
+      }
+    }
+    if (violated.length > 0) {
+      throw new OutputContractError(
+        'caller_specific_constraints',
+        violated.map(v => `caller_specific_constraints: constraint violated: "${v.constraint}"${v.reason ? ` (${v.reason})` : ''}`),
+      )
+    }
+  }
 
   // propagateBeliefs available for introspection but not part of the return
   void propagateBeliefs
