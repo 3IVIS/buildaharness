@@ -1331,3 +1331,22 @@ class HarnessRuntime:
             raise
         _learn_from_run(ctx)
         return result
+
+
+def build_harness_run_state(run_id: str) -> Any:
+    """A `HarnessRunState` seeded the way TS `initializeHarness` seeds a run (default failure-mode library, internal
+    evidence sources, journal retention, resolved control state). Used by the framework adapters' generated preamble."""
+    from .state_store import HarnessRunState
+
+    init = initialize_harness_state("")
+    return HarnessRunState(
+        run_id=run_id,
+        world_model=init.world_model,
+        diagnostics=init.diagnostics,
+        task_graph=init.task_graph,
+        hypothesis_set=init.hypothesis_set,
+        evidence_store=init.evidence_store,
+        strategy_state=init.strategy_state,
+        memory_state=init.memory_state,
+        failure_diagnostics=init.failure_diagnostics,
+    )

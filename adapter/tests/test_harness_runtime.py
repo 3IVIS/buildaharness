@@ -256,3 +256,13 @@ def test_db_shaped_experience_store_is_warm_started_and_captures_completions(mon
     opts = HarnessRunOptions(experience_store=DbStore(), task_class="docs", skip_reviewer_pass=True)
     HarnessRuntime().run("do it", ["a"], opts)
     assert warm == ["docs"] and captured == ["task-0"]
+
+
+def test_adapter_run_state_is_seeded_like_ts_initialize() -> None:
+    from harness.runtime import build_harness_run_state
+
+    state = build_harness_run_state("r1")
+    assert state.run_id == "r1"
+    assert state.failure_diagnostics.failure_mode_library.get_entries()  # default library, as TS seeds it
+    assert state.evidence_store.is_tool_available("execution_engine")
+    assert state.memory_state.journal_retention_policy.max_passing_verbatim == 20
