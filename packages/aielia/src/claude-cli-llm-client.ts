@@ -189,7 +189,7 @@ function invokeClaudeStreaming(claudePath: string, args: string[], onToolStep?: 
  */
 function startToolGateServer(
   onToolProposal?: (tool: string, input: Record<string, unknown>) => Promise<ToolProposalDecision>,
-  onToolResult?: (tool: string, input: Record<string, unknown>, resultText: string, ok: boolean) => void | Promise<void>,
+  onToolResult?: (tool: string, input: Record<string, unknown>, resultText: string, ok: boolean, notFound?: boolean) => void | Promise<void>,
   onToolExecute?: (tool: string, input: Record<string, unknown>) => Promise<string | undefined>,
 ): Promise<{ server: Server; port: number }> {
   return new Promise((resolvePromise, reject) => {
@@ -203,7 +203,7 @@ function startToolGateServer(
           buffer = buffer.slice(newlineIndex + 1)
           if (!line.trim()) continue
           void (async (requestLine: string) => {
-            let request: { kind?: unknown; tool?: unknown; input?: unknown; text?: unknown; ok?: unknown }
+            let request: { kind?: unknown; tool?: unknown; input?: unknown; text?: unknown; ok?: unknown; notFound?: unknown }
             try {
               request = JSON.parse(requestLine)
             } catch {
@@ -234,7 +234,7 @@ function startToolGateServer(
             if (request.kind === 'result') {
               try {
                 if (onToolResult && typeof request.tool === 'string' && typeof request.text === 'string') {
-                  await onToolResult(request.tool, (request.input as Record<string, unknown>) ?? {}, request.text, request.ok !== false)
+                  await onToolResult(request.tool, (request.input as Record<string, unknown>) ?? {}, request.text, request.ok !== false, request.notFound === true)
                 }
               } catch (err) {
                 console.error('claude-cli tool gate: onToolResult threw — ignoring:', err)

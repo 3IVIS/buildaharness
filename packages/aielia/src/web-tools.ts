@@ -58,7 +58,19 @@ export type WebToolResult = { kind: 'text'; text: string }
  * there now — this is a thin adapter from WebToolsContext's `fetchImpl`/`dns` shape.
  */
 async function fetchUrlSafely(ctx: WebToolsContext, url: string): Promise<string> {
-  const result = await fetchTextSafely({ url, fetchImpl: ctx.fetchImpl, dns: ctx.dns })
+  // fetchTextSafely returns whatever body was served, whatever the status, so a 503 used to come back as ordinary page
+  // text: the model got no failure signal and the turn's control plane counted a successful call. A 5xx is a server
+  // fault, not content — surface it as a tool error (a 4xx page, e.g. a 404, stays content: a "not there" answer).
+  // The status of the final response is read through a wrapper so the SSRF/redirect core stays untouched.
+  let lastStatus = 200
+  const baseFetch: typeof fetch = ctx.fetchImpl ?? ((...args) => fetch(...args))
+  const fetchImpl = (async (...args: Parameters<typeof fetch>) => {
+    const response = await baseFetch(...args)
+    lastStatus = response.status
+    return response
+  }) as typeof fetch
+  const result = await fetchTextSafely({ url, fetchImpl, dns: ctx.dns })
+  if (lastStatus >= 500) throw new Error(`HTTP ${lastStatus} from ${url}: ${result.text.slice(0, 200).trim()}`)
   return result.text
 }
 

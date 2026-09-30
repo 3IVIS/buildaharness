@@ -51,6 +51,8 @@ export interface TurnControlPlaneState {
   readonly diagnostics: Diagnostics
   readonly failureDiagnostics: FailureDiagnostics
   controlState: ControlState
+  /** How many times each identical call has already come back negative or failed this turn (see `ToolOutcome.callKey`). */
+  readonly unproductiveCalls: Map<string, number>
   /**
    * EVAL-ONLY ablation (see `controlStateToolPolicyEnabled`): when true this state stays at its
    * default ALLOW/NORMAL — `recordToolOutcome` still records evidence but never re-resolves, and
@@ -103,12 +105,23 @@ export function createTurnControlPlaneState(toolNames: string[], opts: { pinNorm
     diagnostics: new Diagnostics(),
     failureDiagnostics: new FailureDiagnostics(),
     controlState: new ControlState(),
+    unproductiveCalls: new Map(),
   }
 }
+
+/** Identical calls that came back negative before the next one counts as a retry. */
+const UNPRODUCTIVE_REPEAT_FREE = 2
 
 export interface ToolOutcome {
   toolName: string
   ok: boolean
+  /**
+   * The call worked and the answer was "not there" (a missing file). Not a fault, so it does not count as a failure —
+   * unless the identical call has already come back negative twice (`callKey`), which is a retry of a known answer.
+   */
+  negative?: boolean
+  /** Identifies the call (tool + arguments) so repeats of an already-negative or failed call can be recognised. */
+  callKey?: string
   /** Short, human-readable — never the full resultText (can be large/untrusted). */
   summary: string
 }
@@ -142,12 +155,24 @@ export function moreRestrictiveControlState(a: ControlState, b: ControlState): C
  * ControlState (also left on `state.controlState` for convenience).
  */
 export function recordToolOutcome(state: TurnControlPlaneState, outcome: ToolOutcome): ControlState {
+  // What counts toward the failure ratio. A real error always does. A negative answer ("no such file") is information,
+  // so a probe of many different paths does not — but asking again for something the tool already said is not there is
+  // a retry loop: the first UNPRODUCTIVE_REPEAT_FREE identical calls are free, the rest count.
+  let repeatedNegative = false
+  if (outcome.callKey && (outcome.negative === true || !outcome.ok)) {
+    const seen = (state.unproductiveCalls.get(outcome.callKey) ?? 0) + 1
+    state.unproductiveCalls.set(outcome.callKey, seen)
+    repeatedNegative = outcome.negative === true && seen > UNPRODUCTIVE_REPEAT_FREE
+  }
+  const countsAsFailure = !outcome.ok || repeatedNegative
+  const summary = repeatedNegative ? `${outcome.toolName} repeated an identical call that already found nothing` : outcome.summary
+
   const evidence = gatherEvidence(
     {
       id: `tool-${state.evidenceStore.observations.length}`,
-      obs: outcome.summary,
+      obs: summary,
       source: outcome.toolName,
-      evidence_type: outcome.ok ? 'OBSERVATION' : 'SYSTEM_ERROR',
+      evidence_type: countsAsFailure ? 'SYSTEM_ERROR' : 'OBSERVATION',
     },
     state.evidenceStore,
   )
@@ -157,12 +182,12 @@ export function recordToolOutcome(state: TurnControlPlaneState, outcome: ToolOut
     updateWorldModel(capped, state.worldModel, state.diagnostics)
   }
 
-  if (!outcome.ok) {
+  if (countsAsFailure) {
     state.failureDiagnostics.recordFailure({
       id: `tool-failure-${state.failureDiagnostics.failure_history.length}`,
       timestamp: new Date().toISOString(),
       failure_class: 'tool_call_failed',
-      description: outcome.summary,
+      description: summary,
       context: { tool: outcome.toolName },
     })
   }

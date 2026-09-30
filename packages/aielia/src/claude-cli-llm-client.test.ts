@@ -544,6 +544,7 @@ describe('ClaudeCliLLMClient', () => {
           await send({ kind: 'result', tool: 'read_file', input: { path: 'q3.md' }, text: 'Total: 4058' })
           await send({ kind: 'result', tool: 'fetch_url', input: { url: 'https://example.com' }, text: 'boom' })
           await send({ kind: 'result', tool: 'read_file', input: { path: 'gone.md' }, text: 'File not found: gone.md', ok: false })
+          await send({ kind: 'result', tool: 'read_file', input: { path: 'nope.md' }, text: 'File not found: nope.md', ok: false, notFound: true })
           socket.end()
           proc.stdout.emit('data', Buffer.from(streamJsonResult('done')))
           proc.emit('close', 0)
@@ -561,11 +562,12 @@ describe('ClaudeCliLLMClient', () => {
 
       expect(result).toEqual({ content: 'done' })
       // A report with no `ok` field is a success; `ok: false` is passed on as a failure.
-      expect(onToolResult).toHaveBeenNthCalledWith(1, 'read_file', { path: 'q3.md' }, 'Total: 4058', true)
-      expect(onToolResult).toHaveBeenNthCalledWith(2, 'fetch_url', { url: 'https://example.com' }, 'boom', true)
-      expect(onToolResult).toHaveBeenNthCalledWith(3, 'read_file', { path: 'gone.md' }, 'File not found: gone.md', false)
+      expect(onToolResult).toHaveBeenNthCalledWith(1, 'read_file', { path: 'q3.md' }, 'Total: 4058', true, false)
+      expect(onToolResult).toHaveBeenNthCalledWith(2, 'fetch_url', { url: 'https://example.com' }, 'boom', true, false)
+      expect(onToolResult).toHaveBeenNthCalledWith(3, 'read_file', { path: 'gone.md' }, 'File not found: gone.md', false, false)
+      expect(onToolResult).toHaveBeenNthCalledWith(4, 'read_file', { path: 'nope.md' }, 'File not found: nope.md', false, true)
       expect(onToolProposal).not.toHaveBeenCalled() // a result report is never mistaken for a proposal
-      expect(acks).toEqual([{ decision: 'allow' }, { decision: 'allow' }, { decision: 'allow' }])
+      expect(acks).toEqual([{ decision: 'allow' }, { decision: 'allow' }, { decision: 'allow' }, { decision: 'allow' }])
     } finally {
       await rm(workspaceRoot, { recursive: true, force: true })
     }

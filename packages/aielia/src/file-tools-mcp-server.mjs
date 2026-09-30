@@ -275,11 +275,16 @@ const REPORTED_RESULT_CHARS = 6000
  * ack is ignored and every transport failure is swallowed, exactly like the gate's own fail-open
  * posture, so a dead parent can never fail a tool call that already succeeded.
  */
-export async function reportToolResult(tool, input, text, ok = true) {
-  // `ok` rides on the wire only when false, so a success report is byte-identical to before. A failed call has to be
-  // reported too: the parent folds each outcome into the turn's ControlState, and one that only ever hears about
-  // successes never sees a turn's failures pile up.
-  await gateRoundTrip({ kind: 'result', tool, input, text: String(text).slice(0, REPORTED_RESULT_CHARS), ...(ok === false ? { ok: false } : {}) })
+export async function reportToolResult(tool, input, text, ok = true, notFound = false) {
+  // `ok` and `notFound` ride on the wire only when set, so a success report is byte-identical to before. A failed call
+  // has to be reported too: the parent folds each outcome into the turn's ControlState, and one that only ever hears
+  // about successes never sees a turn's failures pile up. `notFound` marks a call that WORKED and answered "no such
+  // file" — a negative answer, not a fault — so the parent can tell a probe from a broken tool.
+  await gateRoundTrip({
+    kind: 'result', tool, input, text: String(text).slice(0, REPORTED_RESULT_CHARS),
+    ...(ok === false ? { ok: false } : {}),
+    ...(notFound === true ? { notFound: true } : {}),
+  })
 }
 
 // A delegated fetch/search runs a real network round trip on the parent side — far longer than a
@@ -650,7 +655,7 @@ async function main() {
           throw err
         })
         if (content === undefined) {
-          await reportToolResult('read_file', { path }, `File not found: ${path}`, false)
+          await reportToolResult('read_file', { path }, `File not found: ${path}`, false, true)
           return { content: [{ type: 'text', text: `File not found: ${path}` }], isError: true }
         }
         await reportToolResult('read_file', { path }, content)
@@ -838,6 +843,7 @@ async function main() {
         await reportToolResult('fetch_url', { url }, text)
         return { content: [{ type: 'text', text: tagFetchedContent(text) }] }
       } catch (err) {
+        await reportToolResult('fetch_url', { url }, `Error: ${err instanceof Error ? err.message : String(err)}`, false)
         return { content: [{ type: 'text', text: `Error: ${err instanceof Error ? err.message : String(err)}` }], isError: true }
       }
     },
@@ -864,6 +870,7 @@ async function main() {
           await reportToolResult('web_search', { query }, searchText)
           return { content: [{ type: 'text', text: searchText }] }
         } catch (err) {
+          await reportToolResult('web_search', { query }, `Error: ${err instanceof Error ? err.message : String(err)}`, false)
           return { content: [{ type: 'text', text: `Error: ${err instanceof Error ? err.message : String(err)}` }], isError: true }
         }
       },

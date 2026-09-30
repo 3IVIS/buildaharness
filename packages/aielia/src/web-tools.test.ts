@@ -47,6 +47,37 @@ describe('executeWebTool', () => {
     expect(result.text).toBe('page body text')
   })
 
+  it('fetch_url treats a 5xx as a tool error (a server fault, not page content) and names the status and url', async () => {
+    const ctx = makeCtx({
+      dns: fakeDns({ 'example.com': ['93.184.216.34'] }),
+      fetchImpl: (async () => textResponse('Service Unavailable', { status: 503, headers: { 'content-type': 'text/plain' } })) as typeof fetch,
+    })
+    await expect(executeWebTool(ctx, 'fetch_url', { url: 'https://example.com/health' })).rejects.toThrow(/HTTP 503 from https:\/\/example.com\/health: Service Unavailable/)
+  })
+
+  it('fetch_url keeps a 4xx page as content — a "not there" answer, unchanged', async () => {
+    const ctx = makeCtx({
+      dns: fakeDns({ 'example.com': ['93.184.216.34'] }),
+      fetchImpl: (async () => textResponse('Not Found', { status: 404, headers: { 'content-type': 'text/plain' } })) as typeof fetch,
+    })
+    const result = await executeWebTool(ctx, 'fetch_url', { url: 'https://example.com/missing' })
+    expect(result).toEqual({ kind: 'text', text: 'Not Found' })
+  })
+
+  it('fetch_url treats a 5xx reached after a redirect as an error too (the final response decides)', async () => {
+    let calls = 0
+    const ctx = makeCtx({
+      dns: fakeDns({ 'example.com': ['93.184.216.34'] }),
+      fetchImpl: (async () => {
+        calls++
+        return calls === 1
+          ? new Response(null, { status: 302, headers: { location: 'https://example.com/health' } })
+          : textResponse('Bad Gateway', { status: 502, headers: { 'content-type': 'text/plain' } })
+      }) as typeof fetch,
+    })
+    await expect(executeWebTool(ctx, 'fetch_url', { url: 'https://example.com/old' })).rejects.toThrow(/HTTP 502/)
+  })
+
   it('throws for an unknown tool name', async () => {
     await expect(executeWebTool(makeCtx(), 'not_a_tool', {})).rejects.toThrow('Unknown web tool')
   })

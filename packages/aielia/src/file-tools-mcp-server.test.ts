@@ -129,9 +129,11 @@ describe('file-tools-mcp-server requestToolGate (Phase D0)', () => {
 
     await reportToolResult('read_file', { path: 'a.txt' }, 'contents')
     await reportToolResult('read_file', { path: 'b.txt' }, 'File not found: b.txt', false)
+    await reportToolResult('read_file', { path: 'c.txt' }, 'File not found: c.txt', false, true)
 
     expect(received[0]).toEqual({ kind: 'result', tool: 'read_file', input: { path: 'a.txt' }, text: 'contents' })
     expect(received[1]).toEqual({ kind: 'result', tool: 'read_file', input: { path: 'b.txt' }, text: 'File not found: b.txt', ok: false })
+    expect(received[2]).toEqual({ kind: 'result', tool: 'read_file', input: { path: 'c.txt' }, text: 'File not found: c.txt', ok: false, notFound: true })
   })
 
   it('requestToolExecution returns the parent text, undefined when declined/unreachable, and throws the parent error', async () => {

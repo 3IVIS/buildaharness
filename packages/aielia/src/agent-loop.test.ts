@@ -69,12 +69,13 @@ function buildAgentLoop(llmClient: ILLMClient): AgentLoop {
 /** A claude-cli-shaped backend: it reports `failures` failed read_file results through onToolResult (as the MCP server now does), then proposes one more read. */
 class FailingThenProposingFakeLLMClient implements ILLMClient {
   public lastDecision: { decision: string; reason?: string } | undefined
-  constructor(private readonly failures: number) {}
+  constructor(private readonly failures: number, private readonly notFound = false, private readonly sameCall = false) {}
   async *callChat(): AsyncIterable<string> { yield '' }
   async callChatSync(): Promise<string> { return '' }
   async callChatStructured(_m: ChatMessage[], _t?: ToolDefinition[], options: ChatOptions = {}): Promise<LLMStructuredResponse> {
     for (let i = 0; i < this.failures; i++) {
-      await options.onToolResult?.('read_file', { path: `missing-${i}.txt` }, `File not found: missing-${i}.txt`, false)
+      const path = this.sameCall ? 'missing.txt' : `missing-${i}.txt`
+      await options.onToolResult?.('read_file', { path }, `File not found: ${path}`, false, this.notFound)
     }
     this.lastDecision = await options.onToolProposal?.('read_file', { path: 'next.txt' })
     return { content: this.lastDecision?.decision === 'deny' ? `denied: ${this.lastDecision.reason}` : 'kept going' }
@@ -82,8 +83,8 @@ class FailingThenProposingFakeLLMClient implements ILLMClient {
 }
 
 describe('claude-cli tool failures reach the turn ControlState the gate reads', () => {
-  const run = async (failures: number, withState = true) => {
-    const llm = new FailingThenProposingFakeLLMClient(failures)
+  const run = async (failures: number, withState = true, kind: { notFound?: boolean; sameCall?: boolean } = {}) => {
+    const llm = new FailingThenProposingFakeLLMClient(failures, kind.notFound, kind.sameCall)
     // Built the way agent-loop.ts's own factory does, so the eval-only ablation switch (its one read site) applies.
     const state = withState ? createTurnControlPlaneState(['read_file'], { pinNormal: !controlStateToolPolicyEnabled() }) : undefined
     const result = await buildAgentLoop(llm).runToolLoop('s', [], 'find it', 'system prompt', undefined, undefined, undefined, 'LOW', state)
@@ -99,6 +100,16 @@ describe('claude-cli tool failures reach the turn ControlState the gate reads', 
     const { llm, result } = await run(13)
     expect(llm.lastDecision?.decision).toBe('deny')
     expect(result).toMatchObject({ kind: 'final' })
+  })
+
+  it('13 DIFFERENT missing paths (negative answers) are a search: the gate stays open', async () => {
+    const { llm } = await run(13, true, { notFound: true })
+    expect(llm.lastDecision).toEqual({ decision: 'allow' })
+  })
+
+  it('the same missing path asked for over and over is a retry loop: the gate closes', async () => {
+    const { llm } = await run(13, true, { notFound: true, sameCall: true })
+    expect(llm.lastDecision?.decision).toBe('deny')
   })
 
   it('without a turn control plane (nothing to fold outcomes into) the calls are still allowed, as before', async () => {
