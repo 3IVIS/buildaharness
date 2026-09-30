@@ -423,3 +423,21 @@ A run paused by one runtime must resume in the other and finish exactly as an un
 each runtime at a proposal and at an iteration end, feeds the checkpoint to the other one and compares a projection of the
 outcome (final result, task statuses, last node). Run it with `PYTHON=<python with the adapter deps> node
 scripts/harness-conformance/compare-checkpoint.mjs` after `npm ci --workspace=packages/harness`.
+
+
+## Differential runtime scenarios (`compare-runtime.mjs`)
+
+`fixtures-runtime/*.json` are declarative scenarios (objective/criteria or explicit tasks, per-task tool behaviours `ok` /
+`fail` / `continue` / `seeded-fail`, optional supervisor decider, semantic hooks, caller update, output contract,
+`env` for the `HARNESS_LEXICAL_*` switches, `skipControlState` etc.). Each is run through the TS `HarnessRuntime`
+(`run-ts-runtime.mts`) and the Python one (`run_py_runtime.py`) and their trace projections are diffed: node order, steps,
+task statuses, final result, strategy state, failure classes, beliefs/observations, control state, journal, the callback log
+(verify / gate / supervisor / semantic hooks) and halts. Random id suffixes (`rebuilt-task-N-xxxx`) are normalised.
+
+    PYTHON=<python with the adapter deps> node scripts/harness-conformance/compare-runtime.mjs [name-substring]
+
+A reviewed, intentional difference goes in `known-discrepancies-runtime.json` (`{"<fixture>": "<reason>"}`); it is reported as
+tracked, and a tracked fixture that starts passing fails the run so the entry gets removed.
+
+The `seeded-fail` tool mirrors `packages/harness/src/harness-runtime-stall.test.ts`: a stall (and so the supervisor consult)
+is otherwise unreachable, because the control state goes to DENY after two failures and blocks a third attempt.

@@ -1,0 +1,26 @@
+{
+  "tasks": [
+    {
+      "id": "a"
+    },
+    {
+      "id": "b"
+    },
+    {
+      "id": "c"
+    },
+    {
+      "id": "d"
+    }
+  ],
+  "tools": {
+    "b": {
+      "kind": "fail"
+    },
+    "d": {
+      "kind": "fail",
+      "times": 1
+    }
+  },
+  "criteria": []
+}

@@ -1,0 +1,7 @@
+{
+  "skipReviewerPass": false,
+  "criteria": [
+    "deploy to production"
+  ],
+  "reviewerRevision": "tighten it"
+}

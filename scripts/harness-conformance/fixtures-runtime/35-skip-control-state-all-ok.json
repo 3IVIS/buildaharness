@@ -1,0 +1,18 @@
+{
+  "tasks": [
+    {
+      "id": "t0",
+      "description": "t0"
+    },
+    {
+      "id": "t1",
+      "description": "t1"
+    },
+    {
+      "id": "t2",
+      "description": "t2"
+    }
+  ],
+  "skipControlState": true,
+  "criteria": []
+}

@@ -1,0 +1,22 @@
+{
+  "constraints": [
+    "be brief"
+  ],
+  "constraintJudge": {
+    "violated": [
+      {
+        "constraint": "be brief",
+        "reason": "too long"
+      }
+    ]
+  },
+  "tools": {
+    "default": {
+      "kind": "ok",
+      "output": "a long answer"
+    }
+  },
+  "criteria": [
+    "only"
+  ]
+}

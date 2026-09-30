@@ -1,0 +1,18 @@
+{
+  "criteria": [
+    "only"
+  ],
+  "outputContract": {
+    "required_sections": [
+      "answer"
+    ]
+  },
+  "tools": {
+    "default": {
+      "kind": "ok",
+      "output": {
+        "answer": "42"
+      }
+    }
+  }
+}

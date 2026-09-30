@@ -108,6 +108,23 @@ _INTERNAL_SOURCES = ("execution_engine", "result_inspection", "fact_extraction",
 _POST_EXEC_TOOLS = ("pytest", "integration_runner", "consistency_checker", "assumption_checker", "goal_checker")
 
 
+class _AllToolsAvailable:
+    """The tool manifest the TS runtime effectively hands `verify()`.
+
+    TS passes the whole EvidenceStore as `toolManifest`; `verify` then looks tools up by name on that object, finds no
+    entry and, since an absent entry means "assume available", runs every tool-backed layer. (A real manifest with an
+    explicit `available: false` is honoured — see the verify conformance fixtures.) Mirrored here so the two runtimes
+    agree, e.g. a failed execution's null output FAILs the syntax layer instead of being skipped.
+    """
+
+    @staticmethod
+    def check_tool_availability(_tool_name: str) -> bool:
+        return True
+
+
+_ALL_TOOLS_AVAILABLE = _AllToolsAvailable()
+
+
 # ── initialisation (TS nodes/initialize.ts) ──────────────────────────────────
 
 
@@ -287,6 +304,9 @@ class HarnessRunOptions:
     decider: Callable[[dict[str, Any]], Any] | None = None
     run_investigation: Callable[[dict[str, Any]], list[Any]] | None = None
     # semantic hypotheses (TS semanticHypotheses / semanticHypothesisJudge / onSemanticHypothesis)
+    # TS complexitySignal (TurnSignals): only `taskCount` / `riskLevel` are read; they decide whether a turn with no
+    # extracted facts still records a belief trail
+    complexity_signal: dict[str, Any] | None = None
     semantic_hypotheses: Callable[[dict[str, Any]], list[dict[str, Any]] | None] | None = None
     semantic_hypothesis_judge: Callable[[dict[str, Any]], dict[str, Any] | None] | None = None
     on_semantic_hypothesis: Callable[[dict[str, Any]], None] | None = None
@@ -1151,37 +1171,44 @@ def drive_main_loop(ctx: LoopContext) -> Iterator[dict[str, Any]]:
                 reliability="MEDIUM",
             )
             facts = opts.fact_extractor(ctx.objective) if opts.fact_extractor else []
-            for i, fact in enumerate(facts):
-                fact_ev = gather_evidence(
-                    id=f"fact-{current.id}-{ctx.steps_used}-{i}",
-                    obs=fact["statement"],
-                    source="fact_extraction",
-                    evidence_type="INFERENCE",
-                    reliability="MEDIUM",
-                    evidence_store=ctx.evidence_store,
-                )
-                if fact_ev is not None:
-                    update_world_model(
-                        apply_tool_reliability(fact_ev, ctx.evidence_store, ctx.diagnostics),
-                        ctx.world_model,
-                        ctx.diagnostics,
-                        {"statement": fact["statement"], "derived_from": [fact_ev.id]},
+            signal = opts.complexity_signal or {}
+            # TS worldModelShouldFire: extracted facts, or a turn the complexity signal calls non-trivial (defaults:
+            # one task, LOW risk). Without either, the execution is recorded as an observation only.
+            world_model_should_fire = (
+                bool(facts) or signal.get("taskCount", 1) > 1 or signal.get("riskLevel", "LOW") != "LOW"
+            )
+            if world_model_should_fire:
+                for i, fact in enumerate(facts):
+                    fact_ev = gather_evidence(
+                        id=f"fact-{current.id}-{ctx.steps_used}-{i}",
+                        obs=fact["statement"],
+                        source="fact_extraction",
+                        evidence_type="INFERENCE",
+                        reliability="MEDIUM",
+                        evidence_store=ctx.evidence_store,
                     )
-            source_ev = executed or outcome
-            if not facts and source_ev is not None and task_accomplished:
-                statement = _completed_trail(current.description, exec_result.output)
-                _record_evidence(
-                    ctx,
-                    id=f"belief-{current.id}-{ctx.steps_used}",
-                    obs=statement,
-                    source="world_model_trail",
-                    evidence_type="INFERENCE",
-                    reliability="MEDIUM",
-                    belief_input={
-                        "statement": statement,
-                        "derived_from": [source_ev.id, outcome.id] if outcome else [source_ev.id],
-                    },
-                )
+                    if fact_ev is not None:
+                        update_world_model(
+                            apply_tool_reliability(fact_ev, ctx.evidence_store, ctx.diagnostics),
+                            ctx.world_model,
+                            ctx.diagnostics,
+                            {"statement": fact["statement"], "derived_from": [fact_ev.id]},
+                        )
+                source_ev = executed or outcome
+                if not facts and source_ev is not None and task_accomplished:
+                    statement = _completed_trail(current.description, exec_result.output)
+                    _record_evidence(
+                        ctx,
+                        id=f"belief-{current.id}-{ctx.steps_used}",
+                        obs=statement,
+                        source="world_model_trail",
+                        evidence_type="INFERENCE",
+                        reliability="MEDIUM",
+                        belief_input={
+                            "statement": statement,
+                            "derived_from": [source_ev.id, outcome.id] if outcome else [source_ev.id],
+                        },
+                    )
 
         for tool in _POST_EXEC_TOOLS:
             ctx.evidence_store.tool_availability_manifest.setdefault(
@@ -1226,7 +1253,7 @@ def drive_main_loop(ctx: LoopContext) -> Iterator[dict[str, Any]]:
                 exec_result.output,
                 ctx.success_criteria,
                 ctx.world_model.assumptions,
-                ctx.evidence_store,
+                _ALL_TOOLS_AVAILABLE,
                 current.risk_level,
                 ctx.evidence_store,
                 ctx.world_model,

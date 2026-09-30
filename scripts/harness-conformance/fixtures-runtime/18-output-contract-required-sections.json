@@ -1,0 +1,10 @@
+{
+  "criteria": [
+    "only"
+  ],
+  "outputContract": {
+    "required_sections": [
+      "answer"
+    ]
+  }
+}

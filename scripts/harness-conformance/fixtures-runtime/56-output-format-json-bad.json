@@ -1,0 +1,14 @@
+{
+  "outputContract": {
+    "format": "json"
+  },
+  "tools": {
+    "default": {
+      "kind": "ok",
+      "output": "not json"
+    }
+  },
+  "criteria": [
+    "only"
+  ]
+}

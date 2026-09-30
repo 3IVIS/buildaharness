@@ -1,0 +1,11 @@
+{
+  "criteria": [
+    "only"
+  ],
+  "maxSteps": 3,
+  "tools": {
+    "default": {
+      "kind": "continue"
+    }
+  }
+}

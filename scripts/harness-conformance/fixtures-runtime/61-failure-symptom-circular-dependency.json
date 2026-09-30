@@ -1,0 +1,49 @@
+{
+  "tasks": [
+    {
+      "id": "t0",
+      "description": "t0"
+    },
+    {
+      "id": "t1",
+      "description": "t1"
+    },
+    {
+      "id": "t2",
+      "description": "t2"
+    },
+    {
+      "id": "t3",
+      "description": "t3"
+    },
+    {
+      "id": "t4",
+      "description": "t4"
+    },
+    {
+      "id": "t5",
+      "description": "t5"
+    },
+    {
+      "id": "t6",
+      "description": "t6"
+    },
+    {
+      "id": "t7",
+      "description": "t7"
+    }
+  ],
+  "skipControlState": true,
+  "tools": {
+    "default": {
+      "kind": "fail",
+      "message": "circular dependency detected between modules"
+    }
+  },
+  "env": {
+    "HARNESS_LEXICAL_MODE": "enabled"
+  },
+  "criteria": [
+    "only"
+  ]
+}

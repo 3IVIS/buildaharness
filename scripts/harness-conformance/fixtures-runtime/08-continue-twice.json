@@ -1,0 +1,11 @@
+{
+  "criteria": [
+    "only"
+  ],
+  "tools": {
+    "default": {
+      "kind": "continue",
+      "times": 2
+    }
+  }
+}

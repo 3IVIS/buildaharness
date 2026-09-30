@@ -1,0 +1,19 @@
+{
+  "tasks": [
+    {
+      "id": "a",
+      "risk_level": "LOW",
+      "parallel_write_domains": [
+        "x"
+      ]
+    },
+    {
+      "id": "b",
+      "risk_level": "LOW",
+      "parallel_write_domains": [
+        "x"
+      ]
+    }
+  ],
+  "criteria": []
+}

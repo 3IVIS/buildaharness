@@ -1,0 +1,17 @@
+{
+  "constraints": [
+    "be brief"
+  ],
+  "constraintJudge": {
+    "violated": []
+  },
+  "tools": {
+    "default": {
+      "kind": "ok",
+      "output": "ok"
+    }
+  },
+  "criteria": [
+    "only"
+  ]
+}
