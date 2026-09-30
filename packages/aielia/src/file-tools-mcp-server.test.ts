@@ -109,6 +109,31 @@ describe('file-tools-mcp-server requestToolGate (Phase D0)', () => {
     await expect(reportToolResult('read_file', { path: 'x' }, 'y')).resolves.toBeUndefined()
   })
 
+  it('reportToolResult carries `ok: false` for a failed call and nothing extra for a success (byte-identical to before)', async () => {
+    const received: Record<string, unknown>[] = []
+    server = createServer((socket) => {
+      acceptedSockets.push(socket)
+      let buffer = ''
+      socket.on('data', (chunk) => {
+        buffer += chunk.toString('utf-8')
+        let nl: number
+        while ((nl = buffer.indexOf('\n')) !== -1) {
+          received.push(JSON.parse(buffer.slice(0, nl)))
+          buffer = buffer.slice(nl + 1)
+          socket.write(`${JSON.stringify({ decision: 'allow' })}\n`)
+        }
+      })
+    })
+    await new Promise<void>((resolve) => server!.listen(0, '127.0.0.1', resolve))
+    process.env.TOOL_GATE_PORT = String((server.address() as { port: number }).port)
+
+    await reportToolResult('read_file', { path: 'a.txt' }, 'contents')
+    await reportToolResult('read_file', { path: 'b.txt' }, 'File not found: b.txt', false)
+
+    expect(received[0]).toEqual({ kind: 'result', tool: 'read_file', input: { path: 'a.txt' }, text: 'contents' })
+    expect(received[1]).toEqual({ kind: 'result', tool: 'read_file', input: { path: 'b.txt' }, text: 'File not found: b.txt', ok: false })
+  })
+
   it('requestToolExecution returns the parent text, undefined when declined/unreachable, and throws the parent error', async () => {
     let mode: 'text' | 'decline' | 'error' = 'text'
     const received: Record<string, unknown>[] = []

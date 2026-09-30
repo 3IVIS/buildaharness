@@ -275,8 +275,11 @@ const REPORTED_RESULT_CHARS = 6000
  * ack is ignored and every transport failure is swallowed, exactly like the gate's own fail-open
  * posture, so a dead parent can never fail a tool call that already succeeded.
  */
-export async function reportToolResult(tool, input, text) {
-  await gateRoundTrip({ kind: 'result', tool, input, text: String(text).slice(0, REPORTED_RESULT_CHARS) })
+export async function reportToolResult(tool, input, text, ok = true) {
+  // `ok` rides on the wire only when false, so a success report is byte-identical to before. A failed call has to be
+  // reported too: the parent folds each outcome into the turn's ControlState, and one that only ever hears about
+  // successes never sees a turn's failures pile up.
+  await gateRoundTrip({ kind: 'result', tool, input, text: String(text).slice(0, REPORTED_RESULT_CHARS), ...(ok === false ? { ok: false } : {}) })
 }
 
 // A delegated fetch/search runs a real network round trip on the parent side — far longer than a
@@ -646,10 +649,14 @@ async function main() {
           if (isEnoent(err)) return undefined
           throw err
         })
-        if (content === undefined) return { content: [{ type: 'text', text: `File not found: ${path}` }], isError: true }
+        if (content === undefined) {
+          await reportToolResult('read_file', { path }, `File not found: ${path}`, false)
+          return { content: [{ type: 'text', text: `File not found: ${path}` }], isError: true }
+        }
         await reportToolResult('read_file', { path }, content)
         return { content: [{ type: 'text', text: content }] }
       } catch (err) {
+        await reportToolResult('read_file', { path }, `Error: ${err instanceof Error ? err.message : String(err)}`, false)
         return { content: [{ type: 'text', text: `Error: ${err instanceof Error ? err.message : String(err)}` }], isError: true }
       }
     },
@@ -677,6 +684,7 @@ async function main() {
         await reportToolResult('list_directory', { path }, names.join('\n'))
         return { content: [{ type: 'text', text: names.join('\n') }] }
       } catch (err) {
+        await reportToolResult('list_directory', { path }, `Error: ${err instanceof Error ? err.message : String(err)}`, false)
         return { content: [{ type: 'text', text: `Error: ${err instanceof Error ? err.message : String(err)}` }], isError: true }
       }
     },

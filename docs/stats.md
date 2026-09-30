@@ -8,9 +8,9 @@ not transcluded, since GitHub-rendered markdown has no include mechanism.
 
 | Metric | Count | Source |
 |---|---|---|
-| Frontend tests (vitest) | 3252 across 243 files | `npm test` (root — aggregates src/ and every packages/* workspace) |
+| Frontend tests (vitest) | 3257 across 243 files | `npm test` (root — aggregates src/ and every packages/* workspace) |
 | Adapter tests (pytest) | 1416 | `pytest adapter/tests/ -v` |
 | MAF adapter tests | 42 | `pytest adapter/tests/test_maf_adapter.py -v` |
-| Project-wide tests | 4,668 | pytest + vitest combined |
+| Project-wide tests | 4,673 | pytest + vitest combined |
 | Node types | 27 (14 execution + 13 harness) | `Node`/`HarnessNode` discriminated unions in `spec/schema.ts` |
 | Docker Compose services | 11 | `docker-compose.yml` top-level `services:` keys, excluding one-shot `restart: "no"` init jobs |

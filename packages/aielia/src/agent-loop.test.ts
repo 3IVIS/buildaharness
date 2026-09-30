@@ -3,7 +3,7 @@ import { ControlState } from '@buildaharness/harness'
 import { InMemoryAdapter, InMemoryReminderStore } from '@buildaharness/runtime'
 import type { ChatMessage, ChatOptions, ILLMClient, LLMStructuredResponse, ToolDefinition, FsBackend } from '@buildaharness/runtime'
 import { AgentLoop } from './agent-loop.js'
-import { createTurnControlPlaneState, type TurnControlPlaneState } from './tool-control-plane.js'
+import { createTurnControlPlaneState, controlStateToolPolicyEnabled, type TurnControlPlaneState } from './tool-control-plane.js'
 import type { FileToolsContext } from './file-tools.js'
 
 /**
@@ -65,6 +65,57 @@ function buildAgentLoop(llmClient: ILLMClient): AgentLoop {
   const reminderStore = new InMemoryReminderStore(memory)
   return new AgentLoop(memory, llmClient, () => undefined, fakeFileTools, undefined, undefined, undefined, reminderStore, 5, undefined, undefined)
 }
+
+/** A claude-cli-shaped backend: it reports `failures` failed read_file results through onToolResult (as the MCP server now does), then proposes one more read. */
+class FailingThenProposingFakeLLMClient implements ILLMClient {
+  public lastDecision: { decision: string; reason?: string } | undefined
+  constructor(private readonly failures: number) {}
+  async *callChat(): AsyncIterable<string> { yield '' }
+  async callChatSync(): Promise<string> { return '' }
+  async callChatStructured(_m: ChatMessage[], _t?: ToolDefinition[], options: ChatOptions = {}): Promise<LLMStructuredResponse> {
+    for (let i = 0; i < this.failures; i++) {
+      await options.onToolResult?.('read_file', { path: `missing-${i}.txt` }, `File not found: missing-${i}.txt`, false)
+    }
+    this.lastDecision = await options.onToolProposal?.('read_file', { path: 'next.txt' })
+    return { content: this.lastDecision?.decision === 'deny' ? `denied: ${this.lastDecision.reason}` : 'kept going' }
+  }
+}
+
+describe('claude-cli tool failures reach the turn ControlState the gate reads', () => {
+  const run = async (failures: number, withState = true) => {
+    const llm = new FailingThenProposingFakeLLMClient(failures)
+    // Built the way agent-loop.ts's own factory does, so the eval-only ablation switch (its one read site) applies.
+    const state = withState ? createTurnControlPlaneState(['read_file'], { pinNormal: !controlStateToolPolicyEnabled() }) : undefined
+    const result = await buildAgentLoop(llm).runToolLoop('s', [], 'find it', 'system prompt', undefined, undefined, undefined, 'LOW', state)
+    return { llm, result, state }
+  }
+
+  it('a few failed reads leave the gate open', async () => {
+    const { llm } = await run(3)
+    expect(llm.lastDecision).toEqual({ decision: 'allow' })
+  })
+
+  it('a turn that has piled up failures is denied further read-only calls, and the model sees why', async () => {
+    const { llm, result } = await run(13)
+    expect(llm.lastDecision?.decision).toBe('deny')
+    expect(result).toMatchObject({ kind: 'final' })
+  })
+
+  it('without a turn control plane (nothing to fold outcomes into) the calls are still allowed, as before', async () => {
+    const { llm } = await run(13, false)
+    expect(llm.lastDecision).toEqual({ decision: 'allow' })
+  })
+
+  it('the AUDIT_CONTROL_STATE_TOOL_POLICY=0 switch still pins the gate open', async () => {
+    process.env.AUDIT_CONTROL_STATE_TOOL_POLICY = '0'
+    try {
+      const { llm } = await run(13)
+      expect(llm.lastDecision).toEqual({ decision: 'allow' })
+    } finally {
+      delete process.env.AUDIT_CONTROL_STATE_TOOL_POLICY
+    }
+  })
+})
 
 describe('AgentLoop onToolProposal wiring (Phase D0)', () => {
   it('allows a read-only proposal at the pre-evidence baseline (no controlPlaneState wired)', async () => {

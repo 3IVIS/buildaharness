@@ -58,7 +58,7 @@ export interface ChatOptions {
    * throw is swallowed. A backend that hands every tool result to the caller directly (the proxy
    * client) never calls this.
    */
-  onToolResult?: (tool: string, input: Record<string, unknown>, resultText: string) => void | Promise<void>
+  onToolResult?: (tool: string, input: Record<string, unknown>, resultText: string, ok: boolean) => void | Promise<void>
   /**
    * Lets the caller execute a read-only network tool (fetch_url / web_search) itself instead of the
    * backend doing it inside its own subprocess. Return the text the model should see as the tool's

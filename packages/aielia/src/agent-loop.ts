@@ -864,7 +864,17 @@ export class AgentLoop {
           sources.push({ tool, path: String(input.query ?? input.url), excerpt: text.slice(0, GROUNDING_EXCERPT_CHARS) })
           return text
         },
-        onToolResult: (tool, input, resultText) => {
+        onToolResult: (tool, input, resultText, ok) => {
+          // Fold this call's outcome into the turn's ControlState, exactly as the manual dispatch loop does for the calls
+          // it makes itself — before this, a claude-cli turn's failures never reached the state checkToolPolicy reads,
+          // so the gate evaluated every call against a state that could not change (14 ALLOWs after 13 failed reads).
+          if (controlPlaneState) {
+            recordToolOutcome(controlPlaneState, {
+              toolName: tool,
+              ok,
+              summary: ok ? `${tool} succeeded` : `${tool} failed: ${resultText.slice(0, 200)}`,
+            })
+          }
           if (tool === 'read_file' || tool === 'list_directory') {
             sources.push({ tool, path: String(input.path), excerpt: resultText.slice(0, GROUNDING_EXCERPT_CHARS) })
           } else if (tool === 'web_search' || tool === 'fetch_url') {
