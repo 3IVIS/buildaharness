@@ -15,16 +15,37 @@ import {
   ADAPTIVE_RULES_V1,
   toPolicyBudget,
   staticLayerPolicy,
+  OPT_IN_LAYERS,
   type EscalationLayer,
   type LayerDecision,
   type LayerPolicy,
   type LayerPolicyMode,
+  type OptInLayer,
   type PolicyBudget,
   type PolicyRules,
   type RunState,
   type TurnSignals,
   type TurnTier,
 } from '@buildaharness/harness'
+
+import { experienceLearningEnabled } from './harness-bridge.js'
+import { reviewerRevisionEnabled } from './reviewer-revision.js'
+import { semanticHypothesesEnabled } from './semantic-hypotheses.js'
+import { sourceReliabilityEnabled } from './source-reliability.js'
+
+/**
+ * The opt-in layers (default OFF, one `AUDIT_*` flag each) the operator has switched on. Each flag is still read
+ * where the layer runs; this only tells the policy which ones exist this turn so its record is true.
+ */
+export function enabledOptInLayers(env?: Record<string, string | undefined>): OptInLayer[] {
+  const on: Record<OptInLayer, boolean> = {
+    source_reliability: sourceReliabilityEnabled(env),
+    semantic_hypotheses: semanticHypothesesEnabled(env),
+    reviewer_revision: reviewerRevisionEnabled(env),
+    experience_learning: experienceLearningEnabled(env),
+  }
+  return OPT_IN_LAYERS.filter((l) => on[l])
+}
 
 export const SEMANTIC_ESCALATIONS = [
   'semantic_contradiction', 'failure_match', 'criterion_coverage', 'change_review', 'model_inferred_facts',
@@ -75,7 +96,7 @@ export function resolveEscalationPlan(
   budget: PolicyBudget = { remainingCalls: null },
 ): EscalationPlan {
   try {
-    const moded = resolveModedLayerPolicy(mode, signals, state, budget, rules)
+    const moded = resolveModedLayerPolicy(mode, signals, state, budget, rules, enabledOptInLayers())
     let policy = moded.executed
     if (mode === 'adaptive' && moded.executedTier === 'T1') {
       // T1 LITE: escalations off, floor layers untouched. Restrict-only (AL-1).
@@ -86,7 +107,7 @@ export function resolveEscalationPlan(
     }
     return { mode: moded.mode, tier: moded.executedTier, policy, shadow: moded.shadow }
   } catch {
-    return { mode: 'static', tier: 'T2', policy: staticLayerPolicy() }
+    return { mode: 'static', tier: 'T2', policy: staticLayerPolicy(enabledOptInLayers()) }
   }
 }
 
