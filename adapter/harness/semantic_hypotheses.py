@@ -180,11 +180,12 @@ def add_semantic_hypotheses(hs: HypothesisSet, proposals: list[dict[str, Any]] |
     for i, p in enumerate(usable):
         confidence = p.get("confidence")
         valid = isinstance(confidence, (int, float)) and not isinstance(confidence, bool) and 0 <= confidence <= 1
+        stated = float(confidence) if isinstance(confidence, (int, float)) and valid else None
         created.append(
             Hypothesis(
                 id=f"sem_{base + i}",
                 explanation=p["explanation"].strip(),
-                confidence=float(confidence) if valid else 1 / len(usable),
+                confidence=stated if stated is not None else 1 / len(usable),
                 predicted_observations=_as_strings(p.get("predicted_observations")),
                 discriminating_evidence=[],
                 generation_sources=[SEMANTIC_SOURCE],

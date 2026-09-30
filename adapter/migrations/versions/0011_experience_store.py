@@ -26,7 +26,7 @@ def upgrade() -> None:
     bind = op.get_bind()
     is_postgres = bind.dialect.name == "postgresql"
     jsonb_type = JSONB() if is_postgres else sa.Text()
-    uuid_type = UUID(as_uuid=False) if is_postgres else sa.String(36)
+    uuid_type: sa.types.TypeEngine[str] = UUID(as_uuid=False) if is_postgres else sa.String(36)
 
     op.create_table(
         "experience_entries",
