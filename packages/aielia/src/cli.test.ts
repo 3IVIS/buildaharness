@@ -4,6 +4,7 @@ import type { ChatMessage, ChatOptions, ILLMClient, ToolDefinition, LLMStructure
 import { InMemoryAdapter } from '@buildaharness/runtime'
 import { HarnessRuntime, saveHarnessCheckpoint, type Task, type AskResponse } from '@buildaharness/harness'
 import { PersonalAssistant } from './assistant.js'
+import { createScriptedLLMClient } from './scripted-llm-client.js'
 import { runCli, type RunCliOptions, type CliInstance } from './cli.js'
 import { DEFAULT_CONFIG, type ConfigStore, type AssistantConfig } from './config.js'
 import { classifyRisk } from './risk-classifier.js'
@@ -912,6 +913,58 @@ describe('clarification-prompt handling (Q6)', () => {
         { questionId: 'q2', kind: 'selected', selectedLabels: ['D'] },
       ],
     })
+  })
+
+  it('a REAL structured question (an unspied assistant halting on its step budget) is rendered as numbered options, and answering by number resumes it to a reply', async () => {
+    const files = new Map([['/ws/note.txt', 'hello from a seeded file']])
+    const backend: FsBackend = {
+      async readTextFile(p) { return files.get(p) },
+      async writeTextFile(p, c) { files.set(p, c) },
+      async removeFile(p) { files.delete(p) },
+      async mkdir() {},
+      async readDir() { return ['note.txt'] },
+    }
+    const readNote = { content: '', toolCalls: [{ id: 't1', name: 'read_file', input: { path: 'note.txt' } }] }
+    // Deterministic model: keeps re-reading until the answer to the question arrives, then finishes. (A queue of scripted
+    // responses would let the resumed turn burn through leftover reads and hit the tiny budget again.)
+    const inner = createScriptedLLMClient({ responses: [], streamChunks: ['The note says: hello from a seeded file.'] })
+    const answered = (messages: ChatMessage[]) => messages.some((m) => m.role === 'user' && m.content.includes('Answer to your question'))
+    const scripted: ILLMClient = {
+      callChat: (m, o) => inner.callChat(m, o),
+      callChatSync: (m, o) => inner.callChatSync(m, o),
+      callChatStructured: async (m, t, o) => {
+        if (isTurnIntentRequest(m)) return inner.callChatStructured(m, t, o)
+        if (m.some((x) => x.role === 'system' && x.content.includes('You check whether'))) return inner.callChatStructured(m, t, o)
+        return answered(m) ? { content: 'The note says: hello from a seeded file.' } : readNote
+      },
+    }
+    const assistant = new PersonalAssistant({
+      llmClient: scripted,
+      fileTools: { backend, workspaceRoot: '/ws' },
+      checkpointStore: new InMemoryAdapter({ scope: 'thread', namespace: 'cli-real-ask' }),
+      oneLoopMode: 'enabled',
+      goalGraphSuggestMode: 'disabled',
+      askMode: 'enabled',
+      maxSteps: 2,
+    })
+    const turnSpy = vi.spyOn(assistant, 'turn') // observe only — the real implementation still runs
+    const askLineQueue = ['1', 's']
+    const askLine = vi.fn(async () => askLineQueue.shift() ?? '')
+    const { cli } = await setupCli({ assistant, askLine })
+    const lines = captureOutput()
+
+    await cli.dispatchLine('Keep re-reading note.txt until you are certain of every word')
+
+    const out = lines.join('\n')
+    // rendered from the real result: the question text and its options, numbered
+    expect(out).toContain('The step budget is exhausted')
+    expect(out).toMatch(/1[.)\]]?\s+Continue with 10 more steps/)
+    expect(out).toMatch(/2[.)\]]?\s+Stop and summarize progress so far/)
+    // answered by ID: the follow-up turn carried the pending id and a `selected` answer for that option
+    const resume = turnSpy.mock.calls.find(([, opts]) => opts?.pendingClarificationId !== undefined)
+    expect(resume?.[1]?.clarificationAnswer?.answers[0]).toMatchObject({ kind: 'selected', selectedLabels: ['Continue with 10 more steps'] })
+    // and the resumed turn ended in a real reply, not silence
+    expect(out).toContain('hello from a seeded file')
   })
 
   it('non-interactive decline mode auto-declines a needs_clarification pause without ever prompting or resolving it', async () => {
