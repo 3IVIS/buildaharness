@@ -27,6 +27,7 @@ from __future__ import annotations
 import json
 import os
 import re
+from collections.abc import Callable
 from dataclasses import dataclass, field
 from typing import TYPE_CHECKING, Any, Literal
 
@@ -228,6 +229,42 @@ _DECIDE_SYSTEM_PROMPT = (
     "on these yet and will treat them as CONTINUE.\n"
     'Always include "rationale". Omit or null the fields that do not apply to your action.'
 )
+
+
+# ── TS coerceForWiredActions / resolveSupervisorDirective (supervisor.ts) ────
+
+# Every action is wired in the synchronous runtime, so nothing degrades to CONTINUE here (TS UNWIRED_ACTIONS is empty).
+_UNWIRED_ACTIONS: frozenset[str] = frozenset()
+
+
+def coerce_for_wired_actions(directive: SupervisorDirective) -> SupervisorDirective:
+    """An action the runtime cannot act on degrades to CONTINUE (TS coerceForWiredActions)."""
+    if directive.action in _UNWIRED_ACTIONS:
+        return SupervisorDirective.cont(f"[not wired: {directive.action}] {directive.rationale}")
+    return directive
+
+
+def resolve_supervisor_directive(
+    decider: Callable[[dict[str, Any]], dict[str, Any] | SupervisorDirective | None],
+    digest: dict[str, Any],
+    on_directive: Callable[[SupervisorDirective], None] | None = None,
+) -> SupervisorDirective:
+    """Consult `decider` with the digest and return a total, wired directive (TS resolveSupervisorDirective).
+
+    A raising decider fails open to CONTINUE; `on_directive` (observability) can never break the run.
+    """
+    try:
+        raw = decider(digest)
+    except Exception:
+        raw = None
+    directive = raw if isinstance(raw, SupervisorDirective) else SupervisorDirective.from_dict(raw)
+    directive = coerce_for_wired_actions(directive)
+    if on_directive is not None:
+        try:
+            on_directive(directive)
+        except Exception:
+            pass
+    return directive
 
 
 def _extract_json(raw: str) -> dict[str, Any] | None:

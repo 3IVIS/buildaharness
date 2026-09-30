@@ -24,7 +24,11 @@ its tests rewritten to the TS behaviour; new coverage is in `adapter/tests/test_
 | 0 | `handle_escalation_response`, `escalate_budget_exhausted`, `cancel_task_graph`, `experience_learning` (`learn_from_journal`…), `output_validation`, `context_compression`, `estimate_voi`, `select_task`, `update_task_graph`, `rollback_and_replan`, `StrategyState.recovery_strategy_order` | ✅ |
 | 0 | `_maybe_resolve` resolves in place + `resolver` argument | ✅ |
 | 0 | Budget-answer handling (`take_budget_answers`, `DEFAULT_BUDGET_EXTENSION`) | ✅ |
-| 0 | `HarnessRuntime` / `driveMainLoop`, checkpoints (`harness-checkpoint`), layer policy/budget/outcome, turn signals, golden baseline, `semantic_compaction` layer, `semanticConstraintJudge` hook, `initialize_harness` building all state | ⬜ out of scope: needs the async runtime restructure; Python keeps its synchronous `run_one_iteration` and outer drivers |
+| 0 | `HarnessRuntime` / `driveMainLoop` (sync twin in `harness/runtime.py`, see §20), `initialize_harness` building all state (`initialize_harness_state`) | ✅ |
+| 0 | checkpoints (`harness-checkpoint`), pause/resume/`pendingProposal` replay, layer policy/budget/outcome, turn signals, golden baseline, `semantic_compaction` layer, semantic hypotheses, `reviewerRevision` | ⬜ out of scope: live in the TS async/checkpointing layer |
+| 0 | `semanticConstraintJudge` hook | ✅ (`HarnessRunOptions.semantic_constraint_judge`) |
+| 20 | Runtime-vs-loop ordering audit, `resolve_supervisor_directive`, `coerce_for_wired_actions`, `resolve_gather_evidence`, `validate_recovery_action_dependencies` | ✅ |
+| 20 | Legacy `loop.run_one_iteration` kept as the old skeleton (not the TS order); no adapter calls it | 🟡 deliberate: use `HarnessRuntime` for TS-order runs |
 | 1 | `update_diagnostics` (all ten dimensions, dep-class-gap annotation, matched pattern, TS signature, `normalise` input forms) | ✅ (function ported; the Python loop still does not call it per iteration — it never did) |
 | 2 | Belief graph (`derived_from_edges`, `verified`, list frontier, `{source,target}` queue, decay 0.05, single-pass `propagate_beliefs`) | ✅ |
 | 2 | `update_world_model` / `recompute_belief_health`, staleness sweep on `affected_paths`, `Belief.applied_contradiction_ids`/`pending_sweep`/`reliability` persisted | ✅ |
@@ -242,8 +246,36 @@ Completely different design.
 * IDs: TS `Math.random()`/`Date.now()` ids vs Python `uuid4`; irrelevant unless persisted keys are compared.
 * `Diagnostics`/`Evidence` numeric types (`freshness`, `recorded_at`) differ; JSON shapes are **not** interchangeable in either direction for World model/Hypotheses/Task graph/Strategy/Memory/Experience (see above); the original "mirrored JSON state-shape" claim in `scripts/harness-conformance/README.md` holds only for control-state inputs.
 
+## 20. `harness-runtime.ts` (`driveMainLoop`) vs `loop.py` (`run_one_iteration`)
+
+**Finding:** `run_one_iteration` is not a port of `driveMainLoop`; it is an older skeleton with a different ordering and several missing nodes.
+Only tests, `node_compilers` and the `harness` package call it (no adapter does), so it was left as is and a TS twin was added:
+`adapter/harness/runtime.py` (`HarnessRuntime.run`, `drive_main_loop`, `initialize_harness_state`). Tests: `adapter/tests/test_harness_runtime.py`.
+
+| Step (TS order) | `run_one_iteration` (legacy) | `HarnessRuntime` (twin) |
+|---|---|---|
+| budget backstop `stepsUsed > maxSteps && !nothingLeftToRun` → `budget_exhausted` (+ budget question) | `check_max_steps` after compression, no all-COMPLETE shortcut | ✅ at the top of each iteration; also re-checked at the end after a late budget-answer poll |
+| `context_compression` | after external updates | ✅ first node |
+| `check_caller_updates` (+ budget answers), restart → `resolveAndStamp` | first node, no restart re-resolve | ✅ |
+| `detect_contradictions` (+ `contradictionChecker`) | after Sub-step B | ✅ first node of Sub-step A |
+| `generate_update_hypotheses`, `update_diagnostics` | never called per iteration | ✅ |
+| `incrementGenerationId` → `resolve_control_state` (consumes the reviewer verdict) | ✅ | ✅ |
+| all COMPLETE → return; `update_task_graph`; `select_task` (HUMAN_REQUIRED → `cannot_make_progress`; none → stalled fallback reply) | missing | ✅ |
+| `estimate_risk`, `estimate_voi`, `review_proposed_change` (+ `semanticChangeReviewer`, `review_failure` halt with fix question) | missing | ✅ |
+| `action_gate` (BLOCK/ESCALATE → task PENDING, stalled → halt) | ✅ gate only, policy stub picks the action | ✅ |
+| `execute` (continuable outcomes, `semanticTaskCompletion`, parallel `concurrentTask` on a forked world model) | never executes | ✅ (`continue` re-runs the task without Sub-step A, as TS `pendingProposal` continuation) |
+| Sub-step B: `incrementGenerationId`, `gather_evidence` (`exec-…`/`result-…`/fact/belief-trail), `apply_tool_reliability`, `update_world_model_post_exec`, `update_diagnostics_post_exec`, `semanticFailureMatcher`, `resolve_control_state_b` | resolve_b only | ✅ |
+| `verify`, `post_exec_gate`, `update_task_state` (journal entry, COMPLETE or `rollback_replan`) | verify + gate; no task state | ✅ |
+| `rollback_replan`: supervisor consulted only on a stall; GATHER_EVIDENCE → `resolve_gather_evidence`; ABORT / ASK_USER halts (cap M=2); `rollback_and_replan(..., requeue_leaf_on_local)` | supervisor handling inline in the stall block *before* the gate | ✅ |
+| `completion_history` / `risk_state_history` pushes; feasibility cap at 0.8·maxSteps; yield | history only partly | ✅ |
+| post-loop: `reviewerPass` (adversarial lens gated), reopen → second main loop → `reviewer_pass_2`; `output_validation` (+ `semanticConstraintJudge`); `learnFromRun` | `reviewer_pass` inside the iteration, no second loop | ✅ |
+
+New Python helpers for the runtime: `supervisor.resolve_supervisor_directive` / `coerce_for_wired_actions`, `investigation.resolve_gather_evidence` (+ `INVESTIGATION_CAP_K`, `INVESTIGATION_DONE_PREFIX`), `runtime.validate_recovery_action_dependencies`.
+
+**Deliberate differences:** synchronous callables instead of promises; no checkpoint/pause/resume/`pendingProposal` replay (`continue` is carried in `LoopContext.pending_continuation`); no layer-policy gating or `reportLayer` events (so `estimate_voi`'s result is computed but not used to gate reporting, and the adversarial reviewer lens runs when the graph has ≥3 tasks or any non-LOW risk task instead of the complexity signal); no semantic hypotheses or `reviewerRevision`; `EscalationHalt` propagates out of `run()` as in TS; the legacy Python-only `RecoveryBudget`, `user_clarification` observation and DB-backed `ExperienceStore` are not used by the runtime (a TS-shaped `InMemoryExperienceStore` is the default-shaped store).
+
 ## Not verified (needs a second pass)
-* `harness-runtime.ts` vs `loop.py` step ordering (only skimmed).
+* ~~`harness-runtime.ts` vs `loop.py` step ordering~~ → audited in §20.
 * Primitives (`blend_engine`, `multi_source_reducer`, `taxonomy_classifier`, `turn_context`, `preference_extractor`), `lexical_*`, `process_*`, `script_utils`, `normalise` (entropy), `ask_question.py`, `trajectory_digest`, `investigation` details: spot-checked, look mirrored; not line-audited.
 * Python-only modules with no TS twin (`plan_store`, `plan_schema`, `execution_boundary`, `provenance`, `semantic_checks`, `langfuse_tracing`, `tool_manifest`, `node_compilers`, `state_store`): decide per module whether TS should gain them or Python should drop them.
 * Conformance suites were not executed (no `node_modules`); run `node scripts/harness-conformance/compare*.mjs` to confirm the tracked items are still the only red ones.
