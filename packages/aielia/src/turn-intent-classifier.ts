@@ -121,7 +121,16 @@ export interface TurnIntentClassification {
   userPosture?: TurnPosture
   pushbackOnPriorTurn?: boolean
   statesConstraint?: boolean
+  /**
+   * The constraint(s) the message sets, each as a short standalone sentence a reply can be checked against ("Do not use
+   * tabs", "Keep it under 100 words"). Only set alongside `statesConstraint` — empty otherwise, and on a classifier
+   * failure. Capped at MAX_STATED_CONSTRAINTS.
+   */
+  statedConstraints?: string[]
 }
+
+/** The most constraints one message can hand the harness — a message with more is not a rule list but a spec. */
+export const MAX_STATED_CONSTRAINTS = 4
 
 const FAIL_SAFE_REASON = 'Risk could not be determined — classification failed or returned an unusable result.'
 
@@ -174,6 +183,7 @@ function failSafeClassification(cause?: unknown): TurnIntentClassification {
     userPosture: 'unknown',
     pushbackOnPriorTurn: false,
     statesConstraint: false,
+    statedConstraints: [],
   }
 }
 
@@ -227,6 +237,7 @@ const TURN_INTENT_SCHEMA = {
     userPosture: { type: 'string', enum: [...POSTURE_VALUES] },
     pushbackOnPriorTurn: { type: 'boolean' },
     statesConstraint: { type: 'boolean' },
+    statedConstraints: { type: 'array', items: { type: 'string' } },
   },
   required: [
     'riskLevel',
@@ -333,7 +344,9 @@ const TURN_INTENT_SYSTEM_PROMPT =
   '12. pushbackOnPriorTurn: true if the message disagrees with, corrects, or expresses ' +
   "dissatisfaction with the assistant's previous reply. False if there is no prior reply.\n\n" +
   '13. statesConstraint: true if the message sets a rule, limit, or standing requirement that should ' +
-  'govern this and later turns (a format, a prohibition, a scope restriction), not just a one-off ask.\n\n' +
+  'govern this and later turns (a format, a prohibition, a scope restriction), not just a one-off ask. ' +
+  'When true, also list each such rule in statedConstraints as a short standalone sentence a reply could be ' +
+  'checked against ("Do not use tabs"); empty when statesConstraint is false.\n\n' +
   '14. isPlanQuestion: true only if told a plan is currently active AND the message only asks about or ' +
   'discusses that plan — where it stands, what a step is, what is left, why something did not finish — ' +
   'and asks for no new work and gives no go-ahead to continue. False for "go ahead", "continue", ' +
@@ -352,7 +365,7 @@ const TURN_INTENT_SYSTEM_PROMPT =
   'boolean, "confidence": "high"|"medium"|"low", "category": "identity"|"health"|"preference"|' +
   '"location"|"occupation"|"relationships"|"project"|"other"}], "needsGrounding": boolean, ' +
   '"ambiguity": "none"|"some"|"high", "userPosture": "informational"|"directive"|"exploratory"|' +
-  '"corrective", "pushbackOnPriorTurn": boolean, "statesConstraint": boolean}'
+  '"corrective", "pushbackOnPriorTurn": boolean, "statesConstraint": boolean, "statedConstraints": [string]}'
 
 interface RawTurnIntent {
   riskLevel?: unknown
@@ -372,6 +385,7 @@ interface RawTurnIntent {
   userPosture?: unknown
   pushbackOnPriorTurn?: unknown
   statesConstraint?: unknown
+  statedConstraints?: unknown
 }
 
 const FACT_CATEGORY_VALUES = new Set(FACT_CATEGORIES)
@@ -459,6 +473,12 @@ function parseTurnIntent(content: string, context: TurnIntentContext): TurnInten
   const userPosture = (POSTURE_VALUES as readonly unknown[]).includes(parsed.userPosture) ? (parsed.userPosture as TurnPosture) : 'unknown'
   const pushbackOnPriorTurn = parsed.pushbackOnPriorTurn === true
   const statesConstraint = parsed.statesConstraint === true
+  const statedConstraints = statesConstraint && Array.isArray(parsed.statedConstraints)
+    ? (parsed.statedConstraints as unknown[])
+        .filter((c): c is string => typeof c === 'string' && c.trim() !== '')
+        .map((c) => c.trim())
+        .slice(0, MAX_STATED_CONSTRAINTS)
+    : []
 
   return {
     riskLevel: parsed.riskLevel,
@@ -479,6 +499,7 @@ function parseTurnIntent(content: string, context: TurnIntentContext): TurnInten
     userPosture,
     pushbackOnPriorTurn,
     statesConstraint,
+    statedConstraints,
   }
 }
 
