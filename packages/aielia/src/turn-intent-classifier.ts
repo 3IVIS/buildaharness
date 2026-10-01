@@ -27,6 +27,8 @@ export interface StatedFact {
   durable: boolean
   confidence: FactConfidence
   category: FactCategory
+  /** M1: stable snake_case key when the fact names a single-valued attribute; absent otherwise (fail-open: no key = accumulate as before). */
+  key?: string
 }
 
 /** AL5a user-input signals. 'unknown' is only ever produced by failSafeClassification, never by the model (same convention as RiskLevel's 'UNKNOWN'). */
@@ -229,6 +231,7 @@ const STATED_FACT_SCHEMA = {
     durable: { type: 'boolean' },
     confidence: { type: 'string', enum: ['high', 'medium', 'low'] },
     category: { type: 'string', enum: FACT_CATEGORIES },
+    key: { type: 'string' },
   },
   required: ['text', 'durable', 'confidence', 'category'],
 }
@@ -336,7 +339,9 @@ const TURN_INTENT_SYSTEM_PROMPT =
   'Priya, I\'m vegetarian, and I live in Austin" is three entries) — return all of them, not just ' +
   'the first. Return an empty array if the message states no fact about the user. Each entry has: ' +
   '`text`, the fact restated concisely in the third person (e.g. "the user is allergic to ' +
-  'peanuts"); `durable`, true for identity/safety-relevant facts meant to persist indefinitely ' +
+  'peanuts"); `key`, optional: a short stable snake_case name for the attribute (e.g. ' +
+  '"home_city", "preferred_editor") ONLY when the fact states the single current value of an ' +
+  'attribute that a later statement would replace; omit it otherwise; `durable`, true for identity/safety-relevant facts meant to persist indefinitely ' +
   '(name, stated preference, health/dietary) and equally true for a stable fact about a project\'s ' +
   'architecture, tech stack, or conventions (e.g. "the project uses PostgreSQL") since those persist ' +
   'the same way a preference does — false for something expected to change (current location, ' +
@@ -392,7 +397,7 @@ const TURN_INTENT_SYSTEM_PROMPT =
   'boolean, "isBulkReminderRequest": boolean, "isAbandonRequest": boolean, "isPlanQuestion": boolean, "continuesPlan": boolean, "isUnderdetermined": boolean, "matchedPlanTemplate": ' +
   'string|null, "needsMultiStepPlan": boolean, "statesDurableFacts": [{"text": string, "durable": ' +
   'boolean, "confidence": "high"|"medium"|"low", "category": "identity"|"health"|"preference"|' +
-  '"location"|"occupation"|"relationships"|"project"|"other"}], "needsGrounding": boolean, ' +
+  '"location"|"occupation"|"relationships"|"project"|"other", "key"?: string}], "needsGrounding": boolean, ' +
   '"ambiguity": "none"|"some"|"high", "userPosture": "informational"|"directive"|"exploratory"|' +
   '"corrective", "pushbackOnPriorTurn": boolean, "statesConstraint": boolean, "statedConstraints": [string], ' +
   '"lastingConstraints": [integer], "liftedConstraints": [integer]}'
@@ -433,7 +438,8 @@ function isStatedFact(value: unknown): value is StatedFact {
     typeof v.durable === 'boolean' &&
     (v.confidence === 'high' || v.confidence === 'medium' || v.confidence === 'low') &&
     typeof v.category === 'string' &&
-    FACT_CATEGORY_VALUES.has(v.category)
+    FACT_CATEGORY_VALUES.has(v.category) &&
+    (v.key === undefined || typeof v.key === 'string')
   )
 }
 

@@ -168,6 +168,7 @@ async function buildAssistant(config: AssistantConfig, { backend, dataDir, remin
     // config.activeProject (set via /project <name>) overrides the default of "the workspace
     // I'm running in" — see PersonalAssistantOptions.activeProject's doc comment.
     activeProject: config.activeProject || workspaceRoot,
+    memoryBudgetChars: config.memoryBudgetChars,
     memory: new FileSystemAdapter({ backend, baseDir: dataDir, namespace: 'transcripts' }),
     experienceStore: await FileSystemExperienceStore.create({ backend, baseDir: dataDir, namespace: 'experience' }),
     checkpointStore: new FileSystemAdapter({ backend, baseDir: dataDir, namespace: 'checkpoints' }),

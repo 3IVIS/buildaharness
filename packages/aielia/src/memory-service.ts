@@ -9,6 +9,12 @@ import type { StatedFact, FactCategory, FactConfidence } from './turn-intent-cla
 // turn — a hard cap, not a summary, so this stays cheap even as the fact/reminder store grows.
 export const FACT_CAP = 20
 
+/** Default character budget for the rendered facts block under `AUDIT_MEMORY_BUDGETED_RENDER` (M0 measured ~195 tokens ≈ 800 chars for 20 facts; this leaves room for roughly 5x that). */
+export const DEFAULT_MEMORY_BUDGET_CHARS = 4000
+
+/** Append-only store of entries a keyed fact replaced (M1); the M2 audit log will subsume it. */
+export const RETIRED_FACTS_KEY = 'facts:retired'
+
 // Deliberately NOT suffixed with a sessionId — clearSession() only deletes `facts:${sessionId}`,
 // so a fact stored here (see recordFacts()) survives /new the same way reminderStore/
 // experienceStore already do (see AssistantSession.clearSession's doc comment on why those stay
@@ -96,6 +102,58 @@ export interface RecordFactsResult {
   corroborations: Corroboration[]
 }
 
+/**
+ * `AUDIT_MEMORY_BUDGETED_RENDER` gate (M1 of the agent memory framework plan). Gates budgeted/
+ * priority rendering, keyed supersession and usage fields. `=0`/`off` restores `slice(-FACT_CAP)`
+ * and append-only writes. Shipped default **OFF**: the M1 real-model pilot has not run (see the plan's
+ * defaults rule), so only `1`/`true`/`on`/`yes`/`enabled` turns it on. Read fresh each call.
+ */
+export function memoryBudgetedRenderEnabled(env?: Record<string, string | undefined>): boolean {
+  const source = env ?? (typeof process !== 'undefined' ? process.env : {})
+  const raw = String(source.AUDIT_MEMORY_BUDGETED_RENDER ?? '').trim().toLowerCase()
+  return ['1', 'true', 'on', 'yes', 'enabled'].includes(raw)
+}
+
+const TIER_PRIORITY: Record<string, number> = { identity: 0, preference: 0, semantic: 1, episodic: 2 }
+
+export interface RenderedFacts {
+  block: string
+  /** Facts actually placed in the block, in render order. */
+  shown: UserFact[]
+  /** In-scope live facts that did not fit the budget. */
+  droppedCount: number
+}
+
+/**
+ * Renders facts by priority and character budget, not by position: identity/preference first, then
+ * semantic, then episodic/session facts; within a tier newest statement first, then most recently
+ * injected. A fact is dropped only when the budget is spent, and the drop is counted. No
+ * query-relevance ranking (D2: no lexical scoring). Pure.
+ */
+export function renderFactsBlock(inScope: UserFact[], budgetChars: number): RenderedFacts {
+  const live = inScope.filter((f) => !f.retiredAt)
+  const ranked = live
+    .map((f, i) => ({ f, i, p: f.durable ? (TIER_PRIORITY[tierForFact(f)] ?? 1) : 2 }))
+    .sort((a, b) =>
+      a.p - b.p
+      || b.f.extractedAt.localeCompare(a.f.extractedAt)
+      || (b.f.lastInjectedAt ?? '').localeCompare(a.f.lastInjectedAt ?? '')
+      || b.i - a.i)
+  const header = '\nKnown facts about the user:\n'
+  const shown: UserFact[] = []
+  const lines: string[] = []
+  let used = header.length
+  for (const { f } of ranked) {
+    const line = factLine(f)
+    const cost = line.length + (lines.length > 0 ? 1 : 0)
+    if (used + cost > budgetChars) continue // a shorter later fact may still fit
+    lines.push(line)
+    shown.push(f)
+    used += cost
+  }
+  return { block: lines.length > 0 ? `${header}${lines.join('\n')}` : '', shown, droppedCount: live.length - shown.length }
+}
+
 /** Durable facts first, then session facts whose text isn't already present among them — so a
  * fact recorded as durable (an allergy, a name) doesn't show up twice within the same session it
  * was stated in, but does reappear on its own once /new clears the session list. */
@@ -172,6 +230,7 @@ export function buildTurnFacts(sessionId: string, userMessage: string, statedFac
         durable: fact.durable,
         confidence: fact.confidence,
         category: fact.category,
+        ...(fact.key ? { key: fact.key } : {}),
       }))
     : []
   return mergeTurnFacts(lexicalFacts, llmFacts)
@@ -230,7 +289,14 @@ export class MemoryService {
     private readonly model: () => string | undefined,
     /** Resolves to `config.activeProject` if the user set one via `/project <name>`, else the workspace root — read through a getter (same convention as `model` above) so a mid-session `/project`/`/config set activeProject` change takes effect on the very next turn. See UserFact.project's doc comment for how this is used. */
     private readonly currentProject: () => string = () => '',
+    /** M1: character budget for the facts block under `AUDIT_MEMORY_BUDGETED_RENDER` (config `memoryBudgetChars`). */
+    private readonly memoryBudgetChars: () => number = () => DEFAULT_MEMORY_BUDGET_CHARS,
   ) {}
+
+  /** Facts rendered since the last flush, keyed by `text|extractedAt`; written lazily so loadFacts() stays read-only (M1). */
+  private pendingInjections = new Map<string, number>()
+  /** Number of in-scope facts the last budgeted render could not show — `/memory` says "N facts not shown this turn". */
+  lastDroppedCount = 0
 
   /**
    * Durable + session facts for `sessionId`, plus the ready-to-splice system-prompt block — see
@@ -246,6 +312,15 @@ export class MemoryService {
     const facts = mergeFacts(durableFacts, sessionFacts)
     const project = this.currentProject()
     const inScope = facts.filter((f) => f.project === undefined || f.project === project)
+    if (memoryBudgetedRenderEnabled()) {
+      const rendered = renderFactsBlock(inScope, this.memoryBudgetChars())
+      this.lastDroppedCount = rendered.droppedCount
+      for (const f of rendered.shown) {
+        const id = `${f.text}|${f.extractedAt}`
+        this.pendingInjections.set(id, (this.pendingInjections.get(id) ?? 0) + 1)
+      }
+      return { facts, factsBlock: rendered.block }
+    }
     const factsBlock = inScope.length > 0
       ? `\nKnown facts about the user:\n${inScope.slice(-FACT_CAP).map(factLine).join('\n')}`
       : ''
@@ -347,6 +422,7 @@ export class MemoryService {
     // all, not even an empty-array write — matching every reader that treats an absent key the
     // same as an empty one, and the "records nothing" test's expectation that the key itself
     // stays unset until a fact is actually captured.
+    if (memoryBudgetedRenderEnabled()) await this.flushInjectionUsage(sessionId)
     if (newFacts.length === 0) return { contradictions: [], corroborations: [] }
 
     let sessionFacts = (((await this.memory.get(`facts:${sessionId}`)) as UserFact[] | undefined) ?? []).map(migrateFact)
@@ -443,7 +519,28 @@ export class MemoryService {
       }
     }
 
-    for (const fact of newFacts) {
+    const retiredNow: UserFact[] = []
+    for (let fact of newFacts) {
+      if (memoryBudgetedRenderEnabled() && fact.key) {
+        const key = fact.key
+        const sameKey = (f: UserFact): boolean => f.key === key && (f.project ?? '') === (fact.project ?? '')
+        const priorLive = [...durableFacts, ...sessionFacts].filter(sameKey)
+        // Restating the same value is a no-op, not a new entry.
+        if (priorLive.some((f) => f.text === fact.text)) continue
+        if (priorLive.length > 0) {
+          const retiredAt = new Date().toISOString()
+          const seen = new Set<string>()
+          for (const old of priorLive) {
+            const id = `${old.text}|${old.extractedAt}`
+            if (seen.has(id)) continue
+            seen.add(id)
+            retiredNow.push({ ...old, retiredAt })
+          }
+          if (durableFacts.some(sameKey)) { durableFacts = durableFacts.filter((f) => !sameKey(f)); durableChanged = true }
+          sessionFacts = sessionFacts.filter((f) => !sameKey(f))
+          fact = { ...fact, supersedes: priorLive[priorLive.length - 1].text }
+        }
+      }
       sessionFacts = [...sessionFacts, fact]
       if (shouldAutoPromote(fact)) {
         durableFacts = [...durableFacts, fact]
@@ -454,12 +551,38 @@ export class MemoryService {
       }
     }
 
+    if (retiredNow.length > 0) {
+      const retired = ((await this.memory.get(RETIRED_FACTS_KEY)) as UserFact[] | undefined) ?? []
+      await this.memory.set(RETIRED_FACTS_KEY, [...retired, ...retiredNow])
+    }
     await this.memory.set(`facts:${sessionId}`, sessionFacts)
     if (durableChanged) await this.memory.set(DURABLE_FACTS_KEY, durableFacts)
     if (pendingChanged) await this.memory.set(PENDING_CONFIRMATION_KEY, pendingFacts)
     if (rejectedChanged) await this.memory.set(REJECTED_FACTS_KEY, rejectedFacts)
 
     return { contradictions, corroborations }
+  }
+
+  /** Writes the batched `injectedCount`/`lastInjectedAt` updates collected by budgeted renders, to whichever store(s) hold each fact. A no-op (no writes) when nothing was rendered. */
+  private async flushInjectionUsage(sessionId: string): Promise<void> {
+    if (this.pendingInjections.size === 0) return
+    const pending = this.pendingInjections
+    this.pendingInjections = new Map()
+    const now = new Date().toISOString()
+    const apply = (facts: UserFact[]): { facts: UserFact[]; changed: boolean } => {
+      let changed = false
+      const out = facts.map((f) => {
+        const n = pending.get(`${f.text}|${f.extractedAt}`)
+        if (!n) return f
+        changed = true
+        return { ...f, injectedCount: (f.injectedCount ?? 0) + n, lastInjectedAt: now }
+      })
+      return { facts: out, changed }
+    }
+    const session = apply((((await this.memory.get(`facts:${sessionId}`)) as UserFact[] | undefined) ?? []).map(migrateFact))
+    if (session.changed) await this.memory.set(`facts:${sessionId}`, session.facts)
+    const durable = apply((((await this.memory.get(DURABLE_FACTS_KEY)) as UserFact[] | undefined) ?? []).map(migrateFact))
+    if (durable.changed) await this.memory.set(DURABLE_FACTS_KEY, durable.facts)
   }
 
   /**

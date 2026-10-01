@@ -77,6 +77,20 @@ export interface UserFact {
    * project is currently active.
    */
   project?: string
+  /**
+   * M1 (agent memory framework): a model-chosen stable key for a fact naming a single-valued
+   * attribute ("home_city", "preferred_editor"). A new fact with the same key replaces the old
+   * one (see `MemoryService.recordFacts()`). Never derived from wording in code; undefined for
+   * a fact that names no single-valued attribute, which keeps today's accumulate behaviour.
+   */
+  key?: string
+  /** M1: set on the replacing fact — the text of the entry it retired. */
+  supersedes?: string
+  /** M1: set on an entry moved to `facts:retired` when a keyed fact replaced it. */
+  retiredAt?: string
+  /** M1 usage fields, updated lazily (batched, flushed from `recordFacts()`) when the fact is rendered into a prompt. */
+  injectedCount?: number
+  lastInjectedAt?: string
 }
 
 /** Every fact has a certainty for `/memory` display purposes, even one with no `confidence` gradient (user_asserted/observed/externally_verified) — those are exactly as certain as a stated fact gets, so they display as 'high' rather than blank. Never used for promotion/tier logic, which still reads `fact.confidence` directly and treats undefined as "no LLM confidence signal" (see that field's own doc comment) — this is purely a rendering convenience. */

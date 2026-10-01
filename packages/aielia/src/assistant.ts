@@ -35,7 +35,7 @@ import type { TraceEvent } from './trace-events.js'
 import type { AssistantToolStep } from './tool-step.js'
 
 import type { LayerPolicyMode } from '@buildaharness/harness'
-import { MemoryService, buildTurnFacts, type MemorySummary, type MemoryExport, type PendingFact } from './memory-service.js'
+import { MemoryService, DEFAULT_MEMORY_BUDGET_CHARS, buildTurnFacts, type MemorySummary, type MemoryExport, type PendingFact } from './memory-service.js'
 import type { UserFact } from './fact-extraction.js'
 import { REVIEW_NOTE_PREFIX, reviewNoticeText } from './review-checker.js'
 import { renderHypothesisNote, hypothesisContextMessage, proposeCompetingExplanations, semanticHypothesesEnabled, HYPOTHESIS_NOTE_PREFIX } from './semantic-hypotheses.js'
@@ -211,6 +211,8 @@ export interface PersonalAssistantOptions {
    * fresh install with no workspace concept at all.
    */
   activeProject?: string
+  /** M1: character budget for the facts block under `AUDIT_MEMORY_BUDGETED_RENDER` — see config.ts's `memoryBudgetChars`. */
+  memoryBudgetChars?: number
   /** Conversation transcript storage — defaults to an in-process Map, swap for IndexedDBAdapter in the browser. */
   memory?: MemoryAdapter
   /** Learning-layer store — persist and pass the same instance back in across sessions to retain strategy weights. */
@@ -361,6 +363,7 @@ export class PersonalAssistant {
   private readonly llmClient: ILLMClient
   private model?: string
   private activeProject?: string
+  private memoryBudgetChars?: number
   private readonly memory: MemoryAdapter
   private readonly webTools?: WebToolsContext
   private readonly onTrace?: (event: TraceEvent) => void
@@ -403,6 +406,7 @@ export class PersonalAssistant {
     this.llmClient = options.llmClient
     this.model = options.model
     this.activeProject = options.activeProject
+    this.memoryBudgetChars = options.memoryBudgetChars
     this.memory = options.memory ?? new InMemoryAdapter({ scope: 'thread', namespace: 'personal-assistant' })
     const experienceStore = options.experienceStore ?? new InMemoryExperienceStore()
     const checkpointStore = options.checkpointStore ?? new InMemoryAdapter({ scope: 'thread', namespace: 'personal-assistant-checkpoints' })
@@ -429,7 +433,7 @@ export class PersonalAssistant {
     // recordFacts()/loadFacts() call, so setActiveProject() takes effect on the very next turn.
     const currentProject = (): string => this.activeProject ?? ''
 
-    this.memoryService = new MemoryService(this.memory, reminderStore, experienceStore, this.llmClient, model, currentProject)
+    this.memoryService = new MemoryService(this.memory, reminderStore, experienceStore, this.llmClient, model, currentProject, () => this.memoryBudgetChars ?? DEFAULT_MEMORY_BUDGET_CHARS)
     this.session = new AssistantSession(this.memory, checkpointStore, spendCap, model, fileTools, shellTools, actionTools)
     this.agentLoop = new AgentLoop(
       this.memory,

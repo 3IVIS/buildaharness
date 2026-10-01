@@ -46,6 +46,7 @@ export const ENV_VAR_FOR_CONFIG_KEY: Partial<Record<keyof AssistantConfig, strin
   dangerouslySkipPermissions: 'ASSISTANT_DANGEROUSLY_SKIP_PERMISSIONS',
   sessionCostLimitUsd: 'ASSISTANT_SESSION_COST_LIMIT_USD',
   sessionCallLimit: 'ASSISTANT_SESSION_CALL_LIMIT',
+  memoryBudgetChars: 'ASSISTANT_MEMORY_BUDGET_CHARS',
   oneLoopMode: 'ASSISTANT_ONE_LOOP',
   askMode: 'ASSISTANT_ASK_MODE',
   planMode: 'ASSISTANT_PLAN_MODE',
@@ -114,6 +115,7 @@ export function envOverridesFromProcessEnv(env: NodeJS.ProcessEnv): Partial<Assi
   if (env.ASSISTANT_DANGEROUSLY_SKIP_PERMISSIONS !== undefined) overrides.dangerouslySkipPermissions = env.ASSISTANT_DANGEROUSLY_SKIP_PERMISSIONS === '1'
   if (env.ASSISTANT_SESSION_COST_LIMIT_USD !== undefined) overrides.sessionCostLimitUsd = Number(env.ASSISTANT_SESSION_COST_LIMIT_USD)
   if (env.ASSISTANT_SESSION_CALL_LIMIT !== undefined) overrides.sessionCallLimit = Number(env.ASSISTANT_SESSION_CALL_LIMIT)
+  if (env.ASSISTANT_MEMORY_BUDGET_CHARS !== undefined) overrides.memoryBudgetChars = Number(env.ASSISTANT_MEMORY_BUDGET_CHARS)
   // resolveOneLoopMode already warns-and-defaults on an unrecognized value, so an explicit
   // ASSISTANT_ONE_LOOP always resolves to a concrete 'enabled'/'disabled' override here.
   if (env.ASSISTANT_ONE_LOOP !== undefined) overrides.oneLoopMode = resolveOneLoopMode(env)
@@ -170,6 +172,11 @@ export function parseConfigValue(key: keyof AssistantConfig, raw: string): unkno
     case 'sessionCostLimitUsd': {
       const n = Number(raw)
       if (!Number.isFinite(n) || n <= 0) throw new ConfigValueParseError('sessionCostLimitUsd must be a positive number')
+      return n
+    }
+    case 'memoryBudgetChars': {
+      const n = Number(raw)
+      if (!Number.isFinite(n) || n <= 0 || !Number.isInteger(n)) throw new ConfigValueParseError('memoryBudgetChars must be a positive integer')
       return n
     }
     case 'sessionCallLimit': {
