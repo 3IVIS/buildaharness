@@ -87,6 +87,7 @@ describe('classifyTurnIntent — happy path field derivation', () => {
       pushbackOnPriorTurn: false,
       statesConstraint: false,
       statedConstraints: [],
+    liftedConstraints: [],
     })
     expect(llm.calls).toBe(1)
   })
@@ -410,6 +411,7 @@ describe('classifyTurnIntent — fail-safe fallback', () => {
     pushbackOnPriorTurn: false,
     statesConstraint: false,
     statedConstraints: [],
+    liftedConstraints: [],
   }
 
   it('falls back on malformed JSON instead of throwing, folding the JSON.parse error into riskReason (same classifyError path as a genuine LLM-call throw, since JSON.parse throwing inside parseTurnIntent is likewise a real caught error, not a semantic-validation null-return)', async () => {
@@ -579,5 +581,34 @@ describe('statedConstraints', () => {
   it('is empty when the field is missing or malformed', async () => {
     expect(await stated({ statesConstraint: true })).toEqual([])
     expect(await stated({ statesConstraint: true, statedConstraints: 'no tabs' })).toEqual([])
+  })
+})
+
+describe('liftedConstraints', () => {
+  const lifted = async (overrides: Record<string, unknown>, standingConstraints?: string[]) =>
+    (await classifyTurnIntent('Tabs are fine now.', new StructuredOnlyLLMClient(response(overrides)), { hasActivePlan: false, standingConstraints })).liftedConstraints
+
+  it('keeps distinct in-range 1-based positions of the standing list', async () => {
+    expect(await lifted({ liftedConstraints: [2, 2, 1, 0, 3, 1.5, 'x'] }, ['a', 'b'])).toEqual([2, 1])
+  })
+  it('is empty when no standing constraints were shown, even if the model named one', async () => {
+    expect(await lifted({ liftedConstraints: [1] })).toEqual([])
+  })
+  it('is empty when the field is missing or malformed', async () => {
+    expect(await lifted({}, ['a'])).toEqual([])
+    expect(await lifted({ liftedConstraints: 'a' }, ['a'])).toEqual([])
+  })
+  it('shows the numbered standing constraints to the model only when there are some', async () => {
+    const seen: string[] = []
+    const client = new StructuredOnlyLLMClient(response({}))
+    const orig = client.callChatStructured.bind(client)
+    client.callChatStructured = (async (m: Parameters<typeof orig>[0], ...rest: unknown[]) => {
+      seen.push(m[0].content)
+      return (orig as (...a: unknown[]) => unknown)(m, ...rest)
+    }) as typeof client.callChatStructured
+    await classifyTurnIntent('hi', client, { hasActivePlan: false, standingConstraints: ['Do not use tabs'] })
+    await classifyTurnIntent('hi', client, { hasActivePlan: false })
+    expect(seen[0]).toContain('1. Do not use tabs')
+    expect(seen[1]).not.toContain('stated earlier in this conversation')
   })
 })

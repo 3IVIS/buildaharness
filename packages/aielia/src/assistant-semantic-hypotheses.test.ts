@@ -27,7 +27,7 @@ function backend(): FsBackend {
   }
 }
 
-function build(opts: { underdetermined: boolean; tools?: boolean }) {
+function build(opts: { underdetermined: boolean; tools?: boolean; layerPolicyMode?: 'static' | 'shadow' | 'adaptive' }) {
   const inner = createScriptedLLMClient({
     responses: ['It could be soft-deleted rows or a stale refresh; here is how to tell.'],
     classify: () => ({ isUnderdetermined: opts.underdetermined }),
@@ -48,7 +48,7 @@ function build(opts: { underdetermined: boolean; tools?: boolean }) {
       return inner.callChatStructured(messages, tools, options)
     },
   } as ILLMClient
-  const assistant = new PersonalAssistant({ llmClient: client, ...(opts.tools === false ? {} : { fileTools: { backend: backend(), workspaceRoot: '/ws' } }) })
+  const assistant = new PersonalAssistant({ llmClient: client, ...(opts.layerPolicyMode ? { layerPolicyMode: opts.layerPolicyMode } : {}), ...(opts.tools === false ? {} : { fileTools: { backend: backend(), workspaceRoot: '/ws' } }) })
   return { assistant, seen }
 }
 
@@ -109,6 +109,35 @@ describe('semantic hypotheses through a real turn', () => {
       const notUnder = build({ underdetermined: false, tools: false })
       await notUnder.assistant.turn(QUESTION, { sessionId: 'h6' })
       expect(notUnder.seen.propose).toBe(0)
+    })
+  })
+
+  describe('the layer policy (opt-in layers obey it)', () => {
+    // The per-turn call budget is spent on the semantic escalations first; with every opt-in flag on, a LOW-risk turn has
+    // nothing left for the hypothesis proposal, so an adaptive plan switches it off even though its own flag is on.
+    const ALL_OPT_IN = ['AUDIT_SEMANTIC_SOURCE_RELIABILITY', 'AUDIT_SEMANTIC_HYPOTHESES', 'AUDIT_REVIEWER_REVISION', 'AUDIT_EXPERIENCE_LEARNING', 'AUDIT_SEMANTIC_COMPACTION']
+    afterEach(() => { for (const v of ALL_OPT_IN) delete process.env[v] })
+
+    it('adaptive + budget spent: the flag is on but no proposal call is made, on a tool turn and on a tool-less turn', async () => {
+      for (const v of ALL_OPT_IN) process.env[v] = '1'
+      const tool = build({ underdetermined: true, layerPolicyMode: 'adaptive' })
+      expect((await tool.assistant.turn(QUESTION, { sessionId: 'p1' })).status).toBe('ok')
+      expect(tool.seen.propose).toBe(0)
+      expect(contextMessage(tool.seen.loopMessages[0])).toBeUndefined()
+
+      const draft = build({ underdetermined: true, tools: false, layerPolicyMode: 'adaptive' })
+      await draft.assistant.turn(QUESTION, { sessionId: 'p2' })
+      expect(draft.seen.propose).toBe(0)
+      expect(draft.seen.draftSystems.every((sys) => !sys.includes('can be explained several ways'))).toBe(true)
+    })
+
+    it('the same turn in static and shadow mode still makes the call (today)', async () => {
+      for (const v of ALL_OPT_IN) process.env[v] = '1'
+      for (const layerPolicyMode of ['static', 'shadow'] as const) {
+        const { assistant, seen } = build({ underdetermined: true, layerPolicyMode })
+        await assistant.turn(QUESTION, { sessionId: `p-${layerPolicyMode}` })
+        expect(seen.propose).toBe(1)
+      }
     })
   })
 })

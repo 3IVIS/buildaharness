@@ -96,8 +96,10 @@ export class TurnInterpreter {
     onUsage: (usage: TokenUsage) => void
     /** Recent transcript, used only by the AL3a ambiguity guard so an answer to an earlier question isn't re-asked. */
     recentTranscript?: ChatMessage[]
+    /** Constraints stated earlier this session; shown to the classifier so the message can lift one. */
+    standingConstraints?: string[]
   }): Promise<TurnInterpretation> {
-    const { userMessage, sessionId, toolLoopWillRun, approved, dangerouslySkipPermissions, onUsage, recentTranscript } = params
+    const { userMessage, sessionId, toolLoopWillRun, approved, dangerouslySkipPermissions, onUsage, recentTranscript, standingConstraints } = params
 
     // Per-task plan cancellation ("cancel the daily-budget task", "skip the research step") is
     // internal bookkeeping — it never touches anything outside this session's own plan state,
@@ -143,7 +145,7 @@ export class TurnInterpreter {
     // Single consolidated LLM call replacing the former classifyRisk/classifyTriviality/
     // classifyDecompositionCandidate/isAbandonPhrase/classifyPlanningCandidate chain — see
     // turn-intent-classifier.ts.
-    const classification = await classifyTurnIntent(userMessage, this.llmClient, { hasActivePlan: planForCancelCheck !== null }, this.model(), onUsage)
+    const classification = await classifyTurnIntent(userMessage, this.llmClient, { hasActivePlan: planForCancelCheck !== null, standingConstraints }, this.model(), onUsage)
 
     // Phase D3: the authoritative approval decision — recomputed from classification's own
     // riskLevel/isBulkReminderRequest signals via turn-policy.ts rather than trusted directly off

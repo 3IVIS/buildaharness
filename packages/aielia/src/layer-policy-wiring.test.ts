@@ -1,6 +1,6 @@
-import { describe, it, expect } from 'vitest'
-import type { PolicyRules, RunState, TurnSignals } from '@buildaharness/harness'
-import { resolveEscalationPlan, enabledOptInLayers, turnPolicyBudget, escalationEnabled, explicitEnvOverride, SEMANTIC_ESCALATIONS, ESCALATION_ENV } from './layer-policy-wiring.js'
+import { describe, it, expect, vi } from 'vitest'
+import { OPT_IN_LAYERS, type PolicyRules, type RunState, type TurnSignals } from '@buildaharness/harness'
+import { resolveEscalationPlan, resolveOptInPlan, optInLayerEnabled, enabledOptInLayers, turnPolicyBudget, escalationEnabled, explicitEnvOverride, SEMANTIC_ESCALATIONS, ESCALATION_ENV } from './layer-policy-wiring.js'
 import { buildTurnFacts } from './memory-service.js'
 
 const routineSignals: TurnSignals = {
@@ -189,5 +189,71 @@ describe('enabledOptInLayers / the opt-in category in the recorded plan', () => 
       if (prior === undefined) delete process.env.AUDIT_REVIEWER_REVISION
       else process.env.AUDIT_REVIEWER_REVISION = prior
     }
+  })
+})
+
+describe('opt-in layers obey the layer policy', () => {
+  const classification = {
+    riskLevel: 'LOW', needsGrounding: false, ambiguity: 'none', userPosture: 'informational',
+    pushbackOnPriorTurn: false, statesConstraint: false, isTrivial: false,
+  } as unknown as Parameters<typeof resolveOptInPlan>[1]
+  const allOn = ['AUDIT_SEMANTIC_SOURCE_RELIABILITY', 'AUDIT_SEMANTIC_HYPOTHESES', 'AUDIT_REVIEWER_REVISION', 'AUDIT_EXPERIENCE_LEARNING', 'AUDIT_SEMANTIC_COMPACTION']
+
+  const withAllOn = (fn: () => void) => {
+    for (const v of allOn) vi.stubEnv(v, '1')
+    try { fn() } finally { vi.unstubAllEnvs() }
+  }
+
+  it('static and shadow resolve no plan, so every enabled layer runs (today)', () => {
+    withAllOn(() => {
+      for (const mode of ['static', 'shadow'] as const) {
+        const plan = resolveOptInPlan(mode, classification)
+        expect(plan).toBeUndefined()
+        for (const l of OPT_IN_LAYERS) expect(optInLayerEnabled(l, true, plan)).toBe(true)
+      }
+    })
+  })
+
+  it('a disabled layer is never switched on by the plan', () => {
+    withAllOn(() => {
+      const plan = resolveOptInPlan('adaptive', classification)
+      for (const l of OPT_IN_LAYERS) expect(optInLayerEnabled(l, false, plan)).toBe(false)
+    })
+  })
+
+  it('adaptive: a layer the plan switched off for budget does not run, and the rest still do', () => {
+    withAllOn(() => {
+      const plan = resolveOptInPlan('adaptive', classification)!
+      const off = OPT_IN_LAYERS.filter((l) => plan.policy[l].decision === 'off')
+      // A LOW-risk turn has 3 calls; the five escalations draw first, so the opt-in layers run out.
+      expect(off.length).toBeGreaterThan(0)
+      expect(off.length).toBeLessThan(OPT_IN_LAYERS.length)
+      for (const l of OPT_IN_LAYERS) {
+        expect(plan.policy[l].decision === 'off').toBe(off.includes(l))
+        expect(optInLayerEnabled(l, true, plan)).toBe(!off.includes(l))
+      }
+      for (const l of off) expect(plan.policy[l].trigger).toBe('budget_exhausted')
+    })
+  })
+
+  it('adaptive T1 LITE turn switches every enabled opt-in layer off (except compaction, which reads only its flag)', () => {
+    withAllOn(() => {
+      const t1 = resolveEscalationPlan('adaptive', routineSignals, healthy)
+      expect(t1.tier).toBe('T1')
+      for (const l of OPT_IN_LAYERS) {
+        if (l === 'semantic_compaction') { expect(t1.policy[l].trigger).not.toBe('tier_t1'); continue }
+        expect(t1.policy[l].decision).toBe('off')
+        expect(optInLayerEnabled(l, true, t1)).toBe(false)
+      }
+      expect(OPT_IN_LAYERS.filter((l) => l !== 'semantic_compaction').every((l) => t1.policy[l].trigger === 'tier_t1' || t1.policy[l].trigger === 'budget_exhausted')).toBe(true)
+    })
+  })
+
+  it('negative control — a T2 turn does not switch them off for the tier', () => {
+    withAllOn(() => {
+      const t2 = resolveEscalationPlan('adaptive', riskySignals, healthy)
+      expect(t2.tier).toBe('T2')
+      for (const l of OPT_IN_LAYERS) expect(t2.policy[l].trigger).not.toBe('tier_t1')
+    })
   })
 })

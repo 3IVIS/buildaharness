@@ -34,6 +34,7 @@ const GROUNDING_EXCERPT_CHARS = 6000
 import { wrapUntrusted, detectInjectionLikelyWithLLM } from './trust-tagging.js'
 import { summarizeToolStep, type AssistantToolStep } from './tool-step.js'
 import { REVIEW_NOTE_PREFIX } from './review-checker.js'
+import { optInLayerEnabled, type EscalationPlan } from './layer-policy-wiring.js'
 import { sourceReliabilityEnabled, assessSourceReliability, recordSourceAssessments, renderSourceNote } from './source-reliability.js'
 import { RECOVERY_NOTE_PREFIX } from './recovery-note.js'
 import { HYPOTHESIS_NOTE_PREFIX, hypothesisContextMessage } from './semantic-hypotheses.js'
@@ -337,7 +338,7 @@ export class AgentLoop {
     const seenInvestigationObs = new Set<string>()
     // AUDIT_SEMANTIC_SOURCE_RELIABILITY: the single read site. The sources are weighed at most once per
     // turn, and an answer that did not weigh them is revised at most once.
-    const weighSources = sourceReliabilityEnabled()
+    const weighSources = optInLayerEnabled('source_reliability', sourceReliabilityEnabled(), this.optInPlan)
     let sourcesWeighed = false
     // The last answer this proposer produced — a reviewer revision asks for a new one, so the model has to see the old one.
     let lastFinalContent: string | undefined
@@ -1380,6 +1381,8 @@ export class AgentLoop {
    */
   /** AL8b: optional policy gate for LLM injection detection; `undefined` (default) ⇒ always detect. */
   injectionDetectionGate?: () => boolean
+  /** The opt-in layers' plan for the turn in flight (adaptive mode only), set by the assistant each turn; see resolveOptInPlan. */
+  optInPlan?: EscalationPlan
 
   private async executeToolCall(name: string, input: Record<string, unknown>, userMessage: string, onUsage?: (usage: TokenUsage) => void): Promise<string> {
     if (name === 'read_file' || name === 'list_directory') {

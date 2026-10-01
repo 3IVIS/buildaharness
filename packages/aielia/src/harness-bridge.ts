@@ -39,7 +39,7 @@ import { checkSemanticReviewConflict } from './review-checker.js'
 import { checkSemanticFailureMatch } from './failure-mode-matcher.js'
 import { checkSemanticCriterionCoverage, NON_CHECKABLE_DEFAULT_CRITERION } from './semantic-criterion-coverage.js'
 import { checkTaskCompletion, semanticTaskCompletionEnabled } from './task-completion-check.js'
-import { checkConstraints, semanticConstraintCheckEnabled } from './constraint-check.js'
+import { checkConstraints, mergeStandingConstraints, semanticConstraintCheckEnabled } from './constraint-check.js'
 import { toTaskRiskLevel } from './task-mapping.js'
 import { TOOL_EFFECT_CLASS } from './tool-effect-class.js'
 import { FACT_CAP } from './memory-service.js'
@@ -57,7 +57,7 @@ import { harnessTokenBudgetTotal } from './harness-token-budget.js'
 import { semanticHypothesesEnabled, proposeCompetingExplanations, judgeHypothesesAgainstEvidence } from './semantic-hypotheses.js'
 import type { SemanticHypothesisEvent, SemanticHypothesisProposal } from '@buildaharness/harness'
 import { recordLayerTelemetry } from './layer-telemetry.js'
-import { resolveEscalationPlan, escalationEnabled, harnessGatePolicy, turnPolicyBudget, type EscalationPlan } from './layer-policy-wiring.js'
+import { resolveEscalationPlan, escalationEnabled, optInLayerEnabled, harnessGatePolicy, turnPolicyBudget, type EscalationPlan } from './layer-policy-wiring.js'
 import type { LayerPolicyMode } from '@buildaharness/harness'
 
 /**
@@ -165,6 +165,8 @@ export interface HarnessRunParams {
   onSemanticHypothesis?: (event: SemanticHypothesisEvent) => void
   /** The competing explanations were already asked for (a tool-less turn drafts its reply first): the harness registers this answer instead of making a second call. `null` = asked, none. `undefined` = not asked. */
   precomputedHypotheses?: SemanticHypothesisProposal[] | null
+  /** The opt-in layers' plan for this turn (adaptive mode only); see resolveOptInPlan. Absent: each layer's own flag decides. */
+  optInPlan?: EscalationPlan
   /** The reviewer pass's verdict sent the last answer back for one revision (AUDIT_REVIEWER_REVISION): the note to put in front of the proposer. */
   onReviewerRevision?: (event: { taskId: string; note: string }) => void
   /** A constraint the user stated this turn was violated by the finished answer: the note to hand the proposer for its one second answer. */
@@ -289,11 +291,16 @@ export class HarnessBridge {
   }
 
   async run(params: HarnessRunParams): Promise<HarnessOutcome> {
-    const { sessionId, userMessage, facts, currentTurnFacts = [], draftReply, classification, initialTasks, activePlan, sources, onProgress, onUsage, oneLoopProposer, runInvestigation, askModeEnabled = false, updateChannel, onReviewConflict, onFailureModeSwitch, onLearnedStrategySwitch, onSemanticHypothesis, precomputedHypotheses, onReviewerRevision, onConstraintRevision, tokensUsed } = params
+    const { sessionId, userMessage, facts, currentTurnFacts = [], draftReply, classification, initialTasks, activePlan, sources, onProgress, onUsage, oneLoopProposer, runInvestigation, askModeEnabled = false, updateChannel, onReviewConflict, onFailureModeSwitch, onLearnedStrategySwitch, onSemanticHypothesis, precomputedHypotheses, optInPlan, onReviewerRevision, onConstraintRevision, tokensUsed } = params
     const runtime = new HarnessRuntime()
     // One harness run per (session, turn) — a run_id a resumed run can be found under if this
     // turn's process died mid-run before reaching the `finally` cleanup below.
     const runId = `turn:${sessionId}`
+    // Constraints stated earlier this session plus this turn's. Only where the semantic judge replaces the lexical match
+    // (`=0` must not start failing turns on a word match) and there is a proposer to re-ask.
+    const standingConstraints = semanticConstraintCheckEnabled() && oneLoopProposer
+      ? mergeStandingConstraints(await this.assistantSession.getStandingConstraints(sessionId), classification.statedConstraints ?? [])
+      : []
 
     // One shared per-turn signal instead of each harness layer inventing its own gating
     // heuristic. AL5a: `consequentialTools` is derived from each tool's effect class (write /
@@ -477,7 +484,7 @@ export class HarnessBridge {
         // own ControlState stays ALLOW/NORMAL (no gate BLOCK/ESCALATE). Default ON — unchanged.
         skipControlState: controlStateGateEnabled() ? undefined : true,
         // AUDIT_EXPERIENCE_LEARNING (default off): journal every executed task and teach the experience store when the run ends.
-        experienceLearning: experienceLearningEnabled() ? true : undefined,
+        experienceLearning: optInLayerEnabled('experience_learning', experienceLearningEnabled(), optInPlan) ? true : undefined,
         retryFailedTask: retryFailedTaskEnabled() ? true : undefined,
         // Trajectory Supervisor GATHER_EVIDENCE host (S5). Inert unless a supervisorDecider is
         // also wired and returns a GATHER_EVIDENCE directive at a stall edge; absent → the
@@ -548,10 +555,10 @@ export class HarnessBridge {
         isCheckableCriterion,
         // AUDIT_HARNESS_TOKEN_BUDGET (default off): the memory layer's token budget, fed from this turn's real usage.
         ...(harnessTokenBudgetTotal() !== undefined && tokensUsed ? { tokenBudget: { total: harnessTokenBudgetTotal()!, used: tokensUsed } } : {}),
-        ...(reviewerRevisionEnabled() && oneLoopProposer
+        ...(optInLayerEnabled('reviewer_revision', reviewerRevisionEnabled(), optInPlan) && oneLoopProposer
           ? { reviewerRevision: reviewerRevisionNote, onReviewerRevision }
           : {}),
-        ...(semanticHypothesesEnabled() && classification.isUnderdetermined === true
+        ...(optInLayerEnabled('semantic_hypotheses', semanticHypothesesEnabled(), optInPlan) && classification.isUnderdetermined === true
           ? {
               semanticHypotheses: (input: { objective: string; observations: string[]; beliefs: string[] }) =>
                 precomputedHypotheses !== undefined
@@ -596,12 +603,11 @@ export class HarnessBridge {
         semanticConstraintJudge: semanticConstraintCheckEnabled()
           ? (input: { constraints: string[]; reply: string }) => checkConstraints(input, this.llmClient, this.model(), onUsage)
           : undefined,
-        // The constraints the user stated THIS turn, extracted by the classifier. Fed to the harness only where the semantic judge
-        // replaces the lexical match (a word match would fail an acknowledging reply) AND there is a proposer to ask again — a
-        // violation sends the answer back once, and a tool-less turn's reply is already drafted. This turn only: nothing is persisted.
-        ...(semanticConstraintCheckEnabled() && oneLoopProposer && classification.statedConstraints && classification.statedConstraints.length > 0
-          ? { callerConstraints: classification.statedConstraints, onConstraintRevision }
-          : {}),
+        // The constraints the user has stated this session (earlier turns' plus this turn's, from the classifier). Fed to the
+        // harness only where the semantic judge replaces the lexical match (a word match would fail an acknowledging reply)
+        // AND there is a proposer to ask again — a violation sends the answer back once, and a tool-less turn's reply is
+        // already drafted. Persisted per session by assistant.ts (AssistantSession.recordStandingConstraints).
+        ...(standingConstraints.length > 0 ? { callerConstraints: standingConstraints, onConstraintRevision } : {}),
         semanticTaskCompletion:
           activePlan?.executingOnPlan && semanticTaskCompletionEnabled()
             ? (input: { taskDescription: string; output: unknown }) => checkTaskCompletion(input, this.llmClient, this.model(), onUsage)

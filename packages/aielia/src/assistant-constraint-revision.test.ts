@@ -21,10 +21,15 @@ function backend(): FsBackend {
   }
 }
 
-function build(opts: { constraints: string[]; replies: string[] }) {
+function build(opts: { constraints: string[]; replies: string[]; perTurn?: string[][]; lifted?: number[][] }) {
+  let turnNo = 0
   const inner = createScriptedLLMClient({
     responses: opts.replies,
-    classify: () => ({ statesConstraint: opts.constraints.length > 0, statedConstraints: opts.constraints }),
+    classify: () => {
+      const constraints = opts.perTurn ? (opts.perTurn[turnNo++] ?? []) : opts.constraints
+      const lifted = opts.lifted ? (opts.lifted[turnNo - 1] ?? []) : []
+      return { statesConstraint: constraints.length > 0, statedConstraints: constraints, liftedConstraints: lifted }
+    },
   })
   const seen = { judged: [] as string[], loopMessages: [] as ChatMessage[][] }
   const client: ILLMClient = {
@@ -78,5 +83,36 @@ describe('stated constraint through a real turn', () => {
     expect(result.status).toBe('ok')
     expect(result.reply).toBe(BAD)
     expect(seen.judged).toEqual([])
+  })
+
+  it('a constraint stated in an earlier turn still governs a later turn that states none', async () => {
+    const { assistant, seen } = build({ constraints: [], perTurn: [['Do not use tabs'], []], replies: [GOOD, BAD, GOOD] })
+    expect((await assistant.turn(MESSAGE, { sessionId: 'p1' })).reply).toBe(GOOD)
+    const second = await assistant.turn('Now do the same for YAML files.', { sessionId: 'p1' })
+    expect(second.reply).toBe(GOOD)
+    expect(seen.judged).toEqual([GOOD, BAD, GOOD])
+  })
+
+  it('negative control — a different session does not inherit the constraint, and /new-style clearing drops it', async () => {
+    const { assistant, seen } = build({ constraints: [], perTurn: [['Do not use tabs'], [], []], replies: [GOOD, BAD, BAD] })
+    await assistant.turn(MESSAGE, { sessionId: 'p2' })
+    const other = await assistant.turn('Now do the same for YAML files.', { sessionId: 'p3' })
+    expect(other.reply).toBe(BAD)
+    expect(seen.judged).toEqual([GOOD])
+  })
+
+  it('a later message that lifts the constraint stops it being checked', async () => {
+    const { assistant, seen } = build({ constraints: [], perTurn: [['Do not use tabs'], []], lifted: [[], [1]], replies: [GOOD, BAD] })
+    await assistant.turn(MESSAGE, { sessionId: 'l1' })
+    expect((await assistant.turn('Tabs are fine now.', { sessionId: 'l1' })).reply).toBe(BAD)
+    expect(seen.judged).toEqual([GOOD])
+  })
+
+  it('a rule lifted and restated in the same message stays in force', async () => {
+    const { assistant, seen } = build({ constraints: [], perTurn: [['Do not use tabs'], ['Do not use tabs'], []], lifted: [[], [1], []], replies: [GOOD, GOOD, GOOD] })
+    await assistant.turn(MESSAGE, { sessionId: 'l2' })
+    await assistant.turn('No tabs, to be clear.', { sessionId: 'l2' })
+    await assistant.turn('One more.', { sessionId: 'l2' })
+    expect(seen.judged).toEqual([GOOD, GOOD, GOOD])
   })
 })

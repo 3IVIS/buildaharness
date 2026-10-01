@@ -46,6 +46,25 @@ export function semanticConstraintCheckEnabled(env?: Record<string, string | und
   return !['0', 'false', 'off', 'no', 'disabled'].includes(raw)
 }
 
+/** Most standing constraints kept per session; the oldest drop first. */
+export const MAX_STANDING_CONSTRAINTS = 8
+
+/**
+ * Standing constraints plus the ones stated now: trimmed, de-duplicated (case-insensitive), the newest last, capped at
+ * MAX_STANDING_CONSTRAINTS (oldest dropped). A constraint restated moves to the end rather than appearing twice.
+ */
+export function mergeStandingConstraints(existing: readonly string[], incoming: readonly string[]): string[] {
+  const merged: string[] = []
+  for (const raw of [...existing, ...incoming]) {
+    const text = typeof raw === 'string' ? raw.trim() : ''
+    if (!text) continue
+    const at = merged.findIndex((c) => c.toLowerCase() === text.toLowerCase())
+    if (at >= 0) merged.splice(at, 1)
+    merged.push(text)
+  }
+  return merged.slice(-MAX_STANDING_CONSTRAINTS)
+}
+
 /**
  * One bounded LLM call: does this reply break any of these constraints? Fails open — an error, an empty reply or an
  * unparseable answer is "no violations", so a broken check can never fail a turn that would have passed. Only
