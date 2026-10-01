@@ -1,0 +1,11 @@
+{
+  "criteria": [
+    "deploy to production"
+  ],
+  "tools": {
+    "default": {
+      "kind": "ok",
+      "output": ""
+    }
+  }
+}

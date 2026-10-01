@@ -1,4 +1,4 @@
-import { describe, it, expect } from 'vitest'
+import { describe, it, expect, beforeAll, afterAll } from 'vitest'
 import {
   WorldModel, type Belief, type Contradiction,
   BeliefDepGraph,
@@ -11,6 +11,18 @@ import { MemoryState } from './memory-state.js'
 import { StrategyState, DEFAULT_STRATEGY_ORDER } from './strategy-state.js'
 import { HypothesisSet } from './hypothesis-set.js'
 import { FailureModeLibrary } from './failure-diagnostics.js'
+
+// These tests exercise the harness's lexical checks, which are off by default (lexical/lexical-off.ts),
+// so this file switches them on.
+let savedLexicalMode: string | undefined
+beforeAll(() => {
+  savedLexicalMode = process.env.HARNESS_LEXICAL_MODE
+  process.env.HARNESS_LEXICAL_MODE = 'enabled'
+})
+afterAll(() => {
+  if (savedLexicalMode === undefined) delete process.env.HARNESS_LEXICAL_MODE
+  else process.env.HARNESS_LEXICAL_MODE = savedLexicalMode
+})
 
 describe('WorldModel', () => {
   it('full toJSON/fromJSON round-trip preserves all fields including contradictions and completeness_flags', () => {

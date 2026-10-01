@@ -6,6 +6,7 @@
  * and enforces a minimum diversity count.
  * Port of adapter/harness/multi_source_reducer.py. No domain vocabulary.
  */
+import { harnessLexicalActive } from '../lexical/lexical-off.js'
 
 export type ReliabilityLevel = 'HIGH' | 'MEDIUM' | 'LOW'
 
@@ -93,7 +94,8 @@ export function makeMultiSourceReducer(
 
         if (!candidateText || !existingText) continue
 
-        if (jaccardSimilarity(candidateText, existingText) > similarityThreshold) {
+        // HARNESS_LEXICAL source-dedupe: word-overlap similarity; off → nothing is treated as a duplicate.
+        if (harnessLexicalActive('source-dedupe') && jaccardSimilarity(candidateText, existingText) > similarityThreshold) {
           const candRank = RELIABILITY_RANK[candidateItem['reliability'] as ReliabilityLevel] ?? 0
           const existRank = RELIABILITY_RANK[existingItem['reliability'] as ReliabilityLevel] ?? 0
           if (candRank > existRank) {

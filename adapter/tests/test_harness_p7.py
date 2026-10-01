@@ -38,6 +38,13 @@ from harness.output_contract import OutputContract
 from harness.task_graph import Task, TaskGraph, TaskStatus
 from harness.world_model import WorldModel
 
+
+@pytest.fixture(autouse=True)
+def _lexical_checks_on(monkeypatch):
+    """These tests exercise the harness's lexical checks, which are off by default (harness/lexical_off.py)."""
+    monkeypatch.setenv("HARNESS_LEXICAL_MODE", "enabled")
+
+
 # ─── Helper factories ────────────────────────────────────────────────────────
 
 
@@ -138,7 +145,8 @@ def test_T02_constraint_update_propagates():
     result = check_external_updates(channel, cs, wm, tg, diag)
 
     assert result is True, "Must return True when an update is processed"
-    assert cs.constraints_changed is True, "constraints_changed must be True after update"
+    # TS applyConstraintChangePropagation clears the flag itself once propagation has run.
+    assert cs.constraints_changed is False, "constraints_changed is cleared after propagation"
     assert wm.generation_id > initial_gen, "generation_id must be incremented"
     # Task t1 (database) should remain; t2 (frontend) should be BLOCKED
     t2_after = next(t for t in tg.tasks if t.id == "t2")
@@ -291,7 +299,7 @@ def test_T07_blocked_risk_state_triggers_escalation():
     assert state.pending_escalation.reason == "blocked_state"
     assert exc_info.value.blocker.reason == "blocked_state"
     # Journal entry must be present
-    assert any(e.get("action_class") == "escalation" for e in state.memory_state.journal), (
+    assert any(e.action_class == "escalation" for e in state.memory_state.journal), (
         "escalation journal entry must be recorded"
     )
 

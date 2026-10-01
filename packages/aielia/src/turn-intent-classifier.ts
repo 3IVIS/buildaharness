@@ -203,6 +203,10 @@ const STATED_FACT_SCHEMA = {
 
 const STATES_DURABLE_FACTS_SCHEMA = { type: 'array', items: STATED_FACT_SCHEMA }
 
+// The plan-template list depends on AUDIT_CODE_PLAN_TEMPLATES, which callers (and the eval arms) may set after this module
+// is imported — so the schema and prompt carry a token and the real list is filled in per call (see below).
+const PLAN_TEMPLATE_NAMES_TOKEN = '<<plan-template-names>>'
+
 const TURN_INTENT_SCHEMA = {
   type: 'object',
   properties: {
@@ -215,7 +219,7 @@ const TURN_INTENT_SCHEMA = {
     isAbandonRequest: { type: 'boolean' },
     isPlanQuestion: { type: 'boolean' },
     isUnderdetermined: { type: 'boolean' },
-    matchedPlanTemplate: { type: ['string', 'null'], enum: [...listTemplateNames(), null] },
+    matchedPlanTemplate: { type: ['string', 'null'], enum: [PLAN_TEMPLATE_NAMES_TOKEN, null] },
     needsMultiStepPlan: { type: 'boolean' },
     statesDurableFacts: STATES_DURABLE_FACTS_SCHEMA,
     needsGrounding: { type: 'boolean' },
@@ -287,7 +291,7 @@ const TURN_INTENT_SYSTEM_PROMPT =
   'aside). If told no plan is currently active, always return false.\n\n' +
   `6. matchedPlanTemplate: if told no plan is currently active AND the request is involved enough ` +
   `to warrant a durable, tracked plan (decomposes into several sub-tasks toward one of the named ` +
-  `kinds below), return the single best-matching name from: ${listTemplateNames().join(', ')}. ` +
+  `kinds below), return the single best-matching name from: ${PLAN_TEMPLATE_NAMES_TOKEN}. ` +
   'Otherwise return null. If told a plan is already active, always return null.\n\n' +
   '7. statesDurableFacts: a list with one entry per durable or session-scoped fact the message ' +
   "states about the user themselves (their name, a stated preference, an allergy/dietary " +
@@ -494,6 +498,14 @@ function parseTurnIntent(content: string, context: TurnIntentContext): TurnInten
  * *primary* fact-extraction path rather than a fallback — see that plan for how memory-service.ts
  * merges it with fact-extraction.ts's regex backstop.
  */
+/** The schema with the current plan-template names in `matchedPlanTemplate`'s enum. */
+function turnIntentSchema(): typeof TURN_INTENT_SCHEMA {
+  const properties = { ...TURN_INTENT_SCHEMA.properties, matchedPlanTemplate: { type: ['string', 'null'], enum: [...listTemplateNames(), null] } }
+  return { ...TURN_INTENT_SCHEMA, properties } as unknown as typeof TURN_INTENT_SCHEMA
+}
+
+const turnIntentSystemPrompt = (): string => TURN_INTENT_SYSTEM_PROMPT.replace(PLAN_TEMPLATE_NAMES_TOKEN, listTemplateNames().join(', '))
+
 export async function classifyTurnIntent(
   message: string,
   llmClient: ILLMClient,
@@ -507,11 +519,11 @@ export async function classifyTurnIntent(
       : 'No plan is currently active for this user.'
     const response = await llmClient.callChatStructured(
       [
-        { role: 'system', content: `${TURN_INTENT_SYSTEM_PROMPT}\n\n${contextNote}` },
+        { role: 'system', content: `${turnIntentSystemPrompt()}\n\n${contextNote}` },
         { role: 'user', content: message },
       ],
       undefined,
-      { model, onUsage, structuredOutput: { schema: TURN_INTENT_SCHEMA } },
+      { model, onUsage, structuredOutput: { schema: turnIntentSchema() } },
     )
     return parseTurnIntent(response.content, context) ?? failSafeClassification()
   } catch (err) {

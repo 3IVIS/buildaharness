@@ -39,6 +39,7 @@ import { checkSemanticReviewConflict } from './review-checker.js'
 import { checkSemanticFailureMatch } from './failure-mode-matcher.js'
 import { checkSemanticCriterionCoverage, NON_CHECKABLE_DEFAULT_CRITERION } from './semantic-criterion-coverage.js'
 import { checkTaskCompletion, semanticTaskCompletionEnabled } from './task-completion-check.js'
+import { checkConstraints, semanticConstraintCheckEnabled } from './constraint-check.js'
 import { toTaskRiskLevel } from './task-mapping.js'
 import { TOOL_EFFECT_CLASS } from './tool-effect-class.js'
 import { FACT_CAP } from './memory-service.js'
@@ -256,6 +257,16 @@ export class HarnessBridge {
     } catch {
       // telemetry is observational only
     }
+  }
+
+  /**
+   * Drops the paused harness run a `needs_clarification` left behind (its checkpoint and its resume-attempt counter),
+   * so the next ordinary run for this session starts fresh instead of resuming it. Used when a clarification answer
+   * is handed to the ordinary turn pipeline rather than fed back into the paused run.
+   */
+  async discardPausedRun(sessionId: string): Promise<void> {
+    await deleteHarnessCheckpoint(this.checkpointStore, `turn:${sessionId}`).catch(() => {})
+    await this.memory.delete(resumeAttemptsKey(sessionId)).catch(() => {})
   }
 
   async run(params: HarnessRunParams): Promise<HarnessOutcome> {
@@ -557,6 +568,11 @@ export class HarnessBridge {
         // Scoped to an approved plan's execution (not an ordinary single-task turn) and off by default:
         // AUDIT_SEMANTIC_TASK_COMPLETION. See task-completion-check.ts.
         onTaskNotAccomplished: (e: { taskId: string; reason: string }) => { taskNotes[e.taskId] = e.reason },
+        // The lexical caller-constraint check throws on a reply that merely names the constraint's subject; this judges
+        // the reply against the constraints instead (AUDIT_SEMANTIC_CONSTRAINT_CHECK, default on). See constraint-check.ts.
+        semanticConstraintJudge: semanticConstraintCheckEnabled()
+          ? (input: { constraints: string[]; reply: string }) => checkConstraints(input, this.llmClient, this.model(), onUsage)
+          : undefined,
         semanticTaskCompletion:
           activePlan?.executingOnPlan && semanticTaskCompletionEnabled()
             ? (input: { taskDescription: string; output: unknown }) => checkTaskCompletion(input, this.llmClient, this.model(), onUsage)

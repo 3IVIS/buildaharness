@@ -38,7 +38,6 @@ from harness.diagnostics import (
     normalise_entropy,
     update_diagnostics,
 )
-from harness.evidence import EvidenceStore
 from harness.gates import StalenessError, action_gate, decomposition_gate, post_exec_gate
 from harness.hypothesis import HypothesisSet
 from harness.loop import run_one_iteration
@@ -112,22 +111,34 @@ def test_T02_dep_class_gap_annotation_is_str_not_numeric():
         _ = d.dep_class_gap_annotation + 1.0  # type: ignore[operator]
 
 
+def _update(d, wm=None, tasks=None, failures=0, hypotheses=None):
+    """Run update_diagnostics on a fresh world model / task graph (TS updateDiagnostics signature)."""
+    from harness.belief_graph import BeliefDepGraph
+    from harness.failure_modes import FailureDiagnostics, FailureRecord
+    from harness.task_graph import TaskGraph
+
+    fd = FailureDiagnostics(failure_history=[FailureRecord(failure_class="x") for _ in range(failures)])
+    update_diagnostics(
+        wm or WorldModel(),
+        hypotheses or HypothesisSet(),
+        TaskGraph(tasks=tasks or []),
+        fd,
+        BeliefDepGraph(),
+        d,
+    )
+
+
 def test_T03_update_diagnostics_reduces_freshness_with_stale_beliefs():
-    """T03 — Adding 5 stale beliefs to a 10-belief world model reduces freshness below 1.0."""
+    """T03 — 5 stale flags over a 10-belief world model give freshness 0.5 (stale_flags is the source of truth)."""
     wm = WorldModel()
 
     for i in range(10):
         b = Belief(id=f"b{i}", statement=f"belief {i}", confidence=0.8, derived_from=["src"])
         wm.beliefs.append(b)
-
-    stale_flags: dict[str, bool] = {}
-    for i in range(5):
-        stale_flags[f"b{i}"] = True
-    wm.stale_flags = stale_flags  # type: ignore[attr-defined]
-    wm.stale_flag_ratio = 0.5  # type: ignore[attr-defined]
+    wm.stale_flags = {f"b{i}": True for i in range(5)}
 
     d = Diagnostics()
-    update_diagnostics(d, wm, HypothesisSet(), EvidenceStore())
+    _update(d, wm)
 
     assert d.belief_health.freshness < 1.0
     assert abs(d.belief_health.freshness - 0.5) < 1e-9
@@ -569,8 +580,10 @@ def test_T25_risk_summary_derives_legacy_three_way_reading():
 # ── execution_ratio_min_attempts (spec/harness-core.json; twin of update-diagnostics.ts) ─────────
 
 
-def _journal(statuses: list[str]) -> list[dict]:
-    return [{"status": s} for s in statuses]
+def _tasks(statuses: list[str]):
+    from harness.task_graph import Task
+
+    return [Task(id=f"t{i}", description="d", status=st.upper()) for i, st in enumerate(statuses)]  # type: ignore[arg-type]
 
 
 def test_progress_rate_stays_neutral_below_the_minimum_number_of_attempts():
@@ -581,16 +594,51 @@ def test_progress_rate_stays_neutral_below_the_minimum_number_of_attempts():
     assert EXECUTION_RATIO_MIN_ATTEMPTS == 3
     for statuses in (["failed"], ["failed", "failed"]):
         d = Diagnostics()
-        update_diagnostics(d, WorldModel(), HypothesisSet(), EvidenceStore(), execution_journal=_journal(statuses))
+        _update(d, tasks=_tasks(statuses))
         assert d.execution_health.progress_rate == 1.0, statuses
+        assert d.execution_health.oscillation_score == 0.0, statuses
 
 
 def test_progress_rate_applies_from_the_minimum_number_of_attempts():
     d = Diagnostics()
-    update_diagnostics(d, WorldModel(), HypothesisSet(), EvidenceStore(), execution_journal=_journal(["failed"] * 3))
+    _update(d, tasks=_tasks(["failed"] * 3))
     assert d.execution_health.progress_rate == 0.0
+    assert d.execution_health.oscillation_score == 1.0
 
     d = Diagnostics()
-    journal = _journal(["completed", "completed", "failed"])
-    update_diagnostics(d, WorldModel(), HypothesisSet(), EvidenceStore(), execution_journal=journal)
+    _update(d, tasks=_tasks(["complete", "complete", "failed"]))
     assert abs(d.execution_health.progress_rate - 2 / 3) < 1e-9
+    assert abs(d.execution_health.oscillation_score - 1 / 3) < 1e-9
+
+
+def test_update_diagnostics_ts_dimensions():
+    """The remaining TS updateDiagnostics dimensions: support from reliability weights, coverage from the active
+    hypotheses, failure_recurrence from the failure history, and the dep_class_gap annotation."""
+    from harness.hypothesis import Hypothesis
+    from harness.task_graph import Task
+
+    wm = WorldModel()
+    for bid, rel in (("a", "HIGH"), ("b", "LOW"), ("c", "")):
+        b = Belief(id=bid, statement=bid, confidence=0.9, derived_from=["s"])
+        b.reliability = rel
+        wm.beliefs.append(b)
+    hs = HypothesisSet(
+        active=[
+            Hypothesis(id="h1", explanation="e", confidence=0.5, generation_sources=["symptom_inference"]),
+            Hypothesis(id="h2", explanation="e", confidence=0.5, generation_sources=["analogy"]),
+        ]
+    )
+    d = Diagnostics()
+    _update(
+        d,
+        wm,
+        tasks=[Task(id="x", description="d", abstraction_level=0), Task(id="y", description="d", abstraction_level=3)],
+        failures=5,
+        hypotheses=hs,
+    )
+
+    assert d.belief_health.support == pytest.approx((1.0 + 0.0 + 0.5) / 3)
+    assert d.coverage_health.symptom_coverage == 1.0  # 2 active / max(0 observations, 1) capped at 1
+    assert d.coverage_health.explanation_coverage == pytest.approx(1.0)  # two equally-weighted sources
+    assert d.execution_health.failure_recurrence == pytest.approx(0.5)
+    assert d.dep_class_gap_annotation == "Abstraction class gaps detected: gap between level 0 and 3"

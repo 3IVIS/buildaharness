@@ -1,0 +1,17 @@
+{
+  "decider": {
+    "action": "ABORT",
+    "rationale": "give up"
+  },
+  "criteria": [
+    "produce the answer"
+  ],
+  "maxSteps": 8,
+  "tools": {
+    "default": {
+      "kind": "seeded-fail",
+      "seedFailures": 3,
+      "failIterations": 1
+    }
+  }
+}

@@ -335,27 +335,10 @@ def gen_harness_preamble() -> str:
         # __file__ is undefined when code is exec()'d — fall back to cwd (/app in container)
         _sys.path.insert(0, str(_pl.Path(globals().get('__file__') or _os.getcwd()).resolve().parent
                                 if globals().get('__file__') else _os.getcwd()))
-        from harness.state_store import HarnessRunState as _HarnessRunState
-        from harness.world_model import WorldModel as _WorldModel
-        from harness.diagnostics import Diagnostics as _Diagnostics
-        from harness.task_graph import TaskGraph as _TaskGraph
-        from harness.hypothesis import HypothesisSet as _HypothesisSet
-        from harness.evidence import EvidenceStore as _EvidenceStore
-        from harness.recovery import StrategyState as _StrategyState
-        from harness.memory import MemoryState as _MemoryState
-        from harness.failure_modes import FailureDiagnostics as _FailureDiagnostics
+        from harness.runtime import build_harness_run_state as _build_harness_run_state
 
-        _harness_state = _HarnessRunState(
-            run_id=os.environ.get("HARNESS_RUN_ID", "run-1"),
-            world_model=_WorldModel(),
-            diagnostics=_Diagnostics(),
-            task_graph=_TaskGraph(),
-            hypothesis_set=_HypothesisSet(),
-            evidence_store=_EvidenceStore(),
-            strategy_state=_StrategyState(),
-            memory_state=_MemoryState(),
-            failure_diagnostics=_FailureDiagnostics(),
-        )
+        # HarnessRunState, seeded the way the TS initializeHarness seeds a run
+        _harness_state = _build_harness_run_state(os.environ.get("HARNESS_RUN_ID", "run-1"))
 
         try:
             from harness.process_tools import list_processes as _list_processes

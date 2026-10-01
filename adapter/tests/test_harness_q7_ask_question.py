@@ -7,12 +7,15 @@ off (flag-off byte-identical is asserted directly, not just implied).
 
 from __future__ import annotations
 
+import pytest
+
 from harness.ask_question import (
     build_budget_exhausted_question,
     build_review_failure_question,
     diagnose_review_failure_options,
 )
 from harness.diagnostics import Diagnostics
+from harness.escalation import EscalationHalt
 from harness.loop import run_one_iteration
 from harness.memory import MemoryState
 from harness.output_contract import (
@@ -21,6 +24,7 @@ from harness.output_contract import (
     completion_check_final,
     validate_output_contract,
 )
+from harness.review_gate import DimensionResult, ReviewResult, escalate_review_failure
 from harness.task_graph import Task, TaskGraph
 from harness.world_model import WorldModel
 
@@ -56,110 +60,104 @@ def test_build_budget_exhausted_question_static_options() -> None:
     ]
 
 
-def test_diagnose_review_failure_options_two_categories() -> None:
-    violations = [
-        "format_requirements: missing required field 'x'",
-        "required_sections: missing section 'y'",
-    ]
-    opts = diagnose_review_failure_options(violations)
+def _dim(dimension: str, reason: str = "r") -> DimensionResult:
+    return DimensionResult(dimension=dimension, passed=False, reason=reason)  # type: ignore[arg-type]
+
+
+def test_diagnose_review_failure_options_two_dimensions() -> None:
+    opts = diagnose_review_failure_options([_dim("task_alignment"), _dim("output_contract_precheck")])
     assert opts is not None
-    assert len(opts) == 2
-    labels = {o.label for o in opts}
-    assert "Adjust the output to match the required format" in labels
-    assert "Add the missing required section(s) to the output" in labels
-
-
-def test_diagnose_review_failure_options_single_category_falls_back() -> None:
-    # Only one *category* even though two violation strings — not "more than one
-    # plausible fix" per Q7's scope, so the caller should fall back to plain halt.
-    violations = [
-        "format_requirements: missing required field 'x'",
-        "format_requirements: result length 500 exceeds max_length 100",
+    assert [o.label for o in opts] == [
+        "Revise the proposed change to align with the current task description",
+        "Adjust the proposed change to satisfy the output contract",
     ]
-    assert diagnose_review_failure_options(violations) is None
 
 
-def test_diagnose_review_failure_options_no_recognized_category() -> None:
-    assert diagnose_review_failure_options(["something unrecognized"]) is None
+def test_diagnose_review_failure_options_single_dimension_falls_back() -> None:
+    # One *dimension* even though two failures — not "more than one plausible fix" per Q7's scope.
+    assert diagnose_review_failure_options([_dim("code_quality"), _dim("code_quality")]) is None
+    assert diagnose_review_failure_options([]) is None
+
+
+def test_diagnose_review_failure_options_too_many_dimensions_falls_back() -> None:
+    all_five = [
+        _dim(d)
+        for d in (
+            "task_alignment",
+            "world_model_consistency",
+            "output_contract_precheck",
+            "code_quality",
+            "hypothesis_compatibility",
+        )
+    ]
+    assert diagnose_review_failure_options(all_five) is None  # 5 > MAX_OPTIONS_PER_QUESTION
 
 
 def test_build_review_failure_question_wraps_options() -> None:
-    opts = diagnose_review_failure_options(
-        ["required_sections: missing section 'a'", "interface_constraints: missing required field 'b'"]
-    )
+    opts = diagnose_review_failure_options([_dim("task_alignment"), _dim("code_quality")])
     assert opts is not None
     q = build_review_failure_question(opts)
     assert q.id == "review-failure-resolution"
+    assert q.question == "The proposed change failed review. Which fix should I apply?"
     assert q.options == opts
 
 
-def test_completion_check_final_ask_mode_off_byte_identical_to_pre_q7(monkeypatch) -> None:
+def _failed_review(dims: list[str], escalate: bool = True) -> ReviewResult:
+    return ReviewResult(
+        passed=False,
+        failed_dimensions=[_dim(d, f"{d} failed") for d in dims],
+        consecutive_failures=2,
+        escalation_triggered=escalate,
+    )
+
+
+def test_escalate_review_failure_ask_mode_off_is_a_plain_halt(monkeypatch) -> None:
     monkeypatch.delenv("HARNESS_ASK_QUESTION", raising=False)
-    contract = OutputContract(required_sections=["a"], format_requirements={"required_fields": ["x"]})
-    run_state = _RunState()
-    try:
-        completion_check_final(
-            result={},
-            output_contract=contract,
-            caller_state=None,
-            harness_run_state=run_state,
-            session_ask_mode=None,
-        )
-        raised = False
-    except Exception as exc:  # EscalationHalt
-        raised = True
-        blocker = exc.blocker  # type: ignore[attr-defined]
-        assert blocker.reason == "review_failure"
-        assert blocker.questions is None
-        assert blocker.question is None
-    assert raised
+    with pytest.raises(EscalationHalt) as exc:
+        escalate_review_failure(_failed_review(["task_alignment", "code_quality"]), "do it", _RunState(), "r1")
+    blocker = exc.value.blocker
+    assert blocker.reason == "review_failure"
+    assert blocker.questions is None
+    assert blocker.question is None
+    assert blocker.missing_info == ["task_alignment failed", "code_quality failed"]
+    assert blocker.current_task_summary == "do it"
 
 
-def test_completion_check_final_ask_mode_on_two_categories_builds_questions(monkeypatch) -> None:
+def test_escalate_review_failure_ask_mode_on_two_dimensions_builds_a_question(monkeypatch) -> None:
     monkeypatch.setenv("HARNESS_ASK_QUESTION", "true")
-    contract = OutputContract(required_sections=["a"], format_requirements={"required_fields": ["x"]})
-    run_state = _RunState()
-    try:
-        completion_check_final(
-            result={},
-            output_contract=contract,
-            caller_state=None,
-            harness_run_state=run_state,
-            session_ask_mode=None,
-        )
-        raised = False
-    except Exception as exc:  # EscalationHalt
-        raised = True
-        blocker = exc.blocker  # type: ignore[attr-defined]
-        assert blocker.reason == "review_failure"
-        assert blocker.questions is not None
-        assert len(blocker.questions) == 1
-        assert len(blocker.questions[0].options) == 2
-    assert raised
+    with pytest.raises(EscalationHalt) as exc:
+        escalate_review_failure(_failed_review(["task_alignment", "code_quality"]), "do it", _RunState(), "r1")
+    blocker = exc.value.blocker
+    assert blocker.reason == "review_failure"
+    assert blocker.questions is not None
+    assert len(blocker.questions) == 1
+    assert len(blocker.questions[0].options or []) == 2
 
 
-def test_completion_check_final_single_violation_falls_back_even_with_ask_mode_on(monkeypatch) -> None:
+def test_escalate_review_failure_single_dimension_or_not_triggered_falls_back(monkeypatch) -> None:
     monkeypatch.setenv("HARNESS_ASK_QUESTION", "true")
-    contract = OutputContract(required_sections=["a"])
-    run_state = _RunState()
-    try:
-        completion_check_final(
-            result={},
-            output_contract=contract,
-            caller_state=None,
-            harness_run_state=run_state,
-        )
-        raised = False
-    except Exception as exc:
-        raised = True
-        blocker = exc.blocker  # type: ignore[attr-defined]
-        assert blocker.questions is None
-    assert raised
+    with pytest.raises(EscalationHalt) as exc:
+        escalate_review_failure(_failed_review(["code_quality"]), "t", _RunState(), "r1")
+    assert exc.value.blocker.questions is None
+
+    # below the consecutive-failure limit: no halt at all
+    escalate_review_failure(_failed_review(["task_alignment", "code_quality"], escalate=False), "t", _RunState())
+
+
+def test_completion_check_final_halts_plainly_on_a_contract_violation() -> None:
+    """The output-contract final check halts with review_failure and the violations, but (as TS) offers no question."""
+    contract = OutputContract(required_sections=["a", "b"])
+    with pytest.raises(EscalationHalt) as exc:
+        completion_check_final(result={}, output_contract=contract, caller_state=None, harness_run_state=_RunState())
+    blocker = exc.value.blocker
+    assert blocker.reason == "review_failure"
+    assert blocker.questions is None
+    assert blocker.missing_info == ['required_sections: missing field "a"', 'required_sections: missing field "b"']
+
+    assert completion_check_final({"a": 1, "b": 2}, contract, None, _RunState()).passed is True
 
 
 def test_validate_output_contract_still_pure() -> None:
-    # Regression anchor: completion_check_final's new branching must not change what
-    # validate_output_contract() itself returns.
     contract = OutputContract(required_sections=["a"])
     result = validate_output_contract({}, contract, None)
     assert isinstance(result, ContractCheckResult)

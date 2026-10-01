@@ -39,14 +39,13 @@ def main() -> None:
     world_model = WorldModel.from_dict(fixture.get("world_model", {}))
 
     matched_pattern = None
-    py_mp = fixture.get("py_matched_pattern")
-    if py_mp is not None:
+    ts_mp = fixture.get("ts_matched_pattern")  # the Python shape is now the TS shape (failure_class/confidence/...)
+    if ts_mp is not None:
         matched_pattern = MatchResult(
-            matched=py_mp["matched"],
-            pattern_name=py_mp["pattern_name"],
-            raw_confidence=py_mp["raw_confidence"],
-            normalised_confidence=py_mp["normalised_confidence"],
-            strategy_affinity=py_mp.get("strategy_affinity"),
+            failure_class=ts_mp["failure_class"],
+            confidence=ts_mp["confidence"],
+            matched_pattern=ts_mp["matched_pattern"],
+            strategy_affinity=ts_mp.get("strategy_affinity"),
         )
     failure_diagnostics = FailureDiagnostics(matched_pattern=matched_pattern)
 

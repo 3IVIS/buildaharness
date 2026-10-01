@@ -18,7 +18,7 @@ Two nodes are covered so far:
   Fixtures in `fixtures-verify/`, runner pair
   `run-ts-verify.mts` / `run_py_verify.py`, diff via `compare-verify.mjs`.
   See "VERIFY-EQUIVALENCE CONTRACT" below — a deliberately narrower
-  contract (layer *status*, not `detail` prose) that has surfaced two
+  contract (layer *status*, not `detail` prose) that has surfaced (and now resolved) two
   tracked divergences.
 
 Extending this pattern (new fixtures + a `run-ts*`/`run_py*` pair) to
@@ -297,36 +297,18 @@ reason (a human owns resolving it).
   `critical_failure_tiers == ['environmental','mechanical']` (N same-tier
   FAILs count once — INV-12).
 
-Result: **23 PASS, 2 tracked discrepancies, 0 untracked.**
+Result: **25 PASS, 0 tracked discrepancies, 0 untracked** (expected; run `compare-verify.mjs` to confirm).
 
-### What this pass found
+### What this pass found (resolved)
 
-**`output_contract_partial` checks different contract fields on each
-runtime.** `fixtures-verify/output-contract-required-sections-only` and
-`…-required-interface-fields-only` pin it:
-
-- TS `verify_output_contract_partial` → `contractShadowCheck`
-  (`packages/harness/src/nodes/policy-gates.ts`) inspects
-  `outputContract.required_sections`.
-- Python `verify_output_contract_partial` → `contract_shadow_check`
-  (`adapter/harness/output_contract.py`) inspects
-  `required_interface_fields` + `interface_constraints`, and never looks
-  at `required_sections`.
-
-Root cause: the **TS `OutputContract` class only carries
-`required_sections`**; the Python `OutputContract` carries
-`required_sections` *and* `required_interface_fields` *and*
-`interface_constraints` (Python also has a standalone
-`check_required_sections()` that `verify()` does not call). So a contract
-that specifies only sections FAILs on TS / PASSes on Python, and one that
-specifies only interface fields does the reverse.
-
-Reconciling this is a **maintainer decision** — enrich the TS
-`OutputContract` + `contractShadowCheck` to match Python, or make
-`required_sections` canonical and change Python — and it has a knock-on
-effect on `postExecGate` / `post_exec_gate`, which also call
-`contractShadowCheck`. Tracked in `known-discrepancies-verify.json`; not
-a regression.
+**`output_contract_partial` used to check different contract fields on each runtime.** TS
+`verify_output_contract_partial` → `contractShadowCheck` inspects `outputContract.required_sections`;
+Python's `contract_shadow_check` used to inspect `required_interface_fields` + `interface_constraints` and never
+looked at `required_sections`. Resolved by making Python follow TS: `contract_shadow_check` now checks
+`required_sections` only (a missing key of a dict result → `Missing required field: <section>`), and the fuller
+checks (format, interface constraints, validation rules, caller constraints) live in `output_validation()`,
+the twin of TS `outputValidation`. `known-discrepancies-verify.json` is now empty; the two
+`output-contract-*-only` fixtures stay as regression fixtures.
 
 ### Usage
 
@@ -433,3 +415,29 @@ Result: **49 PASS, 0 tracked discrepancies, 0 untracked.**
 ```bash
 node scripts/harness-conformance/compare-ask-question.mjs   # cross-language diff (CI gate)
 ```
+
+
+## Checkpoint cross-resume (`compare-checkpoint.mjs`)
+
+A run paused by one runtime must resume in the other and finish exactly as an uninterrupted run does. The script pauses
+each runtime at a proposal and at an iteration end, feeds the checkpoint to the other one and compares a projection of the
+outcome (final result, task statuses, last node). Run it with `PYTHON=<python with the adapter deps> node
+scripts/harness-conformance/compare-checkpoint.mjs` after `npm ci --workspace=packages/harness`.
+
+
+## Differential runtime scenarios (`compare-runtime.mjs`)
+
+`fixtures-runtime/*.json` are declarative scenarios (objective/criteria or explicit tasks, per-task tool behaviours `ok` /
+`fail` / `continue` / `seeded-fail`, optional supervisor decider, semantic hooks, caller update, output contract,
+`env` for the `HARNESS_LEXICAL_*` switches, `skipControlState` etc.). Each is run through the TS `HarnessRuntime`
+(`run-ts-runtime.mts`) and the Python one (`run_py_runtime.py`) and their trace projections are diffed: node order, steps,
+task statuses, final result, strategy state, failure classes, beliefs/observations, control state, journal, the callback log
+(verify / gate / supervisor / semantic hooks) and halts. Random id suffixes (`rebuilt-task-N-xxxx`) are normalised.
+
+    PYTHON=<python with the adapter deps> node scripts/harness-conformance/compare-runtime.mjs [name-substring]
+
+A reviewed, intentional difference goes in `known-discrepancies-runtime.json` (`{"<fixture>": "<reason>"}`); it is reported as
+tracked, and a tracked fixture that starts passing fails the run so the entry gets removed.
+
+The `seeded-fail` tool mirrors `packages/harness/src/harness-runtime-stall.test.ts`: a stall (and so the supervisor consult)
+is otherwise unreachable, because the control state goes to DENY after two failures and blocks a third attempt.

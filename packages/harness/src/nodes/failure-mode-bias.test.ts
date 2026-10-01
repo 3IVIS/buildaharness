@@ -3,7 +3,7 @@
 // apply_failure_mode_bias(), the TS side's own version of "a match actually changes what
 // recovery tries next" instead of only labeling the failure.
 
-import { describe, it, expect } from 'vitest'
+import { describe, it, expect, beforeAll, afterAll } from 'vitest'
 import { rollbackAndReplan } from './rollback-replan.js'
 import { StrategyState } from '../state/strategy-state.js'
 import { FailureDiagnostics, FailureModeLibrary, DEFAULT_FAILURE_MODE_ENTRIES, resolveSemanticMatchStrategy } from '../state/failure-diagnostics.js'
@@ -12,6 +12,18 @@ import { WorldModel } from '../state/world-model.js'
 import { CallerState } from '../state/caller-state.js'
 import { UnavailableExperienceStore } from '../state/experience-store.js'
 import { initializeHarness } from './initialize.js'
+
+// These tests exercise the harness's lexical checks, which are off by default (lexical/lexical-off.ts),
+// so this file switches them on.
+let savedLexicalMode: string | undefined
+beforeAll(() => {
+  savedLexicalMode = process.env.HARNESS_LEXICAL_MODE
+  process.env.HARNESS_LEXICAL_MODE = 'enabled'
+})
+afterAll(() => {
+  if (savedLexicalMode === undefined) delete process.env.HARNESS_LEXICAL_MODE
+  else process.env.HARNESS_LEXICAL_MODE = savedLexicalMode
+})
 
 const task = () => ({
   id: 't1',

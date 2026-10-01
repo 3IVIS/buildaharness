@@ -106,6 +106,52 @@ class PostgresNotifyChannel(UpdateChannel):
         return None
 
 
+def take_budget_answers(payload: dict[str, Any], memory_state: Any, task_graph: Any) -> dict[str, Any] | None:
+    """Act on the user's answer to the budget_exhausted question and remove it from the update (TS takeBudgetAnswers).
+
+    An answer to the budget question is a CONTROL action, not a scope constraint, so it never reaches the constraint
+    pipeline. Options are recognised by the exact labels the question builder produced:
+      - "Continue with N more steps": memory_state.max_steps grows by DEFAULT_BUDGET_EXTENSION;
+      - "Stop and summarize progress so far": every unfinished task is cancelled (`goal_cancelled`);
+      - "Let me clarify the goal": no budget effect; the answer stays a constraint.
+    Returns the update without the budget answers, or None when nothing else was in it.
+    """
+    from .ask_question import DEFAULT_BUDGET_EXTENSION, build_budget_exhausted_question
+    from .constraint_propagation import cancel_task_graph
+
+    answers = payload.get("clarification_answers")
+    if not isinstance(answers, list):
+        return payload
+
+    template = build_budget_exhausted_question(0)
+    assert template.options is not None
+    continue_label, stop_label = template.options[0].label, template.options[1].label
+
+    def question_id(a: Any) -> Any:
+        return a.get("questionId") if isinstance(a, dict) else getattr(a, "question_id", None)
+
+    def labels(a: Any) -> Any:
+        return a.get("selectedLabels") if isinstance(a, dict) else getattr(a, "selected_labels", None)
+
+    budget = [a for a in answers if question_id(a) == template.id]
+    if not budget:
+        return payload
+    for answer in budget:
+        selected = labels(answer)
+        if not isinstance(selected, list):
+            continue
+        if continue_label in selected:
+            if memory_state is not None:
+                memory_state.max_steps += DEFAULT_BUDGET_EXTENSION
+        elif stop_label in selected and task_graph is not None:
+            cancel_task_graph(task_graph)
+
+    rest = [a for a in answers if question_id(a) != template.id]
+    if not rest:
+        return None
+    return {**payload, "clarification_answers": rest}
+
+
 def check_external_updates(
     channel: UpdateChannel,
     caller_state: Any,
@@ -113,6 +159,7 @@ def check_external_updates(
     task_graph: Any,
     diagnostics: Any,
     output_contract: Any | None = None,
+    memory_state: Any | None = None,
 ) -> bool:
     """Non-blocking poll for external constraint updates.
 
@@ -126,10 +173,9 @@ def check_external_updates(
     Transport or parse failures return False silently — the loop never crashes
     due to channel unavailability.
     """
-    from .caller_state import inject_clarification
-    from .constraint_propagation import apply_constraint_change_propagation
+    from .caller_state import inject_clarification, reset_constraints_changed
+    from .constraint_propagation import apply_constraint_change_propagation, cancel_task_graph
     from .output_contract import OutputContract
-    from .staleness import increment_generation_id
     from .world_model import Observation
 
     try:
@@ -140,13 +186,16 @@ def check_external_updates(
     if update is None:
         return False
 
+    remaining = take_budget_answers(update.payload, memory_state, task_graph)
+    if remaining is None:
+        return False  # the whole update was an answer to the budget question, handled as a control action
+    if remaining is not update.payload:
+        update = PendingUpdate(update_type=update.update_type, payload=remaining, received_at=update.received_at)
+
     inject_clarification(caller_state, update.payload)
 
-    # Trajectory Supervisor ASK_USER (S3) — a clarification answer is also recorded as a
-    # first-class world-model Observation with source="user_clarification", so staleness
-    # and contradiction detection re-run over it. (The Python Observation has no
-    # derived_from field — INV-01 is belief-level; provenance here is source +
-    # caller_state.clarification_history, which inject_clarification() just appended to.)
+    # Python-only: the resumed answer is also recorded as a HIGH-provenance user_clarification
+    # observation (harness-runtime.ts documents the same outcome for its resumed run).
     if update.update_type == "clarification" and world_model is not None and hasattr(world_model, "add_observation"):
         answer = _clarification_answer_text(update.payload)
         if answer:
@@ -160,9 +209,17 @@ def check_external_updates(
                 )
             )
 
+    if not caller_state.constraints_changed:
+        return False
+
+    # TS checkCallerUpdates: `cancel_current: true` cancels the whole graph instead of re-scoping it.
+    if update.payload.get("cancel_current") is True:
+        cancel_task_graph(task_graph)
+        world_model.generation_id += 1
+        reset_constraints_changed(caller_state)
+        return True
+
     oc = output_contract if output_contract is not None else OutputContract()
+    # apply_constraint_change_propagation bumps generation_id and clears constraints_changed itself.
     apply_constraint_change_propagation(caller_state, world_model, task_graph, oc, diagnostics)
-
-    increment_generation_id(world_model)
-
     return True

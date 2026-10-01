@@ -12,11 +12,14 @@ from __future__ import annotations
 import sys
 from pathlib import Path
 
+import pytest
+
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
 from harness.diagnostics import Diagnostics
-from harness.evidence import Evidence, EvidenceStore
+from harness.evidence import Evidence, EvidenceStore, ToolAvailability
 from harness.execution import action_dep_overlap, execute, select_reversibility_strategy
+from harness.hypothesis import Hypothesis, HypothesisSet
 from harness.output_contract import OutputContract, contract_shadow_check
 from harness.review_gate import (
     DimensionResult,
@@ -25,21 +28,22 @@ from harness.review_gate import (
     check_world_model_consistency,
     review_proposed_change,
 )
-from harness.risk import (
-    estimate_risk,
-)
+from harness.risk import RiskableAction, estimate_risk
 from harness.task_graph import Task, TaskGraph
 from harness.tool_manifest import ToolAvailabilityManifest, ToolEntry
 from harness.verification import (
     verify,
     verify_evidence_sufficiency,
 )
-from harness.voi import (
-    estimate_value_of_information,
-    update_verification_strength,
-    verification_adequacy_critic,
-)
+from harness.voi import estimate_voi
 from harness.world_model import Belief, Observation, WorldModel
+
+
+@pytest.fixture(autouse=True)
+def _lexical_checks_on(monkeypatch):
+    """These tests exercise the harness's lexical checks, which are off by default (harness/lexical_off.py)."""
+    monkeypatch.setenv("HARNESS_LEXICAL_MODE", "enabled")
+
 
 # ── Helpers ───────────────────────────────────────────────────────────────────
 
@@ -79,13 +83,13 @@ def _world_model_with_refs(file_path: str, n_refs: int) -> WorldModel:
 
 
 def _belief(bid: str, statement: str, reliability: str = "", confidence: float = 0.9) -> Belief:
+    # The review gate keys on confidence >= 0.8 (TS), so a LOW-reliability belief is one with low confidence.
     b = Belief(
         id=bid,
         statement=statement,
-        confidence=confidence,
+        confidence=0.3 if reliability == "LOW" else confidence,
         derived_from=["obs-1"],
     )
-    # Attach reliability as extra attribute
     b.reliability = reliability
     return b
 
@@ -127,7 +131,7 @@ def _make_evidence_store(n_high: int = 0, n_medium: int = 0, n_low: int = 0) -> 
                 reliability="HIGH",
                 source="test",
                 evidence_type="OBSERVATION",
-                freshness=1.0,
+                freshness="2026-01-01T00:00:00+00:00",
             )
         )
     for i in range(n_medium):
@@ -138,7 +142,7 @@ def _make_evidence_store(n_high: int = 0, n_medium: int = 0, n_low: int = 0) -> 
                 reliability="MEDIUM",
                 source="test",
                 evidence_type="OBSERVATION",
-                freshness=1.0,
+                freshness="2026-01-01T00:00:00+00:00",
             )
         )
     for i in range(n_low):
@@ -149,209 +153,104 @@ def _make_evidence_store(n_high: int = 0, n_medium: int = 0, n_low: int = 0) -> 
                 reliability="LOW",
                 source="test",
                 evidence_type="OBSERVATION",
-                freshness=0.5,
+                freshness="2026-01-01T00:00:00+00:00",
             )
         )
     return store
 
 
 # ══════════════════════════════════════════════════════════════════════════════
-# T01  Risk estimation — core vs test file
+# T01  Risk estimation (TS estimateRisk)
 # ══════════════════════════════════════════════════════════════════════════════
 
 
-def test_T01_risk_core_biz_high_refs_is_high():
-    """T01a — core biz logic file with many refs → HIGH risk.
-
-    With 50 refs: centrality=1.0; module_score=1.0 (core file);
-    score = 0.4*1.0 + 0.3*scope + 0.3*1.0 >= 0.7 → HIGH.
-    """
-    file_path = "adapter/harness/core_engine.py"
-    wm = _world_model_with_refs(file_path, 50)  # 50 refs → centrality = 1.0
-
-    task = _task("t1", file_path=file_path, description="refactor core_engine.py")
-    level = estimate_risk(task, wm)
-
-    assert level == "HIGH", f"Expected HIGH risk but got {level}"
+def _graph_with_domains(*domains: str) -> TaskGraph:
+    return TaskGraph(
+        tasks=[Task(id=f"t{i}", description="t", parallel_write_domains=[d]) for i, d in enumerate(domains)]
+    )
 
 
-def test_T01_risk_test_file_2_refs_is_low():
-    """T01b — test-only file with 2 refs → LOW risk."""
-    file_path = "adapter/tests/test_foo.py"
-    wm = _world_model_with_refs(file_path, 2)
-
-    task = _task("t2", file_path=file_path, description="add test")
-    level = estimate_risk(task, wm)
-
-    assert level == "LOW", f"Expected LOW risk but got {level}"
+def test_T01_infrastructure_is_always_high_and_flags_metadata():
+    """T01a — infrastructure modules are HIGH regardless of size and set reduce_edit_size / increase_verification."""
+    action = RiskableAction(module_type="infrastructure", lines_affected=1)
+    assert estimate_risk(action, TaskGraph(), WorldModel()) == "HIGH"
+    assert action.metadata == {"reduce_edit_size": True, "increase_verification": True}
 
 
-# ══════════════════════════════════════════════════════════════════════════════
-# T02  estimate_risk updates task.risk_level in place
-# ══════════════════════════════════════════════════════════════════════════════
+def test_T01_test_modules_are_always_low():
+    """T01b — test modules are LOW even for a huge change, with no metadata flags."""
+    action = RiskableAction(module_type="test", lines_affected=10_000, functions_affected=500)
+    assert estimate_risk(action, TaskGraph(), WorldModel()) == "LOW"
+    assert action.metadata == {}
 
 
-def test_T02_estimate_risk_updates_task_risk_level():
-    """T02 — estimate_risk sets task.risk_level as side effect."""
-    file_path = "adapter/harness/core_engine.py"
-    wm = _world_model_with_refs(file_path, 50)  # 50 refs → centrality = 1.0 → HIGH
-    task = _task("t3", file_path=file_path, description="refactor core_engine.py")
-
-    assert task.risk_level == "LOW"  # default
-    level = estimate_risk(task, wm)
-    assert task.risk_level == level  # side effect occurred
-    assert task.risk_level == "HIGH"
+def test_T01_business_logic_composite_thresholds():
+    """T01c — composite = 0.3*centrality + 0.4*scope + 0.3*0.5; HIGH >= 0.5, MEDIUM >= 0.3, else LOW."""
+    graph = _graph_with_domains("core/engine.py")
+    # nothing changed, nothing central: 0.15 -> LOW
+    assert estimate_risk(RiskableAction("business_logic"), graph, WorldModel()) == "LOW"
+    # max size, fully central file: 0.3 + 0.4 + 0.15 = 0.85 -> HIGH (and flags set)
+    big = RiskableAction("business_logic", ["core/engine.py"], lines_affected=500, functions_affected=20)
+    assert estimate_risk(big, graph, WorldModel()) == "HIGH"
+    assert big.metadata["increase_verification"] is True
+    # scope 0.5 only: 0.2 + 0.15 = 0.35 -> MEDIUM
+    mid = RiskableAction("business_logic", [], lines_affected=250, functions_affected=10)
+    assert estimate_risk(mid, graph, WorldModel()) == "MEDIUM"
+    assert mid.metadata == {}
 
 
 # ══════════════════════════════════════════════════════════════════════════════
-# T03  HIGH risk task → requires_adversarial_pass=True in adequacy result
+# T03-T06  VOI (TS estimateVOI)
 # ══════════════════════════════════════════════════════════════════════════════
 
 
-def test_T03_high_risk_triggers_adversarial_pass():
-    """T03 — HIGH risk task → AdequacyResult.requires_adversarial_pass=True."""
-    manifest = _make_manifest(available=["linter", "pytest", "integration_runner"])
-    result = verification_adequacy_critic(manifest, "HIGH", evidence_store=None)
-    assert result.requires_adversarial_pass is True
+def _hyp_set(n: int) -> HypothesisSet:
+    return HypothesisSet(active=[Hypothesis(id=f"h{i}", explanation="e", confidence=0.5) for i in range(n)])
 
 
-def test_T03_low_risk_no_adversarial_pass():
-    """T03b — LOW risk task → requires_adversarial_pass=False."""
-    manifest = _make_manifest(available=["linter", "pytest", "integration_runner"])
-    result = verification_adequacy_critic(manifest, "LOW", evidence_store=None)
-    assert result.requires_adversarial_pass is False
-
-
-# ══════════════════════════════════════════════════════════════════════════════
-# T04  Low explanation_coverage + HIGH risk → should_gather=True
-# ══════════════════════════════════════════════════════════════════════════════
-
-
-def test_T04_low_explanation_coverage_high_risk_should_gather():
-    """T04 — low explanation_coverage + HIGH risk → should_gather=True."""
+def test_T03_voi_is_uncertainty_reduction_times_decision_impact():
+    """T03 — VOI = ((n-1)/n) * (1 - strength); one active hypothesis leaves nothing to reduce."""
     diagnostics = Diagnostics()
-    diagnostics.coverage_health.explanation_coverage = 0.1  # low coverage → high uncertainty
+    diagnostics.verification_health.strength = 0.2
+    result = estimate_voi(diagnostics, WorldModel(), _hyp_set(4), {})
+    assert result.voi == pytest.approx(0.75 * 0.8)
+    assert result.should_gather_evidence is True  # voi 0.6 > 0.5
 
-    task = _task("t4", risk_level="HIGH")
-
-    result = estimate_value_of_information(
-        evidence_store=None,
-        world_model=WorldModel(),
-        current_task=task,
-        diagnostics=diagnostics,
-    )
-
-    # uncertainty_reduction = 1 - 0.1 = 0.9; decision_impact = 1.0 (HIGH)
-    # voi_score = 0.9 * 1.0 = 0.9 > 0.3 threshold
-    assert result.should_gather is True
-    assert result.voi_score > 0.3
+    assert estimate_voi(diagnostics, WorldModel(), _hyp_set(1), {}).voi == 0.0
 
 
-def test_T04_high_explanation_coverage_low_risk_no_gather():
-    """T04b — high explanation_coverage + LOW risk → should_gather=False."""
+def test_T04_high_strength_means_no_need_to_gather():
+    """T04 — strong verification and a fully available toolset -> no gathering."""
     diagnostics = Diagnostics()
-    diagnostics.coverage_health.explanation_coverage = 0.95  # high coverage → low uncertainty
-
-    task = _task("t5", risk_level="LOW")
-
-    result = estimate_value_of_information(
-        evidence_store=None,
-        world_model=WorldModel(),
-        current_task=task,
-        diagnostics=diagnostics,
-    )
-
-    # uncertainty_reduction = 1 - 0.95 = 0.05; decision_impact = 0.3 (LOW)
-    # voi_score = 0.05 * 0.3 = 0.015 <= 0.3 threshold
-    assert result.should_gather is False
+    diagnostics.verification_health.strength = 0.95
+    manifest = {"linter": ToolAvailability(True), "pytest": ToolAvailability(True)}
+    result = estimate_voi(diagnostics, WorldModel(), _hyp_set(3), manifest)
+    assert result.should_gather_evidence is False
+    assert result.adequacy_shortfall == 0
+    assert result.adequacy_unresolvable is False
+    assert result.updated_verification_strength is None
 
 
-# ══════════════════════════════════════════════════════════════════════════════
-# T05  < 3 available layers → adequate=False, resolution=gather_evidence
-# ══════════════════════════════════════════════════════════════════════════════
-
-
-def test_T05_fewer_than_3_layers_gather_evidence():
-    """T05 — exactly 2 available layers → adequate=False, resolution='gather_evidence'."""
-    # Provide exactly 2 tools that map to layers
-    manifest = _make_manifest(
-        available=["linter", "pytest"],
-        unavailable=[
-            "integration_runner",
-            "consistency_checker",
-            "requirements_checker",
-            "assumption_checker",
-            "goal_checker",
-            "evidence_checker",
-            "contract_checker",
-        ],
-    )
-    result = verification_adequacy_critic(manifest, "LOW", evidence_store=None)
-
-    assert result.adequate is False
-    assert result.resolution == "gather_evidence"
-    assert len(result.available_layers) == 2
-
-
-# ══════════════════════════════════════════════════════════════════════════════
-# T06  < 2 layers → resolution=escalate, strength updated, no loop
-# ══════════════════════════════════════════════════════════════════════════════
-
-
-def test_T06_fewer_than_2_layers_escalate():
-    """T06 — exactly 1 available layer → adequate=False, resolution='escalate'."""
-    manifest = _make_manifest(
-        available=["linter"],
-        unavailable=[
-            "pytest",
-            "integration_runner",
-            "consistency_checker",
-            "requirements_checker",
-            "assumption_checker",
-            "goal_checker",
-            "evidence_checker",
-            "contract_checker",
-        ],
-    )
-    result = verification_adequacy_critic(manifest, "LOW", evidence_store=None)
-
-    assert result.adequate is False
-    assert result.resolution == "escalate"
-    assert len(result.available_layers) == 1
-
-
-def test_T06_update_verification_strength_with_1_layer():
-    """T06b — update_verification_strength sets strength proportionally."""
+def test_T05_low_tool_adequacy_triggers_gathering_and_reports_shortfall():
+    """T05 — adequacy = available / total; below 0.3 evidence is gathered and the shortfall is reported."""
     diagnostics = Diagnostics()
     diagnostics.verification_health.strength = 1.0
+    manifest = {f"t{i}": ToolAvailability(i == 0, "alt" if i == 1 else None) for i in range(4)}  # adequacy 0.25
+    result = estimate_voi(diagnostics, WorldModel(), _hyp_set(1), manifest)
+    assert result.should_gather_evidence is True
+    assert result.adequacy_shortfall == pytest.approx(0.05)
+    assert result.adequacy_unresolvable is False  # one tool available, and one unavailable tool has a fallback
 
-    update_verification_strength(diagnostics, 1)
 
-    # 1 layer / 9 total ≈ 0.111
-    expected = 1 / 9
-    assert abs(diagnostics.verification_health.strength - expected) < 0.01
-
-
-def test_T06_no_loop_on_escalate():
-    """T06c — escalate path does not loop — returns immediately."""
-    manifest = _make_manifest(
-        available=[],  # zero layers
-        unavailable=[
-            "linter",
-            "pytest",
-            "integration_runner",
-            "consistency_checker",
-            "requirements_checker",
-            "assumption_checker",
-            "goal_checker",
-            "evidence_checker",
-            "contract_checker",
-        ],
-    )
-    # This call must complete without looping/hanging
-    result = verification_adequacy_critic(manifest, "MEDIUM", evidence_store=None)
-    assert result.resolution == "escalate"
-    assert result.adequate is False
+def test_T06_nothing_available_and_no_fallback_is_unresolvable_and_lowers_strength():
+    """T06 — no available tool and no fallback -> unresolvable; verification_health.strength drops to the adequacy."""
+    diagnostics = Diagnostics()
+    diagnostics.verification_health.strength = 1.0
+    manifest = {"linter": ToolAvailability(False), "pytest": ToolAvailability(False)}
+    result = estimate_voi(diagnostics, WorldModel(), _hyp_set(1), manifest)
+    assert result.adequacy_unresolvable is True
+    assert result.updated_verification_strength == 0.0
+    assert diagnostics.verification_health.strength == 0.0
 
 
 # ══════════════════════════════════════════════════════════════════════════════
@@ -457,8 +356,8 @@ def test_T07_chinese_paraphrase_of_high_reliability_belief_fails():
 
 
 def test_T08_removes_required_field_fails_contract_check():
-    """T08 — change removing a required_interface_field fails output contract check."""
-    contract = OutputContract(required_interface_fields=["user_id", "session_token"])
+    """T08 — change removing a required section fails output contract check."""
+    contract = OutputContract(required_sections=["user_id", "session_token"])
 
     proposed_change = {"description": "remove user_id from the response payload"}
 
@@ -470,7 +369,7 @@ def test_T08_removes_required_field_fails_contract_check():
 
 def test_T08_no_removal_passes_contract_check():
     """T08b — change not removing required fields passes."""
-    contract = OutputContract(required_interface_fields=["user_id"])
+    contract = OutputContract(required_sections=["user_id"])
     proposed_change = {"description": "add extra metadata to the response"}
 
     result = check_output_contract(proposed_change, contract)
@@ -749,8 +648,10 @@ def test_T11_successful_execution_records_change_log():
     assert result.success is True
     assert len(wm.environment_change_log) == 1
     log_entry = wm.environment_change_log[0]
-    assert log_entry.get("status") == "completed"
-    assert log_entry.get("task_id") == "t11"
+    assert log_entry["id"].startswith("change-")
+    assert log_entry["affected_paths"] == []
+    assert log_entry["description"] == "execution"
+    assert log_entry["timestamp"]
 
 
 # ══════════════════════════════════════════════════════════════════════════════
@@ -791,39 +692,14 @@ def test_T12_read_only_change_ephemeral_strategy():
 # ══════════════════════════════════════════════════════════════════════════════
 
 
-def test_T13_file_mutation_high_risk_git_repo():
-    """T13 — file mutation + HIGH risk in git repo → 'git-revert' strategy."""
-    import os
-    import tempfile
-
-    # Create a temp directory with a .git dir to simulate a git repo
-    with tempfile.TemporaryDirectory() as tmpdir:
-        os.makedirs(os.path.join(tmpdir, ".git"))
-        old_cwd = os.getcwd()
-        os.chdir(tmpdir)
-        try:
-            proposed_change = {"change_type": "file_mutation"}
-            strategy = select_reversibility_strategy(proposed_change, "HIGH")
-            assert strategy == "git-revert"
-        finally:
-            os.chdir(old_cwd)
-
-
-def test_T13_file_mutation_high_risk_no_git():
-    """T13b — file mutation + HIGH risk without git → 'snapshot' strategy."""
-    import os
-    import tempfile
-
-    with tempfile.TemporaryDirectory() as tmpdir:
-        # No .git directory
-        old_cwd = os.getcwd()
-        os.chdir(tmpdir)
-        try:
-            proposed_change = {"change_type": "file_mutation"}
-            strategy = select_reversibility_strategy(proposed_change, "HIGH")
-            assert strategy == "snapshot"
-        finally:
-            os.chdir(old_cwd)
+def test_T13_reversibility_depends_on_change_type_only():
+    """T13 — read-only -> ephemeral; schema/infra -> snapshot; a file mutation is patch-rollback whatever the risk
+    or the presence of a .git directory (TS selectReversibilityStrategy)."""
+    assert select_reversibility_strategy({"change_type": "read-only"}) == "ephemeral"
+    assert select_reversibility_strategy({"change_type": "schema"}) == "snapshot"
+    assert select_reversibility_strategy({"change_type": "infra"}) == "snapshot"
+    assert select_reversibility_strategy({"change_type": "file_mutation"}, "HIGH") == "patch-rollback"
+    assert select_reversibility_strategy({}) == "patch-rollback"
 
 
 def test_T13_file_mutation_low_risk_patch_rollback():
@@ -838,15 +714,13 @@ def test_T13_file_mutation_low_risk_patch_rollback():
 # ══════════════════════════════════════════════════════════════════════════════
 
 
-def test_T14_task_transitions_to_verifying_on_success():
-    """T14 — successful execution transitions task PENDING→ACTIVE→VERIFYING."""
+def test_T14_successful_execution_leaves_task_status_to_the_driver():
+    """T14 — like TS execute(), a successful run does not change the task's status (the driver applies COMPLETE)."""
     task = _task("t14", risk_level="LOW")
     tg = TaskGraph(tasks=[task])
     wm = WorldModel()
 
-    assert task.status == "PENDING"
-
-    execute(
+    result = execute(
         proposed_change={"change_type": "file_mutation"},
         tool_workflow=lambda: "ok",
         world_model=wm,
@@ -855,7 +729,8 @@ def test_T14_task_transitions_to_verifying_on_success():
         evidence_store=EvidenceStore(),
     )
 
-    assert task.status == "VERIFYING"
+    assert task.status == "PENDING"
+    assert result.status == "complete"
 
 
 def test_T14_task_transitions_to_failed_on_error():
@@ -1102,35 +977,23 @@ def test_T18_skipped_layers_do_not_cause_critical_failure():
     assert vr.has_critical_failure is False
 
 
-def test_T18_skipped_layers_strength_from_adequacy_critic():
-    """T18b — update_verification_strength properly reflects available count."""
-    diagnostics = Diagnostics()
-    update_verification_strength(diagnostics, 0)
-    assert diagnostics.verification_health.strength == 0.0
-
-    update_verification_strength(diagnostics, 9)
-    assert diagnostics.verification_health.strength == 1.0
-
-    update_verification_strength(diagnostics, 5)
-    expected = 5 / 9
-    assert abs(diagnostics.verification_health.strength - expected) < 0.01
-
-
 # ══════════════════════════════════════════════════════════════════════════════
 # T19  Missing required_interface_field caught by shadow check, is_stub=False
 # ══════════════════════════════════════════════════════════════════════════════
 
 
-def test_T19_missing_required_field_caught_by_shadow_check():
-    """T19 — contract_shadow_check catches missing required_interface_field."""
-    contract = OutputContract(required_interface_fields=["status", "data"])
+def test_T19_missing_required_section_caught_by_shadow_check():
+    """T19 — contract_shadow_check catches a missing required_sections key of a dict result (TS contractShadowCheck)."""
+    contract = OutputContract(required_sections=["status", "data"])
     result_dict = {"status": "ok"}  # missing "data"
 
     check = contract_shadow_check(result_dict, contract)
 
     assert check.passed is False
     assert check.is_stub is False
-    assert any("data" in v for v in check.violations)
+    assert check.violations == ["Missing required field: data"]
+    assert contract_shadow_check("plain text", contract).passed is True  # non-dict results are not checked
+    assert contract_shadow_check({}, None).passed is True
 
 
 def test_T19_shadow_check_is_not_stub():
@@ -1144,19 +1007,16 @@ def test_T19_shadow_check_is_not_stub():
 # ══════════════════════════════════════════════════════════════════════════════
 
 
-def test_T20_type_regression_caught():
-    """T20 — type mismatch in interface_constraints is caught."""
-    contract = OutputContract(
-        required_interface_fields=["count"],
-        interface_constraints={"count": "int"},
-    )
-    result_dict = {"count": "not-an-int"}  # string instead of int
+def test_T20_interface_constraint_mismatch_caught_by_output_validation():
+    """T20 — a value that differs from interface_constraints[key] is a violation of the authoritative check."""
+    from harness.output_contract import OutputContractError, output_validation
 
-    check = contract_shadow_check(result_dict, contract)
-
-    assert check.passed is False
-    assert check.is_stub is False
-    assert any("count" in v for v in check.violations)
+    contract = OutputContract(interface_constraints={"count": 3})
+    with pytest.raises(OutputContractError) as exc:
+        output_validation({"count": 4}, contract, None)
+    assert exc.value.violated_dimension == "interface_constraints"
+    assert exc.value.violations == ['interface_constraints: field "count" expected 3, got 4']
+    assert output_validation({"count": 3}, contract, None).passed is True
 
 
 # ══════════════════════════════════════════════════════════════════════════════

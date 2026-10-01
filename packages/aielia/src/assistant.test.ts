@@ -10,7 +10,7 @@ import { stagePendingAction, loadPendingAction } from './file-tools.js'
 import type { SendEmail } from './email.js'
 import { listUndoLogEntries } from './action-snapshot.js'
 import { SCHOOL_DATES_BATCH_FIXTURE, fixtureUserMessage, fixtureStructuredResponses, fixtureWebSearch } from './batch-research-fixtures.js'
-import { classifyRisk } from './risk-classifier.js'
+import { classifyRiskLexical } from './risk-classifier.js'
 import { decompositionEnabled } from './turn-interpreter.js'
 
 // This file predates the lexicalMode rollback (lexical-mode.ts's DEFAULT_LEXICAL_MODE) and its
@@ -70,7 +70,7 @@ function looksTrivial(message: string): boolean {
  */
 function deriveTurnIntentJSON(messages: ChatMessage[], override?: Record<string, unknown>): string {
   const userContent = messages.find((m) => m.role === 'user')?.content ?? ''
-  const risk = classifyRisk(userContent)
+  const risk = classifyRiskLexical(userContent)
   const isReminderRequest = risk.reason.includes('reminder')
   const isBulkReminderRequest = isReminderRequest && risk.requiresApproval
   const base = {
@@ -4230,27 +4230,27 @@ describe('PersonalAssistant control plane (Phase 4 of the harness/assistant arch
     expect(policyEvents[0]).toMatchObject({ tool: 'web_search', decision: 'ALLOW' })
   })
 
-  it('Phase 4c: a live per-turn ControlState actually gates — 9 same-turn tool failures flip the 10th call to DENY, not just the classifier UNKNOWN fallback', async () => {
+  it('Phase 4c: a live per-turn ControlState actually gates — retrying the same missing file flips the 11th call to DENY, not just the classifier UNKNOWN fallback', async () => {
     const { events, onTrace } = traceCollector()
     const backend = makeFakeBackend()
     const ROOT = '/ws'
-    // 9 read_file calls against a file that never exists — each fails, feeding tool-control-plane.ts's
-    // recordToolOutcome. The 10th call re-checks policy against the by-then-DENY ControlState (see
-    // tool-control-plane.test.ts for the unit-level 9-failure threshold) and should be denied before
-    // it ever reaches the executor. The 11th response is the final answer once the loop moves past it.
+    // Identical read_file calls against a file that never exists. A missing file is a negative ANSWER, not a tool
+    // fault, so the first two identical calls are free; each further identical call is a retry of a known answer and
+    // counts as a failure, feeding tool-control-plane.ts's recordToolOutcome. After 8 counted failures (call 10) the
+    // 11th call re-checks policy against the by-then-DENY ControlState and is denied before it reaches the executor.
     const failingCall = (id: string) => ({ content: '', toolCalls: [{ id, name: 'read_file', input: { path: 'missing.txt' } }] })
     const llm = scriptedResponses([
-      ...Array.from({ length: 10 }, (_, i) => failingCall(`toolu_${i + 1}`)),
+      ...Array.from({ length: 12 }, (_, i) => failingCall(`toolu_${i + 1}`)),
       { content: 'Could not find the file after repeated attempts.' },
     ])
-    const assistant = new PersonalAssistant({ llmClient: llm, fileTools: { backend, workspaceRoot: ROOT }, onTrace })
+    const assistant = new PersonalAssistant({ llmClient: llm, fileTools: { backend, workspaceRoot: ROOT }, onTrace, maxSteps: 30 })
     const result = await assistant.turn('Please keep checking for missing.txt.')
 
     expect(result.status).toBe('ok')
     const policyEvents = events.filter((e) => e.kind === 'tool_policy_decision')
-    expect(policyEvents).toHaveLength(10)
-    // The first 8 calls are checked against a state with fewer than 8 recorded failures — ALLOW.
-    // The 9th call (index 8) is checked against a state with 8 recorded failures, which already
+    expect(policyEvents).toHaveLength(12)
+    // The first 10 calls are checked against a state with fewer than 8 counted failures — ALLOW.
+    // The 11th call (index 10) is checked against a state with 8 counted failures, which already
     // crosses CRITICAL_THRESHOLD due to a floating-point rounding quirk already present in
     // resolve-control-state.ts (1 - 8/10 evaluates to 0.19999999999999996, not exactly 0.2 — see
     // tool-control-plane.ts's own doc comment and this session's Phase 4c step note in the plan
@@ -4260,9 +4260,30 @@ describe('PersonalAssistant control plane (Phase 4 of the harness/assistant arch
     // the actual gating behavior Phase 4c adds: a real DENY, driven by the live ControlState built
     // from this turn's own prior failures, not the classifier's advisory UNKNOWN fallback (which
     // never fires here — riskHint stays 'LOW' throughout).
-    expect(policyEvents.slice(0, 8).every((e) => e.decision === 'ALLOW')).toBe(true)
-    expect(policyEvents[8]).toMatchObject({ tool: 'read_file', decision: 'DENY' })
-    expect(policyEvents[9]).toMatchObject({ tool: 'read_file', decision: 'DENY' })
+    expect(policyEvents.slice(0, 10).every((e) => e.decision === 'ALLOW')).toBe(true)
+    expect(policyEvents[10]).toMatchObject({ tool: 'read_file', decision: 'DENY' })
+    expect(policyEvents[11]).toMatchObject({ tool: 'read_file', decision: 'DENY' })
+  })
+
+  it('probing many DIFFERENT paths that do not exist is a search, not a retry loop — no DENY, and the real file is reached', async () => {
+    const { events, onTrace } = traceCollector()
+    const backend = makeFakeBackend()
+    const ROOT = '/ws'
+    await backend.writeTextFile(`${ROOT}/ops/retry.conf`, 'retry_limit = 7')
+    const read = (id: string, path: string) => ({ content: '', toolCalls: [{ id, name: 'read_file', input: { path } }] })
+    const llm = scriptedResponses([
+      ...Array.from({ length: 13 }, (_, i) => read(`toolu_${i + 1}`, `guess-${i}.conf`)),
+      read('toolu_14', 'ops/retry.conf'),
+      { content: 'retry_limit is 7, in ops/retry.conf.' },
+    ])
+    const assistant = new PersonalAssistant({ llmClient: llm, fileTools: { backend, workspaceRoot: ROOT }, onTrace, maxSteps: 30 })
+    const result = await assistant.turn('Check these paths until you find retry_limit.')
+
+    expect(result.status).toBe('ok')
+    const policyEvents = events.filter((e) => e.kind === 'tool_policy_decision')
+    expect(policyEvents).toHaveLength(14)
+    expect(policyEvents.every((e) => e.decision === 'ALLOW')).toBe(true)
+    expect(result.reply).toContain('7')
   })
 
   it('write_file staging still produces needs_approval + a resolvable pendingActionId', async () => {

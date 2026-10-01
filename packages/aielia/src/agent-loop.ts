@@ -21,7 +21,7 @@ import type { TurnIntentClassification, RiskLevel } from './turn-intent-classifi
 import { evaluateToolPolicy } from './tool-policy.js'
 import { createTurnControlPlaneState, recordToolOutcome, moreRestrictiveControlState, controlStateToolPolicyEnabled, type TurnControlPlaneState } from './tool-control-plane.js'
 import { classifyToolYield, type ToolYield } from './tool-yield-classifier.js'
-import { FILE_TOOLS, executeFileTool, readCurrentFileContent, type FileToolsContext } from './file-tools.js'
+import { FILE_TOOLS, executeFileTool, readCurrentFileContent, ToolNotFoundError, type FileToolsContext } from './file-tools.js'
 import { formatWriteDiff } from './diff-format.js'
 import { WEB_TOOLS, executeWebTool, type WebToolsContext } from './web-tools.js'
 import { SHELL_TOOLS, executeShellTool, commandMayLeaveWorkspace, type ShellToolsContext } from './shell-tools.js'
@@ -864,7 +864,20 @@ export class AgentLoop {
           sources.push({ tool, path: String(input.query ?? input.url), excerpt: text.slice(0, GROUNDING_EXCERPT_CHARS) })
           return text
         },
-        onToolResult: (tool, input, resultText) => {
+        onToolResult: (tool, input, resultText, ok, notFound) => {
+          // Fold this call's outcome into the turn's ControlState, exactly as the manual dispatch loop does for the calls
+          // it makes itself — before this, a claude-cli turn's failures never reached the state checkToolPolicy reads,
+          // so the gate evaluated every call against a state that could not change (14 ALLOWs after 13 failed reads).
+          if (controlPlaneState) {
+            recordToolOutcome(controlPlaneState, {
+              toolName: tool,
+              // a missing file is the tool working and answering "no" — see ToolOutcome.negative
+              ok: ok || notFound === true,
+              negative: notFound === true,
+              callKey: `${tool}:${JSON.stringify(input)}`,
+              summary: notFound ? `${tool} found nothing: ${resultText.slice(0, 200)}` : ok ? `${tool} succeeded` : `${tool} failed: ${resultText.slice(0, 200)}`,
+            })
+          }
           if (tool === 'read_file' || tool === 'list_directory') {
             sources.push({ tool, path: String(input.path), excerpt: resultText.slice(0, GROUNDING_EXCERPT_CHARS) })
           } else if (tool === 'web_search' || tool === 'fetch_url') {
@@ -1056,6 +1069,7 @@ export class AgentLoop {
         }
         let resultText: string
         let toolOk = true
+        let toolNegative = false
         try {
           resultText = await this.executeToolCall(call.name, call.input, userMessage, onUsage)
           this.onTrace?.({ kind: 'tool_call', tool: call.name, ok: true })
@@ -1084,7 +1098,9 @@ export class AgentLoop {
           this.onTrace?.({ kind: 'tool_call', tool: call.name, ok: false })
           resultText = `Error: ${err instanceof Error ? err.message : String(err)}`
           this.onDebugLog?.({ kind: 'tool_call', sessionId, content: `${call.name}(${JSON.stringify(call.input)}) → ${resultText}` })
-          toolOk = false
+          // A missing file is the tool working and answering "no such file", not a fault (ToolOutcome.negative).
+          toolNegative = err instanceof ToolNotFoundError
+          toolOk = toolNegative
         }
         // Phase 4c: feed this call's outcome into the same live ControlState checkToolPolicy
         // reads at the top of the next iteration of this loop — a short summary only, never the
@@ -1093,7 +1109,9 @@ export class AgentLoop {
           recordToolOutcome(controlPlaneState, {
             toolName: call.name,
             ok: toolOk,
-            summary: toolOk ? `${call.name} succeeded` : `${call.name} failed: ${resultText.slice(0, 200)}`,
+            negative: toolNegative,
+            callKey: `${call.name}:${JSON.stringify(call.input)}`,
+            summary: toolNegative ? `${call.name} found nothing: ${resultText.slice(0, 200)}` : toolOk ? `${call.name} succeeded` : `${call.name} failed: ${resultText.slice(0, 200)}`,
           })
         }
         messages.push({ role: 'tool', content: resultText, toolCallId: call.id })

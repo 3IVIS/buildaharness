@@ -42,6 +42,7 @@ import { renderHypothesisNote, hypothesisContextMessage, proposeCompetingExplana
 import type { SemanticHypothesisProposal } from '@buildaharness/harness'
 import { RECOVERY_NOTE_PREFIX, recoveryNoteText } from './recovery-note.js'
 import { AssistantSession, type IndexedMessage, type TranscriptSearchHit } from './assistant-session.js'
+import { semanticCompactionEnabled, summarizeOlderMessages } from './semantic-compaction.js'
 import { AgentLoop, OneLoopPause, type BatchBudgetState, type BatchBudgetTrace, type ToolLoopResult, trimmedAverage, nextItemBudget } from './agent-loop.js'
 import type { TurnIntentClassification, FactCategory } from './turn-intent-classifier.js'
 import { ActionApprovalService } from './action-approval-service.js'
@@ -61,6 +62,7 @@ import { DEFAULT_ASK_MODE, type AskMode } from './ask-mode-flag.js'
 import { DEFAULT_AMBIGUITY_GUARD_MODE, type AmbiguityGuardMode } from './ambiguity-guard-flag.js'
 import { DEFAULT_PLAN_MODE, type PlanRolloutMode } from './plan-mode-flag.js'
 import { AskClarificationService } from './ask-clarification-service.js'
+import { formatAskQuestions } from './ask-response-format.js'
 import { ResponseService } from './response-service.js'
 import { createSteeringReconcileChannel } from './goal-graph-reconcile.js'
 import { loadGoalGraphRecord, saveGoalGraphRecord, createEmptyGoalGraphRecord } from './goal-graph-store.js'
@@ -605,7 +607,7 @@ export class PersonalAssistant {
       this.onDebugLog?.({
         kind: 'assistant_reply',
         sessionId,
-        content: `[${result.status}]${result.riskLevel ? ` (${result.riskLevel})` : ''}${cacheNote} ${result.reply ?? result.reason ?? '(no reply)'}`,
+        content: `[${result.status}]${result.riskLevel ? ` (${result.riskLevel})` : ''}${cacheNote} ${result.reply ?? (result.questions?.length ? formatAskQuestions(result.questions) : result.reason) ?? '(no reply)'}`,
       })
       return result
     } catch (err) {
@@ -879,7 +881,13 @@ export class PersonalAssistant {
         globalEnabled: this.askMode === 'enabled',
         sessionAskMode: options.askMode === undefined ? undefined : options.askMode === 'enabled',
       })
-      return this.askClarification.resolvePendingClarification(sessionId, transcriptKey, options.pendingClarificationId, options.clarificationAnswer, askModeEnabledForResume)
+      const resolved = await this.askClarification.resolvePendingClarification(
+        sessionId, transcriptKey, options.pendingClarificationId, options.clarificationAnswer, askModeEnabledForResume, this.oneLoopMode === 'enabled',
+      )
+      if (!('fallThrough' in resolved)) return resolved
+      // The validated answer becomes this turn's message and the ordinary pipeline (with its one-loop proposer) carries on,
+      // the way an approved plan does below — see resolvePendingClarification's `handOffToOrdinaryTurn`.
+      userMessage = resolved.answerText
     }
 
     // P2 — resolving a staged needs_plan_approval result. `resolvePendingPlanApproval` mutates
@@ -911,7 +919,10 @@ export class PersonalAssistant {
       if (!('fallThrough' in draftOutcome)) return draftOutcome
     }
 
-    const transcript = await this.session.loadAndCompactTranscript(sessionId)
+    const transcript = await this.session.loadAndCompactTranscript(
+      sessionId,
+      semanticCompactionEnabled() ? (older) => summarizeOlderMessages(older, this.llmClient, this.model, accumulateUsage) : undefined,
+    )
     const { facts, factsBlock } = await this.memoryService.loadFacts(sessionId)
     const { remindersBlock } = await this.memoryService.loadActiveReminders()
     let systemPrompt = `${SYSTEM_PROMPT}${factsBlock}${remindersBlock}`

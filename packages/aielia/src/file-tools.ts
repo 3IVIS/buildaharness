@@ -183,13 +183,21 @@ export function requireStringArg(input: Record<string, unknown>, key: string): s
   return value
 }
 
+/** A read that worked and found nothing there — an answer ("no such file"), not a tool fault. Typed so the turn's control plane can tell a probe from a broken tool without matching message text. */
+export class ToolNotFoundError extends Error {
+  constructor(message: string) {
+    super(message)
+    this.name = 'ToolNotFoundError'
+  }
+}
+
 /** Executes one of the three file tools by name. Real I/O for read/list; write_file only stages (see T2). */
 export async function executeFileTool(ctx: FileToolsContext, toolName: string, input: Record<string, unknown>): Promise<FileToolResult> {
   switch (toolName) {
     case 'read_file': {
       const resolved = await resolveAndVerify(ctx, requireStringArg(input, 'path'))
       const content = await ctx.backend.readTextFile(resolved)
-      if (content === undefined) throw new Error(`File not found: ${input.path as string}`)
+      if (content === undefined) throw new ToolNotFoundError(`File not found: ${input.path as string}`)
       return { kind: 'text', text: content }
     }
     case 'list_directory': {

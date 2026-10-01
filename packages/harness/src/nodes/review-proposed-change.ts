@@ -114,6 +114,10 @@ function checkOutputContract(proposedChange: ProposedChange, outputContract: Out
   if (outputContract === null) {
     return { dimension: 'output_contract_precheck', passed: true, reason: 'No output contract provided' }
   }
+  // HARNESS_LEXICAL review-phrases: "remove <section>" is a phrase match over free text.
+  if (!harnessLexicalActive('review-phrases')) {
+    return { dimension: 'output_contract_precheck', passed: true, reason: 'Lexical phrase check switched off' }
+  }
   const changeDesc = getChangeDescription(proposedChange)
   for (const section of outputContract.required_sections) {
     const s = section.toLowerCase()
@@ -143,7 +147,7 @@ function checkCodeQuality(proposedChange: ProposedChange, toolManifest: Evidence
     return { dimension: 'code_quality', passed: true, reason: 'No linter available — code quality check skipped' }
   }
   const changeDesc = getChangeDescription(proposedChange)
-  if (changeDesc.includes('syntax error') || changeDesc.includes('invalid code')) {
+  if (harnessLexicalActive('review-phrases') && (changeDesc.includes('syntax error') || changeDesc.includes('invalid code'))) {
     return { dimension: 'code_quality', passed: false, reason: 'Change description indicates code quality issues' }
   }
   return { dimension: 'code_quality', passed: true, reason: 'Code quality check passed' }
@@ -180,7 +184,7 @@ export function applyReviewOutcome(
   taskId: string,
   passed: boolean,
   consecutiveFailuresMap: Map<string, number>,
-  failedDimension?: DimensionResult,
+  failedDimension?: DimensionResult | DimensionResult[],
 ): ReviewResult {
   if (passed) {
     consecutiveFailuresMap.set(taskId, 0)
@@ -191,7 +195,7 @@ export function applyReviewOutcome(
   consecutiveFailuresMap.set(taskId, consec)
   return {
     passed: false,
-    failed_dimensions: failedDimension ? [failedDimension] : [],
+    failed_dimensions: failedDimension === undefined ? [] : Array.isArray(failedDimension) ? failedDimension : [failedDimension],
     consecutive_failures: consec,
     escalation_triggered: consec >= ESCALATION_THRESHOLD,
   }
@@ -215,30 +219,25 @@ export function reviewProposedChange(
     () => checkHypothesisCompatibility(proposedChange, hypothesisSet),
   ]
 
-  // Short-circuit on first failure
-  for (const check of checks) {
-    const result = check()
-    if (!result.passed) {
-      return applyReviewOutcome(taskId, false, consecutiveFailuresMap, result)
-    }
-  }
-
-  return applyReviewOutcome(taskId, true, consecutiveFailuresMap)
+  // Run every dimension and collect every failure, as adapter/harness/review_gate.py's review_proposed_change() does.
+  // (It used to stop at the first failing dimension, so failed_dimensions was never longer than one and the
+  // review_failure site could never offer its "which fix?" question — see diagnoseReviewFailureOptions below.) The checks
+  // are pure and cheap; whether the change passes is unchanged — it fails exactly when at least one dimension fails.
+  const failed = checks.map((check) => check()).filter((result) => !result.passed)
+  return failed.length > 0
+    ? applyReviewOutcome(taskId, false, consecutiveFailuresMap, failed)
+    : applyReviewOutcome(taskId, true, consecutiveFailuresMap)
 }
 
 // ── Q7 — deterministic-site question builder (the internal plan) ──
 //
-// Twin note: unlike adapter/harness/review_gate.py's review_proposed_change() (which runs
-// all 5 dimensions and collects every failure), reviewProposedChange() above short-circuits
-// on the first failing dimension, so failed_dimensions is always length <= 1 per call —
-// this is a pre-existing divergence between the two languages' review-gate shape, not
-// something this phase changes. In practice that means diagnoseReviewFailureOptions()
-// below will only ever see one failed dimension from this file's own caller and correctly
-// return undefined every time — the review_failure site in harness-runtime.ts therefore
-// always falls back to today's plain missing_info halt, exactly as Q7's scope requires for
-// a site with no genuine discrete option set. The function itself stays generically correct
-// (unit-testable directly against a synthetic multi-dimension ReviewResult, per Q7's
-// Validation tab) in case a future caller ever aggregates more than one failed dimension.
+// Twin note: adapter/harness/review_gate.py's review_proposed_change() runs all 5 dimensions and collects every failure,
+// and so does reviewProposedChange() above since 2026-09-30 (it used to short-circuit on the first failing dimension, so
+// failed_dimensions was always length <= 1 and diagnoseReviewFailureOptions() below always returned undefined — the
+// review_failure site in harness-runtime.ts could only ever fall back to the plain missing_info halt). Now a change that
+// trips two or three dimensions at once (and has failed review twice in a row for the same task) is offered a structured
+// "which fix should I apply?" question when the effective ask mode is on; a single failing dimension, or more than
+// MAX_OPTIONS_PER_QUESTION, still falls back to the plain halt exactly as before.
 const REVIEW_DIMENSION_FIXES: Record<ReviewDimension, string> = {
   task_alignment: 'Revise the proposed change to align with the current task description',
   world_model_consistency: 'Resolve the conflict with existing high-confidence beliefs before proceeding',

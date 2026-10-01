@@ -165,7 +165,7 @@ describe('AL9a: per-turn call budget through resolveEscalationPlan', () => {
 })
 
 describe('enabledOptInLayers / the opt-in category in the recorded plan', () => {
-  const FLAGS = ['AUDIT_SEMANTIC_SOURCE_RELIABILITY', 'AUDIT_SEMANTIC_HYPOTHESES', 'AUDIT_REVIEWER_REVISION', 'AUDIT_EXPERIENCE_LEARNING']
+  const FLAGS = ['AUDIT_SEMANTIC_SOURCE_RELIABILITY', 'AUDIT_SEMANTIC_HYPOTHESES', 'AUDIT_REVIEWER_REVISION', 'AUDIT_EXPERIENCE_LEARNING', 'AUDIT_SEMANTIC_COMPACTION']
   it('nothing is enabled by default, and each flag enables exactly its own layer', () => {
     expect(enabledOptInLayers({})).toEqual([])
     const byFlag: Record<string, string> = {
@@ -173,6 +173,7 @@ describe('enabledOptInLayers / the opt-in category in the recorded plan', () => 
       AUDIT_SEMANTIC_HYPOTHESES: 'semantic_hypotheses',
       AUDIT_REVIEWER_REVISION: 'reviewer_revision',
       AUDIT_EXPERIENCE_LEARNING: 'experience_learning',
+      AUDIT_SEMANTIC_COMPACTION: 'semantic_compaction',
     }
     for (const f of FLAGS) expect(enabledOptInLayers({ [f]: '1' })).toEqual([byFlag[f]])
   })

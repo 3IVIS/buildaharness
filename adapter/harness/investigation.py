@@ -213,3 +213,40 @@ def count_investigations(world_model: WorldModel) -> int:
             head = obs.content.split("]", 1)[0]
             seen.add(head)
     return len(seen)
+
+
+# ── TS resolveGatherEvidence (investigation.ts) ───────────────────────────────
+
+INVESTIGATION_CAP_K = 3
+INVESTIGATION_DONE_PREFIX = "[investigation done]"
+
+
+def resolve_gather_evidence(
+    world_model: WorldModel,
+    directive: Any,
+    host: Callable[[dict[str, Any]], list[InvestigationFinding] | None] | None,
+) -> Any:
+    """Run a supervisor GATHER_EVIDENCE directive through the host and return the follow-up directive (TS
+    resolveGatherEvidence).
+
+    Without a host (or an investigation request) the directive degrades to CONTINUE; so it does once
+    INVESTIGATION_CAP_K investigations have been merged this run and when the host raises. On success the findings are
+    merged into the world model and a CONTINUE directive whose rationale starts with INVESTIGATION_DONE_PREFIX is
+    returned (the caller uses that prefix to re-queue the failed leaf).
+    """
+    from .supervisor import SupervisorDirective
+
+    if host is None or getattr(directive, "investigation", None) is None:
+        return SupervisorDirective.cont(f"[not wired: GATHER_EVIDENCE] {directive.rationale}")
+    if count_investigations(world_model) >= INVESTIGATION_CAP_K:
+        return SupervisorDirective.cont(f"[investigation cap {INVESTIGATION_CAP_K} reached] {directive.rationale}")
+    req = directive.investigation.to_dict()
+    try:
+        findings = host(req) or []
+    except Exception:
+        return SupervisorDirective.cont(f"[investigation failed] {directive.rationale}")
+    if findings:
+        merge_investigation_findings(
+            world_model, InvestigationOutcome(findings=list(findings)), question=str(req.get("question", ""))
+        )
+    return SupervisorDirective.cont(f"{INVESTIGATION_DONE_PREFIX} {directive.rationale}")

@@ -140,7 +140,7 @@ export function looksLikeEnumeratedItems(message: string): boolean {
   return looksLikeEnumeratedItemsLexical(message)
 }
 
-/** The raw lexical enumeration check — never switched off by `lexicalMode` (risk-classifier's bulk-reminder gate depends on it). */
+/** The raw lexical enumeration check, used inside `classifyRisk`'s bulk-reminder gate — which is itself switched by lexicalMode's `risk` family. */
 export function looksLikeEnumeratedItemsLexical(message: string): boolean {
   const trimmed = message.trim()
   if (isFactThenSingleReminder(trimmed)) return false

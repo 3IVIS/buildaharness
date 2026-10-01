@@ -7,7 +7,7 @@ import {
 } from '@buildaharness/harness'
 import { ANTHROPIC_DEFAULT_MODEL } from '@buildaharness/runtime'
 import type { MemoryAdapter, ChatMessage, TokenUsage, FsBackend, MemoryResult } from '@buildaharness/runtime'
-import { compactTranscript } from './transcript-compaction.js'
+import { compactTranscript, compactTranscriptSemantic } from './transcript-compaction.js'
 import {
   loadPendingAction,
   stagePendingAction,
@@ -308,10 +308,14 @@ export class AssistantSession {
    * (rather than the sequencer reading `memory` directly) so this remains the one place that reads
    * `transcript:${sessionId}` for a live turn.
    */
-  async loadAndCompactTranscript(sessionId: string): Promise<ChatMessage[]> {
+  async loadAndCompactTranscript(
+    sessionId: string,
+    /** AUDIT_SEMANTIC_COMPACTION: summarizes the older messages instead of truncating them (semantic-compaction.ts). */
+    summarize?: (older: ChatMessage[]) => Promise<string | null>,
+  ): Promise<ChatMessage[]> {
     const transcriptKey = `transcript:${sessionId}`
     const rawTranscript = ((await this.memory.get(transcriptKey)) as ChatMessage[] | undefined) ?? []
-    const { transcript, compacted } = compactTranscript(rawTranscript)
+    const { transcript, compacted } = summarize ? await compactTranscriptSemantic(rawTranscript, summarize) : compactTranscript(rawTranscript)
     if (compacted) await this.memory.set(transcriptKey, transcript)
     return transcript
   }

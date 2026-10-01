@@ -12,10 +12,11 @@ from __future__ import annotations
 import uuid
 from typing import Any
 
-from .caller_state import CallerState, update_success_criteria
+from .caller_state import CallerState, reset_constraints_changed, split_ws, update_success_criteria
 from .contradiction import detect_contradictions
 from .evidence import EvidenceStore
 from .hypothesis import HypothesisSet
+from .lexical_off import harness_lexical_active
 from .output_contract import OutputContract, update_output_contract
 from .task_graph import Task, TaskGraph
 from .world_model import WorldModel
@@ -36,7 +37,8 @@ def revalidate_task_graph(
     """
     updated_criteria = set(caller_state.success_criteria)
 
-    if updated_criteria:
+    # HARNESS_LEXICAL criterion-scope: scope and coverage are judged by shared words; off → graph unchanged.
+    if updated_criteria and harness_lexical_active("criterion-scope"):
         for task in task_graph.tasks:
             if task.status == "COMPLETE":
                 continue
@@ -59,24 +61,39 @@ def revalidate_task_graph(
     return task_graph
 
 
+def cancel_task_graph(task_graph: TaskGraph) -> None:
+    """Block every unfinished task with block_reason="goal_cancelled" (TS cancelTaskGraph).
+
+    COMPLETE and FAILED tasks are left alone; already-cancelled tasks are not touched again.
+    """
+    for task in task_graph.tasks:
+        if task.status in ("COMPLETE", "FAILED"):
+            continue
+        if task.status == "BLOCKED" and task.block_reason == "goal_cancelled":
+            continue
+        task.status = "BLOCKED"
+        task.block_reason = "goal_cancelled"
+        task_graph.changed = True
+
+
 def _task_in_scope(task: Task, criteria: set[str]) -> bool:
     """True if the task description shares at least one token with any criterion."""
-    desc_tokens = set(task.description.lower().split())
+    desc_tokens = set(split_ws(task.description.lower()))
     for criterion in criteria:
-        if desc_tokens & set(criterion.lower().split()):
+        if desc_tokens & set(split_ws(criterion.lower())):
             return True
     return False
 
 
 def _criterion_covered(criterion: str, task_graph: TaskGraph) -> bool:
     """True if at least one active/pending task already covers this criterion."""
-    criterion_tokens = set(criterion.lower().split())
+    criterion_tokens = set(split_ws(criterion.lower()))
     for task in task_graph.tasks:
         if task.status == "COMPLETE":
             continue
         if task.status == "BLOCKED" and task.block_reason == "scope_eliminated":
             continue
-        if set(task.description.lower().split()) & criterion_tokens:
+        if set(split_ws(task.description.lower())) & criterion_tokens:
             return True
     return False
 
@@ -102,8 +119,8 @@ def apply_constraint_change_propagation(
     3. update_output_contract — re-derive contract from updated constraints
     4. revalidate_task_graph — block/add tasks based on scope change
 
-    The caller is responsible for incrementing generation_id and calling
-    resolve_control_state() after this function returns.
+    Bumps world_model.generation_id and clears caller_state.constraints_changed itself (as TS does);
+    the caller is responsible for calling resolve_control_state() afterwards.
 
     task_graph is mutated in-place. output_contract fields are updated in-place
     AND the new OutputContract is returned.
@@ -114,11 +131,16 @@ def apply_constraint_change_propagation(
     # 2. Re-detect contradictions on updated belief set; merge without duplicates
     ev_store = evidence_store if evidence_store is not None else EvidenceStore()
     hyp_set = hypothesis_set if hypothesis_set is not None else HypothesisSet()
-    new_contradictions = detect_contradictions(world_model, ev_store, hyp_set)
-    existing_ids = {c.id for c in world_model.contradictions}
-    for c in new_contradictions:
-        if c.id not in existing_ids:
-            world_model.contradictions.append(c)
+    # detect_contradictions stores and resolves what it finds (TS twin does the same); only de-dupe by id.
+    detect_contradictions(world_model, ev_store, hyp_set)
+    seen: set[str] = set()
+    deduped = []
+    for c in world_model.contradictions:
+        if c.id in seen:
+            continue
+        seen.add(c.id)
+        deduped.append(c)
+    world_model.contradictions = deduped
 
     # 3. Re-derive output contract from updated constraints (immutable update)
     new_oc = update_output_contract(caller_state, output_contract)
@@ -128,5 +150,9 @@ def apply_constraint_change_propagation(
 
     # 4. Revalidate task graph (mutates in-place)
     task_graph = revalidate_task_graph(task_graph, caller_state, world_model)
+
+    # TS applyConstraintChangePropagation ends by bumping the generation and clearing the flag itself.
+    world_model.generation_id += 1
+    reset_constraints_changed(caller_state)
 
     return task_graph, output_contract

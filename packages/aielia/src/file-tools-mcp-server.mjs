@@ -275,8 +275,16 @@ const REPORTED_RESULT_CHARS = 6000
  * ack is ignored and every transport failure is swallowed, exactly like the gate's own fail-open
  * posture, so a dead parent can never fail a tool call that already succeeded.
  */
-export async function reportToolResult(tool, input, text) {
-  await gateRoundTrip({ kind: 'result', tool, input, text: String(text).slice(0, REPORTED_RESULT_CHARS) })
+export async function reportToolResult(tool, input, text, ok = true, notFound = false) {
+  // `ok` and `notFound` ride on the wire only when set, so a success report is byte-identical to before. A failed call
+  // has to be reported too: the parent folds each outcome into the turn's ControlState, and one that only ever hears
+  // about successes never sees a turn's failures pile up. `notFound` marks a call that WORKED and answered "no such
+  // file" — a negative answer, not a fault — so the parent can tell a probe from a broken tool.
+  await gateRoundTrip({
+    kind: 'result', tool, input, text: String(text).slice(0, REPORTED_RESULT_CHARS),
+    ...(ok === false ? { ok: false } : {}),
+    ...(notFound === true ? { notFound: true } : {}),
+  })
 }
 
 // A delegated fetch/search runs a real network round trip on the parent side — far longer than a
@@ -378,6 +386,7 @@ const INJECTION_PATTERNS = Object.values(injectionPatternsData).flatMap((lang) =
 )
 
 export function detectInjectionLikely(text) {
+  if (LEXICAL_OFF_FAMILIES.has('injection')) return { flagged: false }
   for (const { pattern, reason } of INJECTION_PATTERNS) {
     if (pattern.test(text)) return { flagged: true, reason }
   }
@@ -497,7 +506,11 @@ export async function fetchUrlSafely(url) {
       currentUrl = new URL(location, currentUrl).toString()
       continue
     }
-    return truncateFetchedText(await response.text())
+    const body = await response.text()
+    // Same rule as web-tools.ts's fetchUrlSafely: a 5xx is a server fault, not page content — an error the model and the
+    // parent's ControlState can see (a 4xx page stays content).
+    if (response.status >= 500) throw new Error(`HTTP ${response.status} from ${url}: ${body.slice(0, 200).trim()}`)
+    return truncateFetchedText(body)
   }
   throw new Error(`Too many redirects while fetching "${url}"`)
 }
@@ -582,11 +595,16 @@ const REMINDER_REQUEST_MARKER = new RegExp(
   'i',
 )
 
-// lexicalMode: the parent hands the resolved off-families in as ASSISTANT_LEXICAL_OFF (see
-// lexical/lexical-mode.ts). Only the fact-marker family is honoured here — this script's injection
-// regex deliberately stays on, because for fetched pages under the claude-cli backend it is the only
-// injection check they get (the LLM check never sees these results).
-const LEXICAL_OFF_FAMILIES = new Set(String(process.env.ASSISTANT_LEXICAL_OFF ?? '').split(',').map((s) => s.trim().toLowerCase()).filter(Boolean))
+// lexicalMode: the parent hands the resolved off-families in as ASSISTANT_LEXICAL_RESOLVED_OFF (see
+// lexical/lexical-mode.ts's lexicalOffEnvValue). Unset means the default — every family off; an empty
+// value means none off. This script honours `fact-markers` (the reminder fact-vs-to-do guard and its
+// reminder-request clause) and `injection` (the regex on fetched pages). `let`, not `const`: the
+// self-test below exercises the patterns themselves and switches them on for its own run.
+const ALL_LEXICAL_FAMILIES = ['fact-markers', 'coding-fact', 'injection', 'enumeration', 'risk', 'task-cancel', 'plan-mode', 'batch-list', 'tool-yield', 'template-keywords']
+let LEXICAL_OFF_FAMILIES =
+  process.env.ASSISTANT_LEXICAL_RESOLVED_OFF === undefined
+    ? new Set(ALL_LEXICAL_FAMILIES)
+    : new Set(String(process.env.ASSISTANT_LEXICAL_RESOLVED_OFF).split(',').map((s) => s.trim().toLowerCase()).filter(Boolean))
 
 function looksLikeDurableFact(text) {
   if (LEXICAL_OFF_FAMILIES.has('fact-markers')) return false
@@ -646,10 +664,14 @@ async function main() {
           if (isEnoent(err)) return undefined
           throw err
         })
-        if (content === undefined) return { content: [{ type: 'text', text: `File not found: ${path}` }], isError: true }
+        if (content === undefined) {
+          await reportToolResult('read_file', { path }, `File not found: ${path}`, false, true)
+          return { content: [{ type: 'text', text: `File not found: ${path}` }], isError: true }
+        }
         await reportToolResult('read_file', { path }, content)
         return { content: [{ type: 'text', text: content }] }
       } catch (err) {
+        await reportToolResult('read_file', { path }, `Error: ${err instanceof Error ? err.message : String(err)}`, false)
         return { content: [{ type: 'text', text: `Error: ${err instanceof Error ? err.message : String(err)}` }], isError: true }
       }
     },
@@ -677,6 +699,7 @@ async function main() {
         await reportToolResult('list_directory', { path }, names.join('\n'))
         return { content: [{ type: 'text', text: names.join('\n') }] }
       } catch (err) {
+        await reportToolResult('list_directory', { path }, `Error: ${err instanceof Error ? err.message : String(err)}`, false)
         return { content: [{ type: 'text', text: `Error: ${err instanceof Error ? err.message : String(err)}` }], isError: true }
       }
     },
@@ -830,6 +853,7 @@ async function main() {
         await reportToolResult('fetch_url', { url }, text)
         return { content: [{ type: 'text', text: tagFetchedContent(text) }] }
       } catch (err) {
+        await reportToolResult('fetch_url', { url }, `Error: ${err instanceof Error ? err.message : String(err)}`, false)
         return { content: [{ type: 'text', text: `Error: ${err instanceof Error ? err.message : String(err)}` }], isError: true }
       }
     },
@@ -856,6 +880,7 @@ async function main() {
           await reportToolResult('web_search', { query }, searchText)
           return { content: [{ type: 'text', text: searchText }] }
         } catch (err) {
+          await reportToolResult('web_search', { query }, `Error: ${err instanceof Error ? err.message : String(err)}`, false)
           return { content: [{ type: 'text', text: `Error: ${err instanceof Error ? err.message : String(err)}` }], isError: true }
         }
       },
@@ -898,6 +923,7 @@ async function main() {
           // check refused the reminder outright any time the raw message mentioned an unrelated
           // fact anywhere, even though the reminder's own `text` content wasn't the fact itself.
           const wholeMessageIsFactOnly =
+            !LEXICAL_OFF_FAMILIES.has('fact-markers') &&
             !REMINDER_REQUEST_MARKER.test(process.env.CURRENT_USER_MESSAGE ?? '') &&
             looksLikeDurableFact(process.env.CURRENT_USER_MESSAGE ?? '')
           if (looksLikeDurableFact(text) || wholeMessageIsFactOnly) {
@@ -913,6 +939,9 @@ async function main() {
           const record = await createReminder(remindersFile, text)
           return { content: [{ type: 'text', text: `Reminder created: "${record.rawText}" (id ${record.id}).` }] }
         } catch (err) {
+          // A genuine error is a failed call the parent's ControlState should see; the deliberate refusal above (a
+          // fact-shaped "reminder") returns before this and is NOT reported — declining is the tool working.
+          await reportToolResult('create_reminder', { text }, `Error: ${err instanceof Error ? err.message : String(err)}`, false)
           return { content: [{ type: 'text', text: `Error: ${err instanceof Error ? err.message : String(err)}` }], isError: true }
         }
       },
@@ -936,6 +965,7 @@ async function main() {
             : reminders.map((r) => `- ${r.rawText}${r.done ? ' (done)' : ''}`).join('\n')
           return { content: [{ type: 'text', text }] }
         } catch (err) {
+          await reportToolResult('list_reminders', {}, `Error: ${err instanceof Error ? err.message : String(err)}`, false)
           return { content: [{ type: 'text', text: `Error: ${err instanceof Error ? err.message : String(err)}` }], isError: true }
         }
       },
@@ -947,6 +977,8 @@ async function main() {
 }
 
 async function selfTest() {
+  // The checks below test the lexical patterns themselves, so switch every family on for this run.
+  LEXICAL_OFF_FAMILIES = new Set()
   const dir = await mkdtemp(`${tmpdir()}/file-tools-mcp-test-`)
   try {
     const resolved = resolveInWorkspace(dir, 'notes.txt')

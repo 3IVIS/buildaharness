@@ -42,7 +42,7 @@ from __future__ import annotations
 import math
 import uuid
 from collections import namedtuple
-from collections.abc import Callable
+from collections.abc import Callable, Mapping
 from dataclasses import dataclass, field
 from datetime import UTC, datetime
 from enum import StrEnum
@@ -523,6 +523,15 @@ def warm_start(
     if experience_store is None or not experience_store.available:
         return WarmStartResult(loaded=False)
 
+    if hasattr(experience_store, "get_class_priors"):
+        # A TS-shaped store (InMemoryExperienceStore): apply TS warmStart semantics.
+        warm_start_from_store(experience_store, strategy_state, failure_diagnostics, dep_graph_budget, task_graph)
+        return WarmStartResult(
+            loaded=True,
+            strategy_weights_loaded=bool(experience_store.get_strategy_weights()),
+            class_priors_loaded=bool(experience_store.get_class_priors()),
+        )
+
     weights_loaded = load_strategy_priors(experience_store, strategy_state)
     decompositions_seeded = load_structural_decompositions(experience_store, task_graph, task_class)
     tool_workflows = load_tool_workflow_seeds(experience_store)
@@ -713,7 +722,7 @@ def update_experience_store(
 
 
 def softmax_strategy_policy(
-    strategy_weights: dict[StrategyWeightKey, float],
+    strategy_weights: Mapping[Any, float],
     failure_class: str,
     temperature: float = 1.0,
 ) -> list[str]:
@@ -723,9 +732,12 @@ def softmax_strategy_policy(
     Temperature controls exploration: lower → concentrate on top strategy;
     higher → more uniform distribution across strategies.
     """
-    class_weights = {
-        key.strategy_type: rate for key, rate in strategy_weights.items() if key.failure_class == failure_class
-    }
+    class_weights: dict[str, float] = {}
+    for key, rate in strategy_weights.items():
+        # keys are StrategyWeightKey tuples (DB store) or "<strategy>:<class>" strings (TS-shaped stores)
+        strategy_type, key_class = key.split(":", 1) if isinstance(key, str) else (key.strategy_type, key.failure_class)
+        if key_class == failure_class:
+            class_weights[strategy_type] = rate
     if not class_weights:
         return list(DEFAULT_STRATEGY_ORDER)
 
@@ -842,3 +854,193 @@ def run_offline_eval_pipeline(
     if to_promote:
         experience_store.promote_strategy_weights(to_promote)
     return results
+
+
+# ── TS-shaped stores (state/experience-store.ts) ─────────────────────────────
+#
+# The TS harness talks to an `ExperienceStore` *interface* (strategy weights keyed "<strategy>:<class>", class
+# priors, decompositions, tool workflows, verification plans, recovery sequences, schemaVersion) with an in-memory
+# and an "unavailable" implementation. The DB-backed ExperienceStore above keeps its promotion boundary; the classes
+# below are the TS-shaped implementations so the same warm-start / learning code (warm_start_from_store,
+# experience_learning.learn_from_journal) runs against either runtime's store shape.
+
+EXPERIENCE_STORE_SCHEMA_VERSION = 1
+
+
+class InMemoryExperienceStore:
+    """Twin of TS InMemoryExperienceStore."""
+
+    def __init__(self) -> None:
+        self._strategy_weights: dict[str, float] = {}
+        self._class_priors: dict[str, float] = {}
+        self._decompositions: list[dict[str, Any]] = []
+        self._tool_workflows: list[dict[str, Any]] = []
+        self._verification_plans: list[dict[str, Any]] = []
+        self._recovery_sequences: list[dict[str, Any]] = []
+        self._runs: dict[str, dict[str, Any]] = {}
+
+    @property
+    def available(self) -> bool:
+        return True
+
+    def get_strategy_weights(self) -> dict[str, float]:
+        return dict(self._strategy_weights)
+
+    def set_strategy_weight(self, key: str, weight: float) -> None:
+        self._strategy_weights[key] = weight
+
+    def get_class_priors(self) -> dict[str, float]:
+        return dict(self._class_priors)
+
+    def set_class_prior(self, failure_class: str, prior: float) -> None:
+        self._class_priors[failure_class] = prior
+
+    def get_decompositions(self) -> list[dict[str, Any]]:
+        return list(self._decompositions)
+
+    def add_decomposition(self, entry: dict[str, Any]) -> None:
+        self._decompositions.append(entry)
+
+    def get_tool_workflows(self) -> list[dict[str, Any]]:
+        return list(self._tool_workflows)
+
+    def add_tool_workflow(self, entry: dict[str, Any]) -> None:
+        self._tool_workflows.append(entry)
+
+    def get_verification_plans(self) -> list[dict[str, Any]]:
+        return list(self._verification_plans)
+
+    def add_verification_plan(self, entry: dict[str, Any]) -> None:
+        self._verification_plans.append(entry)
+
+    def get_recovery_sequences(self) -> list[dict[str, Any]]:
+        return list(self._recovery_sequences)
+
+    def add_recovery_sequence(self, entry: dict[str, Any]) -> None:
+        self._recovery_sequences.append(entry)
+
+    def update_experience_store(self, run_id: str, outcome: dict[str, Any]) -> None:
+        self._runs[run_id] = outcome
+
+    def to_dict(self) -> dict[str, Any]:
+        return {
+            "strategy_weights": dict(self._strategy_weights),
+            "class_priors": dict(self._class_priors),
+            "decompositions": list(self._decompositions),
+            "tool_workflows": list(self._tool_workflows),
+            "verification_plans": list(self._verification_plans),
+            "recovery_sequences": list(self._recovery_sequences),
+            "schemaVersion": EXPERIENCE_STORE_SCHEMA_VERSION,
+        }
+
+    @classmethod
+    def from_dict(cls, data: dict[str, Any] | None) -> InMemoryExperienceStore:
+        store = cls()
+        if not isinstance(data, dict):
+            return store
+        if data.get("schemaVersion", EXPERIENCE_STORE_SCHEMA_VERSION) > EXPERIENCE_STORE_SCHEMA_VERSION:
+            import warnings
+
+            warnings.warn(
+                f"InMemoryExperienceStore.from_dict: schemaVersion {data.get('schemaVersion')} is newer than this "
+                f"build understands (current: {EXPERIENCE_STORE_SCHEMA_VERSION}) — starting from a fresh store "
+                "instead of misreading it.",
+                stacklevel=2,
+            )
+            return store
+        store._strategy_weights = dict(data.get("strategy_weights") or {})
+        store._class_priors = dict(data.get("class_priors") or {})
+        for attr, key in (
+            ("_decompositions", "decompositions"),
+            ("_tool_workflows", "tool_workflows"),
+            ("_verification_plans", "verification_plans"),
+            ("_recovery_sequences", "recovery_sequences"),
+        ):
+            value = data.get(key)
+            setattr(store, attr, list(value) if isinstance(value, list) else [])
+        return store
+
+
+class UnavailableExperienceStore(InMemoryExperienceStore):
+    """Twin of TS UnavailableExperienceStore: reads are empty, writes are ignored."""
+
+    @property
+    def available(self) -> bool:
+        return False
+
+    def set_strategy_weight(self, key: str, weight: float) -> None:
+        return None
+
+    def set_class_prior(self, failure_class: str, prior: float) -> None:
+        return None
+
+    def add_decomposition(self, entry: dict[str, Any]) -> None:
+        return None
+
+    def add_tool_workflow(self, entry: dict[str, Any]) -> None:
+        return None
+
+    def add_verification_plan(self, entry: dict[str, Any]) -> None:
+        return None
+
+    def add_recovery_sequence(self, entry: dict[str, Any]) -> None:
+        return None
+
+    def update_experience_store(self, run_id: str, outcome: dict[str, Any]) -> None:
+        return None
+
+
+def _softmax(values: list[float], temperature: float) -> list[float]:
+    scaled = [v / temperature for v in values]
+    peak = max(scaled)
+    exps = [math.exp(v - peak) for v in scaled]
+    total = sum(exps)
+    return [e / total for e in exps]
+
+
+def warm_start_from_store(
+    experience_store: Any,
+    strategy_state: Any,
+    failure_diagnostics: Any,
+    dep_graph_budget: Any,
+    task_graph: Any = None,
+) -> None:
+    """TS warmStart (nodes/warm-start.ts) for a TS-shaped store (get_strategy_weights keyed "<strategy>:<class>").
+
+    * every recorded weight is added onto `strategy_state.prior_strategy_weights[<strategy>]`;
+    * class priors are copied into `failure_diagnostics.failure_mode_library.class_priors`;
+    * a positive total weight shrinks `dep_graph_budget.confidence_decay_rate` by `min(0.5, total / 100)` (floor 0.01);
+    * `strategy_state.recovery_strategy_order` is set to the softmax(T=1) ordering of the prior weights.
+    """
+    if not experience_store.available:
+        return
+
+    weights = experience_store.get_strategy_weights()
+    for key, weight in weights.items():
+        strategy_type = key.split(":")[0]
+        if strategy_type in DEFAULT_STRATEGY_ORDER:
+            strategy_state.prior_strategy_weights[strategy_type] = (
+                strategy_state.prior_strategy_weights.get(strategy_type, 0) + weight
+            )
+
+    for cls, prior in experience_store.get_class_priors().items():
+        failure_diagnostics.failure_mode_library.class_priors[cls] = prior
+
+    if weights:
+        total_weight = sum(weights.values())
+        if total_weight > 0:
+            dep_graph_budget.confidence_decay_rate = max(
+                0.01, dep_graph_budget.confidence_decay_rate * (1 - min(0.5, total_weight / 100))
+            )
+
+    policy = softmax_strategy_policy_from_state(strategy_state, 1.0)
+    ordered = sorted(policy.items(), key=lambda kv: kv[1], reverse=True)
+    if len(ordered) == len(DEFAULT_STRATEGY_ORDER):
+        strategy_state.recovery_strategy_order = [s for s, _ in ordered]
+
+
+def softmax_strategy_policy_from_state(strategy_state: Any, temperature: float = 1.0) -> dict[str, float]:
+    """TS softmaxStrategyPolicy: strategy -> probability from `strategy_state.prior_strategy_weights`."""
+    weights = strategy_state.prior_strategy_weights
+    probs = _softmax([weights.get(s, 0) for s in DEFAULT_STRATEGY_ORDER], temperature)
+    return dict(zip(DEFAULT_STRATEGY_ORDER, probs, strict=True))

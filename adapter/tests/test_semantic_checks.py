@@ -18,7 +18,7 @@ import pytest
 
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
-from harness.failure_modes import FailurePattern
+from harness.failure_modes import FailureModeEntry
 from harness.semantic_checks import semantic_contradiction_check, semantic_failure_match
 
 _mock_litellm = MagicMock()
@@ -118,13 +118,12 @@ async def test_contradiction_returns_empty_when_the_llm_call_itself_raises():
 # ── semantic_failure_match ──────────────────────────────────────────────────────
 
 _PATTERNS = [
-    FailurePattern(
-        name="TOOL_UNAVAILABLE_CASCADE",
-        description="Multiple SYSTEM_ERROR evidences from different tools",
-        required_conditions=["system_error", "unavailable", "tool"],
-        excluded_conditions=[],
+    FailureModeEntry(
+        id="tool-unavailable-cascade",
+        failure_class="TOOL_UNAVAILABLE_CASCADE",
+        symptoms=["system_error", "unavailable", "tool"],
+        pattern_description="Multiple SYSTEM_ERROR evidences from different tools",
         strategy_affinity="REIMPLEMENT",
-        hypothesis_template="x",
     )
 ]
 
@@ -146,10 +145,14 @@ async def test_failure_match_returns_none_without_calling_llm_when_no_patterns()
 @pytest.mark.asyncio
 async def test_failure_match_calls_llm_and_returns_a_paraphrased_match():
     _mock_litellm.acompletion.return_value = _mock_llm_response(
-        json.dumps({"matched": True, "pattern_name": "TOOL_UNAVAILABLE_CASCADE", "confidence": 0.8})
+        json.dumps({"matched": True, "pattern_name": "tool-unavailable-cascade", "confidence": 0.8})
     )
     result = await semantic_failure_match(["several external services failed to respond"], _PATTERNS)
-    assert result == {"pattern_name": "TOOL_UNAVAILABLE_CASCADE", "confidence": 0.8}
+    assert result == {
+        "failure_class": "TOOL_UNAVAILABLE_CASCADE",
+        "confidence": 0.8,
+        "matched_pattern": "tool-unavailable-cascade",
+    }
 
 
 @pytest.mark.asyncio
@@ -171,10 +174,14 @@ async def test_failure_match_rejects_a_pattern_name_the_library_does_not_have():
 @pytest.mark.asyncio
 async def test_failure_match_defaults_confidence_when_missing():
     _mock_litellm.acompletion.return_value = _mock_llm_response(
-        json.dumps({"matched": True, "pattern_name": "TOOL_UNAVAILABLE_CASCADE"})
+        json.dumps({"matched": True, "pattern_name": "tool-unavailable-cascade"})
     )
     result = await semantic_failure_match(["tools kept failing"], _PATTERNS)
-    assert result == {"pattern_name": "TOOL_UNAVAILABLE_CASCADE", "confidence": 0.5}
+    assert result == {
+        "failure_class": "TOOL_UNAVAILABLE_CASCADE",
+        "confidence": 0.5,
+        "matched_pattern": "tool-unavailable-cascade",
+    }
 
 
 @pytest.mark.asyncio

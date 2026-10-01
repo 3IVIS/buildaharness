@@ -1,0 +1,21 @@
+{
+  "tasks": [
+    {
+      "id": "a"
+    },
+    {
+      "id": "b",
+      "depends_on": [
+        "a"
+      ]
+    }
+  ],
+  "tools": {
+    "a": {
+      "kind": "fail"
+    }
+  },
+  "criteria": [
+    "only"
+  ]
+}

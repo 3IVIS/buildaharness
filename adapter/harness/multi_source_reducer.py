@@ -12,6 +12,8 @@ from collections.abc import Callable
 from dataclasses import dataclass
 from typing import Any
 
+from .lexical_off import harness_lexical_active
+
 _RELIABILITY_RANK: dict[str, int] = {"HIGH": 3, "MEDIUM": 2, "LOW": 1}
 
 
@@ -85,7 +87,10 @@ def make_multi_source_reducer(
                 if not candidate_text or not existing_text:
                     continue
 
-                if _jaccard_similarity(candidate_text, existing_text) > similarity_threshold:
+                if (
+                    harness_lexical_active("source-dedupe")
+                    and _jaccard_similarity(candidate_text, existing_text) > similarity_threshold
+                ):
                     cand_rank = _RELIABILITY_RANK.get(candidate_item["reliability"], 0)
                     exist_rank = _RELIABILITY_RANK.get(existing_item["reliability"], 0)
 

@@ -1,0 +1,20 @@
+{
+  "criteria": [
+    "a",
+    "b",
+    "c"
+  ],
+  "decider": {
+    "action": "REDIRECT_STRATEGY",
+    "rationale": "try other",
+    "strategy_hint": "TRACE_EXEC"
+  },
+  "maxSteps": 8,
+  "tools": {
+    "default": {
+      "kind": "seeded-fail",
+      "seedFailures": 3,
+      "failIterations": 1
+    }
+  }
+}

@@ -1,6 +1,11 @@
 """
-Task graph with 6-state status, DAG validation, conflict probability cache,
-and abstraction fit checking — P4.1, P4.2, P4.4.
+Task graph — P4.1, P4.2 and P4.4.
+
+Twin of packages/harness/src/state/task-graph.ts and nodes/{update-task-graph,select-task,apply-task-outcome}.ts.
+
+Six statuses (PENDING / RUNNING / COMPLETE / FAILED / BLOCKED / HUMAN_REQUIRED). COMPLETE is terminal and FAILED may
+only be set by the execution layer. The graph also carries the per-domain-pair conflict-probability cache that
+update_task_graph() seeds and select_task() reads to decide whether two ready tasks may run concurrently.
 """
 
 from __future__ import annotations
@@ -8,26 +13,21 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from typing import Any, Literal
 
+from .lexical_off import harness_lexical_active
 from .lexical_patterns import get_granularity_markers
 
-TaskStatus = Literal["PENDING", "ACTIVE", "VERIFYING", "COMPLETE", "FAILED", "BLOCKED"]
+TaskStatus = Literal["PENDING", "RUNNING", "COMPLETE", "FAILED", "BLOCKED", "HUMAN_REQUIRED"]
 TaskRisk = Literal["LOW", "MEDIUM", "HIGH"]
-
-# COMPLETE is terminal — only the P9 reviewer pass may reset to PENDING.
-# FAILED tasks may be requeued (PENDING) or blocked.
-_VALID_TRANSITIONS: dict[str, set[str]] = {
-    "PENDING": {"ACTIVE", "BLOCKED"},
-    "ACTIVE": {"VERIFYING", "FAILED", "BLOCKED"},
-    "VERIFYING": {"COMPLETE", "FAILED", "BLOCKED"},
-    "COMPLETE": set(),
-    "FAILED": {"PENDING", "BLOCKED"},
-    "BLOCKED": {"PENDING", "ACTIVE"},
-}
+TaskNodeKind = Literal["task", "goal_hypothesis"]
+SiblingRelation = Literal["alternative", "concurrent"]
 
 _RISK_ORDER: dict[str, int] = {"HIGH": 0, "MEDIUM": 1, "LOW": 2}
 
+PESSIMISTIC_THRESHOLD = 0.5
 
-# ── Task and TaskGraph ────────────────────────────────────────────────────────
+
+class GraphCycleError(Exception):
+    """A dependency cycle in the task graph (TS GraphCycleError)."""
 
 
 @dataclass
@@ -39,15 +39,17 @@ class Task:
     risk_level: TaskRisk = "LOW"
     assigned_strategy: str | None = None
     parallel_write_domains: list[str] = field(default_factory=list)
-    # 0 = coarsest (module), 1 = function, 2 = statement-level
     abstraction_level: int = 0
     block_reason: str | None = None
-    # Belief IDs whose validity was required to conclude this task COMPLETE.
-    # Populated by the execution layer; consumed by the P9 reviewer drain.
     completed_evidence: list[str] = field(default_factory=list)
+    # Goal-hypothesis graph fields (TS Task.node_kind / goal_id / hypothesis_ids / relation_to_siblings).
+    node_kind: TaskNodeKind | None = None
+    goal_id: str | None = None
+    hypothesis_ids: list[str] | None = None
+    relation_to_siblings: SiblingRelation | None = None
 
     def to_dict(self) -> dict[str, Any]:
-        return {
+        d: dict[str, Any] = {
             "id": self.id,
             "description": self.description,
             "status": self.status,
@@ -56,9 +58,18 @@ class Task:
             "assigned_strategy": self.assigned_strategy,
             "parallel_write_domains": list(self.parallel_write_domains),
             "abstraction_level": self.abstraction_level,
-            "block_reason": self.block_reason,
-            "completed_evidence": list(self.completed_evidence),
         }
+        if self.block_reason is not None:
+            d["block_reason"] = self.block_reason
+        if self.node_kind is not None:
+            d["node_kind"] = self.node_kind
+        if self.goal_id is not None:
+            d["goal_id"] = self.goal_id
+        if self.hypothesis_ids is not None:
+            d["hypothesis_ids"] = list(self.hypothesis_ids)
+        if self.relation_to_siblings is not None:
+            d["relation_to_siblings"] = self.relation_to_siblings
+        return d
 
     @classmethod
     def from_dict(cls, d: dict[str, Any]) -> Task:
@@ -73,6 +84,10 @@ class Task:
             abstraction_level=d.get("abstraction_level", 0),
             block_reason=d.get("block_reason"),
             completed_evidence=d.get("completed_evidence", []),
+            node_kind=d.get("node_kind"),
+            goal_id=d.get("goal_id"),
+            hypothesis_ids=d.get("hypothesis_ids"),
+            relation_to_siblings=d.get("relation_to_siblings"),
         )
 
     def to_plan_task(self) -> dict[str, Any]:
@@ -90,11 +105,15 @@ class Task:
         }
 
 
+def make_conflict_key(domain_a: str, domain_b: str) -> str:
+    """Order-independent key for a pair of write domains (`a::b`, sorted)."""
+    return "::".join(sorted([domain_a, domain_b]))
+
+
 @dataclass
 class TaskGraph:
     tasks: list[Task] = field(default_factory=list)
-    # Set True whenever tasks are added/removed/status-changed.
-    # Used by check_abstraction_alignment to decide if recomputation is needed.
+    conflict_probability_cache: dict[str, float] = field(default_factory=dict)
     changed: bool = False
 
     def get_task(self, task_id: str) -> Task | None:
@@ -103,25 +122,37 @@ class TaskGraph:
                 return t
         return None
 
-    def update_task_status(
-        self,
-        task_id: str,
-        new_status: TaskStatus,
-        block_reason: str | None = None,
-    ) -> None:
+    def set_status(self, task_id: str, new_status: TaskStatus, from_execution_layer: bool = False) -> None:
+        """Move a task to `new_status` (TS TaskGraph.setStatus).
+
+        Raises ValueError for an unknown task, for any transition out of COMPLETE (terminal), and for FAILED unless
+        `from_execution_layer` (only the execution layer may declare a task failed).
+        """
         task = self.get_task(task_id)
         if task is None:
-            raise ValueError(f"Task {task_id!r} not found in graph")
-        allowed = _VALID_TRANSITIONS.get(task.status, set())
-        if new_status not in allowed:
-            raise ValueError(f"Invalid task status transition: {task.status} → {new_status} for task {task_id!r}")
+            raise ValueError(f'TaskGraph: task "{task_id}" not found')
+        if task.status == "COMPLETE":
+            raise ValueError(
+                f'TaskGraph: task "{task_id}" is in terminal status COMPLETE; no further transitions allowed'
+            )
+        if new_status == "FAILED" and not from_execution_layer:
+            raise ValueError("TaskGraph: status FAILED can only be set by the execution layer")
         task.status = new_status
-        task.block_reason = block_reason
         self.changed = True
+
+    def select_unblocked_leaf(self) -> Task | None:
+        return select_unblocked_leaf(self)
+
+    def set_conflict_probability(self, domain_a: str, domain_b: str, probability: float) -> None:
+        self.conflict_probability_cache[make_conflict_key(domain_a, domain_b)] = probability
+
+    def get_conflict_probability(self, domain_a: str, domain_b: str) -> float:
+        return self.conflict_probability_cache.get(make_conflict_key(domain_a, domain_b), 0)
 
     def to_dict(self) -> dict[str, Any]:
         return {
             "tasks": [t.to_dict() for t in self.tasks],
+            "conflict_probability_cache": dict(self.conflict_probability_cache),
             "changed": self.changed,
         }
 
@@ -129,6 +160,7 @@ class TaskGraph:
     def from_dict(cls, d: dict[str, Any]) -> TaskGraph:
         return cls(
             tasks=[Task.from_dict(t) for t in d.get("tasks", [])],
+            conflict_probability_cache=dict(d.get("conflict_probability_cache", {})),
             changed=d.get("changed", False),
         )
 
@@ -143,276 +175,169 @@ class TaskGraph:
         }
 
 
-# ── Effect feedback (Phase H, ADR-003 F-2) ───────────────────────────────────
+# ── apply_task_outcome ────────────────────────────────────────────────────────
 
 
 @dataclass
 class TaskOutcome:
-    """What the executor observed for a task — the Effect-feedback primitive.
+    """What the executor observed for a task — the Effect-feedback primitive (TS TaskOutcome).
 
-    apply_task_outcome() is the one State-write path callers use to report it; direct
-    TaskGraph.update_task_status() calls from outside this module are the seam Phase H
-    closes (INV-17 grep-gates it — see test_harness_h.py).
+    apply_task_outcome() is the one State-write path callers use to report it; direct TaskGraph.set_status() calls
+    from outside this module are the seam Phase H closes (INV-17 grep-gates it — see test_harness_h.py).
     """
 
     status: TaskStatus
+    from_execution_layer: bool = False
+    continue_: bool = False
+    # Python extras (not in TS): evidence ids stamped on a COMPLETE task and a block reason for BLOCKED.
     evidence_ids: list[str] = field(default_factory=list)
     block_reason: str | None = None
-    # Not yet consumed — Phase D1's "not done → loop again" signal lands here.
-    continue_: bool = False
 
 
 def apply_task_outcome(task_graph: TaskGraph, task_id: str, outcome: TaskOutcome) -> None:
-    """Apply a TaskOutcome to task_graph — the single writer for task-status transitions.
-
-    Wraps TaskGraph.update_task_status() (which still owns transition validation) and,
-    on a COMPLETE outcome carrying evidence_ids, stamps Task.completed_evidence — the
-    belief IDs the P9 reviewer drain (reviewer.py) later checks for invalidation.
-    """
-    task_graph.update_task_status(task_id, outcome.status, block_reason=outcome.block_reason)
+    """Apply a TaskOutcome to task_graph — the single writer for task-status transitions."""
+    task_graph.set_status(task_id, outcome.status, from_execution_layer=outcome.from_execution_layer)
+    task = task_graph.get_task(task_id)
+    if task is None:
+        return
+    if outcome.block_reason is not None:
+        task.block_reason = outcome.block_reason
     if outcome.status == "COMPLETE" and outcome.evidence_ids:
-        task = task_graph.get_task(task_id)
-        if task is not None:
-            task.completed_evidence = list(outcome.evidence_ids)
+        task.completed_evidence = list(outcome.evidence_ids)
 
 
-# ── P4.1 — Graph operations ───────────────────────────────────────────────────
+# ── validation, cycle detection, conflict probabilities (TS updateTaskGraph) ──
 
 
 def validate_task_graph(task_graph: TaskGraph) -> list[str]:
-    """Return a list of error strings (empty = valid).
+    """Orphaned-dependency errors (TS validateTaskGraph): every `depends_on` must name a task in the graph.
+    Cycles are reported separately by update_task_graph() as GraphCycleError."""
+    ids = {t.id for t in task_graph.tasks}
+    return [
+        f'Task "{t.id}" depends on unknown task "{dep}"'
+        for t in task_graph.tasks
+        for dep in t.depends_on
+        if dep not in ids
+    ]
 
-    Checks: (1) orphaned depends_on references, (2) dependency cycles via
-    iterative DFS, (3) COMPLETE tasks must have all deps also COMPLETE.
-    Returns all errors found, not just the first.
-    """
-    errors: list[str] = []
-    task_by_id: dict[str, Task] = {t.id: t for t in task_graph.tasks}
-    ids = set(task_by_id)
 
-    # (1) Orphaned references
+def _detect_cycles(task_graph: TaskGraph) -> None:
+    white, gray, black = 0, 1, 2
+    color: dict[str, int] = {t.id: white for t in task_graph.tasks}
+    task_map = {t.id: t for t in task_graph.tasks}
+
+    def dfs(task_id: str) -> None:
+        color[task_id] = gray
+        task = task_map.get(task_id)
+        for dep_id in task.depends_on if task is not None else []:
+            c = color.get(dep_id, white)
+            if c == gray:
+                raise GraphCycleError(f'Cycle detected in task graph: "{dep_id}" is part of a cycle')
+            if c == white:
+                dfs(dep_id)
+        color[task_id] = black
+
     for t in task_graph.tasks:
-        for dep_id in t.depends_on:
-            if dep_id not in ids:
-                errors.append(f"Task {t.id!r} depends_on unknown task {dep_id!r}")
+        if color.get(t.id, white) == white:
+            dfs(t.id)
 
-    # (2) Cycle detection via iterative DFS (WHITE=0, GRAY=1, BLACK=2)
-    WHITE, GRAY, BLACK = 0, 1, 2
-    colour: dict[str, int] = {tid: WHITE for tid in ids}
-    adj: dict[str, list[str]] = {t.id: list(t.depends_on) for t in task_graph.tasks}
 
-    def _dfs(start: str) -> bool:
-        stack = [(start, iter(adj.get(start, [])))]
-        colour[start] = GRAY
-        while stack:
-            node, children = stack[-1]
-            try:
-                child = next(children)
-                if child not in colour:
-                    continue  # orphaned ref already reported
-                if colour[child] == GRAY:
-                    return True
-                if colour[child] == WHITE:
-                    colour[child] = GRAY
-                    stack.append((child, iter(adj.get(child, []))))
-            except StopIteration:
-                colour[node] = BLACK
-                stack.pop()
-        return False
+def _update_conflict_probabilities(task_graph: TaskGraph) -> None:
+    tasks = task_graph.tasks
+    if len(tasks) < 2:
+        return
 
-    cycle_reported: set[str] = set()
-    for tid in list(ids):
-        if colour[tid] == WHITE:
-            if _dfs(tid):
-                if tid not in cycle_reported:
-                    errors.append(f"Dependency cycle detected involving task {tid!r}")
-                    cycle_reported.add(tid)
+    domains = sorted({d for t in tasks for d in t.parallel_write_domains})
+    for i, dom_a in enumerate(domains):
+        for dom_b in domains[i + 1 :]:
+            if task_graph.get_conflict_probability(dom_a, dom_b) == 0:
+                count_a = sum(1 for t in tasks if dom_a in t.parallel_write_domains)
+                count_b = sum(1 for t in tasks if dom_b in t.parallel_write_domains)
+                if count_a > 0 and count_b > 0:
+                    task_graph.set_conflict_probability(dom_a, dom_b, min(1, (count_a + count_b) / (2 * len(tasks))))
+        if task_graph.get_conflict_probability(dom_a, dom_a) == 0:
+            count_a = sum(1 for t in tasks if dom_a in t.parallel_write_domains)
+            if count_a >= 2:
+                task_graph.set_conflict_probability(dom_a, dom_a, min(1, count_a / len(tasks)))
 
-    # (3) Consistent dependency status
-    for t in task_graph.tasks:
-        if t.status == "COMPLETE":
-            for dep_id in t.depends_on:
-                dep = task_by_id.get(dep_id)
-                if dep is not None and dep.status != "COMPLETE":
-                    errors.append(
-                        f"COMPLETE task {t.id!r} has non-COMPLETE dependency {dep_id!r} (status={dep.status!r})"
-                    )
 
-    return errors
+def update_task_graph(
+    objective: str | None = None,
+    world_model: Any = None,
+    hypothesis_set: Any = None,
+    task_graph: TaskGraph | None = None,
+) -> None:
+    """Check the graph is acyclic (raises GraphCycleError) and seed missing conflict probabilities."""
+    assert task_graph is not None
+    _detect_cycles(task_graph)
+    _update_conflict_probabilities(task_graph)
+
+
+# ── task selection (TS selectTask / TaskGraph.selectUnblockedLeaf) ────────────
+
+
+def _eligible_tasks(task_graph: TaskGraph) -> list[Task]:
+    task_by_id = {t.id: t for t in task_graph.tasks}
+    return [
+        t
+        for t in task_graph.tasks
+        if t.status == "PENDING"
+        and all(task_by_id.get(dep) is not None and task_by_id[dep].status == "COMPLETE" for dep in t.depends_on)
+    ]
 
 
 def select_unblocked_leaf(task_graph: TaskGraph) -> Task | None:
-    """Return the highest-priority PENDING task whose all depends_on are COMPLETE.
-
-    Priority: HIGH risk first, MEDIUM second, LOW last; insertion order within
-    the same risk level.
-    Returns None when no such task exists.
-    """
-    task_by_id: dict[str, Task] = {t.id: t for t in task_graph.tasks}
-    candidates: list[Task] = []
-
-    for t in task_graph.tasks:
-        if t.status != "PENDING":
-            continue
-        all_done = all(
-            task_by_id.get(dep_id) is not None and task_by_id[dep_id].status == "COMPLETE" for dep_id in t.depends_on
-        )
-        if all_done:
-            candidates.append(t)
-
-    if not candidates:
+    """Highest-risk PENDING task whose dependencies are all COMPLETE (insertion order within a risk level)."""
+    eligible = _eligible_tasks(task_graph)
+    if not eligible:
         return None
-
-    candidates.sort(key=lambda t: _RISK_ORDER[t.risk_level])
-    return candidates[0]
-
-
-# ── P4.2 — Conflict probability cache ────────────────────────────────────────
+    eligible.sort(key=lambda t: _RISK_ORDER[t.risk_level])
+    return eligible[0]
 
 
 @dataclass
-class ConflictProbabilityCache:
-    # Keyed by sorted domain-pair string "da::db" (sorted to ensure determinism).
-    probabilities: dict[str, float] = field(default_factory=dict)
-    pessimistic_threshold: float = 0.5
-    # Rolling observation counts for Bayesian updates.
-    observation_counts: dict[str, int] = field(default_factory=dict)
-
-    def _key(self, domain_a: str, domain_b: str) -> str:
-        pair = sorted([domain_a, domain_b])
-        return f"{pair[0]}::{pair[1]}"
-
-    def to_dict(self) -> dict[str, Any]:
-        return {
-            "probabilities": dict(self.probabilities),
-            "pessimistic_threshold": self.pessimistic_threshold,
-            "observation_counts": dict(self.observation_counts),
-        }
-
-    @classmethod
-    def from_dict(cls, d: dict[str, Any]) -> ConflictProbabilityCache:
-        return cls(
-            probabilities=d.get("probabilities", {}),
-            pessimistic_threshold=d.get("pessimistic_threshold", 0.5),
-            observation_counts=d.get("observation_counts", {}),
-        )
+class SelectTaskResult:
+    task: Task | None
+    concurrent_task: Task | None
+    escalate: bool
 
 
-def compute_initial_conflict_probabilities(
-    task_graph: TaskGraph,
-) -> ConflictProbabilityCache:
-    """Compute per-domain-pair conflict probabilities from task write-domain structure.
+def select_task(task_graph: TaskGraph, control_state: Any) -> SelectTaskResult:
+    """Pick the next task and, when safe, a second one to run concurrently (TS selectTask).
 
-    For each pair of parallel-eligible PENDING tasks (no dependency between them):
-    - identical domain sets   → probability 1.0 for shared domain pairs
-    - disjoint domain sets    → probability 0.0 for cross-domain pairs
-    - partial overlap         → overlap_count / max(len_a, len_b) for each pair
+    HUMAN_REQUIRED escalates. The second-ranked ready task runs concurrently unless its write domains overlap the
+    primary's and the recorded conflict probability between them exceeds PESSIMISTIC_THRESHOLD (0.5).
     """
-    cache = ConflictProbabilityCache()
-    pending = [t for t in task_graph.tasks if t.status == "PENDING"]
-    dep_sets: dict[str, set[str]] = {t.id: set(t.depends_on) for t in pending}
+    if getattr(control_state, "escalation_reason", None) == "HUMAN_REQUIRED":
+        return SelectTaskResult(None, None, True)
 
-    for i, ta in enumerate(pending):
-        for tb in pending[i + 1 :]:
-            # Skip tasks with a direct dependency on each other
-            if tb.id in dep_sets.get(ta.id, set()):
-                continue
-            if ta.id in dep_sets.get(tb.id, set()):
-                continue
+    eligible = _eligible_tasks(task_graph)
+    if not eligible:
+        return SelectTaskResult(None, None, False)
 
-            domains_a = set(ta.parallel_write_domains)
-            domains_b = set(tb.parallel_write_domains)
+    ranked = sorted(eligible, key=lambda t: _RISK_ORDER.get(t.risk_level, 1))
+    primary = ranked[0]
+    if len(ranked) < 2:
+        return SelectTaskResult(primary, None, False)
 
-            if not domains_a or not domains_b:
-                continue
+    secondary = ranked[1]
+    primary_domains = set(primary.parallel_write_domains)
+    if not any(d in primary_domains for d in secondary.parallel_write_domains):
+        return SelectTaskResult(primary, secondary, False)
 
-            overlap = domains_a & domains_b
-            max_len = max(len(domains_a), len(domains_b))
-
-            if domains_a == domains_b:
-                pair_prob = 1.0
-            elif not overlap:
-                pair_prob = 0.0
-            else:
-                pair_prob = len(overlap) / max_len
-
-            # Store per-domain-pair, taking the max when multiple task pairs
-            # contribute to the same domain pair.
-            for da in ta.parallel_write_domains:
-                for db in tb.parallel_write_domains:
-                    key = cache._key(da, db)
-                    cache.probabilities[key] = max(cache.probabilities.get(key, 0.0), pair_prob)
-
-    return cache
-
-
-def update_from_experience_store(
-    cache: ConflictProbabilityCache,
-    experience_store: Any,
-) -> None:
-    """Blend cached structural estimates with historical conflict rates.
-
-    experience_store.write_conflict_history maps domain-pair key → {"conflicts": int, "total_runs": int}.
-    Bayesian blend: new_prob = (structural_prob × N_prior + empirical_rate × N_obs) / (N_prior + N_obs)
-    with N_prior = 5.
-    """
-    if experience_store is None:
-        return
-    history: dict[str, Any] = getattr(experience_store, "write_conflict_history", {})
-    N_prior = 5
-    for key, stats in history.items():
-        if not isinstance(stats, dict):
-            continue
-        total = stats.get("total_runs", 0)
-        if total == 0:
-            continue
-        conflicts = stats.get("conflicts", 0)
-        empirical_rate = conflicts / total
-        structural_prob = cache.probabilities.get(key, 0.0)
-        new_prob = (structural_prob * N_prior + empirical_rate * total) / (N_prior + total)
-        cache.probabilities[key] = max(0.0, min(1.0, new_prob))
-
-
-def should_use_pessimistic_blocking(
-    cache: ConflictProbabilityCache,
-    domain_a: str,
-    domain_b: str,
-) -> bool:
-    """Return True when the conflict probability exceeds the pessimistic threshold.
-
-    Unknown pairs default to False (optimistic) — fail open to avoid excessive blocking
-    on first-time domain pairs that haven't accumulated empirical data yet.
-    """
-    key = cache._key(domain_a, domain_b)
-    prob = cache.probabilities.get(key)
-    if prob is None:
-        return False
-    return prob > cache.pessimistic_threshold
-
-
-def record_actual_overlap(
-    cache: ConflictProbabilityCache,
-    domain_a: str,
-    domain_b: str,
-    conflict_observed: bool,
-) -> None:
-    """Update the conflict probability cache with one empirical observation.
-
-    Uses a rolling Bayesian update treating the existing probability as the
-    result of (N_prior + existing_obs_count) prior observations:
-        new_prob = (current_prob × total_prior_weight + observation) / (total_prior_weight + 1)
-    """
-    N_prior = 5
-    key = cache._key(domain_a, domain_b)
-    n = cache.observation_counts.get(key, 0)
-    current_prob = cache.probabilities.get(key, 0.0)
-
-    total_prior_weight = N_prior + n
-    observation = 1.0 if conflict_observed else 0.0
-    new_prob = (current_prob * total_prior_weight + observation) / (total_prior_weight + 1)
-
-    cache.probabilities[key] = max(0.0, min(1.0, new_prob))
-    cache.observation_counts[key] = n + 1
+    conflict_prob = max(
+        [
+            0,
+            *(
+                task_graph.get_conflict_probability(da, db)
+                for da in primary.parallel_write_domains
+                for db in secondary.parallel_write_domains
+            ),
+        ]
+    )
+    if conflict_prob > PESSIMISTIC_THRESHOLD:
+        return SelectTaskResult(primary, None, False)
+    return SelectTaskResult(primary, secondary, False)
 
 
 # ── P4.4 — Abstraction fit checking ──────────────────────────────────────────
@@ -466,6 +391,10 @@ def check_abstraction_alignment(
     the score hasn't changed since the last computation in that case.
     """
     if not force and not task_graph.changed:
+        return 1.0
+    # HARNESS_LEXICAL granularity-markers: the granularity estimate is a keyword count; with it off the
+    # alignment reads neutral (1.0), the value an unchanged graph gets.
+    if not harness_lexical_active("granularity-markers"):
         return 1.0
 
     wm_granularity = estimate_world_model_granularity(world_model)

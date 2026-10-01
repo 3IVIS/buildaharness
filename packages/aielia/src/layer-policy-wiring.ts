@@ -29,6 +29,7 @@ import {
 } from '@buildaharness/harness'
 
 import { experienceLearningEnabled } from './harness-bridge.js'
+import { semanticCompactionEnabled } from './semantic-compaction.js'
 import { reviewerRevisionEnabled } from './reviewer-revision.js'
 import { semanticHypothesesEnabled } from './semantic-hypotheses.js'
 import { sourceReliabilityEnabled } from './source-reliability.js'
@@ -43,6 +44,7 @@ export function enabledOptInLayers(env?: Record<string, string | undefined>): Op
     semantic_hypotheses: semanticHypothesesEnabled(env),
     reviewer_revision: reviewerRevisionEnabled(env),
     experience_learning: experienceLearningEnabled(env),
+    semantic_compaction: semanticCompactionEnabled(env),
   }
   return OPT_IN_LAYERS.filter((l) => on[l])
 }

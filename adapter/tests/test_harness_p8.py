@@ -726,7 +726,7 @@ def test_inv10_warm_start_absent_vs_present_identical_strategy_state():
 
     assert result.loaded is False
     assert initial.current_strategy == "DIRECT_EDIT"
-    assert initial.prior_strategy_weights == {}
+    assert initial.prior_strategy_weights == StrategyState().prior_strategy_weights  # unchanged flat prior
     assert initial.recovery_was_used is False
 
 

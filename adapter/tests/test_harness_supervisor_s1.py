@@ -27,7 +27,7 @@ from harness.diagnostics import (
     ExecutionHealth,
     VerificationHealth,
 )
-from harness.failure_modes import FailureDiagnostics, FailureEntry
+from harness.failure_modes import FailureDiagnostics, FailureRecord
 from harness.hypothesis import HypothesisSet
 from harness.loop import run_one_iteration
 from harness.memory import MemoryState
@@ -274,7 +274,7 @@ def _digest():
 
     return build_digest(
         StrategyState(stall_reason="strategy_loop", switch_count=2, switch_triggers=["a", "b"]),
-        FailureDiagnostics(failure_history=[FailureEntry(failure_class="compile_error", step=i) for i in range(3)]),
+        FailureDiagnostics(failure_history=[FailureRecord(failure_class="compile_error") for i in range(3)]),
         TaskGraph(),
         WorldModel(),
     )

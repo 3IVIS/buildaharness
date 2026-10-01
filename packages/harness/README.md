@@ -153,6 +153,23 @@ inline. This package ships two:
 For an implementation that survives a page reload, see `DexieExperienceStore`
 in `@buildaharness/runtime`.
 
+## Lexical checks (off by default)
+
+The harness's own keyword / substring / token-overlap checks over natural-language text (the negation-pair
+contradiction detector, the review gate's negation and phrase checks, the failure library's exact match,
+criterion coverage and scope, the caller-constraint word match, granularity markers, error-symptom phrases,
+and the preference / dedupe primitives) are **all off by default**. A host wires semantic hooks in their
+place; with no hook the check simply never matches. The full list is in `src/lexical/lexical-off.ts`.
+
+- `HARNESS_LEXICAL_MODE=enabled` turns every check back on.
+- `HARNESS_LEXICAL_ON=negation-pairs,…` / `HARNESS_LEXICAL_OFF=…` turn single checks on or off (`all` works
+  in both; OFF wins).
+- `setHarnessLexicalMode('enabled' | 'disabled' | undefined)` sets the mode from the host where there is no
+  `process.env` (a browser); an explicit `HARNESS_LEXICAL_MODE` still wins.
+
+The Python twin (`adapter/harness/lexical_off.py`) has the same variables, the same default, and the same
+names for the checks both twins share.
+
 ## Relationship to the Python harness (`adapter/harness/`)
 
 State shapes are mirrored 1:1 (all 13 structures round-trip via

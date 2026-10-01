@@ -53,7 +53,7 @@ def main() -> None:
             SimpleNamespace(reliability=e.get("reliability", "LOW"))
             for e in fx["evidence_store"].get("entries", [])
         ]
-        evidence_store = SimpleNamespace(entries=entries)
+        evidence_store = SimpleNamespace(observations=entries)
 
     world_model = None
     if fx.get("world_model") is not None:
@@ -69,15 +69,14 @@ def main() -> None:
 
     hypothesis_set = None
     if fx.get("hypothesis_set") is not None:
-        hypotheses = [
+        active = [
             SimpleNamespace(
-                eliminated=False,
                 confidence=h.get("confidence", 0.0),
                 predicted_observations=h.get("predicted_observations", []),
             )
             for h in fx["hypothesis_set"].get("active", [])
         ]
-        hypothesis_set = SimpleNamespace(hypotheses=hypotheses)
+        hypothesis_set = SimpleNamespace(active=active)
 
     vr = verify(
         fx.get("result"),

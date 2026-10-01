@@ -1,0 +1,17 @@
+{
+  "tasks": [
+    {
+      "id": "h",
+      "risk_level": "HIGH"
+    }
+  ],
+  "tools": {
+    "default": {
+      "kind": "ok",
+      "output": "result"
+    }
+  },
+  "criteria": [
+    "only"
+  ]
+}

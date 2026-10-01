@@ -1,4 +1,5 @@
 import { getDeadEndMarkers, testAny } from './lexical/patterns.js'
+import { lexicalActive } from './lexical/lexical-mode.js'
 
 export type ToolYield = 'productive' | 'dead_end'
 
@@ -28,6 +29,6 @@ export function classifyToolYield(toolName: 'web_search' | 'fetch_url', resultTe
   // wrapUntrusted (and, rarely, an injection-warning prefix) — the literal marker is a substring
   // of that wrapped text, never the whole of it.
   if (toolName === 'web_search' && resultText.includes(NO_RESULTS_LITERAL)) return 'dead_end'
-  if (testAny(DEAD_END_MARKERS, resultText)) return 'dead_end'
+  if (lexicalActive('tool-yield') && testAny(DEAD_END_MARKERS, resultText)) return 'dead_end'
   return 'productive'
 }

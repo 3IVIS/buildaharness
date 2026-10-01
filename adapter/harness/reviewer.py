@@ -1,102 +1,57 @@
 """
 Reviewer pass — Phase 9.
 
-Three-lens reviewer pass (implementer / reviewer / adversarial), adversarial
-prior seeding via causal-proximity filter, and propagation drain that reopens
-COMPLETE tasks whose underlying beliefs were invalidated.
+Twin of packages/harness/src/nodes/reviewer-pass.ts. Three lenses look at the finished work and return plain-text
+findings:
 
-Key invariants:
-  INV-09: AdversarialPrior is ephemeral — it has no to_dict()/from_dict() and
-          must never be stored outside the local scope of reviewer_pass().
-  INV-01: ReviewFindings are integrated via add_observation() first; any
-          corrective belief requires an explicit derived_from chain.
-  INV-06: loop re-entry triggered by tasks_reopened does not write to
-          control_state — only resolve_control_state() may produce a new value.
-  INV-18: a pending ReviewerVerdict of severity >= MEDIUM forces the next
-          resolve_control_state() call's execution_mode into {CAUTIOUS,
-          RECOVERY} (never NORMAL) and never changes permission on its own —
-          see control_state.py's _apply_pending_reviewer_verdict(). One-shot:
-          consumed and cleared by run_one_iteration() after that one resolve.
+  implementer   every success criterion should be covered by some belief (substring match — HARNESS_LEXICAL
+                criterion-substring — or the host's `semantic_criterion_coverage`);
+  reviewer      unresolved HIGH / SYSTEM_BREAKING contradictions, and "more than half the beliefs are LOW (<0.25)";
+  adversarial   a HIGH-confidence belief (>= 0.8) near the goal that a contradiction involves, and any failure class
+                whose prior probability exceeds 0.5.
+
+The pass then propagates beliefs, regenerates hypotheses and re-detects contradictions, recomputes abstraction fit,
+reopens COMPLETE tasks a reviewer finding names, and derives a one-shot pending verdict (INV-18): the highest
+severity >= MEDIUM finding becomes a ReviewerVerdict that forces the next resolve_control_state() call into a
+non-NORMAL execution mode. The AdversarialPrior seeds are ephemeral (INV-09) — a local list, never stored.
 """
 
 from __future__ import annotations
 
-import uuid
 from collections import deque
+from collections.abc import Callable
 from dataclasses import dataclass, field
 from typing import Any, Literal
 
-from .lexical_patterns import get_evidence_negation_words
+from .lexical_off import harness_lexical_active
 
-# Was a locally-hardcoded 7-word set missing "unavailable" relative to hypothesis.py's
-# identical-purpose set — now the same shared source both read (lexical_patterns.py's
-# negation.json), closing that drift; see get_evidence_negation_words()'s doc comment.
-_EVIDENCE_NEGATION_WORDS = get_evidence_negation_words()
+ReviewerVerdictSeverity = Literal["LOW", "MEDIUM", "HIGH"]
+ReviewerVerdictLens = Literal["implementer", "reviewer", "adversarial"]
 
-ReviewFindingLens = Literal["implementer", "reviewer", "adversarial"]
-ReviewFindingType = Literal[
-    "contradiction",
-    "gap",
-    "regression",
-    "assumption_violation",
-    "contract_miss",
-]
-ReviewFindingSeverity = Literal["LOW", "MEDIUM", "HIGH"]
+ADVERSARIAL_PROXIMITY_THRESHOLD = 0.5
+ADVERSARIAL_MAX_SEEDS = 10
+BFS_HOP_LIMIT = 3
+WEAK_BELIEF_CONFIDENCE = 0.25
+ADVERSARIAL_HIGH_CONFIDENCE = 0.8
+CLASS_PRIOR_FINDING_THRESHOLD = 0.5
 
-_HIGH_SEVERITY_DELTA = 0.1
+_SEVERITY_RANK: dict[str, int] = {"LOW": 0, "MEDIUM": 1, "HIGH": 2}
 
-
-# ── Data classes ─────────────────────────────────────────────────────────────
-
-
-@dataclass
-class ReviewFinding:
-    lens: ReviewFindingLens
-    finding_type: ReviewFindingType
-    description: str
-    affected_belief_ids: list[str] = field(default_factory=list)
-    affected_task_ids: list[str] = field(default_factory=list)
-    severity: ReviewFindingSeverity = "MEDIUM"
-    id: str = field(default_factory=lambda: str(uuid.uuid4()))
-
-    def to_dict(self) -> dict[str, Any]:
-        return {
-            "id": self.id,
-            "lens": self.lens,
-            "finding_type": self.finding_type,
-            "description": self.description,
-            "affected_belief_ids": list(self.affected_belief_ids),
-            "affected_task_ids": list(self.affected_task_ids),
-            "severity": self.severity,
-        }
-
-
-@dataclass
-class AdversarialPrior:
-    """Ephemeral adversarial prior — must never be serialised to HarnessRunState.
-
-    Intentionally omits to_dict() / from_dict() to make persistence structurally
-    impossible (INV-09).  Store only as a local variable inside reviewer_pass().
-    """
-
-    negated_beliefs: list[dict[str, Any]] = field(default_factory=list)
-    seeded_from_failure_history: bool = False
-    dep_class_gap_included: bool = False
+# (criterion, beliefs) -> covered?  Host-supplied semantic check (TS SemanticCriterionCoverage; sync here — the
+# outer async driver awaits its model call before/around the pass).
+SemanticCriterionCoverage = Callable[[str, list[Any]], bool]
+CriterionCheckable = Callable[[str], bool]
 
 
 @dataclass
 class ReviewerVerdict:
-    """Bounded, single-slot verdict that survives into the next iteration's
-    HarnessRunState (Phase I / ADR-003 finding F-3, authority-map ruling A-4).
+    """Bounded, single-slot verdict that survives into the next iteration's HarnessRunState (Phase I / INV-18).
 
-    Unlike AdversarialPrior, this is deliberately persisted — INV-09 only
-    protects the negated-belief scratch state from serialisation, not this
-    typed summary of the pass's own findings. resolve_control_state() reads
-    this as an input (never writes it); only reviewer_pass() produces one.
+    resolve_control_state() reads this as an input (never writes it); only reviewer_pass() produces one.
     """
 
-    severity: ReviewFindingSeverity
-    lens: ReviewFindingLens
+    severity: ReviewerVerdictSeverity
+    lens: ReviewerVerdictLens
     summary: str
 
     def to_dict(self) -> dict[str, Any]:
@@ -107,645 +62,244 @@ class ReviewerVerdict:
         return cls(severity=d["severity"], lens=d["lens"], summary=d["summary"])
 
 
-_SEVERITY_RANK: dict[ReviewFindingSeverity, int] = {"LOW": 0, "MEDIUM": 1, "HIGH": 2}
+@dataclass
+class PropagationQueue:
+    reopened_task_ids: list[str] = field(default_factory=list)
 
 
-def _derive_pending_verdict(findings: list[ReviewFinding]) -> ReviewerVerdict | None:
-    """The highest-severity finding (severity >= MEDIUM only) becomes the pending
-    verdict — a resolver input, not a log of every finding. None when nothing
-    reaches MEDIUM. Ties keep the first-encountered finding (lens order:
-    implementer, reviewer, adversarial — the pass's own fixed sequence)."""
-    candidates = [f for f in findings if _SEVERITY_RANK[f.severity] >= _SEVERITY_RANK["MEDIUM"]]
-    if not candidates:
-        return None
-    top = max(candidates, key=lambda f: _SEVERITY_RANK[f.severity])
-    return ReviewerVerdict(severity=top.severity, lens=top.lens, summary=top.description)
+def drain_propagation_queue(queue: PropagationQueue) -> list[str]:
+    """Take (and clear) the task ids queued for reopening."""
+    ids = list(queue.reopened_task_ids)
+    queue.reopened_task_ids = []
+    return ids
 
 
 @dataclass
 class ReviewPassResult:
-    findings: list[ReviewFinding] = field(default_factory=list)
-    tasks_reopened: bool = False
+    implementer_findings: list[str] = field(default_factory=list)
+    reviewer_findings: list[str] = field(default_factory=list)
+    adversarial_findings: list[str] = field(default_factory=list)
     reopened_task_ids: list[str] = field(default_factory=list)
-    abstraction_fit_score: float = 1.0
     pending_verdict: ReviewerVerdict | None = None
+
+    @property
+    def findings(self) -> list[str]:
+        return [*self.implementer_findings, *self.reviewer_findings, *self.adversarial_findings]
+
+    @property
+    def tasks_reopened(self) -> bool:
+        return bool(self.reopened_task_ids)
 
     def to_dict(self) -> dict[str, Any]:
         return {
-            "findings": [f.to_dict() for f in self.findings],
-            "tasks_reopened": self.tasks_reopened,
+            "implementer_findings": list(self.implementer_findings),
+            "reviewer_findings": list(self.reviewer_findings),
+            "adversarial_findings": list(self.adversarial_findings),
             "reopened_task_ids": list(self.reopened_task_ids),
-            "abstraction_fit_score": self.abstraction_fit_score,
             "pending_verdict": self.pending_verdict.to_dict() if self.pending_verdict is not None else None,
         }
 
 
-# ── P9.1 — Adversarial prior seeding ─────────────────────────────────────────
+def _classify_finding_severity(lens: str, finding: str) -> ReviewerVerdictSeverity:
+    if lens == "reviewer" and (
+        finding.startswith("Unresolved HIGH") or finding.startswith("Unresolved SYSTEM_BREAKING")
+    ):
+        return "HIGH"
+    if lens == "adversarial" and finding.startswith("Adversarial challenge:"):
+        return "HIGH"
+    return "MEDIUM"
 
 
-def compute_causal_proximity(
-    belief_id: str,
-    success_criteria: list[str],
-    belief_dep_graph: Any,
-) -> float:
-    """Return causal proximity score in [0,1] for belief_id relative to success_criteria.
-
-    Performs BFS from belief_id through the belief dependency graph (undirected)
-    to find the shortest path to any belief node identified as a success criterion.
-    Returns 1.0 / (shortest_path_length + 1).  Beliefs with no path score 0.0.
-
-    Success-criteria nodes are identified by:
-      1. Exact belief_id match against any string in success_criteria.
-      2. Substring match of a success criterion against the node's description value
-         in belief_dep_graph.belief_nodes.
-    """
-    belief_nodes: dict[str, str] = getattr(belief_dep_graph, "belief_nodes", {})
-    edges = getattr(belief_dep_graph, "edges", [])
-
-    sc_ids: set[str] = set()
-    for criterion in success_criteria:
-        # Only exact belief_id match — avoids false positives from substring overlap.
-        if criterion in belief_nodes:
-            sc_ids.add(criterion)
-
-    if not sc_ids:
-        return 0.0
-
-    if belief_id in sc_ids:
-        return 1.0
-
-    # Build undirected adjacency
-    adj: dict[str, list[str]] = {}
-    for edge in edges:
-        fid = getattr(edge, "from_id", None)
-        tid = getattr(edge, "to_id", None)
-        if fid and tid:
-            adj.setdefault(fid, []).append(tid)
-            adj.setdefault(tid, []).append(fid)
-
-    visited: set[str] = {belief_id}
-    queue: deque[tuple[str, int]] = deque([(belief_id, 0)])
-
-    while queue:
-        node, dist = queue.popleft()
-        if node in sc_ids:
-            return 1.0 / (dist + 1)
-        for neighbor in adj.get(node, []):
-            if neighbor not in visited:
-                visited.add(neighbor)
-                queue.append((neighbor, dist + 1))
-
-    return 0.0
+def _derive_pending_verdict(
+    implementer_findings: list[str],
+    reviewer_findings: list[str],
+    adversarial_findings: list[str],
+) -> ReviewerVerdict | None:
+    """The highest-severity finding (>= MEDIUM) becomes the pending verdict; ties keep the first found, in lens
+    order implementer, reviewer, adversarial. None when there are no findings."""
+    candidates = [
+        ReviewerVerdict(_classify_finding_severity(lens, f), lens, f)  # type: ignore[arg-type]
+        for lens, findings in (
+            ("implementer", implementer_findings),
+            ("reviewer", reviewer_findings),
+            ("adversarial", adversarial_findings),
+        )
+        for f in findings
+    ]
+    candidates = [c for c in candidates if _SEVERITY_RANK[c.severity] >= _SEVERITY_RANK["MEDIUM"]]
+    if not candidates:
+        return None
+    top = candidates[0]
+    for c in candidates[1:]:
+        if _SEVERITY_RANK[c.severity] > _SEVERITY_RANK[top.severity]:
+            top = c
+    return top
 
 
-def _negate_statement(statement: str) -> str:
-    low = statement.strip().lower()
-    if low.startswith("not "):
-        return statement.strip()[4:]
-    return f"NOT: {statement}"
+# ── P9.1 — adversarial prior seeding ─────────────────────────────────────────
 
 
 def seed_adversarial_prior(
     world_model: Any,
     success_criteria: list[str],
-    failure_history: Any,
-    dep_class_gap_annotation: Any = None,
-    belief_dep_graph: Any = None,
-    top_k: int = 5,
-) -> AdversarialPrior:
-    """Seed an AdversarialPrior by selecting beliefs causally proximal to success_criteria.
+    belief_dep_graph: Any,
+    max_seeds: int = ADVERSARIAL_MAX_SEEDS,
+) -> list[Any]:
+    """Beliefs near the goal to attack (TS seedAdversarialPrior). Ephemeral (INV-09): keep it a local.
 
-    Selection order: causal proximity (highest first), NOT raw confidence.
-    The returned object must be stored only as a local variable — it has no
-    serialisation methods (INV-09).
+    Every belief with causal proximity >= 0.5 (a criterion appears in its text -> 1.0, else it has a derived_from
+    chain -> 0.6, else 0.1) starts a breadth-first walk over `derived_from_edges` (either direction), up to 3 hops,
+    collecting at most `max_seeds` beliefs. The criterion-text test is HARNESS_LEXICAL criterion-proximity.
     """
-    beliefs = getattr(world_model, "beliefs", [])
+    criteria = {c.lower() for c in success_criteria}
 
-    # Step 1: compute proximity for each belief
-    proximity_pairs: list[tuple[Any, float]] = []
-    for belief in beliefs:
-        prox = (
-            compute_causal_proximity(belief.id, success_criteria, belief_dep_graph)
-            if belief_dep_graph is not None
-            else 0.0
-        )
-        proximity_pairs.append((belief, prox))
+    def causal_proximity(belief: Any) -> float:
+        text = belief.statement.lower()
+        if harness_lexical_active("criterion-proximity") and any(c in text for c in criteria):
+            return 1.0
+        if belief.derived_from:
+            return 0.6
+        return 0.1
 
-    # Step 2: sort by proximity descending, take top-K
-    proximity_pairs.sort(key=lambda p: p[1], reverse=True)
+    beliefs_by_id = {b.id: b for b in world_model.beliefs}
+    visited: set[str] = set()
+    queue: deque[tuple[str, int]] = deque()
+    selected: list[Any] = []
 
-    negated_beliefs: list[dict[str, Any]] = [
-        {
-            "belief_id": b.id,
-            "negated_statement": _negate_statement(b.statement),
-            "causal_proximity": prox,
-        }
-        for b, prox in proximity_pairs[:top_k]
-        if prox > 0.0
-    ]
+    for belief in world_model.beliefs:
+        if causal_proximity(belief) >= ADVERSARIAL_PROXIMITY_THRESHOLD:
+            queue.append((belief.id, 0))
+            visited.add(belief.id)
 
-    # Step 3: supplement from failure_history class priors (base_rate heuristic)
-    seeded_from_failure = False
-    fh_entries: list[Any] = []
-    if failure_history is not None:
-        fh_entries = getattr(failure_history, "failure_history", [])
+    while queue and len(selected) < max_seeds:
+        belief_id, hop = queue.popleft()
+        belief = beliefs_by_id.get(belief_id)
+        if belief is None:
+            continue
+        selected.append(belief)
+        if hop >= BFS_HOP_LIMIT:
+            continue
+        for edge in belief_dep_graph.derived_from_edges:
+            next_id = edge.to_id if edge.from_id == belief_id else edge.from_id if edge.to_id == belief_id else None
+            if next_id and next_id not in visited:
+                visited.add(next_id)
+                queue.append((next_id, hop + 1))
 
-    if fh_entries:
-        class_counts: dict[str, int] = {}
-        for entry in fh_entries:
-            fc = getattr(entry, "failure_class", "")
-            if fc:
-                class_counts[fc] = class_counts.get(fc, 0) + 1
-
-        # Classes with count >= 2 treated as base_rate > 0.3
-        high_rate_classes = {fc for fc, cnt in class_counts.items() if cnt >= 2}
-        already_seeded = {d["belief_id"] for d in negated_beliefs}
-
-        if high_rate_classes:
-            for belief in beliefs:
-                if belief.id in already_seeded:
-                    continue
-                stmt = getattr(belief, "statement", "").lower()
-                for fc in high_rate_classes:
-                    fc_tokens = fc.lower().split("_")
-                    if fc.lower() in stmt or any(tok in stmt for tok in fc_tokens):
-                        negated_beliefs.append(
-                            {
-                                "belief_id": belief.id,
-                                "negated_statement": _negate_statement(belief.statement),
-                                "causal_proximity": 0.0,
-                            }
-                        )
-                        already_seeded.add(belief.id)
-                        seeded_from_failure = True
-                        break
-
-    # Step 4: dep_class_gap_annotation seeds
-    dep_class_gap_included = False
-    if dep_class_gap_annotation is not None:
-        gap_belief_ids: list[str] = []
-        if isinstance(dep_class_gap_annotation, dict):
-            gap_belief_ids = dep_class_gap_annotation.get("belief_ids", [])
-        else:
-            gap_belief_ids = getattr(dep_class_gap_annotation, "belief_ids", [])
-
-        if gap_belief_ids:
-            dep_class_gap_included = True
-            already_seeded = {d["belief_id"] for d in negated_beliefs}
-            for bid in gap_belief_ids:
-                if bid in already_seeded:
-                    continue
-                belief = next((b for b in beliefs if b.id == bid), None)
-                stmt = belief.statement if belief else f"belief {bid}"
-                negated_beliefs.append(
-                    {
-                        "belief_id": bid,
-                        "negated_statement": _negate_statement(stmt),
-                        "causal_proximity": 0.0,
-                    }
-                )
-
-    return AdversarialPrior(
-        negated_beliefs=negated_beliefs,
-        seeded_from_failure_history=seeded_from_failure,
-        dep_class_gap_included=dep_class_gap_included,
-    )
+    return selected
 
 
-# ── P9.2 — Three-lens reviewer pass ──────────────────────────────────────────
+# ── lenses ────────────────────────────────────────────────────────────────────
 
 
 def implementer_lens(
     world_model: Any,
-    task_graph: Any,
     success_criteria: list[str],
-) -> list[ReviewFinding]:
-    """Check task completion evidence, criteria coverage, and contradiction integrity.
-
-    (a) Every COMPLETE task must have at least one observation referencing it.
-    (b) All success_criteria must be covered by at least one COMPLETE task.
-    (c) No COMPLETE task may have an open HIGH contradiction referencing its output.
-    """
-    findings: list[ReviewFinding] = []
-
-    observations = getattr(world_model, "observations", [])
-    contradictions = getattr(world_model, "contradictions", [])
-    tasks = getattr(task_graph, "tasks", [])
-
-    # Build set of observation content/source strings for fast lookup
-    obs_content: list[str] = [
-        (getattr(o, "content", "") + " " + getattr(o, "source", "")).lower() for o in observations
-    ]
-
-    for task in tasks:
-        if getattr(task, "status", "") != "COMPLETE":
-            continue
-        tid = task.id
-
-        # (a) No supporting observation
-        has_obs = any(tid.lower() in oc for oc in obs_content)
-        if not has_obs:
-            findings.append(
-                ReviewFinding(
-                    lens="implementer",
-                    finding_type="gap",
-                    description=f"Task {tid!r} is COMPLETE but has no observation referencing it",
-                    affected_task_ids=[tid],
-                    severity="HIGH",
-                )
-            )
-
-        # (c) Open HIGH contradiction referencing this task's output beliefs
-        task_belief_ids: set[str] = set(getattr(task, "completed_evidence", []))
-        for contra in contradictions:
-            if getattr(contra, "severity", "") == "HIGH":
-                involved = set(getattr(contra, "involved_belief_ids", []))
-                if task_belief_ids & involved:
-                    findings.append(
-                        ReviewFinding(
-                            lens="implementer",
-                            finding_type="contradiction",
-                            description=(
-                                f"COMPLETE task {tid!r} has an open HIGH contradiction "
-                                f"({contra.id}) referencing its evidence beliefs"
-                            ),
-                            affected_belief_ids=list(task_belief_ids & involved),
-                            affected_task_ids=[tid],
-                            severity="HIGH",
-                        )
-                    )
-
-    # (b) success_criteria coverage
-    complete_task_descriptions = " ".join(
-        getattr(t, "description", "").lower() for t in tasks if getattr(t, "status", "") == "COMPLETE"
-    )
+    semantic_criterion_coverage: SemanticCriterionCoverage | None = None,
+    is_checkable_criterion: CriterionCheckable | None = None,
+) -> list[str]:
+    findings: list[str] = []
     for criterion in success_criteria:
-        criterion_tokens = set(criterion.lower().split())
-        covered = bool(criterion_tokens & set(complete_task_descriptions.split()))
+        if is_checkable_criterion is not None and not is_checkable_criterion(criterion):
+            continue
+        covered = harness_lexical_active("criterion-substring") and any(
+            criterion.lower() in b.statement.lower() for b in world_model.beliefs
+        )
         if not covered:
-            findings.append(
-                ReviewFinding(
-                    lens="implementer",
-                    finding_type="gap",
-                    description=f"Success criterion {criterion!r} is not covered by any COMPLETE task",
-                    severity="MEDIUM",
-                )
+            semantically = (
+                semantic_criterion_coverage(criterion, world_model.beliefs)
+                if semantic_criterion_coverage is not None
+                else False
             )
-
+            if not semantically:
+                findings.append(f'Success criterion not covered by any belief: "{criterion}"')
     return findings
 
 
-def reviewer_lens(
-    world_model: Any,
-    output_contract: Any,
-    task_graph: Any,
-    evidence_store: Any,
-) -> list[ReviewFinding]:
-    """Check output contract pre-conditions, unvalidated assumptions, and evidence gaps.
+def reviewer_lens(world_model: Any) -> list[str]:
+    findings: list[str] = []
+    for contradiction in world_model.contradictions:
+        if contradiction.severity in ("HIGH", "SYSTEM_BREAKING"):
+            findings.append(f"Unresolved {contradiction.severity} contradiction: {contradiction.description}")
 
-    (a) Required interface fields not produced by any COMPLETE task.
-    (b) Assumptions not validated by any HIGH-reliability observation.
-    (c) HIGH-reliability evidence that contradicts a belief but has no contradiction record.
-    """
-    findings: list[ReviewFinding] = []
-
-    observations = getattr(world_model, "observations", [])
-    beliefs = getattr(world_model, "beliefs", [])
-    assumptions = getattr(world_model, "assumptions", [])
-    contradictions = getattr(world_model, "contradictions", [])
-    required_fields = getattr(output_contract, "required_interface_fields", []) if output_contract else []
-
-    # (a) Required interface fields
-    # Also include all observations for field presence check
-    all_obs_content = " ".join(getattr(o, "content", "").lower() for o in observations)
-
-    for field_name in required_fields:
-        if field_name.lower() not in all_obs_content:
-            findings.append(
-                ReviewFinding(
-                    lens="reviewer",
-                    finding_type="contract_miss",
-                    description=f"Required interface field {field_name!r} not found in any observation",
-                    severity="HIGH",
-                )
-            )
-
-    # (b) Unvalidated assumptions
-    high_rel_obs = [
-        getattr(o, "content", "").lower()
-        for o in observations
-        if getattr(o, "source", "").lower() in ("tool", "high", "verified")
-    ]
-    # Also check evidence_store entries
-    if evidence_store is not None:
-        entries = getattr(evidence_store, "entries", [])
-        for entry in entries:
-            if getattr(entry, "reliability", "") == "HIGH":
-                high_rel_obs.append(getattr(entry, "obs", "").lower())
-
-    for assumption in assumptions:
-        assumption_lower = assumption.lower()
-        assumption_tokens = set(assumption_lower.split())
-        validated = any(bool(assumption_tokens & set(obs.split())) for obs in high_rel_obs)
-        if not validated:
-            findings.append(
-                ReviewFinding(
-                    lens="reviewer",
-                    finding_type="assumption_violation",
-                    description=f"Assumption {assumption!r} has no validating HIGH-reliability observation",
-                    severity="MEDIUM",
-                )
-            )
-
-    # (c) HIGH-reliability evidence contradicting beliefs without a contradiction record
-    involved_in_contradictions: set[str] = set()
-    for c in contradictions:
-        involved_in_contradictions.update(getattr(c, "involved_belief_ids", []))
-
-    if evidence_store is not None:
-        entries = getattr(evidence_store, "entries", [])
-        for entry in entries:
-            if getattr(entry, "reliability", "") != "HIGH":
-                continue
-            obs_words = set(getattr(entry, "obs", "").lower().split())
-            for belief in beliefs:
-                if belief.id in involved_in_contradictions:
-                    continue
-                stmt_words = set(belief.statement.lower().split())
-                common = obs_words & stmt_words
-                if common and (obs_words & _EVIDENCE_NEGATION_WORDS):
-                    findings.append(
-                        ReviewFinding(
-                            lens="reviewer",
-                            finding_type="gap",
-                            description=(
-                                f"HIGH-reliability evidence contradicts belief {belief.id!r} "
-                                "but no contradiction record exists"
-                            ),
-                            affected_belief_ids=[belief.id],
-                            severity="MEDIUM",
-                        )
-                    )
-
+    weak = [b for b in world_model.beliefs if b.confidence < WEAK_BELIEF_CONFIDENCE]
+    if len(weak) > len(world_model.beliefs) / 2:
+        findings.append(f"More than half of beliefs have LOW confidence ({len(weak)}/{len(world_model.beliefs)})")
     return findings
 
 
 def adversarial_lens(
     world_model: Any,
-    adversarial_prior: AdversarialPrior,
-    hypothesis_set: Any,
-    task_graph: Any,
-) -> list[ReviewFinding]:
-    """Challenge completed-task conclusions and hypothesis support using negated beliefs.
+    success_criteria: list[str],
+    failure_diagnostics: Any,
+    belief_dep_graph: Any,
+) -> list[str]:
+    findings: list[str] = []
+    for belief in seed_adversarial_prior(world_model, success_criteria, belief_dep_graph, ADVERSARIAL_MAX_SEEDS):
+        if belief.confidence >= ADVERSARIAL_HIGH_CONFIDENCE and any(
+            belief.id in c.involved_belief_ids for c in world_model.contradictions
+        ):
+            findings.append(f'Adversarial challenge: HIGH-reliability belief "{belief.id}" is contradicted')
 
-    For each negated belief in adversarial_prior:
-    - If a COMPLETE task's evidence includes this belief, flag it as potentially invalid.
-    - If an active hypothesis is ONLY supported by beliefs in the negated set, flag it.
-    """
-    findings: list[ReviewFinding] = []
-
-    tasks = getattr(task_graph, "tasks", [])
-    active_hypotheses = getattr(hypothesis_set, "active", []) if hypothesis_set else []
-
-    negated_ids: set[str] = {d["belief_id"] for d in adversarial_prior.negated_beliefs}
-
-    if not negated_ids:
-        return findings
-
-    # Check COMPLETE tasks whose completed_evidence overlaps with negated beliefs
-    for task in tasks:
-        if getattr(task, "status", "") != "COMPLETE":
-            continue
-        evidence_ids = set(getattr(task, "completed_evidence", []))
-        invalidated = evidence_ids & negated_ids
-        if invalidated:
-            findings.append(
-                ReviewFinding(
-                    lens="adversarial",
-                    finding_type="contradiction",
-                    description=(
-                        f"If adversarial prior holds, COMPLETE task {task.id!r} result "
-                        f"is invalidated by negation of beliefs {sorted(invalidated)}"
-                    ),
-                    affected_belief_ids=list(invalidated),
-                    affected_task_ids=[task.id],
-                    severity="HIGH",
-                )
-            )
-
-    # Check hypotheses only supported by negated beliefs
-    all_beliefs = getattr(world_model, "beliefs", [])
-    all_belief_ids = {b.id for b in all_beliefs}
-
-    for hyp in active_hypotheses:
-        discrim = set(getattr(hyp, "discriminating_evidence", []))
-        # Only consider belief-id references (not observation ids)
-        belief_support = discrim & all_belief_ids
-        if belief_support and belief_support.issubset(negated_ids):
-            findings.append(
-                ReviewFinding(
-                    lens="adversarial",
-                    finding_type="assumption_violation",
-                    description=(
-                        f"Hypothesis {hyp.id!r} is only supported by beliefs in the "
-                        "adversarial negation set — inadequately supported"
-                    ),
-                    affected_belief_ids=list(belief_support),
-                    severity="MEDIUM",
-                )
-            )
-
+    for cls, prior in failure_diagnostics.failure_mode_library.class_priors.items():
+        if prior > CLASS_PRIOR_FINDING_THRESHOLD:
+            findings.append(f'High prior probability ({prior:.2f}) for failure class "{cls}"')
     return findings
 
 
 def reviewer_pass(
     world_model: Any,
-    task_graph: Any,
     success_criteria: list[str],
-    output_contract: Any,
-    hypothesis_set: Any,
-    evidence_store: Any,
-    caller_state: Any,
+    failure_diagnostics: Any,
     belief_dep_graph: Any,
-    failure_history: Any,
-    dep_class_gap_annotation: Any = None,
+    dep_graph_budget: Any,
+    hypothesis_set: Any,
+    task_graph: Any,
+    diagnostics: Any,
+    evidence_store: Any,
+    propagation_queue: PropagationQueue,
+    run_adversarial_lens: bool = True,
+    semantic_criterion_coverage: SemanticCriterionCoverage | None = None,
+    is_checkable_criterion: CriterionCheckable | None = None,
 ) -> ReviewPassResult:
-    """Run the three-lens reviewer pass and return a ReviewPassResult.
+    """Run the three-lens reviewer pass (TS reviewerPass).
 
-    Sequence (INV-09 enforced — adversarial_prior goes out of scope after lenses):
-      1. seed_adversarial_prior() — ephemeral local
-      2. implementer_lens + reviewer_lens + adversarial_lens
-      3. adversarial_prior goes out of scope
-      4. Integrate HIGH-severity findings into world_model (observation first, INV-01)
-      5. propagate_beliefs()
-      6. update hypothesis_set + run elimination policy
-      7. detect_contradictions()
-      8. check_abstraction_alignment() — unconditional (force=True)
-      9. drain_propagation_queue()
-     10. Recompute diagnostics sub-dimensions
-     11. Return ReviewPassResult
+    Order: implementer, reviewer and (unless `run_adversarial_lens` is False) adversarial lenses; recompute
+    verification_health.feasibility from an unconditional abstraction-fit check; propagate beliefs; regenerate
+    hypotheses; detect contradictions. A reviewer finding that contains the id of a COMPLETE task queues that task
+    for reopening. The pass returns the drained ids and does NOT change task statuses — the caller reopens them
+    (TS sets them PENDING and runs the main loop again).
     """
     from .belief_graph import propagate_beliefs
     from .contradiction import detect_contradictions
-    from .hypothesis import EliminationPolicy, eliminate
+    from .hypothesis import generate_update_hypotheses
+    from .memory import MemoryState
     from .task_graph import check_abstraction_alignment
-    from .world_model import Belief, Observation
 
-    sc_list: list[str] = list(success_criteria or [])
-    if caller_state is not None:
-        sc_list = list(getattr(caller_state, "success_criteria", sc_list) or sc_list)
-
-    # ── Step 1: seed adversarial prior (ephemeral local) ───────────────────────
-    adversarial_prior = seed_adversarial_prior(
-        world_model=world_model,
-        success_criteria=sc_list,
-        failure_history=failure_history,
-        dep_class_gap_annotation=dep_class_gap_annotation,
-        belief_dep_graph=belief_dep_graph,
+    impl_findings = implementer_lens(world_model, success_criteria, semantic_criterion_coverage, is_checkable_criterion)
+    reviewer_findings = reviewer_lens(world_model)
+    adversarial_findings = (
+        adversarial_lens(world_model, success_criteria, failure_diagnostics, belief_dep_graph)
+        if run_adversarial_lens
+        else []
     )
 
-    # ── Step 2: run all three lenses ──────────────────────────────────────────
-    impl_findings = implementer_lens(world_model, task_graph, sc_list)
-    rev_findings = reviewer_lens(world_model, output_contract, task_graph, evidence_store)
-    adv_findings = adversarial_lens(world_model, adversarial_prior, hypothesis_set, task_graph)
+    diagnostics.verification_health.feasibility = check_abstraction_alignment(task_graph, world_model, True)
 
-    # ── Step 3: adversarial_prior goes out of scope here ─────────────────────
-    del adversarial_prior
+    propagate_beliefs(belief_dep_graph, dep_graph_budget, world_model)
+    generate_update_hypotheses(world_model, evidence_store, hypothesis_set, failure_diagnostics, MemoryState())
+    detect_contradictions(world_model, evidence_store, hypothesis_set)
 
-    all_findings: list[ReviewFinding] = impl_findings + rev_findings + adv_findings
-
-    # ── Step 4: integrate HIGH findings into world_model (INV-01) ─────────────
-    high_findings = [f for f in all_findings if f.severity == "HIGH"]
-    for finding in high_findings:
-        # First: add an Observation (the finding itself is an observed review outcome)
-        obs_id = f"review_obs_{finding.id}"
-        obs = Observation(
-            id=obs_id,
-            content=f"[{finding.lens}_lens] {finding.finding_type}: {finding.description}",
-            source="reviewer_pass",
-        )
-        world_model.add_observation(obs)
-
-        # Second: add a corrective Belief derived from the observation (INV-01)
-        corrective_stmt = f"Corrective: {finding.description}"
-        belief_id = f"review_belief_{finding.id}"
-        corrective_belief = Belief(
-            id=belief_id,
-            statement=corrective_stmt,
-            confidence=0.9,
-            derived_from=[obs_id],
-            supporting_evidence=[obs_id],
-        )
-        world_model.add_belief(corrective_belief)
-
-        # Mark affected belief_ids as invalidated in the propagation queue
-        if belief_dep_graph is not None and finding.affected_belief_ids:
-            pq: list[str] = getattr(belief_dep_graph, "propagation_queue", [])
-            for bid in finding.affected_belief_ids:
-                if bid not in pq:
-                    pq.append(bid)
-            belief_dep_graph.propagation_queue = pq
-
-    # ── Step 5: propagate_beliefs ─────────────────────────────────────────────
-    if belief_dep_graph is not None:
-        from .belief_graph import DepGraphBudget
-
-        budget = DepGraphBudget()
-        propagate_beliefs(belief_dep_graph, budget, world_model)
-
-    # ── Step 6: update hypothesis_set + elimination policy ────────────────────
-    if hypothesis_set is not None and evidence_store is not None:
-        policy = EliminationPolicy()
-        eliminate(hypothesis_set, evidence_store, {}, policy)
-
-    # ── Step 7: detect_contradictions ─────────────────────────────────────────
-    _es = evidence_store if evidence_store is not None else _make_empty_evidence_store()
-    # detect_contradictions expects task_graph as dict or None
-    _tg_dict = task_graph.to_dict() if (task_graph is not None and hasattr(task_graph, "to_dict")) else None
-    new_contradictions = detect_contradictions(
-        world_model=world_model,
-        evidence_store=_es,
-        hypothesis_set=hypothesis_set or _make_empty_hypothesis_set(),
-        task_graph=_tg_dict,
-    )
-    for c in new_contradictions:
-        already = any(ec.id == c.id for ec in world_model.contradictions)
-        if not already:
-            world_model.add_contradiction(c)
-
-    # ── Step 8: check_abstraction_alignment (unconditional — INV-P9.2) ────────
-    abstraction_score = check_abstraction_alignment(task_graph, world_model, force=True)
-
-    # ── Step 9: drain_propagation_queue ───────────────────────────────────────
-    reopened_ids = drain_propagation_queue(belief_dep_graph, task_graph)
+    reopened: list[str] = []
+    for finding in reviewer_findings:
+        for task in task_graph.tasks:
+            if task.id in finding and task.status == "COMPLETE" and task.id not in reopened:
+                reopened.append(task.id)
+                propagation_queue.reopened_task_ids.append(task.id)
 
     return ReviewPassResult(
-        findings=all_findings,
-        tasks_reopened=bool(reopened_ids),
-        reopened_task_ids=reopened_ids,
-        abstraction_fit_score=abstraction_score,
-        pending_verdict=_derive_pending_verdict(all_findings),
+        implementer_findings=impl_findings,
+        reviewer_findings=reviewer_findings,
+        adversarial_findings=adversarial_findings,
+        reopened_task_ids=drain_propagation_queue(propagation_queue),
+        pending_verdict=_derive_pending_verdict(impl_findings, reviewer_findings, adversarial_findings),
     )
-
-
-# ── P9.3 — drain_propagation_queue + task re-open ────────────────────────────
-
-
-def drain_propagation_queue(
-    belief_dep_graph: Any,
-    task_graph: Any,
-) -> list[str]:
-    """Drain the belief_dep_graph propagation_queue and reopen affected COMPLETE tasks.
-
-    For each belief_id in the propagation_queue: finds COMPLETE tasks whose
-    completed_evidence list includes that belief_id, transitions them to PENDING,
-    and clears their completed_evidence.  Clears the propagation_queue.
-
-    Returns the list of task_ids that were reopened (may be empty).
-    Only COMPLETE tasks are subject to re-open — FAILED, BLOCKED, ACTIVE, or
-    PENDING tasks are left in their current status.
-    """
-    if belief_dep_graph is None:
-        return []
-
-    pq: list[str] = list(getattr(belief_dep_graph, "propagation_queue", []))
-    if not pq:
-        return []
-
-    # Clear the queue
-    belief_dep_graph.propagation_queue = []
-
-    if task_graph is None:
-        return []
-
-    tasks = getattr(task_graph, "tasks", [])
-    invalidated_beliefs: set[str] = set(pq)
-    reopened: list[str] = []
-
-    for task in tasks:
-        if getattr(task, "status", "") != "COMPLETE":
-            continue
-        evidence_ids: set[str] = set(getattr(task, "completed_evidence", []))
-        if evidence_ids & invalidated_beliefs:
-            # Transition COMPLETE → PENDING (P9 reviewer pass special case — INV-task-graph)
-            task.status = "PENDING"
-            task.completed_evidence = []
-            task_graph.changed = True
-            reopened.append(task.id)
-
-    return reopened
-
-
-# ── Helpers ───────────────────────────────────────────────────────────────────
-
-
-def _make_empty_evidence_store() -> Any:
-    from .evidence import EvidenceStore
-
-    return EvidenceStore()
-
-
-def _make_empty_hypothesis_set() -> Any:
-    from .hypothesis import HypothesisSet
-
-    return HypothesisSet()

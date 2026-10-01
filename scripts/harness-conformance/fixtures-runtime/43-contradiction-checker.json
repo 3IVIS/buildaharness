@@ -1,0 +1,14 @@
+{
+  "criteria": [
+    "a",
+    "b"
+  ],
+  "facts": [
+    "the sky is blue",
+    "the sky is not blue"
+  ],
+  "contradictionChecker": {
+    "description": "sky conflict",
+    "severity": "HIGH"
+  }
+}

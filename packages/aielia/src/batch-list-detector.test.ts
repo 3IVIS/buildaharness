@@ -1,5 +1,17 @@
-import { describe, it, expect } from 'vitest'
+import { describe, it, expect, beforeAll, afterAll } from 'vitest'
 import { detectHomogeneousBatchList } from './batch-list-detector.js'
+
+// This file tests the 'batch-list' lexical family, which is off by default (lexical/lexical-mode.ts), so it
+// switches just that family on.
+let savedLexicalOn: string | undefined
+beforeAll(() => {
+  savedLexicalOn = process.env.ASSISTANT_LEXICAL_ON
+  process.env.ASSISTANT_LEXICAL_ON = 'batch-list'
+})
+afterAll(() => {
+  if (savedLexicalOn === undefined) delete process.env.ASSISTANT_LEXICAL_ON
+  else process.env.ASSISTANT_LEXICAL_ON = savedLexicalOn
+})
 
 describe('detectHomogeneousBatchList', () => {
   it('does not detect an open-ended discovery request', () => {

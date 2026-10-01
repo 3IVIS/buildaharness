@@ -28,7 +28,7 @@ from harness.hypothesis import HypothesisSet
 from harness.loop import run_one_iteration
 from harness.memory import MemoryState
 from harness.recovery import StrategyState
-from harness.reviewer import ReviewerVerdict, ReviewFinding, _derive_pending_verdict
+from harness.reviewer import ReviewerVerdict, _derive_pending_verdict
 from harness.state_store import HarnessRunState
 from harness.task_graph import Task, TaskGraph
 from harness.world_model import Belief, Contradiction, Observation, WorldModel
@@ -47,25 +47,27 @@ def _healthy_diagnostics() -> Diagnostics:
 
 
 def test_derive_pending_verdict_none_when_no_findings():
-    assert _derive_pending_verdict([]) is None
+    assert _derive_pending_verdict([], [], []) is None
 
 
-def test_derive_pending_verdict_none_when_only_low_severity():
-    findings = [ReviewFinding(lens="implementer", finding_type="gap", description="minor", severity="LOW")]
-    assert _derive_pending_verdict(findings) is None
+def test_derive_pending_verdict_generic_findings_are_medium():
+    """A finding that is not a recognised HIGH pattern is MEDIUM (the floor for a pending verdict)."""
+    verdict = _derive_pending_verdict(['Success criterion not covered by any belief: "x"'], [], [])
+    assert verdict == ReviewerVerdict("MEDIUM", "implementer", 'Success criterion not covered by any belief: "x"')
 
 
 def test_derive_pending_verdict_picks_highest_severity():
-    findings = [
-        ReviewFinding(lens="implementer", finding_type="gap", description="low prio", severity="LOW"),
-        ReviewFinding(lens="reviewer", finding_type="gap", description="med prio", severity="MEDIUM"),
-        ReviewFinding(lens="adversarial", finding_type="contradiction", description="high prio", severity="HIGH"),
-    ]
-    verdict = _derive_pending_verdict(findings)
+    verdict = _derive_pending_verdict(
+        ["implementer gap"],
+        ["Unresolved HIGH contradiction: boom"],
+        ['Adversarial challenge: HIGH-reliability belief "b" is contradicted'],
+    )
     assert verdict is not None
     assert verdict.severity == "HIGH"
-    assert verdict.lens == "adversarial"
-    assert verdict.summary == "high prio"
+    assert (
+        verdict.lens == "reviewer"
+    )  # tie between HIGH findings goes to the first (implementer, reviewer, adversarial)
+    assert verdict.summary == "Unresolved HIGH contradiction: boom"
 
 
 def test_reviewer_verdict_roundtrip():
@@ -179,7 +181,7 @@ def _make_state() -> HarnessRunState:
         diagnostics=_healthy_diagnostics(),
         task_graph=TaskGraph(
             tasks=[
-                Task(id="t1", description="primary task", status="ACTIVE", completed_evidence=[], abstraction_level=0)
+                Task(id="t1", description="primary task", status="RUNNING", completed_evidence=[], abstraction_level=0)
             ]
         ),
         hypothesis_set=HypothesisSet(active=[], eliminated=[]),

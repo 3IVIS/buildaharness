@@ -3,8 +3,7 @@ Parallel branch merge — P4.3.
 
 reconcile_parallel_branches() runs at a parallel join point to merge world
 models from independent branches, resolve generation_id conflicts, detect
-contradictions on the merged model, and update the conflict probability cache
-from actual write-domain overlap observed.
+contradictions on the merged model, and decay the conflict probability of the parallel domain pairs.
 
 INV-03: merged generation_id = max(branch generation_ids) — time never retreats.
 INV-05: SYSTEM_BREAKING contradictions enter merged.contradictions[] without
@@ -13,111 +12,104 @@ INV-05: SYSTEM_BREAKING contradictions enter merged.contradictions[] without
 
 from __future__ import annotations
 
+from collections.abc import Callable
+from dataclasses import dataclass
 from typing import Any
 
 from .contradiction import detect_contradictions
 from .control_state import resolve_control_state
-from .task_graph import ConflictProbabilityCache, Task, record_actual_overlap
+from .task_graph import TaskGraph
 from .world_model import Belief, Contradiction, Observation, WorldModel
 
 
-def merge_world_models(branch_models: list[WorldModel]) -> WorldModel:
-    """Merge parallel branch world models at a join point.
+@dataclass
+class ParallelBranch:
+    world_model: WorldModel
+    control_state: Any
+
+
+def merge_world_models(*branch_models: WorldModel) -> WorldModel:
+    """Merge parallel branch world models at a join point (TS mergeWorldModels, applied left to right).
 
     - generation_id: max across all branches (INV-03 — time only advances)
-    - observations: union, deduplicated by ID
-    - beliefs: union, deduplicated by ID; on collision keep higher confidence
-    - contradictions: union without deduplication — the same contradiction
-      appearing in two branches is well-supported evidence
-    - environment_change_log: union, sorted by timestamp ascending
-    - assumptions: union, deduplicated
+    - observations / beliefs / contradictions: union by id, the later branch winning on a collision
+    - assumptions: union, deduplicated (first-seen order)
+    - completeness_flags: merged, the later branch winning
+    Unlike the earlier Python merge, environment_change_log and stale_flags are not carried over (TS does not).
     """
+    if len(branch_models) == 1 and isinstance(branch_models[0], (list, tuple)):
+        branch_models = tuple(branch_models[0])  # accept a single list of models too
+    merged = WorldModel()
     if not branch_models:
-        return WorldModel()
+        return merged
 
-    merged_gen = max(m.generation_id for m in branch_models)
+    merged.generation_id = max(m.generation_id for m in branch_models)
 
-    obs_by_id: dict[str, Observation] = {}
-    for m in branch_models:
-        for obs in m.observations:
-            if obs.id not in obs_by_id:
-                obs_by_id[obs.id] = obs
-
-    belief_by_id: dict[str, Belief] = {}
+    beliefs: dict[str, Belief] = {}
+    observations: dict[str, Observation] = {}
+    contradictions: dict[str, Contradiction] = {}
+    assumptions: list[str] = []
     for m in branch_models:
         for b in m.beliefs:
-            existing = belief_by_id.get(b.id)
-            if existing is None or b.confidence > existing.confidence:
-                belief_by_id[b.id] = b
-
-    all_contradictions: list[Contradiction] = []
-    for m in branch_models:
-        all_contradictions.extend(m.contradictions)
-
-    all_logs: list[dict[str, Any]] = []
-    for m in branch_models:
-        all_logs.extend(m.environment_change_log)
-    all_logs.sort(key=lambda e: e.get("timestamp", ""))
-
-    seen_assumptions: set[str] = set()
-    all_assumptions: list[str] = []
-    for m in branch_models:
+            beliefs[b.id] = b
+        for o in m.observations:
+            observations[o.id] = o
+        for c in m.contradictions:
+            contradictions[c.id] = c
         for a in m.assumptions:
-            if a not in seen_assumptions:
-                seen_assumptions.add(a)
-                all_assumptions.append(a)
+            if a not in assumptions:
+                assumptions.append(a)
+        merged.completeness_flags.update(m.completeness_flags)
 
-    merged = WorldModel(
-        generation_id=merged_gen,
-        observations=list(obs_by_id.values()),
-        beliefs=list(belief_by_id.values()),
-        assumptions=all_assumptions,
-        contradictions=all_contradictions,
-        environment_change_log=all_logs,
-    )
+    merged.beliefs = list(beliefs.values())
+    merged.observations = list(observations.values())
+    merged.contradictions = list(contradictions.values())
+    merged.assumptions = assumptions
     return merged
 
 
+@dataclass
+class ReconcileResult:
+    world_model: WorldModel
+    control_state: Any
+
+
 def reconcile_parallel_branches(
-    branch_models: list[WorldModel],
-    branch_tasks: list[Task],
-    conflict_cache: ConflictProbabilityCache,
+    branches: list[ParallelBranch],
+    task_graph: TaskGraph,
+    diagnostics: Any,
+    failure_diagnostics: Any,
     evidence_store: Any,
     hypothesis_set: Any,
-    diagnostics: Any,
-) -> tuple[WorldModel, Any]:
-    """Reconcile parallel branches at a join point.
+    resolver: Callable[[Any, WorldModel, Any], Any] | None = None,
+    parallel_domain_pairs: list[tuple[str, str]] | None = None,
+) -> ReconcileResult:
+    """Reconcile parallel branches at a join point (TS reconcileParallelBranches).
 
-    Steps:
-    1. Merge world models (max generation_id, union observations/beliefs/contradictions).
-    2. Run detect_contradictions on the merged model to catch optimistic-path conflicts.
-    3. Resolve control state from the merged model and diagnostics.
-    4. Compute actual write-domain overlap between branch tasks.
-    5. Update conflict_cache with empirical overlap observations.
-
-    Returns (merged_world_model, resolved_control_state).
+    Steps: merge the branch world models (max generation_id); run detect_contradictions on the merged model to catch
+    optimistic-path conflicts; resolve control state from it (stamped with the merged generation_id); decay the
+    conflict probability of each given domain pair by x0.9 (only pairs that already have a positive probability).
     """
-    # Step 1
-    merged = merge_world_models(branch_models)
+    if not branches:
+        raise ValueError("reconcile_parallel_branches: no branches provided")
 
-    # Step 2 — never raises (INV-05); SYSTEM_BREAKING → merged.contradictions[]
+    max_gen = max(b.world_model.generation_id for b in branches)
+
+    merged = branches[0].world_model
+    for branch in branches[1:]:
+        merged = merge_world_models(merged, branch.world_model)
+    merged.generation_id = max_gen
+
     detect_contradictions(merged, evidence_store, hypothesis_set)
 
-    # Step 3
-    control_state = resolve_control_state(
-        diagnostics,
-        merged,
-        failure_diagnostics=None,
-        step=merged.generation_id,
-    )
+    if resolver is not None:
+        merged_cs = resolver(diagnostics, merged, failure_diagnostics)
+    else:
+        merged_cs = resolve_control_state(diagnostics, merged, failure_diagnostics, step=merged.generation_id)
+    merged_cs.generation_id = merged.generation_id
 
-    # Steps 4 & 5 — update cache from actual write-domain overlap
-    for i, task_a in enumerate(branch_tasks):
-        for task_b in branch_tasks[i + 1 :]:
-            for da in task_a.parallel_write_domains:
-                for db in task_b.parallel_write_domains:
-                    # Conflict when both branches wrote to the same domain
-                    conflict_observed = da == db
-                    record_actual_overlap(conflict_cache, da, db, conflict_observed)
+    for da, db in parallel_domain_pairs or []:
+        existing = task_graph.get_conflict_probability(da, db)
+        task_graph.set_conflict_probability(da, db, existing * 0.9 if existing > 0 else 0)
 
-    return merged, control_state
+    return ReconcileResult(world_model=merged, control_state=merged_cs)

@@ -5,7 +5,7 @@ import type {
   LLMStructuredResponse,
   ToolDefinition,
 } from '@buildaharness/runtime'
-import { classifyRisk } from './risk-classifier.js'
+import { classifyRiskLexical } from './risk-classifier.js'
 
 /**
  * A deterministic, network-free {@link ILLMClient} for tests and demos — the one publicly
@@ -60,7 +60,7 @@ export interface ScriptedLLMClientScript {
 /**
  * Known auxiliary semantic-escalation system prompts and their safe, inert default answer — see
  * ScriptedLLMClientScript's doc comment. Kept in sync by hand with each check's own system prompt
- * (review-checker.ts, failure-mode-matcher.ts, trust-tagging.ts, grounding-check.ts, task-completion-check.ts, source-reliability.ts, semantic-hypotheses.ts) since there's no shared constant
+ * (review-checker.ts, failure-mode-matcher.ts, trust-tagging.ts, grounding-check.ts, task-completion-check.ts, constraint-check.ts, semantic-compaction.ts, source-reliability.ts, semantic-hypotheses.ts) since there's no shared constant
  * to import without a circular dependency back into this package's own public surface.
  */
 export const SIDE_CALL_MARKERS: Array<[string, string]> = [
@@ -69,6 +69,8 @@ export const SIDE_CALL_MARKERS: Array<[string, string]> = [
   ['You are a security classifier analyzing untrusted external content', '{"flagged":false}'],
   ['You check whether an assistant\'s reply is faithful to the raw results', '{"verdict":"grounded"}'],
   ['You judge whether an assistant actually accomplished a task', '{"done":true}'],
+  ['You condense the earlier part of a conversation', '{"summary":""}'],
+  ['You judge whether an assistant\'s reply violates constraints', '{"violations":[]}'],
   ['You weigh the reliability of the sources an assistant read', '{"assessments":[],"weighed":true}'],
   ['You propose competing explanations for an underdetermined request', '{"hypotheses":[]}'],
   ['You decide which explanations a set of new observations rules out', '{"contradicted":[]}'],
@@ -91,7 +93,7 @@ function isTurnIntentRequest(messages: ChatMessage[]): boolean {
  */
 function deriveTurnIntentJSON(messages: ChatMessage[], override?: Record<string, unknown>): string {
   const userContent = messages.find((m) => m.role === 'user')?.content ?? ''
-  const risk = classifyRisk(userContent)
+  const risk = classifyRiskLexical(userContent)
   const isReminderRequest = risk.reason.includes('reminder')
   const base = {
     riskLevel: risk.riskLevel,

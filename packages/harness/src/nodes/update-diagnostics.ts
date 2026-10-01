@@ -7,6 +7,7 @@ import { normalise, assertNormalised, DimensionType } from '../normalise.js'
 import { EXECUTION_RATIO_MIN_ATTEMPTS } from '../_core-generated.js'
 import { computeSourceEntropy } from './generate-update-hypotheses.js'
 import { getGranularityMarkers } from '../lexical/patterns.js'
+import { harnessLexicalActive } from '../lexical/lexical-off.js'
 
 /**
  * Matches adapter/harness/task_graph.py's estimate_world_model_granularity():
@@ -43,6 +44,9 @@ function estimateWorldModelGranularity(worldModel: WorldModel): number {
  */
 export function checkAbstractionAlignment(taskGraph: TaskGraph, worldModel: WorldModel, force = false): number {
   if (!force && !taskGraph.changed) return 1.0
+  // The granularity estimate is a keyword count; with it off there is nothing to compare against, so
+  // alignment reads neutral (1.0), the same value an unchanged graph gets.
+  if (!harnessLexicalActive('granularity-markers')) return 1.0
 
   const wmGranularity = estimateWorldModelGranularity(worldModel)
   const total = taskGraph.tasks.length

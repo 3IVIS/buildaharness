@@ -125,13 +125,16 @@ def staleness_sweep(
     """Invalidate beliefs via TTL and environment_change_log, then decay dep graph edges.
 
     Returns stale_flag_ratio — the proportion of beliefs flagged stale after the sweep.
-    Stores stale_flags and stale_flag_ratio as transient attributes on world_model.
+    Writes the result into world_model.stale_flags (already-stale beliefs are skipped).
     Calls apply_decay() at the end if belief_dep_graph and dep_graph_budget are provided.
     """
-    stale_flags: dict[str, bool] = getattr(world_model, "stale_flags", {})
+    stale_flags: dict[str, bool] = world_model.stale_flags
     now = datetime.now(UTC).replace(tzinfo=None)
 
     for belief in world_model.beliefs:
+        if stale_flags.get(belief.id):
+            continue  # already stale (TS stalenessSweep skips it)
+
         belief_ts = belief.recorded_at
         if belief_ts.tzinfo is not None:
             belief_ts = belief_ts.replace(tzinfo=None)
@@ -141,11 +144,13 @@ def staleness_sweep(
             stale_flags[belief.id] = True
             continue
 
-        # Environment-change-based invalidation
+        # Environment-change-based invalidation (a change to one of the belief's source paths after it was recorded)
         belief_sources = set(belief.derived_from) | set(belief.supporting_evidence)
         for change in environment_change_log:
-            affected_source = change.get("affected_source", "")
-            if not affected_source or affected_source not in belief_sources:
+            affected = list(change.get("affected_paths") or [])
+            if change.get("affected_source"):  # legacy single-string key
+                affected.append(change["affected_source"])
+            if not any(p in belief_sources for p in affected):
                 continue
             change_ts_raw = change.get("timestamp") or change.get("recorded_at")
             if change_ts_raw is None:
@@ -160,12 +165,9 @@ def staleness_sweep(
                 stale_flags[belief.id] = True
                 break
 
-    world_model.stale_flags = stale_flags  # type: ignore[attr-defined]
-
     belief_count = max(1, len(world_model.beliefs))
     stale_count = sum(1 for v in stale_flags.values() if v)
     ratio = stale_count / belief_count
-    world_model.stale_flag_ratio = ratio  # type: ignore[attr-defined]
 
     # Edge decay — runs on the same schedule but is independent of belief staleness
     if belief_dep_graph is not None and dep_graph_budget is not None:

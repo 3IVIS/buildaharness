@@ -113,44 +113,55 @@ def test_requeue_is_noop_when_nothing_failed():
     assert requeue_failed_leaves(tg) is False
 
 
-# ── REDIRECT_STRATEGY on a one-node stall now re-queues the leaf ──────────────
+# ── a stall rebuilds the graph GLOBALly (TS rollbackAndReplan: `noProgress` -> rebuildTaskGraph) ──────────────
+#
+# The Python loop's stall branch is the analogue of TS's failure path with cannotMakeProgress() true, so it replans
+# GLOBAL: the graph is rebuilt from the success criteria plus a "Verify:" task per belief. That already leaves
+# runnable work on a one-node turn graph, so the LOCAL requeue_failed_leaves() path (unit-tested above, used by
+# rollback_and_replan on a non-stall failure) does not fire here.
 
 
-def test_redirect_requeues_failed_leaf_on_single_node_graph(monkeypatch):
+def _descriptions(tg):
+    return [t.description for t in tg.tasks]
+
+
+def test_redirect_on_a_stall_rebuilds_the_graph_and_switches_strategy(monkeypatch):
     cs = _CallerState(["answer the question"])
     tasks = [Task(id="t1", description="respond", status="FAILED", abstraction_level=0)]
     _r, ss, tg, _wm = _run(_redirect(), tasks=tasks, caller_state=cs, monkeypatch=monkeypatch)
-    assert tg.tasks[0].status == "PENDING"
+    assert _descriptions(tg) == ["answer the question", "Verify: belief 0"]
+    assert all(t.status == "PENDING" for t in tg.tasks)
     assert ss.current_strategy == "REIMPLEMENT"
-    assert any("supervisor:requeue_leaf" in t for t in ss.switch_triggers)
+    assert not any("requeue_leaf" in t for t in ss.switch_triggers)
 
 
-def test_redirect_does_not_requeue_when_a_pending_task_exists(monkeypatch):
+def test_stall_rebuild_replaces_the_whole_graph_even_when_a_task_is_runnable(monkeypatch):
     cs = _CallerState(["answer the question"])
     tasks = [
         Task(id="t1", description="failed", status="FAILED", abstraction_level=0),
         Task(id="t2", description="still runnable", status="PENDING", abstraction_level=0),
     ]
     _r, ss, tg, _wm = _run(_redirect(), tasks=tasks, caller_state=cs, monkeypatch=monkeypatch)
-    assert tg.tasks[0].status == "FAILED"
+    assert _descriptions(tg) == ["answer the question", "Verify: belief 0"]
     assert not any("supervisor:requeue_leaf" in t for t in ss.switch_triggers)
 
 
-def test_flag_off_no_requeue(monkeypatch):
+def test_flag_off_still_replans_globally_without_supervisor_triggers(monkeypatch):
     monkeypatch.delenv("HARNESS_TRAJECTORY_SUPERVISOR", raising=False)
     cs = _CallerState(["answer the question"])
     tasks = [Task(id="t1", description="respond", status="FAILED", abstraction_level=0)]
     _r, ss, tg, _wm = _run(_redirect(), tasks=tasks, caller_state=cs, monkeypatch=None)
-    assert tg.tasks[0].status == "FAILED"
-    assert not any("requeue_leaf" in t for t in ss.switch_triggers)
+    assert _descriptions(tg) == ["answer the question", "Verify: belief 0"]
+    assert not any("supervisor:" in t for t in ss.switch_triggers)
 
 
-def test_continue_directive_does_not_requeue(monkeypatch):
+def test_continue_directive_takes_the_deterministic_ladder(monkeypatch):
     cs = _CallerState(["answer the question"])
     tasks = [Task(id="t1", description="respond", status="FAILED", abstraction_level=0)]
     d = SupervisorDirective(action="CONTINUE", rationale="keep going")
-    _r, _ss, tg, _wm = _run(d, tasks=tasks, caller_state=cs, monkeypatch=monkeypatch)
-    assert tg.tasks[0].status == "FAILED"
+    _r, ss, tg, _wm = _run(d, tasks=tasks, caller_state=cs, monkeypatch=monkeypatch)
+    assert _descriptions(tg) == ["answer the question", "Verify: belief 0"]
+    assert ss.current_strategy == "TRACE_EXEC"
 
 
 # ── boundedness ──────────────────────────────────────────────────────────────

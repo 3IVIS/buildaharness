@@ -107,9 +107,11 @@ function seedAdversarialPrior(
 
   function causalProximity(belief: Belief): number {
     const text = belief.statement.toLowerCase()
-    // Direct match → high proximity
-    for (const criterion of criteriaSet) {
-      if (text.includes(criterion)) return 1.0
+    // Direct match → high proximity (a substring match; HARNESS_LEXICAL criterion-proximity)
+    if (harnessLexicalActive('criterion-proximity')) {
+      for (const criterion of criteriaSet) {
+        if (text.includes(criterion)) return 1.0
+      }
     }
     // Derived from observations that reference success criteria
     if (belief.derived_from.length > 0) return 0.6

@@ -13,6 +13,7 @@ gates handle staleness internally.
 
 from __future__ import annotations
 
+from collections.abc import Callable
 from typing import Any, Literal
 
 from .staleness import StalenessError, assert_generation_fresh, staleness_check
@@ -31,37 +32,49 @@ def _maybe_resolve(
     world_model: Any,
     diagnostics: Any | None,
     failure_diagnostics: Any | None,
+    resolver: Callable[[Any, Any, Any], Any] | None = None,
 ) -> Any:
-    """Re-resolve control_state if stale and diagnostics are available.
+    """Re-resolve a stale control_state IN PLACE (TS _maybeResolve): the caller's object is updated, not replaced.
 
-    Returns a fresh control_state. Raises StalenessError if still stale
-    after resolution, or if diagnostics were not provided.
+    Raises StalenessError when it is stale and no diagnostics were provided, or when it is still stale after one
+    resolution. `resolver(diagnostics, world_model, failure_diagnostics)` defaults to resolve_control_state (TS
+    callers always pass `resolveControlState`).
     """
     from .control_state import resolve_control_state
+    from .failure_modes import FailureDiagnostics
 
     if not staleness_check(control_state, world_model):
         return control_state
 
     if diagnostics is None:
         raise StalenessError(
-            f"control_state.generation_id={control_state.generation_id} is behind "
-            f"world_model.generation_id={world_model.generation_id}. "
-            "Provide diagnostics to allow automatic re-resolution."
+            f"ControlState generation_id ({control_state.generation_id}) is stale relative to "
+            f"WorldModel ({world_model.generation_id})"
         )
 
-    fresh = resolve_control_state(
-        diagnostics,
-        world_model,
-        failure_diagnostics,
-        step=world_model.generation_id,
+    fd = failure_diagnostics if failure_diagnostics is not None else FailureDiagnostics()
+    resolved = (
+        resolver(diagnostics, world_model, fd)
+        if resolver is not None
+        else resolve_control_state(diagnostics, world_model, fd, step=world_model.generation_id)
     )
 
-    if staleness_check(fresh, world_model):
+    control_state.generation_id = resolved.generation_id
+    control_state.permission = resolved.permission
+    control_state.execution_mode = resolved.execution_mode
+    control_state.escalation = resolved.escalation
+    control_state.risk_estimate = resolved.risk_estimate
+    control_state.confidence_estimate = resolved.confidence_estimate
+    control_state.escalation_reason = resolved.escalation_reason
+    control_state.block_mask = list(resolved.block_mask)
+    control_state.notes = list(resolved.notes)
+
+    if staleness_check(control_state, world_model):
         raise StalenessError(
-            "control_state is still stale after one re-resolution — "
-            f"generation_id={fresh.generation_id} vs world_model={world_model.generation_id}"
+            "ControlState still stale after one resolution attempt "
+            f"(generation_id={control_state.generation_id}, worldModel.generation_id={world_model.generation_id})"
         )
-    return fresh
+    return control_state
 
 
 def decomposition_gate(
@@ -71,6 +84,7 @@ def decomposition_gate(
     world_model: Any,
     diagnostics: Any | None = None,
     failure_diagnostics: Any | None = None,
+    resolver: Callable[[Any, Any, Any], Any] | None = None,
 ) -> bool:
     """Gate task decomposition.
 
@@ -78,7 +92,7 @@ def decomposition_gate(
     Returns True when NORMAL or CAUTIOUS.
     Re-resolves control_state once if stale.
     """
-    control_state = _maybe_resolve(control_state, world_model, diagnostics, failure_diagnostics)
+    control_state = _maybe_resolve(control_state, world_model, diagnostics, failure_diagnostics, resolver)
 
     if control_state.permission == "DENY":
         return False
@@ -97,6 +111,7 @@ def action_gate(
     world_model: Any,
     diagnostics: Any | None = None,
     failure_diagnostics: Any | None = None,
+    resolver: Callable[[Any, Any, Any], Any] | None = None,
 ) -> Literal["PASS", "BLOCK", "ESCALATE"]:
     """Gate action execution (sub-step A freshness check).
 
@@ -107,7 +122,7 @@ def action_gate(
 
     Re-resolves control_state once if stale.
     """
-    control_state = _maybe_resolve(control_state, world_model, diagnostics, failure_diagnostics)
+    control_state = _maybe_resolve(control_state, world_model, diagnostics, failure_diagnostics, resolver)
 
     if getattr(control_state, "escalation_reason", None) == "HUMAN_REQUIRED":
         return "ESCALATE"
@@ -133,6 +148,7 @@ def post_exec_gate(
     diagnostics: Any | None = None,
     output_contract: Any | None = None,
     failure_diagnostics: Any | None = None,
+    resolver: Callable[[Any, Any, Any], Any] | None = None,
 ) -> bool:
     """Gate post-execution commit (sub-step B freshness check).
 
@@ -143,7 +159,7 @@ def post_exec_gate(
 
     Re-resolves control_state once if stale.
     """
-    control_state = _maybe_resolve(control_state, world_model, diagnostics, failure_diagnostics)
+    control_state = _maybe_resolve(control_state, world_model, diagnostics, failure_diagnostics, resolver)
 
     if output_contract is not None:
         from .output_contract import contract_shadow_check

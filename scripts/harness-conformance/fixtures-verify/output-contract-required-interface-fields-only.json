@@ -1,6 +1,6 @@
 {
   "id": "output-contract-required-interface-fields-only",
-  "description": "KNOWN DIVERGENCE (mirror of the above). Contract sets required_interface_fields=['id'] with an empty result. Python -> FAIL (missing interface field); TS ignores that field and checks only required_sections (empty) -> PASS. Tracked.",
+  "description": "Contract sets only required_interface_fields=['status'] with an empty result. contractShadowCheck / contract_shadow_check ignore required_interface_fields on both runtimes -> PASS on both (resolved: Python previously FAILed here).",
   "result": {},
   "success_criteria": [],
   "assumptions": [],

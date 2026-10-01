@@ -194,6 +194,21 @@ jobs:
       - name: Harness TS/Python conformance — ask-question
         run: node scripts/harness-conformance/compare-ask-question.mjs
 
+      # Cross-runtime checkpoint resume: a run paused by the TS HarnessRuntime
+      # resumes in the Python one and vice versa (pause at a proposal and at an
+      # iteration end), ending exactly like an uninterrupted run. The wire format
+      # is the TS one; see scripts/harness-conformance/README.md.
+      - name: Harness TS/Python conformance — checkpoint cross-resume
+        run: node scripts/harness-conformance/compare-checkpoint.mjs
+
+      # Differential runtime conformance: declarative scenarios
+      # (fixtures-runtime/) run through the TS HarnessRuntime and the Python
+      # twin; node order, task statuses, strategy/failure/world-model state,
+      # callback log and halts must match. Reviewed differences go in
+      # known-discrepancies-runtime.json (tracked = exit 0, untracked = exit 1).
+      - name: Harness TS/Python conformance — runtime scenarios
+        run: node scripts/harness-conformance/compare-runtime.mjs
+
   runtime-package:
     name: '@buildaharness/runtime — typecheck, test, build'
     runs-on: ubuntu-latest

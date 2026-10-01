@@ -32,6 +32,13 @@ from harness.preference_extractor import PreferenceSignal, make_preference_extra
 from harness.taxonomy_classifier import ClassifierConfig, TaxonomyClassifier, TaxonomyType  # noqa: E402
 from harness.turn_context import ResourceBudget, SessionField, make_turn_initializer  # noqa: E402
 
+
+@pytest.fixture(autouse=True)
+def _lexical_checks_on(monkeypatch):
+    """These tests exercise the harness's lexical checks, which are off by default (harness/lexical_off.py)."""
+    monkeypatch.setenv("HARNESS_LEXICAL_MODE", "enabled")
+
+
 # ── G-1: normalize_blend ──────────────────────────────────────────────────────
 
 

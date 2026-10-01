@@ -10,12 +10,21 @@ P7 additions: update_success_criteria(), escalation_pending, pending_clarificati
 
 from __future__ import annotations
 
+import re
 from dataclasses import dataclass, field
 from datetime import UTC, datetime
 from typing import TYPE_CHECKING, Any
 
+from .lexical_off import harness_lexical_active
+
 if TYPE_CHECKING:
     from .escalation import AskAnswer, AskQuestion
+
+
+def split_ws(text: str) -> list[str]:
+    """JS `text.split(/\\s+/)` semantics (a leading/trailing space yields an empty token), not Python's
+    bare `str.split()`. TS twin: caller-state.ts / check-caller-updates.ts tokenise this way."""
+    return re.split(r"\s+", text)
 
 
 @dataclass
@@ -34,7 +43,7 @@ class CallerState:
         return {
             "current_constraints": list(self.current_constraints),
             "clarification_history": list(self.clarification_history),
-            "last_update": self.last_update.isoformat() if self.last_update else None,
+            "last_update": (self.last_update or datetime.now(UTC)).isoformat(),
             "output_preferences": dict(self.output_preferences),
             "success_criteria": list(self.success_criteria),
             "constraints_changed": self.constraints_changed,
@@ -106,6 +115,14 @@ def inject_clarification(caller_state: CallerState, update: dict[str, Any]) -> N
     if "success_criteria" in update:
         caller_state.success_criteria = list(update["success_criteria"])
 
+    # TS updateConstraints also appends single/extra items (caller-state.ts `add_constraint`,
+    # `add_success_criteria`).
+    if "add_constraint" in update:
+        caller_state.current_constraints = [*caller_state.current_constraints, update["add_constraint"]]
+
+    if "add_success_criteria" in update:
+        caller_state.success_criteria = [*caller_state.success_criteria, *update["add_success_criteria"]]
+
     caller_state.last_update = datetime.now(UTC)
     caller_state.constraints_changed = True
 
@@ -123,12 +140,14 @@ def update_success_criteria(caller_state: CallerState, world_model: Any) -> None
     """
     if not caller_state.success_criteria:
         return
+    if not harness_lexical_active("criterion-scope"):  # "no shared word" is a lexical test
+        return
 
     criteria_tokens: set[str] = set()
     for criterion in caller_state.success_criteria:
-        criteria_tokens.update(criterion.lower().split())
+        criteria_tokens.update(split_ws(criterion.lower()))
 
     for belief in world_model.beliefs:
-        statement_tokens = set(belief.statement.lower().split())
+        statement_tokens = set(split_ws(belief.statement.lower()))
         if not (statement_tokens & criteria_tokens):
             world_model.stale_flags[belief.id] = True

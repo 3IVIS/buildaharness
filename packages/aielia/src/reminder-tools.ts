@@ -1,6 +1,7 @@
 import type { ToolDefinition, ReminderStore } from '@buildaharness/runtime'
 import { requireStringArg } from './file-tools.js'
 import { getFactMarkerPatterns, getRiskPatterns, testAny } from './lexical/patterns.js'
+import { lexicalActive } from './lexical/lexical-mode.js'
 
 const factPatterns = getFactMarkerPatterns()
 // Reuses risk-classifier.ts's own reminderPattern (risk-patterns.json) instead of re-declaring an
@@ -68,8 +69,9 @@ export async function executeReminderTool(
       // reminder. Without this, the whole-message check refused the reminder outright any time
       // the raw message mentioned an unrelated fact anywhere, even though `text` itself wasn't the
       // fact (same bug shape file-tools-mcp-server.mjs's create_reminder had — kept in sync here).
+      // lexicalMode fact-markers: with the family off nothing reads as fact-shaped, so the reminder is created.
       const isFactShaped = (t: string): boolean =>
-        testAny(factPatterns.factMarkers, t) || testAny(factPatterns.healthOrDietaryMarkers, t)
+        lexicalActive('fact-markers') && (testAny(factPatterns.factMarkers, t) || testAny(factPatterns.healthOrDietaryMarkers, t))
       const sourceIsFactOnly = sourceUserMessage !== undefined && !REMINDER_REQUEST_MARKER.test(sourceUserMessage) && isFactShaped(sourceUserMessage)
       if (isFactShaped(text) || sourceIsFactOnly) {
         return `Not created as a reminder — this reads as a fact about the user, not a to-do, and is already captured separately. Just acknowledge it in your reply; no reminder is needed.`

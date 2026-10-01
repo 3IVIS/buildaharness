@@ -36,11 +36,10 @@ from harness.failure_modes import FailureDiagnostics
 from harness.hypothesis import Hypothesis, HypothesisSet
 from harness.loop import run_one_iteration
 from harness.memory import MemoryState, check_max_steps, compress_memory, should_compress
-from harness.parallel_merge import reconcile_parallel_branches
+from harness.parallel_merge import ParallelBranch, reconcile_parallel_branches
 from harness.recovery import StrategyState, switch_strategy
-from harness.reviewer import drain_propagation_queue
 from harness.state_store import HarnessRunState
-from harness.task_graph import ConflictProbabilityCache, Task, TaskGraph
+from harness.task_graph import Task, TaskGraph
 from harness.world_model import Belief, Observation, WorldModel
 
 FRAMEWORKS = ["langgraph", "crewai", "mastra", "maf"]
@@ -91,7 +90,7 @@ def _make_harness_run_state(run_id: str = "") -> HarnessRunState:
                 Task(
                     id="t1",
                     description="primary task",
-                    status="ACTIVE",
+                    status="RUNNING",
                     completed_evidence=[],
                     abstraction_level=0,
                 ),
@@ -278,19 +277,23 @@ def test_e2e_05_parallel_branch_merge(framework: str):
             parallel_write_domains=["domain_b"],
         ),
     ]
-    cache = ConflictProbabilityCache()
+    graph = TaskGraph(tasks=branch_tasks)
     diagnostics = _make_diagnostics()
     evidence_store = EvidenceStore()
-    hypothesis_set = HypothesisSet(active=[], eliminated=[])
+    hypothesis_set = HypothesisSet()
 
-    merged_wm, control_state = reconcile_parallel_branches(
-        branch_models=[wm_a, wm_b],
-        branch_tasks=branch_tasks,
-        conflict_cache=cache,
-        evidence_store=evidence_store,
-        hypothesis_set=hypothesis_set,
-        diagnostics=diagnostics,
+    from harness.control_state import ControlState
+    from harness.failure_modes import FailureDiagnostics
+
+    result = reconcile_parallel_branches(
+        [ParallelBranch(wm_a, ControlState()), ParallelBranch(wm_b, ControlState())],
+        graph,
+        diagnostics,
+        FailureDiagnostics(),
+        evidence_store,
+        hypothesis_set,
     )
+    merged_wm, control_state = result.world_model, result.control_state
 
     assert merged_wm is not None
     assert control_state is not None
@@ -307,28 +310,21 @@ def test_e2e_05_parallel_branch_merge(framework: str):
 
 @pytest.mark.parametrize("framework", FRAMEWORKS)
 def test_e2e_06_context_compression(framework: str):
-    """E2E-06: Small token_budget triggers should_compress; compress_memory populates lists."""
-    wm = WorldModel()
-    # Add enough content to exceed 90% of a tiny token budget
-    long_content = "x" * 200
-    for i in range(5):
-        wm.add_observation(Observation(id=f"obs-{i}", content=long_content, source="test"))
-    # No beliefs derived from obs-2..4 — those will be compressed
-    wm.add_belief(Belief(id="b-0", statement="belief 0", confidence=0.9, derived_from=["obs-0"]))
-    wm.add_belief(Belief(id="b-1", statement="belief 1", confidence=0.8, derived_from=["obs-1"]))
+    """E2E-06: token pressure >= 0.9 triggers compression; compress_memory trims structures / stamps regions."""
+    from harness.memory import PrunedRegion, Structure
 
-    # token_budget=100 forces compression (5×200=1000 >> 0.9×100=90)
-    memory_state = MemoryState(token_budget=100, max_steps=20)
+    memory_state = MemoryState(max_steps=20)
+    memory_state.token_budget.total = 100
+    memory_state.token_budget.used = 95
 
-    assert should_compress(wm, memory_state) is True
+    assert should_compress(memory_state) is True
 
-    compress_memory(wm, memory_state)
+    memory_state.compression_risk.compressed_structures = [Structure(id=f"s{i}") for i in range(12)]
+    memory_state.compression_risk.pruned_regions = [PrunedRegion(id="r")]
+    result = compress_memory(memory_state)
 
-    # At least one of compressed_structures or pruned_regions must be non-empty
-    assert (
-        len(memory_state.compression_risk.compressed_structures) > 0
-        or len(memory_state.compression_risk.pruned_regions) > 0
-    )
+    assert len(result.dropped) == 2
+    assert len(result.pruned) == 1
 
 
 # ══════════════════════════════════════════════════════════════════════════════
@@ -338,37 +334,46 @@ def test_e2e_06_context_compression(framework: str):
 
 @pytest.mark.parametrize("framework", FRAMEWORKS)
 def test_e2e_07_reviewer_reentry(framework: str):
-    """E2E-07: drain_propagation_queue reopens a COMPLETE task whose evidence is invalidated."""
-    _wm = _make_world_model(2)
+    """E2E-07: a reviewer finding naming a COMPLETE task reopens it (the pass reports it; the caller re-queues it)."""
+    from harness.belief_graph import DepGraphBudget
+    from harness.diagnostics import Diagnostics
+    from harness.failure_modes import FailureDiagnostics
+    from harness.reviewer import PropagationQueue, reviewer_pass
+    from harness.world_model import Contradiction
+
+    wm = _make_world_model(2)
+    wm.contradictions.append(
+        Contradiction(
+            id="c1",
+            type="pairwise",
+            severity="HIGH",
+            scope="local",
+            involved_belief_ids=["b-0"],
+            description="the result of t1 no longer holds",
+        )
+    )
     task_graph = TaskGraph(
         tasks=[
-            Task(
-                id="t1",
-                description="completed task",
-                status="COMPLETE",
-                completed_evidence=["b-0"],
-                abstraction_level=0,
-            ),
-            Task(
-                id="t2",
-                description="pending task",
-                status="PENDING",
-                completed_evidence=[],
-                abstraction_level=0,
-            ),
+            Task(id="t1", description="completed task", status="COMPLETE"),
+            Task(id="t2", description="pending task", status="PENDING"),
         ]
     )
 
-    # Seed the propagation queue with b-0, which t1 depends on
-    belief_dep_graph = BeliefDepGraph()
-    belief_dep_graph.propagation_queue = ["b-0"]
+    result = reviewer_pass(
+        wm,
+        [],
+        FailureDiagnostics(),
+        BeliefDepGraph(),
+        DepGraphBudget(),
+        HypothesisSet(),
+        task_graph,
+        Diagnostics(),
+        EvidenceStore(),
+        PropagationQueue(),
+    )
 
-    reopened = drain_propagation_queue(belief_dep_graph, task_graph)
-
-    # t1 should be reopened because b-0 is in its completed_evidence
-    assert "t1" in reopened
-    reopened_task = next(t for t in task_graph.tasks if t.id == "t1")
-    assert reopened_task.status == "PENDING"
+    assert result.reopened_task_ids == ["t1"]
+    assert result.tasks_reopened is True
 
 
 # ══════════════════════════════════════════════════════════════════════════════

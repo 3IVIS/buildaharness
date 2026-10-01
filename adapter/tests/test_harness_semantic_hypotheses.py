@@ -17,11 +17,8 @@ from harness.evidence import Evidence, EvidenceStore
 from harness.hypothesis import (
     Hypothesis,
     HypothesisSet,
-    check_contradicting_evidence,
-    generate_hypotheses,
-    symptom_inference,
 )
-from harness.lexical_off import harness_lexical_active, resolve_harness_lexical_off
+from harness.lexical_off import HARNESS_LEXICAL_CHECKS, harness_lexical_active, resolve_harness_lexical_off
 from harness.semantic_hypotheses import (
     SEMANTIC_SOURCE,
     add_semantic_hypotheses,
@@ -177,7 +174,7 @@ def test_eliminate_contradicted_moves_only_named_semantic_hypotheses():
     removed = eliminate_contradicted(hs, [{"id": "sem_0", "reason": "none deleted"}, {"id": "tmpl"}, {"id": "ghost"}])
     assert [h.id for h in removed] == ["sem_0"]
     assert [h.id for h in hs.active] == ["sem_1", "tmpl"]  # the template seed is never removed by this path
-    assert [(h.id, r.reason) for h, r in hs.eliminated] == [("sem_0", "CONTRADICTING_EVIDENCE")]
+    assert [h.id for h in hs.eliminated] == ["sem_0"]
     assert eliminate_contradicted(hs, None) == [] and eliminate_contradicted(hs, []) == []
 
 
@@ -190,11 +187,18 @@ def test_separating_check_round_trips_and_is_absent_when_empty():
     assert "separating_check" not in plain.to_dict()  # existing payloads are byte-identical
 
 
-# ── HARNESS_LEXICAL_OFF for the hypothesis checks ─────────────────────────────
+# ── the lexical switch (harness/lexical_off.py) for the hypothesis checks ──────────
 
 
 def ev(id_: str, obs: str) -> Evidence:
-    return Evidence(id=id_, obs=obs, reliability="HIGH", source="log", evidence_type="OBSERVATION", freshness=1.0)
+    return Evidence(
+        id=id_,
+        obs=obs,
+        reliability="HIGH",
+        source="log",
+        evidence_type="OBSERVATION",
+        freshness="2026-01-01T00:00:00+00:00",
+    )
 
 
 def _world_with_observations():
@@ -206,60 +210,39 @@ def _world_with_observations():
     return wm, es
 
 
-def test_lexical_off_switch_resolution():
-    assert resolve_harness_lexical_off({}) == frozenset()
-    assert resolve_harness_lexical_off({"HARNESS_LEXICAL_OFF": "all"}) == frozenset(
-        {"hypothesis-clustering", "hypothesis-negation-elimination"}
+@pytest.fixture
+def lexical_env(monkeypatch):
+    for var in ("HARNESS_LEXICAL_MODE", "HARNESS_LEXICAL_ON", "HARNESS_LEXICAL_OFF"):
+        monkeypatch.delenv(var, raising=False)
+    return monkeypatch
+
+
+def test_lexical_switch_resolution():
+    assert resolve_harness_lexical_off({}) == frozenset(HARNESS_LEXICAL_CHECKS)  # default: every check off
+    assert resolve_harness_lexical_off({"HARNESS_LEXICAL_MODE": "enabled"}) == frozenset()
+    assert resolve_harness_lexical_off({"HARNESS_LEXICAL_MODE": "enabled", "HARNESS_LEXICAL_OFF": "all"}) == frozenset(
+        HARNESS_LEXICAL_CHECKS
     )
-    assert resolve_harness_lexical_off({"HARNESS_LEXICAL_OFF": "hypothesis-clustering, nonsense"}) == frozenset(
-        {"hypothesis-clustering"}
-    )
-    assert harness_lexical_active("hypothesis-clustering", {}) is True
-    assert harness_lexical_active("hypothesis-clustering", {"HARNESS_LEXICAL_OFF": "hypothesis-clustering"}) is False
+    assert resolve_harness_lexical_off(
+        {"HARNESS_LEXICAL_MODE": "enabled", "HARNESS_LEXICAL_OFF": "negation-pairs, nonsense"}
+    ) == frozenset({"negation-pairs"})
+    assert harness_lexical_active("negation-pairs", {}) is False
+    assert harness_lexical_active("negation-pairs", {"HARNESS_LEXICAL_ON": "negation-pairs"}) is True
+    assert harness_lexical_active("negation-pairs", {"HARNESS_LEXICAL_ON": "review-negation"}) is False
+    assert harness_lexical_active("negation-pairs", {"HARNESS_LEXICAL_ON": "all"}) is True
+    # OFF wins over ON
     assert (
-        harness_lexical_active("hypothesis-negation-elimination", {"HARNESS_LEXICAL_OFF": "hypothesis-clustering"})
-        is True
+        harness_lexical_active(
+            "negation-pairs", {"HARNESS_LEXICAL_ON": "negation-pairs", "HARNESS_LEXICAL_OFF": "negation-pairs"}
+        )
+        is False
     )
 
 
-def test_default_is_unchanged_clustering_still_produces_hypotheses(monkeypatch):
-    monkeypatch.delenv("HARNESS_LEXICAL_OFF", raising=False)
-    wm, es = _world_with_observations()
-    assert len(symptom_inference(wm, es)) > 0
-    assert len(generate_hypotheses(wm, es)) > 0
-
-
-def test_clustering_off_produces_nothing_from_word_overlap(monkeypatch):
-    monkeypatch.setenv("HARNESS_LEXICAL_OFF", "hypothesis-clustering")
-    wm, es = _world_with_observations()
-    assert symptom_inference(wm, es) == []
-
-
-def test_clustering_off_also_disables_the_jaccard_dedupe(monkeypatch):
-    monkeypatch.delenv("HARNESS_LEXICAL_OFF", raising=False)
-    wm, es = _world_with_observations()
-    stub = {"a": "database connection timed out during export", "b": "database connection timed out during export"}
-    merged_on = generate_hypotheses(wm, es, fml_stub=stub)
-    monkeypatch.setenv("HARNESS_LEXICAL_OFF", "hypothesis-clustering")
-    kept_off = generate_hypotheses(wm, es, fml_stub=stub)
-    assert sum(h.explanation == stub["a"] for h in merged_on) == 1  # near-identical explanations merged
-    assert sum(h.explanation == stub["a"] for h in kept_off) == 2  # dedupe is lexical, so off keeps both
-
-
-def test_negation_elimination_off_never_eliminates_on_word_overlap(monkeypatch):
-    h = Hypothesis("h", "rows arrive", 0.5, ["rows arrive on time"], [], ["symptom_inference"])
-    es = EvidenceStore()
-    es.append(ev("e", "rows did not arrive on time"))
-    monkeypatch.delenv("HARNESS_LEXICAL_OFF", raising=False)
-    assert check_contradicting_evidence(h, es) is True
-    monkeypatch.setenv("HARNESS_LEXICAL_OFF", "hypothesis-negation-elimination")
-    assert check_contradicting_evidence(h, es) is False
-
-
-@pytest.mark.parametrize("value", ["", "hypothesis-clustering", "all"])
-def test_switch_is_read_at_call_time_not_import_time(monkeypatch, value):
-    monkeypatch.setenv("HARNESS_LEXICAL_OFF", value)
-    assert harness_lexical_active("hypothesis-clustering") is (value == "")
+@pytest.mark.parametrize(("value", "active"), [("", False), ("negation-pairs", True), ("all", True)])
+def test_switch_is_read_at_call_time_not_import_time(lexical_env, value, active):
+    lexical_env.setenv("HARNESS_LEXICAL_ON", value)
+    assert harness_lexical_active("negation-pairs") is active
 
 
 # ── the async driver's two steps (what planner_api._run_planner calls) ─────────

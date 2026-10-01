@@ -26,20 +26,43 @@ function totalChars(transcript: ChatMessage[]): number {
  * summary — keeps compaction free instead of costing an extra call every time
  * a long session crosses the threshold.
  */
-export function compactTranscript(transcript: ChatMessage[]): CompactionResult {
+export const SUMMARY_HEADER = '[Earlier conversation summary]'
+
+/** The older/recent split when the transcript is long enough to compact, else null. */
+function splitForCompaction(transcript: ChatMessage[]): { older: ChatMessage[]; recent: ChatMessage[] } | null {
   const overThreshold = transcript.length > MAX_TRANSCRIPT_MESSAGES || totalChars(transcript) > MAX_TRANSCRIPT_CHARS
-  if (!overThreshold || transcript.length <= KEEP_RECENT) {
-    return { transcript, compacted: false }
-  }
+  if (!overThreshold || transcript.length <= KEEP_RECENT) return null
+  return { older: transcript.slice(0, transcript.length - KEEP_RECENT), recent: transcript.slice(transcript.length - KEEP_RECENT) }
+}
 
-  const older = transcript.slice(0, transcript.length - KEEP_RECENT)
-  const recent = transcript.slice(transcript.length - KEEP_RECENT)
-
+function truncatedSummary(older: ChatMessage[]): ChatMessage {
   const summaryLines = older.map(m => `${m.role}: ${m.content.slice(0, SUMMARY_PREVIEW_CHARS)}`)
-  const summaryMessage: ChatMessage = {
-    role: 'assistant',
-    content: `[Earlier conversation summary]\n${summaryLines.join('\n')}`,
-  }
+  return { role: 'assistant', content: `${SUMMARY_HEADER}\n${summaryLines.join('\n')}` }
+}
 
-  return { transcript: [summaryMessage, ...recent], compacted: true }
+export function compactTranscript(transcript: ChatMessage[]): CompactionResult {
+  const split = splitForCompaction(transcript)
+  if (!split) return { transcript, compacted: false }
+  return { transcript: [truncatedSummary(split.older), ...split.recent], compacted: true }
+}
+
+/**
+ * Same thresholds and same messages kept as `compactTranscript`, but the older part is summarized by `summarize`
+ * (semantic-compaction.ts) instead of truncated to 200 characters each. A `summarize` that returns null or throws
+ * falls back to the truncated form, so this can never lose more than `compactTranscript` would have.
+ */
+export async function compactTranscriptSemantic(
+  transcript: ChatMessage[],
+  summarize: (older: ChatMessage[]) => Promise<string | null>,
+): Promise<CompactionResult> {
+  const split = splitForCompaction(transcript)
+  if (!split) return { transcript, compacted: false }
+  let summary: string | null = null
+  try {
+    summary = await summarize(split.older)
+  } catch {
+    /* fall back to the truncated form */
+  }
+  const message: ChatMessage = summary ? { role: 'assistant', content: `${SUMMARY_HEADER}\n${summary}` } : truncatedSummary(split.older)
+  return { transcript: [message, ...split.recent], compacted: true }
 }

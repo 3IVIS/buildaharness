@@ -1,0 +1,13 @@
+{
+  "tasks": [
+    {
+      "id": "h",
+      "risk_level": "HIGH"
+    },
+    {
+      "id": "l",
+      "risk_level": "LOW"
+    }
+  ],
+  "criteria": []
+}

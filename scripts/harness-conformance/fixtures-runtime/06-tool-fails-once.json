@@ -1,0 +1,11 @@
+{
+  "criteria": [
+    "only"
+  ],
+  "tools": {
+    "default": {
+      "kind": "fail",
+      "times": 1
+    }
+  }
+}

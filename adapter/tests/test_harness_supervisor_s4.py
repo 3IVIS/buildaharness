@@ -74,7 +74,7 @@ def _run_stall(
         monkeypatch.setenv("HARNESS_TRAJECTORY_SUPERVISOR", "1")
     wm = wm or _world_model()
     ss = strategy_state or StrategyState(completion_history=list(STALL_HISTORY))
-    tg = TaskGraph(tasks=[Task(id="t1", description="primary", status="ACTIVE", abstraction_level=0)])
+    tg = TaskGraph(tasks=[Task(id="t1", description="primary", status="RUNNING", abstraction_level=0)])
     result = run_one_iteration(
         world_model=wm,
         diagnostics=_diagnostics(),
@@ -107,7 +107,7 @@ def _run_state() -> HarnessRunState:
         run_id=str(uuid.uuid4()),
         world_model=_world_model(),
         diagnostics=_diagnostics(),
-        task_graph=TaskGraph(tasks=[Task(id="t1", description="task", status="ACTIVE", abstraction_level=0)]),
+        task_graph=TaskGraph(tasks=[Task(id="t1", description="task", status="RUNNING", abstraction_level=0)]),
         hypothesis_set=HypothesisSet(active=[], eliminated=[]),
         evidence_store=EvidenceStore(),
         strategy_state=StrategyState(),

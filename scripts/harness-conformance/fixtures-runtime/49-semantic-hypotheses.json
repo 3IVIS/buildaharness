@@ -1,0 +1,48 @@
+{
+  "tasks": [
+    {
+      "id": "t0",
+      "description": "step 0",
+      "depends_on": []
+    },
+    {
+      "id": "t1",
+      "description": "step 1",
+      "depends_on": [
+        "t0"
+      ]
+    },
+    {
+      "id": "t2",
+      "description": "step 2",
+      "depends_on": [
+        "t1"
+      ]
+    }
+  ],
+  "semanticHypotheses": [
+    {
+      "explanation": "reading A",
+      "predicted_observations": [
+        "x"
+      ]
+    },
+    {
+      "explanation": "reading B",
+      "predicted_observations": [
+        "y"
+      ]
+    }
+  ],
+  "hypothesisJudge": {
+    "contradicted": [
+      {
+        "id": "sem_0",
+        "reason": "ruled out"
+      }
+    ]
+  },
+  "criteria": [
+    "only"
+  ]
+}

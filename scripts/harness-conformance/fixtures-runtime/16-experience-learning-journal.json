@@ -1,0 +1,23 @@
+{
+  "tasks": [
+    {
+      "id": "t0",
+      "description": "step 0",
+      "depends_on": []
+    },
+    {
+      "id": "t1",
+      "description": "step 1",
+      "depends_on": [
+        "t0"
+      ]
+    }
+  ],
+  "experienceLearning": true,
+  "tools": {
+    "t1": {
+      "kind": "fail"
+    }
+  },
+  "criteria": []
+}

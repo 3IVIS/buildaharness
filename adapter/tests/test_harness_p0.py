@@ -254,11 +254,18 @@ def test_T07c_add_contradiction_ignores_unknown_belief_ids():
     assert len(wm.contradictions) == 1  # still recorded — Tier 1 scans world_model.contradictions
 
 
-def test_T07d_belief_round_trips_contradicts():
-    """T07d — Belief.to_dict/from_dict preserves contradicts[]."""
-    b = Belief(id="b1", statement="x", confidence=0.8, derived_from=["o1"], contradicts=["b2", "b3"])
-    restored = Belief.from_dict(b.to_dict())
-    assert restored.contradicts == ["b2", "b3"]
+def test_T07d_contradicts_is_derived_not_serialised():
+    """T07d — `contradicts` is not on the TS Belief wire shape; WorldModel.from_dict rebuilds it from contradictions."""
+    wm = WorldModel()
+    for bid in ("b1", "b2"):
+        wm.add_belief(Belief(id=bid, statement=bid, confidence=0.8, derived_from=["o1"]))
+    wm.add_contradiction(
+        Contradiction(id="c1", type="pairwise", severity="LOW", scope="local", involved_belief_ids=["b1", "b2"])
+    )
+    data = wm.to_dict()
+    assert "contradicts" not in data["beliefs"][0]
+    restored = WorldModel.from_dict(data)
+    assert restored.beliefs[0].contradicts == ["b2"] and restored.beliefs[1].contradicts == ["b1"]
 
 
 # ══════════════════════════════════════════════════════════════════════════════
@@ -360,7 +367,7 @@ def test_T16_output_contract_from_dict_populates_fields():
     """T16 — from_dict with required_sections populates the field; others default."""
     oc = OutputContract.from_dict({"required_sections": ["summary"]})
     assert oc.required_sections == ["summary"]
-    assert oc.format_requirements == {}
+    assert oc.format == "text"
     assert oc.required_interface_fields == []
 
 

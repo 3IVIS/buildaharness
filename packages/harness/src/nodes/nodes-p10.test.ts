@@ -1,4 +1,4 @@
-import { describe, it, expect, vi } from 'vitest'
+import { describe, it, expect, vi, beforeAll, afterAll } from 'vitest'
 
 import { WorldModel, BeliefDepGraph } from '../state/world-model.js'
 import { ControlState } from '../state/control-state.js'
@@ -21,6 +21,18 @@ import { rollbackAndReplan, cannotMakeProgress, buildStrategyOrdering, STALL_WIN
 import { makeSurfaceBlocker, awaitClarification, EscalationHalt, handleEscalationResponse } from './escalate.js'
 import { applyConstraintChangePropagation, revalidateTaskGraph } from './check-caller-updates.js'
 import { resolveControlState } from './resolve-control-state.js'
+
+// These tests exercise the harness's lexical checks, which are off by default (lexical/lexical-off.ts),
+// so this file switches them on.
+let savedLexicalMode: string | undefined
+beforeAll(() => {
+  savedLexicalMode = process.env.HARNESS_LEXICAL_MODE
+  process.env.HARNESS_LEXICAL_MODE = 'enabled'
+})
+afterAll(() => {
+  if (savedLexicalMode === undefined) delete process.env.HARNESS_LEXICAL_MODE
+  else process.env.HARNESS_LEXICAL_MODE = savedLexicalMode
+})
 
 // ─── helpers ─────────────────────────────────────────────────────────────────
 
@@ -54,7 +66,7 @@ function makeDiagnostics(): Diagnostics {
 // ─── P10.1 reviewProposedChange ───────────────────────────────────────────────
 
 describe('reviewProposedChange', () => {
-  it('first failure blocks action without evaluating remaining dimensions', () => {
+  it('a change that fails several dimensions is blocked and every failing dimension is reported', () => {
     const wm = makeWorldModel()
     // HIGH-confidence belief whose negation the change matches
     wm.beliefs.push({
@@ -82,9 +94,8 @@ describe('reviewProposedChange', () => {
     const map = new Map<string, number>()
     const result = reviewProposedChange(change, makeTask(), wm, null, hs, null, map)
     expect(result.passed).toBe(false)
-    // short-circuit: only one dimension in failed_dimensions
-    expect(result.failed_dimensions).toHaveLength(1)
-    expect(result.failed_dimensions[0].dimension).toBe('world_model_consistency')
+    // every failing dimension is collected (as the Python twin does), in check order
+    expect(result.failed_dimensions.map((d) => d.dimension)).toEqual(['world_model_consistency', 'hypothesis_compatibility'])
   })
 
   it('world-model consistency check rejects change contradicting any HIGH-reliability belief', () => {

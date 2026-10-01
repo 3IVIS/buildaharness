@@ -11,25 +11,24 @@ Run with: pytest adapter/tests/test_harness_p6.py -v
 
 from __future__ import annotations
 
-from typing import ClassVar
-
 import pytest
 
 from harness.diagnostics import Diagnostics
+from harness.experience_store import InMemoryExperienceStore, UnavailableExperienceStore
 from harness.failure_modes import (
     FailureDiagnostics,
-    FailureEntry,
+    FailureModeEntry,
     FailureModeLibrary,
-    FailurePattern,
+    FailureRecord,
     MatchResult,
-    normalise_confidence,
 )
-from harness.hypothesis import generate_from_failure_library
 from harness.memory import (
+    JournalEntry,
     MemoryState,
     apply_retention_policy,
     check_max_steps,
     compress_memory,
+    should_compress,
 )
 
 # ── Harness imports ───────────────────────────────────────────────────────────
@@ -51,6 +50,13 @@ from harness.replanning import (
 from harness.task_graph import Task, TaskGraph
 from harness.world_model import Belief, Observation, WorldModel
 
+
+@pytest.fixture(autouse=True)
+def _lexical_checks_on(monkeypatch):
+    """These tests exercise the harness's lexical checks, which are off by default (harness/lexical_off.py)."""
+    monkeypatch.setenv("HARNESS_LEXICAL_MODE", "enabled")
+
+
 # ── Helpers ───────────────────────────────────────────────────────────────────
 
 
@@ -63,7 +69,7 @@ def _make_failure_diagnostics(
 ) -> FailureDiagnostics:
     fd = FailureDiagnostics()
     for fc in failure_classes or []:
-        fd.failure_history.append(FailureEntry(failure_class=fc))
+        fd.failure_history.append(FailureRecord(failure_class=fc))
     return fd
 
 
@@ -155,10 +161,9 @@ class TestRecoveryStrategies:
         the fixed order is still available if the caller ignores the suggestion."""
         ss = StrategyState(current_strategy="DIRECT_EDIT")
         match_result = MatchResult(
-            matched=True,
-            pattern_name="TOOL_UNAVAILABLE_CASCADE",
-            raw_confidence=0.8,
-            normalised_confidence=0.8,
+            failure_class="TOOL_UNAVAILABLE_CASCADE",
+            confidence=0.8,
+            matched_pattern="tool-unavailable-cascade",
             strategy_affinity="REIMPLEMENT",
         )
         suggestion = apply_failure_mode_bias(match_result, ss)
@@ -170,33 +175,31 @@ class TestRecoveryStrategies:
         assert suggestion != fixed_next  # suggestion differs from fixed progression
 
     def test_T06_adaptive_strategy_and_fallback(self) -> None:
-        """T06: Softmax returns TRACE_EXEC first after DIRECT_EDIT failures;
-        experience_store.available=False falls back to fixed order."""
+        """T06: recorded weights (keys "<strategy>:<class>", as TS) reorder the ladder by softmax; the next strategy is
+        the one after the current in that ordering. An unavailable store falls back to the fixed order."""
         ss = StrategyState(current_strategy="DIRECT_EDIT")
         failure_class = "tool_error"
 
-        # Mock experience_store with weights favouring TRACE_EXEC
-        class _FakeStore:
-            available: ClassVar[bool] = True
-            strategy_weights: ClassVar[dict[str, dict[str, float]]] = {
-                "tool_error": {
-                    "DIRECT_EDIT": -5.0,
-                    "TRACE_EXEC": 5.0,
-                    "BROADER_SEARCH": 0.0,
-                    "REIMPLEMENT": 0.0,
-                    "MINIMAL_FIX": 0.0,
-                    "ESCALATE": -5.0,
-                }
-            }
+        store = InMemoryExperienceStore()
+        for strategy, weight in {
+            "DIRECT_EDIT": -5.0,
+            "TRACE_EXEC": 5.0,
+            "BROADER_SEARCH": 0.0,
+            "REIMPLEMENT": 0.0,
+            "MINIMAL_FIX": 0.0,
+            "ESCALATE": -5.0,
+        }.items():
+            store.set_strategy_weight(f"{strategy}:{failure_class}", weight)
 
-        result = get_strategy_with_experience(ss, failure_class, _FakeStore())
-        assert result == "TRACE_EXEC"
+        # ordering by descending probability: TRACE_EXEC, then the zero-weight strategies (in ladder order),
+        # then DIRECT_EDIT / ESCALATE — the next strategy is the one after the current in that ordering.
+        ordering = ["TRACE_EXEC", "BROADER_SEARCH", "REIMPLEMENT", "MINIMAL_FIX", "DIRECT_EDIT", "ESCALATE"]
+        for current, expected in zip(ordering, [*ordering[1:], "ESCALATE"], strict=True):
+            state = StrategyState(current_strategy=current)  # type: ignore[arg-type]
+            assert get_strategy_with_experience(state, failure_class, store) == expected
 
         # Unavailable store falls back transparently
-        class _UnavailableStore:
-            available = False
-
-        fallback = get_strategy_with_experience(ss, failure_class, _UnavailableStore())
+        fallback = get_strategy_with_experience(ss, failure_class, UnavailableExperienceStore())
         assert fallback == get_next_strategy(ss)
 
 
@@ -206,78 +209,44 @@ class TestRecoveryStrategies:
 
 
 class TestFailureModeLibrary:
-    def test_T07_normalised_confidence_clamped(self) -> None:
-        """T07: normalise_confidence clamps raw > 1.0 to 1.0; match() returns [0,1]."""
-        assert normalise_confidence(1.5) == 1.0
-        assert normalise_confidence(-0.3) == 0.0
-        assert normalise_confidence(0.7) == pytest.approx(0.7)
-
-        # Library with a pattern whose all conditions are satisfied
+    def test_T07_match_scores_overlap_and_picks_best(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        """T07: match(symptoms) scores each entry by curated-symptom overlap / max(#curated, #observed) and returns
+        the best; a result carries failure_class, confidence in [0,1], the entry id and the strategy affinity."""
+        monkeypatch.setenv("HARNESS_LEXICAL_MODE", "enabled")
         lib = FailureModeLibrary(
             [
-                FailurePattern(
-                    name="ALWAYS",
-                    description="always matches",
-                    required_conditions=["always"],
-                    excluded_conditions=[],
-                    strategy_affinity=None,
-                    hypothesis_template="always fires",
-                )
+                FailureModeEntry("weak", "WEAK", ["alpha", "beta", "gamma", "delta"], "d", "MINIMAL_FIX"),
+                FailureModeEntry("strong", "STRONG", ["circular", "cycle"], "d", "BROADER_SEARCH"),
             ]
         )
-        wm = WorldModel()
-        wm.beliefs = []
-        # Inject context via a belief
-        import uuid
+        result = lib.match(["circular dependency and cycle detected in task graph"])
+        assert result is not None
+        assert result.failure_class == "STRONG"
+        assert result.matched_pattern == "strong"
+        assert result.strategy_affinity == "BROADER_SEARCH"
+        assert result.confidence == pytest.approx(2 / 2)
+        assert 0.0 <= result.confidence <= 1.0
+        assert lib.match(["nothing relevant here"]) is None
 
-        from harness.world_model import Belief
+    def test_T07b_match_is_off_without_the_lexical_switch(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        """T07b: HARNESS_LEXICAL failure-exact-match off (the default) -> only a semantic matcher can classify."""
+        monkeypatch.delenv("HARNESS_LEXICAL_MODE", raising=False)
+        lib = FailureModeLibrary([FailureModeEntry("e", "E", ["circular"], "d")])
+        assert lib.match(["circular dependency"]) is None
 
-        b = Belief(
-            id=str(uuid.uuid4()),
-            statement="this always fires due to the word always being present",
-            confidence=0.9,
-            derived_from=["src1"],
+    def test_T08_class_priors_and_round_trip(self) -> None:
+        """T08: class_priors live on the library and survive FailureDiagnostics to_dict/from_dict."""
+        lib = FailureModeLibrary([FailureModeEntry("e", "E", ["x"], "d", "TRACE_EXEC")], {"E": 0.7})
+        fd = FailureDiagnostics(
+            failure_mode_library=lib,
+            matched_pattern=MatchResult("E", 0.5, "e", "TRACE_EXEC"),
+            failure_history=[FailureRecord(failure_class="E", description="boom")],
         )
-        wm.beliefs = [b]
-
-        result = lib.match(wm, None, None)
-        assert result.matched is True
-        assert 0.0 <= result.normalised_confidence <= 1.0
-
-    def test_T08_generate_from_failure_library_sources(self) -> None:
-        """T08: generate_from_failure_library() returns Hypothesis with
-        generation_sources=["failure_mode_library"] using the matched template."""
-        lib = FailureModeLibrary(
-            [
-                FailurePattern(
-                    name="TEST_PATTERN",
-                    description="test",
-                    required_conditions=["circular", "cycle"],
-                    excluded_conditions=[],
-                    strategy_affinity="BROADER_SEARCH",
-                    hypothesis_template="A circular dependency was detected",
-                )
-            ]
-        )
-
-        wm = WorldModel()
-        import uuid
-
-        from harness.world_model import Belief
-
-        b = Belief(
-            id=str(uuid.uuid4()),
-            statement="circular dependency and cycle detected in task graph",
-            confidence=0.8,
-            derived_from=["obs1"],
-        )
-        wm.beliefs = [b]
-
-        hypotheses = generate_from_failure_library(wm, lib)
-        assert len(hypotheses) == 1
-        h = hypotheses[0]
-        assert "failure_mode_library" in h.generation_sources
-        assert h.explanation == "A circular dependency was detected"
+        restored = FailureDiagnostics.from_dict(fd.to_dict())
+        assert restored.failure_mode_library.class_priors == {"E": 0.7}
+        assert restored.failure_mode_library.entries[0].strategy_affinity == "TRACE_EXEC"
+        assert restored.matched_pattern == fd.matched_pattern
+        assert restored.failure_history[0].failure_class == "E"
 
     def test_T09_block_mask_not_derived_from_match_result(self) -> None:
         """T09: block_mask in resolve_control_state is derived solely from diagnostic
@@ -292,10 +261,9 @@ class TestFailureModeLibrary:
 
         # High-confidence MatchResult
         high_match = MatchResult(
-            matched=True,
-            pattern_name="TEST",
-            raw_confidence=1.0,
-            normalised_confidence=1.0,
+            failure_class="TEST",
+            confidence=1.0,
+            matched_pattern="test",
             strategy_affinity="REIMPLEMENT",
         )
         fd = FailureDiagnostics(matched_pattern=high_match)
@@ -316,10 +284,9 @@ class TestFailureModeLibrary:
 
         # MatchResult fields must not appear in block_mask computation
         match_result_fields = {
-            "matched",
-            "pattern_name",
-            "raw_confidence",
-            "normalised_confidence",
+            "failure_class",
+            "confidence",
+            "matched_pattern",
             "strategy_affinity",
         }
         for entry in cs.block_mask:
@@ -354,7 +321,7 @@ class TestReplanning:
         tg = _make_task_graph(3)
         tg.tasks[0].status = "COMPLETE"
         tg.tasks[1].status = "FAILED"
-        tg.tasks[2].status = "ACTIVE"
+        tg.tasks[2].status = "RUNNING"
 
         wm = WorldModel()
         cs = self._make_caller_state(["criterion A", "criterion B"])
@@ -365,8 +332,8 @@ class TestReplanning:
 
     def test_T11_local_scope_preserves_unrelated_tasks(self) -> None:
         """T11: LOCAL replan only touches current_task dependents; unrelated tasks keep status."""
-        current = Task(id="t_current", description="current", status="ACTIVE")
-        dependent = Task(id="t_dep", description="dep", status="ACTIVE", depends_on=["t_current"])
+        current = Task(id="t_current", description="current", status="RUNNING")
+        dependent = Task(id="t_dep", description="dep", status="RUNNING", depends_on=["t_current"])
         unrelated = Task(id="t_unrelated", description="unrelated", status="COMPLETE")
 
         tg = TaskGraph(tasks=[current, dependent, unrelated])
@@ -381,18 +348,16 @@ class TestReplanning:
         assert unrelated_task is not None and unrelated_task.status == "COMPLETE"
 
     def test_T12_validate_always_called_after_global_replan(self) -> None:
-        """T12: Invalid graph (cycle) from rebuild raises immediately — never returned silently."""
+        """T12: an invalid graph (orphaned dependency) from rebuild raises immediately — never returned silently."""
 
         from harness import replanning as replan_mod
 
         original_rebuild = replan_mod.rebuild_task_graph
 
-        def _cyclic_rebuild(wm: object, cs: object) -> TaskGraph:
-            t_a = Task(id="a", description="a", status="PENDING", depends_on=["b"])
-            t_b = Task(id="b", description="b", status="PENDING", depends_on=["a"])
-            return TaskGraph(tasks=[t_a, t_b])
+        def _orphan_rebuild(wm: object, cs: object) -> TaskGraph:
+            return TaskGraph(tasks=[Task(id="a", description="a", status="PENDING", depends_on=["ghost"])])
 
-        replan_mod.rebuild_task_graph = _cyclic_rebuild  # type: ignore[assignment]
+        replan_mod.rebuild_task_graph = _orphan_rebuild  # type: ignore[assignment]
         try:
             tg = _make_task_graph(1)
             wm = WorldModel()
@@ -411,56 +376,34 @@ class TestReplanning:
 
 
 class TestContextCompression:
-    def _make_world_model_with_beliefs(self, n_beliefs: int) -> WorldModel:
-        import uuid
+    def test_T13_compress_memory_trims_structures_and_stamps_regions(self) -> None:
+        """T13: compress_memory keeps at most 10 compressed structures (dropping the oldest), returns the dropped
+        ones, and stamps every pruned region not in the preserve set — beliefs/observations are never touched."""
+        from harness.memory import PrunedRegion, Structure
 
         wm = WorldModel()
-        for i in range(n_beliefs):
-            b = Belief(
-                id=str(uuid.uuid4()),
-                statement=f"belief {i}",
-                confidence=0.8,
-                derived_from=[f"obs_{i}"],
-            )
-            wm.beliefs.append(b)
-        return wm
-
-    def test_T13_compressed_vs_pruned_mutually_exclusive(self) -> None:
-        """T13: compress_memory separates dropped obs → compressed_structures and
-        truncated beliefs → pruned_regions; the two lists are mutually exclusive."""
-        import uuid
-
-        wm = WorldModel()
-
-        # Observations not referenced by any belief → will be dropped
-        obs_orphan = Observation(id=str(uuid.uuid4()), content="orphan obs", source="test")
-        wm.observations = [obs_orphan]
-
-        # 11 beliefs (> MAX_BELIEFS=10) → beliefs region will be pruned
-        for i in range(11):
-            b = Belief(
-                id=str(uuid.uuid4()),
-                statement=f"belief {i}",
-                confidence=0.8,
-                derived_from=["some_src"],
-            )
-            wm.beliefs.append(b)
-
+        wm.beliefs.append(Belief(id="b", statement="s", confidence=0.8, derived_from=["src"]))
+        wm.observations.append(Observation(id="o", content="c", source="t"))
         ms = MemoryState()
-        dropped, pruned = compress_memory(wm, ms)
+        ms.compression_risk.compressed_structures = [Structure(id=f"s{i}") for i in range(13)]
+        ms.compression_risk.pruned_regions = [PrunedRegion(id="keep"), PrunedRegion(id="drop")]
 
-        assert len(set(dropped) & set(pruned)) == 0, "dropped and pruned lists must be mutually exclusive"
-        assert any("observation:" in d for d in dropped)
-        assert "beliefs" in pruned
+        result = compress_memory(ms, ["keep"])
 
-    def test_T14_completeness_flags_set_false_after_pruning(self) -> None:
-        """T14: completeness_flags["beliefs"] is False after beliefs are added to pruned_regions."""
-        wm = self._make_world_model_with_beliefs(11)
+        assert [s.id for s in result.dropped] == ["s0", "s1", "s2"]
+        assert len(ms.compression_risk.compressed_structures) == 10
+        assert [r.id for r in result.pruned] == ["drop"]
+        assert result.pruned[0].pruned_at != ""
+        assert len(wm.beliefs) == 1 and len(wm.observations) == 1
+
+    def test_T14_pressure_threshold(self) -> None:
+        """T14: should_compress is True once token_budget.used / total >= 0.9 (the caller maintains `used`)."""
         ms = MemoryState()
-        _, pruned = compress_memory(wm, ms)
-
-        assert "beliefs" in pruned
-        assert wm.completeness_flags.get("beliefs") is False
+        ms.token_budget.total = 1000
+        ms.token_budget.used = 899
+        assert should_compress(ms) is False
+        ms.token_budget.used = 900
+        assert should_compress(ms) is True
 
     def test_T15_action_dep_overlap_detects_pruned_regions(self) -> None:
         """T15: action_dep_overlap returns non-empty when action depends on a pruned region."""
@@ -490,48 +433,51 @@ class TestContextCompression:
 
 
 class TestJournalAndBudget:
-    def _make_journal(self, n_passing: int, n_failures: int, max_verbatim: int = 10) -> tuple[list, dict]:
-        journal = []
+    def _make_journal(self, n_passing: int, n_failures: int, max_verbatim: int = 10) -> MemoryState:
+        ms = MemoryState()
         for i in range(n_passing):
-            journal.append({"action_class": "edit", "outcome": "pass", "step": i, "success": True})
+            ms.journal.append(
+                JournalEntry(step=i, action_class="edit", outcome="completed", success=True, verbatim="v")
+            )
         for i in range(n_failures):
-            journal.append({"action_class": "edit", "outcome": "fail", "step": n_passing + i, "success": False})
-        policy = {
-            "retain_failures_permanently": True,
-            "max_passing_verbatim": max_verbatim,
-            "compress_older_passing": True,
-        }
-        return journal, policy
+            ms.journal.append(JournalEntry(step=n_passing + i, action_class="edit", outcome="failed:x", success=False))
+        ms.journal_retention_policy.max_passing_verbatim = max_verbatim
+        return ms
 
     def test_T16_journal_bounded_after_retention(self) -> None:
-        """T16: After 30 passing + 5 failures with max_passing_verbatim=10:
-        5 failures verbatim + 10 passing verbatim + 20 compressed passing summaries."""
-        journal, policy = self._make_journal(n_passing=30, n_failures=5, max_verbatim=10)
-        result = apply_retention_policy(journal, policy)
+        """T16: After 30 passing + 5 failures with max_passing_verbatim=10 the journal is: 5 failures, then 20
+        compressed older passing entries (no verbatim), then the 10 most recent passing entries verbatim."""
+        ms = self._make_journal(n_passing=30, n_failures=5, max_verbatim=10)
+        apply_retention_policy(ms)
+        result = ms.journal
 
-        failures_in_result = [e for e in result if e.get("outcome") == "fail" or e.get("success") is False]
-        verbatim_passing = [
-            e
-            for e in result
-            if e.get("outcome") == "pass" and e.get("success") is True and "action_class" in e and "step" in e
-        ]
-        compressed_passing = [e for e in result if e.get("outcome") == "pass" and e.get("success") is not True]
-
-        assert len(failures_in_result) == 5
-        assert len(verbatim_passing) == 10
-        assert len(compressed_passing) == 20
         assert len(result) == 35
+        assert [e.success for e in result[:5]] == [False] * 5
+        assert all(e.verbatim is None and e.success for e in result[5:25])
+        assert [e.step for e in result[5:25]] == list(range(20))
+        assert all(e.verbatim == "v" for e in result[25:])
+        assert [e.step for e in result[25:]] == list(range(20, 30))
+
+    def test_T16b_failures_dropped_when_not_retained(self) -> None:
+        ms = self._make_journal(n_passing=2, n_failures=3)
+        ms.journal_retention_policy.retain_failures_permanently = False
+        apply_retention_policy(ms)
+        assert all(e.success for e in ms.journal)
 
     def test_T17_check_max_steps_warn_at_80_percent(self) -> None:
-        """T17: At 80% of max_steps, check_max_steps returns 'warn' and
-        diagnostics.verification_health.feasibility is reduced by 0.1."""
+        """T17: from floor(0.8 * max_steps) on, check_max_steps returns 'warn' and caps
+        verification_health.feasibility at BUDGET_WARNING_FLOOR (0.5), as the TS runtime does."""
         ms = MemoryState(max_steps=100)
         diag = Diagnostics()
         diag.verification_health.feasibility = 0.9
 
         result = check_max_steps(80, ms, diag)
         assert result == "warn"
-        assert diag.verification_health.feasibility == pytest.approx(0.8)
+        assert diag.verification_health.feasibility == pytest.approx(0.5)
+
+        diag.verification_health.feasibility = 0.3
+        check_max_steps(85, ms, diag)
+        assert diag.verification_health.feasibility == pytest.approx(0.3)  # min(), never raised
 
     def test_T18_check_max_steps_escalate_at_limit(self) -> None:
         """T18: At max_steps, check_max_steps returns 'escalate'.

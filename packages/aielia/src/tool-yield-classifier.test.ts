@@ -1,6 +1,18 @@
-import { describe, it, expect } from 'vitest'
+import { describe, it, expect, beforeAll, afterAll } from 'vitest'
 import { classifyToolYield } from './tool-yield-classifier.js'
 import { wrapUntrusted } from './trust-tagging.js'
+
+// This file tests the 'tool-yield' lexical family, which is off by default (lexical/lexical-mode.ts), so it
+// switches just that family on.
+let savedLexicalOn: string | undefined
+beforeAll(() => {
+  savedLexicalOn = process.env.ASSISTANT_LEXICAL_ON
+  process.env.ASSISTANT_LEXICAL_ON = 'tool-yield'
+})
+afterAll(() => {
+  if (savedLexicalOn === undefined) delete process.env.ASSISTANT_LEXICAL_ON
+  else process.env.ASSISTANT_LEXICAL_ON = savedLexicalOn
+})
 
 describe('classifyToolYield', () => {
   it('classifies the literal "No results found." web_search executor output as dead_end', () => {

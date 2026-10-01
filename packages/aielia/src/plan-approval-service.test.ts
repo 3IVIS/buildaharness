@@ -1,8 +1,20 @@
-import { describe, it, expect } from 'vitest'
+import { describe, it, expect, beforeAll, afterAll } from 'vitest'
 import type { ChatMessage, ChatOptions, ILLMClient, LLMStructuredResponse, ToolDefinition } from '@buildaharness/runtime'
 import { InMemoryAdapter } from '@buildaharness/runtime'
 import { PersonalAssistant } from './assistant.js'
 import { loadPlanRecord } from './plan-store.js'
+
+// This file tests the 'plan-mode' lexical family, which is off by default (lexical/lexical-mode.ts), so it
+// switches just that family on.
+let savedLexicalOn: string | undefined
+beforeAll(() => {
+  savedLexicalOn = process.env.ASSISTANT_LEXICAL_ON
+  process.env.ASSISTANT_LEXICAL_ON = 'plan-mode'
+})
+afterAll(() => {
+  if (savedLexicalOn === undefined) delete process.env.ASSISTANT_LEXICAL_ON
+  else process.env.ASSISTANT_LEXICAL_ON = savedLexicalOn
+})
 
 const TURN_INTENT_MARKER = ' independent judgments'
 const DRAFTING_MARKER = 'drafting a multi-step plan'

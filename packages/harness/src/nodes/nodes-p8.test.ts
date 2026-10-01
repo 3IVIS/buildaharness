@@ -1,4 +1,4 @@
-import { describe, it, expect } from 'vitest'
+import { describe, it, expect, beforeAll, afterAll } from 'vitest'
 import { WorldModel, BeliefDepGraph, DepGraphBudget } from '../state/world-model.js'
 import { EvidenceStore } from '../state/evidence-store.js'
 import { HypothesisSet } from '../state/hypothesis-set.js'
@@ -13,6 +13,18 @@ import { updateWorldModel, propagateBeliefs } from './update-world-model.js'
 import { detectContradictions, recordExternalContradiction } from './detect-contradictions.js'
 import { generateUpdateHypotheses } from './generate-update-hypotheses.js'
 import { updateDiagnostics, checkAbstractionAlignment } from './update-diagnostics.js'
+
+// These tests exercise the harness's lexical checks, which are off by default (lexical/lexical-off.ts),
+// so this file switches them on.
+let savedLexicalMode: string | undefined
+beforeAll(() => {
+  savedLexicalMode = process.env.HARNESS_LEXICAL_MODE
+  process.env.HARNESS_LEXICAL_MODE = 'enabled'
+})
+afterAll(() => {
+  if (savedLexicalMode === undefined) delete process.env.HARNESS_LEXICAL_MODE
+  else process.env.HARNESS_LEXICAL_MODE = savedLexicalMode
+})
 
 // ─── gather_evidence ───────────────────────────────────────────────────────
 

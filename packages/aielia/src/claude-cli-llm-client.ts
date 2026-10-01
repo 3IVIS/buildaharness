@@ -189,7 +189,7 @@ function invokeClaudeStreaming(claudePath: string, args: string[], onToolStep?: 
  */
 function startToolGateServer(
   onToolProposal?: (tool: string, input: Record<string, unknown>) => Promise<ToolProposalDecision>,
-  onToolResult?: (tool: string, input: Record<string, unknown>, resultText: string) => void | Promise<void>,
+  onToolResult?: (tool: string, input: Record<string, unknown>, resultText: string, ok: boolean, notFound?: boolean) => void | Promise<void>,
   onToolExecute?: (tool: string, input: Record<string, unknown>) => Promise<string | undefined>,
 ): Promise<{ server: Server; port: number }> {
   return new Promise((resolvePromise, reject) => {
@@ -203,7 +203,7 @@ function startToolGateServer(
           buffer = buffer.slice(newlineIndex + 1)
           if (!line.trim()) continue
           void (async (requestLine: string) => {
-            let request: { kind?: unknown; tool?: unknown; input?: unknown; text?: unknown }
+            let request: { kind?: unknown; tool?: unknown; input?: unknown; text?: unknown; ok?: unknown; notFound?: unknown }
             try {
               request = JSON.parse(requestLine)
             } catch {
@@ -234,7 +234,7 @@ function startToolGateServer(
             if (request.kind === 'result') {
               try {
                 if (onToolResult && typeof request.tool === 'string' && typeof request.text === 'string') {
-                  await onToolResult(request.tool, (request.input as Record<string, unknown>) ?? {}, request.text)
+                  await onToolResult(request.tool, (request.input as Record<string, unknown>) ?? {}, request.text, request.ok !== false, request.notFound === true)
                 }
               } catch (err) {
                 console.error('claude-cli tool gate: onToolResult threw — ignoring:', err)
@@ -415,7 +415,8 @@ export class ClaudeCliLLMClient implements ILLMClient {
               ...(this.shellTools ? { ENABLE_SHELL_TOOLS: '1' } : {}),
               ...(this.webTools?.braveApiKey ? { BRAVE_SEARCH_API_KEY: this.webTools.braveApiKey } : {}),
               ...(this.actionTools ? { ENABLE_EMAIL_TOOL: '1' } : {}),
-              ...(lexicalOffEnvValue() ? { ASSISTANT_LEXICAL_OFF: lexicalOffEnvValue() } : {}),
+              // Always passed (even empty): the server reads an unset value as the default, every family off.
+              ASSISTANT_LEXICAL_RESOLVED_OFF: lexicalOffEnvValue(),
             },
           },
         },

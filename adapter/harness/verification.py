@@ -348,7 +348,7 @@ def verify_evidence_sufficiency(
             detail="No evidence store provided",
         )
 
-    entries = getattr(evidence_store, "entries", [])
+    entries = evidence_store.observations
 
     if scope == "global":
         # Global scope: >= 5 items with HIGH or MEDIUM reliability
@@ -417,14 +417,11 @@ def _run_adversarial_pass(
     if hypothesis_set is None:
         return True
 
-    hypotheses = getattr(hypothesis_set, "hypotheses", [])
-    if not hypotheses:
+    active = hypothesis_set.active
+    if not active:
         return True
 
     # Find top hypothesis by confidence
-    active = [h for h in hypotheses if not getattr(h, "eliminated", False)]
-    if not active:
-        return True
 
     top_hypothesis = max(active, key=lambda h: getattr(h, "confidence", 0.0))
     predicted_obs = getattr(top_hypothesis, "predicted_observations", [])

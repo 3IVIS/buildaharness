@@ -1,4 +1,4 @@
-import { describe, it, expect } from 'vitest'
+import { describe, it, expect, beforeAll, afterAll } from 'vitest'
 import { WorldModel } from '../state/world-model.js'
 import { Diagnostics } from '../state/diagnostics.js'
 import { FailureDiagnostics } from '../state/failure-diagnostics.js'
@@ -24,6 +24,18 @@ import { selectTask } from './select-task.js'
 import { reconcileParallelBranches } from './parallel-merge.js'
 import { estimateRisk, type RiskableAction } from './estimate-risk.js'
 import { estimateVOI } from './estimate-voi.js'
+
+// These tests exercise the harness's lexical checks, which are off by default (lexical/lexical-off.ts),
+// so this file switches them on.
+let savedLexicalMode: string | undefined
+beforeAll(() => {
+  savedLexicalMode = process.env.HARNESS_LEXICAL_MODE
+  process.env.HARNESS_LEXICAL_MODE = 'enabled'
+})
+afterAll(() => {
+  if (savedLexicalMode === undefined) delete process.env.HARNESS_LEXICAL_MODE
+  else process.env.HARNESS_LEXICAL_MODE = savedLexicalMode
+})
 
 // ─── helpers ─────────────────────────────────────────────────────────────────
 

@@ -1,0 +1,9 @@
+{
+  "criteria": [
+    "only"
+  ],
+  "semanticTaskCompletion": {
+    "done": false,
+    "reason": "nope"
+  }
+}

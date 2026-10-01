@@ -1,6 +1,7 @@
 import type { ILLMClient, TokenUsage, MemoryAdapter } from '@buildaharness/runtime'
 import { makeQuestionsBatch, validateAskResponse, type AskQuestion, type AskResponse } from '@buildaharness/harness'
 import { testAny, getPlanModeCancelPatterns } from './lexical/patterns.js'
+import { lexicalActive } from './lexical/lexical-mode.js'
 import { draftPlanRevision } from './plan-drafting.js'
 import { loadTemplate } from './plan-templates/index.js'
 import type { PlanRecord, PlanTaskRecord } from './plan-store.js'
@@ -32,6 +33,7 @@ const { cancelVerbs, planningReferenceMarker } = getPlanModeCancelPatterns()
 
 /** Both an explicit cancel-shaped verb AND a reference to planning/drafting must match — same both-markers-required discipline plan-store.ts's matchTaskCancelAttempt uses, so an unrelated "cancel my flight" said mid-draft doesn't spuriously exit plan mode. */
 function isCancelPlanningPhrase(message: string): boolean {
+  if (!lexicalActive('plan-mode')) return false // lexicalMode: see lexical/lexical-mode.ts
   return testAny(cancelVerbs, message) && testAny(planningReferenceMarker, message)
 }
 

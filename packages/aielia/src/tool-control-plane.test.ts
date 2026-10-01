@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest'
 import { ControlState } from '@buildaharness/harness'
-import { createTurnControlPlaneState, recordToolOutcome, toolAvailabilityManifest, moreRestrictiveControlState, controlStateToolPolicyEnabled, controlStateGateEnabled } from './tool-control-plane.js'
+import { createTurnControlPlaneState, recordToolOutcome, toolAvailabilityManifest, moreRestrictiveControlState, controlStateToolPolicyEnabled, controlStateGateEnabled, type TurnControlPlaneState } from './tool-control-plane.js'
 
 describe('toolAvailabilityManifest', () => {
   it('marks every named tool available', () => {
@@ -175,5 +175,41 @@ describe('control_state ablation — AUDIT_CONTROL_STATE_TOOL_POLICY / _GATE (ev
       cs = recordToolOutcome(state, { toolName: 'read_file', ok: false, summary: `read_file failed: attempt ${i}` })
     }
     expect(cs.permission).toBe('DENY')
+  })
+})
+
+describe('negative answers (a missing file) are information, not faults', () => {
+  const negative = (state: TurnControlPlaneState, path: string) =>
+    recordToolOutcome(state, { toolName: 'read_file', ok: true, negative: true, callKey: `read_file:${JSON.stringify({ path })}`, summary: `read_file found nothing: ${path}` })
+
+  it('many DIFFERENT missing paths never close the gate', () => {
+    const state = createTurnControlPlaneState(['read_file'])
+    for (let i = 0; i < 30; i++) negative(state, `guess-${i}.conf`)
+    expect(state.controlState.permission).toBe('ALLOW')
+    expect(state.failureDiagnostics.failure_history).toHaveLength(0)
+  })
+
+  it('the same missing path asked for again and again is a retry: the first two are free, then failures count and the gate closes', () => {
+    const state = createTurnControlPlaneState(['read_file'])
+    negative(state, 'gone.txt')
+    negative(state, 'gone.txt')
+    expect(state.failureDiagnostics.failure_history).toHaveLength(0)
+    negative(state, 'gone.txt')
+    expect(state.failureDiagnostics.failure_history).toHaveLength(1)
+    for (let i = 0; i < 7; i++) negative(state, 'gone.txt')
+    expect(state.failureDiagnostics.failure_history).toHaveLength(8)
+    expect(state.controlState.permission).toBe('DENY')
+  })
+
+  it('a real error still counts every time (unchanged): 8 of them close the gate', () => {
+    const state = createTurnControlPlaneState(['read_file'])
+    for (let i = 0; i < 8; i++) recordToolOutcome(state, { toolName: 'read_file', ok: false, callKey: `read_file:${i}`, summary: 'read_file failed: EACCES' })
+    expect(state.controlState.permission).toBe('DENY')
+  })
+
+  it('a negative answer is recorded as an observation, not a system error, so it does not dent tool reliability', () => {
+    const state = createTurnControlPlaneState(['read_file'])
+    negative(state, 'a.txt')
+    expect(state.evidenceStore.observations.at(-1)?.evidence_type).not.toBe('SYSTEM_ERROR')
   })
 })

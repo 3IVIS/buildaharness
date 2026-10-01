@@ -13,11 +13,8 @@ repeatedly calls run_one_iteration() (the planner driver's `_run_planner`); see 
 the actual gating (only called when the lexical check already found nothing, with a delta guard so
 an unchanged belief/symptom set isn't re-asked every iteration).
 
-Deliberately written against Python's own FailurePattern shape (name/description/
-required_conditions), not TS's FailureModeEntry (id/failure_class/symptoms/description) — the two
-have structurally diverged (see this plan's Decision 8, Finding C) and reconciling them is a
-separate decision; this writes the semantic matcher against whichever shape Python's
-FailureModeLibrary actually uses today.
+Written against FailureModeEntry (id/failure_class/symptoms/pattern_description), the same shape as the TS
+library, and returning the same match shape TS's semanticFailureMatcher hook does.
 """
 
 from __future__ import annotations
@@ -116,21 +113,22 @@ async def semantic_contradiction_check(
 
 async def semantic_failure_match(
     symptoms: list[str],
-    patterns: list[Any],
+    entries: list[Any],
     model: str = "claude-haiku-4-5-20251001",
     temperature: float = 0.0,
 ) -> dict[str, Any] | None:
-    """`patterns` is FailureModeLibrary.patterns (FailurePattern objects). Returns
-    {"pattern_name": str, "confidence": float} on a genuine match, else None (never raises) —
-    including on empty symptoms/patterns, no match found, or any LLM/parse failure.
+    """`entries` is FailureModeLibrary.entries (FailureModeEntry objects). Returns
+    {"failure_class": str, "confidence": float, "matched_pattern": str} — the shape TS's semanticFailureMatcher hook
+    returns, where matched_pattern is the entry id — on a genuine match, else None (never raises), including on
+    empty symptoms/entries, no match found, or any LLM/parse failure.
     """
-    if not symptoms or not patterns:
+    if not symptoms or not entries:
         return None
 
     pattern_payload = [
-        {"name": p.name, "description": p.description, "required_conditions": p.required_conditions} for p in patterns
+        {"name": e.id, "description": e.pattern_description, "required_conditions": list(e.symptoms)} for e in entries
     ]
-    valid_names = {p.name for p in patterns}
+    by_id = {e.id: e for e in entries}
 
     try:
         import litellm as _litellm
@@ -154,8 +152,12 @@ async def semantic_failure_match(
     if parsed.get("matched") is not True:
         return None
     pattern_name = parsed.get("pattern_name")
-    if not isinstance(pattern_name, str) or pattern_name not in valid_names:
+    if not isinstance(pattern_name, str) or pattern_name not in by_id:
         return None
     confidence = parsed.get("confidence")
     confidence = min(1.0, max(0.0, confidence)) if isinstance(confidence, (int, float)) else 0.5
-    return {"pattern_name": pattern_name, "confidence": confidence}
+    return {
+        "failure_class": by_id[pattern_name].failure_class,
+        "confidence": confidence,
+        "matched_pattern": pattern_name,
+    }
