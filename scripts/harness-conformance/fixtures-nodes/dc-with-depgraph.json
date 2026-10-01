@@ -1,0 +1,51 @@
+{
+ "node": "detect_contradictions",
+ "state": {
+  "worldModel": {
+   "beliefs": [
+    {
+     "id": "b1",
+     "statement": "the cache is enabled",
+     "confidence": 0.9,
+     "derived_from": [
+      "o1"
+     ],
+     "recorded_at": "2026-01-01T00:00:00.000Z"
+    },
+    {
+     "id": "b2",
+     "statement": "the cache is not enabled",
+     "confidence": 0.85,
+     "derived_from": [
+      "o1"
+     ],
+     "recorded_at": "2026-01-01T00:00:00.000Z"
+    }
+   ]
+  },
+  "depGraph": {
+   "belief_nodes": [
+    {
+     "belief_id": "b1",
+     "confidence": 0.9
+    },
+    {
+     "belief_id": "b2",
+     "confidence": 0.85
+    }
+   ],
+   "derived_from_edges": [
+    {
+     "from": "b1",
+     "to": "b2",
+     "confidence": 0.8,
+     "verified": true
+    }
+   ],
+   "invalidation_frontier": [],
+   "propagation_queue": [],
+   "unverified_edge_ratio": 0.0,
+   "confidence_decay_rate": 0.05
+  }
+ }
+}

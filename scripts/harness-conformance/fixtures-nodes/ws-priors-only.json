@@ -1,0 +1,12 @@
+{
+ "node": "warm_start",
+ "state": {},
+ "args": {
+  "store": {
+   "priors": {
+    "CIRCULAR_DEPENDENCY": 0.7,
+    "SCOPE_CREEP": 0.1
+   }
+  }
+ }
+}

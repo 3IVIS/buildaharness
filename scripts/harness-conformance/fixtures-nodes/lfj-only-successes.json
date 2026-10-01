@@ -1,0 +1,24 @@
+{
+ "node": "learn_from_journal",
+ "args": {
+  "journal": [
+   {
+    "step": 0,
+    "action_class": "DIRECT_EDIT",
+    "outcome": "completed",
+    "success": true
+   },
+   {
+    "step": 1,
+    "action_class": "TRACE_EXEC",
+    "outcome": "completed",
+    "success": true
+   }
+  ],
+  "store": {
+   "priors": {
+    "X": 0.8
+   }
+  }
+ }
+}

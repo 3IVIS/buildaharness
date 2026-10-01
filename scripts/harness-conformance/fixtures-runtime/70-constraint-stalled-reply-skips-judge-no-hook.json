@@ -1,0 +1,40 @@
+{
+  "tasks": [
+    {
+      "id": "t0",
+      "description": "step 0",
+      "depends_on": []
+    },
+    {
+      "id": "t1",
+      "description": "step 1",
+      "depends_on": [
+        "t0"
+      ]
+    },
+    {
+      "id": "t2",
+      "description": "step 2",
+      "depends_on": [
+        "t1"
+      ]
+    }
+  ],
+  "tools": {
+    "default": {
+      "kind": "fail"
+    }
+  },
+  "criteria": [],
+  "constraints": [
+    "be brief"
+  ],
+  "constraintJudge": {
+    "violated": [
+      {
+        "constraint": "be brief",
+        "reason": "too long"
+      }
+    ]
+  }
+}

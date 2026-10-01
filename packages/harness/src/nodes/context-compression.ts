@@ -94,10 +94,12 @@ function applyJournalRetentionPolicy(memoryState: MemoryState): void {
   }
 
   // Keep only last N passing verbatim; compress older passing to summary records
-  const recentPassing = passingVerbatim.slice(-policy.max_passing_verbatim)
+  // `slice(-0)` is the whole array, so split at an explicit index: max_passing_verbatim = 0 keeps none verbatim.
+  const splitAt = Math.max(0, passingVerbatim.length - policy.max_passing_verbatim)
+  const recentPassing = passingVerbatim.slice(splitAt)
   const compressedOlder: JournalEntry[] = []
-  if (policy.compress_older_passing && passingVerbatim.length > policy.max_passing_verbatim) {
-    const olderPassing = passingVerbatim.slice(0, -policy.max_passing_verbatim)
+  if (policy.compress_older_passing && splitAt > 0) {
+    const olderPassing = passingVerbatim.slice(0, splitAt)
     for (const entry of olderPassing) {
       compressedOlder.push({
         step: entry.step,

@@ -1,0 +1,36 @@
+{
+ "node": "context_compression",
+ "state": {
+  "memoryState": {
+   "token_budget": {
+    "total": 1000,
+    "used": 950
+   },
+   "compression_risk": {
+    "compressed_structures": [],
+    "pruned_regions": [
+     {
+      "id": "r1",
+      "description": "d",
+      "token_count": 3,
+      "pruned_at": "2026-01-01T00:00:00.000Z"
+     },
+     {
+      "id": "r2",
+      "description": "d",
+      "token_count": 3,
+      "pruned_at": "2026-01-01T00:00:00.000Z"
+     },
+     {
+      "id": "worldModel",
+      "description": "d",
+      "token_count": 3,
+      "pruned_at": "2026-01-01T00:00:00.000Z"
+     }
+    ],
+    "dependent_tasks": []
+   },
+   "journal": []
+  }
+ }
+}

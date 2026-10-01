@@ -1,0 +1,66 @@
+{
+ "node": "update_diagnostics",
+ "state": {
+  "worldModel": {
+   "beliefs": [
+    {
+     "id": "b1",
+     "statement": "server is up",
+     "confidence": 0.9,
+     "derived_from": [
+      "o1"
+     ],
+     "recorded_at": "2026-01-01T00:00:00.000Z",
+     "reliability": "HIGH"
+    },
+    {
+     "id": "b2",
+     "statement": "server is not up",
+     "confidence": 0.6,
+     "derived_from": [
+      "o1"
+     ],
+     "recorded_at": "2026-01-01T00:00:00.000Z",
+     "reliability": "LOW"
+    },
+    {
+     "id": "b3",
+     "statement": "cache warm",
+     "confidence": 0.4,
+     "derived_from": [
+      "o1"
+     ],
+     "recorded_at": "2026-01-01T00:00:00.000Z",
+     "reliability": "MEDIUM"
+    },
+    {
+     "id": "b4",
+     "statement": "x",
+     "confidence": 0.7,
+     "derived_from": [
+      "o1"
+     ],
+     "recorded_at": "2026-01-01T00:00:00.000Z"
+    }
+   ],
+   "observations": [
+    {
+     "id": "o1",
+     "content": "a",
+     "source": "tool",
+     "recorded_at": "2026-01-01T00:00:00.000Z"
+    },
+    {
+     "id": "o2",
+     "content": "b",
+     "source": "tool",
+     "recorded_at": "2026-01-01T00:00:00.000Z"
+    }
+   ],
+   "stale_flags": {
+    "b3": true
+   }
+  }
+ },
+ "args": {}
+}
