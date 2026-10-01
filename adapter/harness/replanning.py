@@ -72,6 +72,22 @@ def requeue_failed_leaves(task_graph: TaskGraph) -> bool:
     return changed
 
 
+def requeue_failed_task(task_graph: TaskGraph, task_id: str) -> bool:
+    """Flip ONE failed task (by id) back to PENDING, even one with dependents (TS requeueFailedTask).
+
+    diagnose_and_replan already reset its dependents to PENDING; they cannot run until it does. Used for a confident
+    failure-mode match: the classified failure is this task's, so this task gets the new strategy's attempt.
+    """
+    for t in task_graph.tasks:
+        if t.id == task_id:
+            if t.status != "FAILED":
+                return False
+            t.status = "PENDING"
+            task_graph.changed = True
+            return True
+    return False
+
+
 def requeue_failed_tasks(task_graph: TaskGraph) -> bool:
     """Flip EVERY FAILED task back to PENDING (TS requeueFailedTasks, retry_failed_task).
 
@@ -293,8 +309,22 @@ def rollback_and_replan(
         if retry_failed_task:
             if requeue_failed_tasks(new_graph):
                 new_state.switch_triggers.append(f"retry_failed_task: {current_task.id}")
-        elif (requeue_leaf_on_local or failure_mode_switch) and not any(t.status == "PENDING" for t in new_graph.tasks):
-            if requeue_failed_leaves(new_graph):
+        else:
+            # A confident failure-mode match re-queues the task that failed, on a decomposed turn too (a failed root
+            # has dependents and its siblings are pending, so the old "only when nothing else is pending, only a leaf"
+            # rule never applied) — see rollbackAndReplan in packages/harness.
+            requeued = False
+            if failure_mode_switch and requeue_failed_task(new_graph, current_task.id):
+                requeued = True
+                new_state.switch_triggers.append(
+                    f"failure_mode:requeue_task {failure_mode_switch['failure_class']}"[:200]
+                )
+            if (
+                not requeued
+                and requeue_leaf_on_local
+                and not any(t.status == "PENDING" for t in new_graph.tasks)
+                and requeue_failed_leaves(new_graph)
+            ):
                 new_state.switch_triggers.append(sup_trigger("requeue_leaf"))
 
     return RollbackReplanResult(

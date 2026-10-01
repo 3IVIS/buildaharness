@@ -92,9 +92,20 @@ DEFAULT_FAILURE_MODE_ENTRIES: list[FailureModeEntry] = [
     FailureModeEntry(
         id="tool-unavailable-cascade",
         failure_class="TOOL_UNAVAILABLE_CASCADE",
-        symptoms=["tool unavailable", "service unavailable", "connection refused", "not available", "unreachable"],
+        symptoms=[
+            "tool unavailable",
+            "service unavailable",
+            "connection refused",
+            "not available",
+            "unreachable",
+            "rate limit exceeded",
+            "too many requests",
+            "request timed out",
+        ],
         pattern_description=(
-            "The same tool (or several) keeps failing to respond — retrying the same call is unlikely to help."
+            "The same tool or service (or several) keeps failing to respond — unavailable, overloaded, rate-limited, "
+            "timing out or unreachable — so repeating the identical call is unlikely to help and a different approach "
+            "is needed."
         ),
         strategy_affinity="REIMPLEMENT",
     ),
