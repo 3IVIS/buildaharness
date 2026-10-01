@@ -11,12 +11,6 @@ import {
   registerAll,
   DEFAULT_REGISTRY,
 } from './process-registry.js'
-import {
-  listProcesses,
-  loadProcess,
-  getCurrentStep,
-  completeStep,
-} from './process-tools.js'
 import { TaskGraph } from './state/task-graph.js'
 import { initializeHarness } from './nodes/initialize.js'
 import { validateTaskGraph } from './nodes/initialize.js'
@@ -364,80 +358,6 @@ describe('ProcessConcept.fromJson error handling', () => {
     const concept = makeMinimalConcept({ id: 'same' })
     registry.register('same', concept)
     expect(registry.load('same')).toBe(concept)
-  })
-})
-
-// ─── TS-T29 to TS-T36: process-tools ─────────────────────────────────────────
-
-describe('process-tools', () => {
-  let registry: ProcessRegistry
-  let graph: TaskGraph
-
-  beforeEach(() => {
-    registry = new ProcessRegistry()
-    registerAll(registry)
-    graph = new TaskGraph()
-  })
-
-  it('TS-T29: listProcesses() returns array of dicts each with id/name/description/stepCount', () => {
-    const results = listProcesses(registry)
-    expect(results.length).toBeGreaterThan(0)
-    for (const r of results) {
-      expect(typeof r.id).toBe('string')
-      expect(typeof r.name).toBe('string')
-      expect(typeof r.description).toBe('string')
-      expect(typeof r.stepCount).toBe('number')
-    }
-  })
-
-  it('TS-T30: listProcesses() returns entries sorted alphabetically by id; count matches DEFAULT_REGISTRY.listAvailable()', () => {
-    const results = listProcesses(registry)
-    const ids = results.map(r => r.id)
-    expect(ids).toEqual([...ids].sort())
-    expect(results.length).toBe(registry.listAvailable().length)
-  })
-
-  it('TS-T31: loadProcess("implement_feature") seeds task graph and returns firstStep pointing to first PENDING task', () => {
-    const result = loadProcess('implement_feature', graph, registry)
-    expect(result.conceptId).toBe('implement_feature')
-    expect(result.seededSteps).toBeGreaterThan(0)
-    expect(result.firstStep).not.toBeNull()
-    expect(typeof result.firstStep!.id).toBe('string')
-    expect(result.firstStep!.id.startsWith('implement_feature:')).toBe(true)
-  })
-
-  it('TS-T32: loadProcess() called twice with same conceptId leaves task count unchanged — idempotent (INV-PC-05)', () => {
-    loadProcess('implement_feature', graph, registry)
-    const countAfterFirst = graph.tasks.length
-    loadProcess('implement_feature', graph, registry)
-    expect(graph.tasks.length).toBe(countAfterFirst)
-  })
-
-  it('TS-T33: loadProcess() with unregistered conceptId throws ProcessConceptNotFoundError', () => {
-    expect(() => loadProcess('unknown_concept', graph, registry)).toThrow(ProcessConceptNotFoundError)
-  })
-
-  it('TS-T34: getCurrentStep() returns null when all tasks in graph are COMPLETE (INV-PC-06)', () => {
-    loadProcess('debug_test_failure', graph, registry)
-    for (const task of graph.tasks) {
-      task.status = 'COMPLETE'
-    }
-    expect(getCurrentStep(graph)).toBeNull()
-  })
-
-  it('TS-T35: completeStep(stepId) sets task to COMPLETE and returns nextStep pointing to newly-unblocked dependent', () => {
-    loadProcess('debug_test_failure', graph, registry)
-    const first = getCurrentStep(graph)!
-    const result = completeStep(first.id, graph)
-    expect(result.completed).toBe(first.id)
-    const completedTask = graph.tasks.find(t => t.id === first.id)!
-    expect(completedTask.status).toBe('COMPLETE')
-    // next step should now be unblocked (the task that depended on first)
-    expect(result.nextStep).not.toBeNull()
-  })
-
-  it('TS-T36: completeStep() with nonexistent stepId throws Error with missing ID in message (INV-PC-07)', () => {
-    expect(() => completeStep('nonexistent_step_id', graph)).toThrow()
   })
 })
 

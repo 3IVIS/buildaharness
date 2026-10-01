@@ -22,8 +22,6 @@ export function estimateRisk(
 ): RiskEstimate {
   // Module type provides a base that dominates for extreme values
   if (action.module_type === 'infrastructure') {
-    action.metadata['reduce_edit_size'] = true
-    action.metadata['increase_verification'] = true
     return 'HIGH'
   }
   if (action.module_type === 'test') {
@@ -51,11 +49,6 @@ export function estimateRisk(
     risk = 'MEDIUM'
   } else {
     risk = 'LOW'
-  }
-
-  if (risk === 'HIGH') {
-    action.metadata['reduce_edit_size'] = true
-    action.metadata['increase_verification'] = true
   }
 
   return risk
