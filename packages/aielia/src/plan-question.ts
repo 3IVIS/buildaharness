@@ -32,6 +32,40 @@ export function shouldRoutePlanQuestion(input: { mode: PlanQuestionRouting; plan
 }
 
 /**
+ * `AUDIT_STUCK_PLAN_RESUME` (default ON): a plan stuck on a failed step is resumed only by a message that says to carry it
+ * on (the classifier's `continuesPlan`). Any other message is answered on its own terms — the plan is not handed to the
+ * harness, so the failed step is not silently retried — and the reply ends by asking whether to retry it. `0`/`false`/
+ * `off`/`no`/`disabled` restores the old behaviour (any non-trivial message on a stuck plan retries the step).
+ */
+export function stuckPlanResumeEnabled(env?: Record<string, string | undefined>): boolean {
+  const source = env ?? (typeof process !== 'undefined' ? process.env : {})
+  const raw = String(source.AUDIT_STUCK_PLAN_RESUME ?? '').trim().toLowerCase()
+  return !['0', 'false', 'off', 'no', 'disabled'].includes(raw)
+}
+
+/**
+ * True when the turn should set the stuck plan aside: the plan is stuck, the message is not a question about it (that is
+ * routed separately) and the classifier said explicitly that it does not continue it. A missing `continuesPlan` is not
+ * "no" — it keeps today's behaviour.
+ */
+export function shouldSetAsideStuckPlan(input: { enabled: boolean; plan: PlanRecord | null; isPlanQuestion: boolean | undefined; continuesPlan: boolean | undefined }): boolean {
+  const { enabled, plan, isPlanQuestion, continuesPlan } = input
+  return enabled && plan !== null && isPlanQuestion !== true && continuesPlan === false && isPlanStuck(plan)
+}
+
+/** Prompt addendum for a turn that set a stuck plan aside: answer the message, then ask about the failed step. */
+export function renderStuckPlanNudge(plan: PlanRecord): string {
+  const failed = plan.tasks.filter((t) => t.status === 'FAILED' && !t.cancelled)
+  const lines = failed.map((t) => `- ${t.description}${t.statusNote ? ` — not accepted because: ${t.statusNote}` : ''}`)
+  return (
+    `\n\nThe user has an active plan that is stuck on a failed step:\n${lines.join('\n')}\n` +
+    `Their message is about something else and does not ask to continue the plan, so do NOT run, retry or mention the plan ` +
+    `while answering it. Answer their message fully, then end the reply with one short line asking whether they want you to ` +
+    `retry the stuck step (they can also say skip it or abandon the plan).`
+  )
+}
+
+/**
  * The plan's tasks as the harness should see them for a turn that moves the plan forward. A step that
  * failed is put back to pending so it gets another attempt (left as FAILED it would strand the run on
  * every later turn), and its description carries why the last attempt was rejected so the retry can

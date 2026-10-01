@@ -629,3 +629,18 @@ describe('lastingConstraints', () => {
     expect(await lasting({ statesConstraint: false, lastingConstraints: [1] })).toBeUndefined()
   })
 })
+
+describe('continuesPlan', () => {
+  const run = async (overrides: Record<string, unknown>, hasActivePlan: boolean) =>
+    (await classifyTurnIntent('x', new StructuredOnlyLLMClient(response(overrides)), { hasActivePlan })).continuesPlan
+  it('is the model\'s boolean when a plan is active', async () => {
+    expect(await run({ continuesPlan: true }, true)).toBe(true)
+    expect(await run({ continuesPlan: false }, true)).toBe(false)
+  })
+  it('is undefined when no plan is active, on abandon, or when the model omitted/garbled it', async () => {
+    expect(await run({ continuesPlan: false }, false)).toBeUndefined()
+    expect(await run({ continuesPlan: false, isAbandonRequest: true }, true)).toBeUndefined()
+    expect(await run({}, true)).toBeUndefined()
+    expect(await run({ continuesPlan: 'no' }, true)).toBeUndefined()
+  })
+})

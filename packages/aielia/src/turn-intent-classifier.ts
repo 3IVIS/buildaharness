@@ -75,6 +75,13 @@ export interface TurnIntentClassification {
    */
   isPlanQuestion?: boolean
   /**
+   * Part of the plan judgment: with a plan active, the message tells the assistant to continue it (a go-ahead, "retry",
+   * "run the next step", details for a step that failed) as opposed to being about something else entirely. `undefined`
+   * when no plan is active or the model omitted/garbled it — callers then treat the message as continuing the plan, which
+   * is today's behaviour. Only an explicit `false` lets a stuck plan be set aside (see plan-question.ts).
+   */
+  continuesPlan?: boolean
+  /**
    * The 15th judgment: the message asks why something happened or which of several things is true, and the message
    * itself gives no way to tell the possible explanations apart. Optional and fail-safe false — a classifier failure
    * never claims a request is underdetermined. Only read by the semantic-hypotheses hook (AUDIT_SEMANTIC_HYPOTHESES).
@@ -243,6 +250,7 @@ const TURN_INTENT_SCHEMA = {
     isBulkReminderRequest: { type: 'boolean' },
     isAbandonRequest: { type: 'boolean' },
     isPlanQuestion: { type: 'boolean' },
+    continuesPlan: { type: 'boolean' },
     isUnderdetermined: { type: 'boolean' },
     matchedPlanTemplate: { type: ['string', 'null'], enum: [PLAN_TEMPLATE_NAMES_TOKEN, null] },
     needsMultiStepPlan: { type: 'boolean' },
@@ -370,7 +378,9 @@ const TURN_INTENT_SYSTEM_PROMPT =
   'discusses that plan — where it stands, what a step is, what is left, why something did not finish — ' +
   'and asks for no new work and gives no go-ahead to continue. False for "go ahead", "continue", ' +
   '"run the plan", "do the next step", an edit to the plan, an approval, or anything that asks the ' +
-  'assistant to do work. If told no plan is active, always return false.\n\n' +
+  'assistant to do work. If told no plan is active, always return false. Also give continuesPlan: with a plan active, ' +
+  'true if the message tells the assistant to carry the plan on (a go-ahead, "continue", "retry", "run the next step", ' +
+  'details or a fix for a step that failed); false if it is about something else entirely. Omit it when no plan is active.\n\n' +
   '15. isUnderdetermined: true if the message asks WHY something happened, or WHICH of several things is true, ' +
   'and the facts it gives (if any) are consistent with more than one explanation — a discrepancy, an unexplained ' +
   'result, a symptom with several plausible causes — even when one explanation seems the most likely. Supplied facts ' +
@@ -379,7 +389,7 @@ const TURN_INTENT_SYSTEM_PROMPT =
   'Respond with JSON only, matching this shape exactly: {"riskLevel": "LOW"|"MEDIUM"|"HIGH", ' +
   '"riskReason": string, "isTrivial": boolean, "decomposedTasks": [{"id": string, "description": ' +
   'string, "depends_on": string[], "riskLevel": "LOW"|"MEDIUM"|"HIGH"}], "isReminderRequest": ' +
-  'boolean, "isBulkReminderRequest": boolean, "isAbandonRequest": boolean, "isPlanQuestion": boolean, "isUnderdetermined": boolean, "matchedPlanTemplate": ' +
+  'boolean, "isBulkReminderRequest": boolean, "isAbandonRequest": boolean, "isPlanQuestion": boolean, "continuesPlan": boolean, "isUnderdetermined": boolean, "matchedPlanTemplate": ' +
   'string|null, "needsMultiStepPlan": boolean, "statesDurableFacts": [{"text": string, "durable": ' +
   'boolean, "confidence": "high"|"medium"|"low", "category": "identity"|"health"|"preference"|' +
   '"location"|"occupation"|"relationships"|"project"|"other"}], "needsGrounding": boolean, ' +
@@ -396,6 +406,7 @@ interface RawTurnIntent {
   isBulkReminderRequest?: unknown
   isAbandonRequest?: unknown
   isPlanQuestion?: unknown
+  continuesPlan?: unknown
   isUnderdetermined?: unknown
   matchedPlanTemplate?: unknown
   needsMultiStepPlan?: unknown
@@ -478,6 +489,7 @@ function parseTurnIntent(content: string, context: TurnIntentContext): TurnInten
   const isAbandonRequest = context.hasActivePlan && parsed.isAbandonRequest
   // Tolerant like the other additive signals: absent or malformed is false (an active plan drives the turn, as before).
   const isPlanQuestion = context.hasActivePlan && !isAbandonRequest && parsed.isPlanQuestion === true
+  const continuesPlan = context.hasActivePlan && !isAbandonRequest && typeof parsed.continuesPlan === 'boolean' ? parsed.continuesPlan : undefined
   // Tolerant like the other additive signals: absent or malformed is false.
   const isUnderdetermined = parsed.isUnderdetermined === true
   const matchedPlanTemplate =
@@ -519,6 +531,7 @@ function parseTurnIntent(content: string, context: TurnIntentContext): TurnInten
     isBulkReminderRequest,
     isAbandonRequest,
     isPlanQuestion,
+    ...(continuesPlan !== undefined ? { continuesPlan } : {}),
     isUnderdetermined,
     matchedPlanTemplate,
     needsMultiStepPlan,
