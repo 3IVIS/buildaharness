@@ -286,10 +286,12 @@ class HarnessRunOptions:
     experience_learning: bool = False
     retry_failed_task: bool = False  # re-queue the failed leaf after the ladder switches strategy (TS retryFailedTask)
     is_checkable_criterion: Callable[[str], bool] | None = None
-    # (criterion, beliefs) -> covered?  Asked only for a criterion the substring check did not cover (TS semanticCriterionCoverage).
+    # (criterion, beliefs) -> covered?  Asked only for a criterion the substring check did not cover
+    # (TS semanticCriterionCoverage).
     semantic_criterion_coverage: Callable[[str, list[Any]], bool] | None = None
-    # Opt-in: feeds memory_state.token_budget from real usage; `used` is read once per iteration just before context_compression
-    # (TS tokenBudget {total, used()}). Absent => token_budget.used stays 0 and the pressure branch never runs.
+    # Opt-in: feeds memory_state.token_budget from real usage; `used` is read once per iteration just before
+    # context_compression (TS tokenBudget {total, used()}). Absent => token_budget.used stays 0 and the pressure
+    # branch never runs.
     token_budget: dict[str, Any] | None = None
     ask_mode: str | None = None  # "enabled" turns the structured ask-question shape on (TS askMode)
     # observability callbacks (a raising handler never breaks the run)
