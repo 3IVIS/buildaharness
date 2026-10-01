@@ -70,9 +70,9 @@ const SYSTEM_PROMPT =
   'nothing concrete and specific follows from this particular goal. The input may also carry the ' +
   'bigger picture: `earlierConversation` (what was discussed before), `stepsTaken` (files read or ' +
   'searches made) and `goalGraph` (every goal the session tracks, with task statuses; the entry ' +
-  'marked `focus` is the one just finished). Use it: prefer a next step that follows from ' +
+  'marked `focus` is the one just finished; a goal\'s `openSuggestions` are next steps proposed for it when it finished, which the earlier conversation may or may not show as done). Use it: prefer a next step that follows from ' +
   'something raised earlier or from a goal that is still open, and do not propose work that an ' +
-  'earlier turn or a finished goal already covers. For each suggestion, judge ' +
+  'earlier turn or a finished goal already covers; when the user has moved on to something unrelated, an earlier goal\'s still-relevant `openSuggestions` are a good thing to offer going back to. For each suggestion, judge ' +
   '`confidence` against an observable criterion, not a vague guess: `high` if the next step was ' +
   'explicitly mentioned or clearly implied as follow-up work by the user or the goal\'s own success ' +
   'criteria/rationale (e.g. tests were named as pending, a stated multi-part request\'s remaining ' +

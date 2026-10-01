@@ -45,6 +45,23 @@ describe('summarizeGoalGraph', () => {
     updatedAt: now,
   } as GoalGraphRecord
 
+  it('carries a finished goal\'s persisted suggestions as openSuggestions, but not for the focus goal and not when there are none', () => {
+    const sg = (description: string, confidence: 'high' | 'medium' = 'high') => ({ description, rationale: 'r', confidence }) as never
+    const withSuggestions: GoalGraphRecord = {
+      threads: [
+        thread({ id: 'a', status: 'DONE', successCriteria: 'release status', suggestions: [sg('chase the sign-off'), sg('run the dry-run', 'medium'), sg('fix flaky test'), sg('a fourth one')] }),
+        thread({ id: 'b', status: 'DONE', successCriteria: 'focus goal', suggestions: [sg('would duplicate the focus')] }),
+        thread({ id: 'c', status: 'DONE', successCriteria: 'no suggestions' }),
+      ],
+      activeThreadId: 'b',
+      updatedAt: now,
+    } as GoalGraphRecord
+    const out = summarizeGoalGraph(withSuggestions, 'b')
+    expect(out.find((g) => g.goal === 'release status')?.openSuggestions).toEqual(['chase the sign-off', 'run the dry-run', 'fix flaky test'])
+    expect(out.find((g) => g.goal === 'focus goal')).not.toHaveProperty('openSuggestions')
+    expect(out.find((g) => g.goal === 'no suggestions')).not.toHaveProperty('openSuggestions')
+  })
+
   it('leaves out abandoned goals and orders focus, then unfinished, then done', () => {
     expect(summarizeGoalGraph(record, 'a').map((g) => g.goal)).toEqual(['finished goal', 'current goal', 'open goal'])
     expect(summarizeGoalGraph(record, 'd').map((g) => g.goal)).toEqual(['current goal', 'open goal', 'finished goal'])
