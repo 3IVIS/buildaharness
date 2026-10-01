@@ -624,6 +624,11 @@ export class HarnessBridge {
                 autoAdvanceBudget = autoAdvanceBudget.consume({ calls: resolvedThisCheck })
                 if (autoAdvanceBudget.isExhausted()) pause = true
               }
+              // A pause is only worth keeping when something is left to run. When the task that just resolved was the
+              // plan's last (the ceiling is hit exactly on the final step), pausing would leave a finished run's checkpoint
+              // behind, and the NEXT turn — whatever the user said — would resume it and answer with that run's stale result
+              // instead of the new message.
+              if (pause && !cp.runState.taskGraph.tasks.some((t) => t.status === 'PENDING' || t.status === 'RUNNING')) pause = false
               return pause
             }
           : undefined,

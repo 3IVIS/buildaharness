@@ -2461,6 +2461,47 @@ describe('PersonalAssistant structured planning', () => {
     expect(result.planStatus?.completionPct).toBeCloseTo((10 / 12) * 100, 1)
   })
 
+  describe('a plan that resolves exactly PLAN_AUTO_ADVANCE_TASK_CEILING tasks', () => {
+    // Found by a real-model conversation (eval/layers/reviewer_adversarial_lens, row 5): the run paused at the ceiling even though
+    // the last task was the plan's last, the checkpoint was kept, and the NEXT turn resumed it whatever the user said — answering
+    // "Where does the plan stand?" with the last step's output and no model call.
+    async function finishTenStepPlan() {
+      const memory = new InMemoryAdapter()
+      const checkpointStore = new InMemoryAdapter({ scope: 'thread', namespace: 'test-checkpoints' })
+      const tasks = Array.from({ length: 10 }, (_, i) => ({
+        id: `t${i + 1}`,
+        description: `Step ${i + 1}`,
+        depends_on: i === 0 ? [] : [`t${i}`],
+        riskLevel: 'LOW' as const,
+      }))
+      const plan = createPlanRecord({ templateName: 'project_planning', successCriteria: 'All 10 steps are done.', tasks })
+      await savePlan(memory, 'exact-session', plan)
+      const responses = [
+        ...Array.from({ length: 10 }, (_, i) => ({ content: `step ${i + 1} output` })),
+        { content: 'The plan is complete: all ten steps are done.' },
+      ]
+      const llm = scriptedResponses(responses)
+      const assistant = new PersonalAssistant({ llmClient: llm, memory, checkpointStore, planMode: 'gated' })
+      const first = await assistant.turn('Give me an update on the plan.', { sessionId: 'exact-session' })
+      return { assistant, checkpointStore, llm, first }
+    }
+
+    it('finishes without leaving a paused run behind (nothing is left to resume)', async () => {
+      const { checkpointStore, first } = await finishTenStepPlan()
+      expect(first.planStatus?.completionPct).toBe(100)
+      expect(await loadHarnessCheckpoint(checkpointStore, 'turn:exact-session')).toBeUndefined()
+    })
+
+    it('treats the next message as a new turn, not a resume of the finished plan run', async () => {
+      const { assistant, checkpointStore } = await finishTenStepPlan()
+      const second = await assistant.turn('Where does the plan stand against its goal?', { sessionId: 'exact-session' })
+      expect(second.status).toBe('ok')
+      // A resumed run carries the finished run's step count (10); a fresh one starts again from 1.
+      expect(second.stepsUsed).toBeLessThan(10)
+      expect(await loadHarnessCheckpoint(checkpointStore, 'turn:exact-session')).toBeUndefined()
+    })
+  })
+
   it('with AUDIT_SEMANTIC_TASK_COMPLETION on, an approved plan task whose output the check judges not done is not counted complete', async () => {
     const prev = process.env.AUDIT_SEMANTIC_TASK_COMPLETION
     process.env.AUDIT_SEMANTIC_TASK_COMPLETION = '1'
