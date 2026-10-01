@@ -23,6 +23,12 @@ export interface RollbackReplanResult {
    * something to actually act on.
    */
   failureModeSwitch?: { failure_class: string; strategy: StrategyType }
+  /**
+   * Set only when the experience-learning feed (HarnessRunOptions.experienceLearning) re-ranked the ladder for this failure
+   * class and that ranking picked the next strategy (no supervisor redirect, no failure-mode bias). Like failureModeSwitch it is
+   * bookkeeping unless the host surfaces it to the proposer — nothing in this harness reads a task's chosen strategy.
+   */
+  learnedSwitch?: { failure_class: string; strategy: StrategyType }
 }
 
 export const STALL_WINDOW = 5
@@ -119,6 +125,20 @@ export function buildStrategyOrdering(
   const indexed = DEFAULT_STRATEGY_ORDER.map((s, i) => ({ s, p: probs[i] }))
   indexed.sort((a, b) => b.p - a.p)
   return indexed.map(x => x.s)
+}
+
+const sameOrder = (a: readonly string[], b: readonly string[]): boolean => a.length === b.length && a.every((v, i) => v === b[i])
+
+/**
+ * The next strategy from a LEARNED ranking. `getNextStrategy` takes the entry after the current strategy, which is right for the
+ * fixed default order but, for a ranking, skips the top choice whenever the current strategy sits above it (current DIRECT_EDIT
+ * with [BROADER_SEARCH, TRACE_EXEC, DIRECT_EDIT, …] would land on the fourth entry). Here the nth switch takes the nth-ranked
+ * strategy, stepping past the one already in effect, so the learned winner is tried first and later switches walk down the ranking.
+ */
+export function pickLearnedStrategy(ordering: StrategyType[], current: StrategyType, switchCount: number): StrategyType {
+  const i = Math.min(switchCount, ordering.length - 1)
+  const candidate = ordering[i]
+  return candidate === current ? ordering[Math.min(i + 1, ordering.length - 1)] : candidate
 }
 
 function getNextStrategy(current: StrategyType, ordering: StrategyType[]): StrategyType {
@@ -219,6 +239,7 @@ export function rollbackAndReplan(
   rollbackFn?: () => void,
   supervisorDirective?: SupervisorDirective | null,
   requeueLeafOnLocal = false,
+  learnedLadder = false,
 ): RollbackReplanResult {
   // Rollback
   rollbackFn?.()
@@ -274,6 +295,7 @@ export function rollbackAndReplan(
 
   let newStrategyState: StrategyState
   let failureModeSwitch: RollbackReplanResult['failureModeSwitch']
+  let learnedSwitch: RollbackReplanResult['learnedSwitch']
   if (isReframe) {
     // REFRAME does not advance the strategy ladder (parity with loop.py's S1 behaviour).
     newStrategyState = new StrategyState({
@@ -283,7 +305,14 @@ export function rollbackAndReplan(
       risk_state_history: [...strategyState.risk_state_history],
     })
   } else {
-    const nextStrategy = redirectHint ?? failureModeHint ?? getNextStrategy(strategyState.current_strategy, ordering)
+    const learnedRanking = learnedLadder && !redirectHint && !failureModeHint && !sameOrder(ordering, DEFAULT_STRATEGY_ORDER)
+    const nextStrategy =
+      redirectHint ??
+      failureModeHint ??
+      (learnedRanking
+        ? pickLearnedStrategy(ordering, strategyState.current_strategy, strategyState.switch_count)
+        : getNextStrategy(strategyState.current_strategy, ordering))
+    learnedSwitch = learnedRanking ? { failure_class: failureClass, strategy: nextStrategy } : undefined
     failureModeSwitch =
       !redirectHint && failureModeHint && failureDiagnostics.matched_pattern
         ? { failure_class: failureDiagnostics.matched_pattern.failure_class, strategy: failureModeHint }
@@ -351,5 +380,6 @@ export function rollbackAndReplan(
     newTaskGraph,
     replanScope,
     failureModeSwitch,
+    learnedSwitch,
   }
 }

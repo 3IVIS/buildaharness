@@ -156,6 +156,8 @@ export interface HarnessRunParams {
   onReviewerRevision?: (event: { taskId: string; note: string }) => void
   /** A confident failure-mode match picked the recovery strategy — advisory (see HarnessRunOptions.onFailureModeSwitch). The caller decides how to surface it. */
   onFailureModeSwitch?: (event: { taskId: string; failure_class: string; strategy: string }) => void
+  /** With AUDIT_EXPERIENCE_LEARNING on, a ranking learned from earlier runs picked the recovery strategy — advisory (see HarnessRunOptions.onLearnedStrategySwitch). */
+  onLearnedStrategySwitch?: (event: { taskId: string; failure_class: string; strategy: string }) => void
   /**
    * Trajectory Supervisor GATHER_EVIDENCE host (S5 of
    * the internal plan) — AgentLoop.runSupervisorInvestigation bound
@@ -270,7 +272,7 @@ export class HarnessBridge {
   }
 
   async run(params: HarnessRunParams): Promise<HarnessOutcome> {
-    const { sessionId, userMessage, facts, currentTurnFacts = [], draftReply, classification, initialTasks, activePlan, sources, onProgress, onUsage, oneLoopProposer, runInvestigation, askModeEnabled = false, updateChannel, onReviewConflict, onFailureModeSwitch, onSemanticHypothesis, precomputedHypotheses, onReviewerRevision } = params
+    const { sessionId, userMessage, facts, currentTurnFacts = [], draftReply, classification, initialTasks, activePlan, sources, onProgress, onUsage, oneLoopProposer, runInvestigation, askModeEnabled = false, updateChannel, onReviewConflict, onFailureModeSwitch, onLearnedStrategySwitch, onSemanticHypothesis, precomputedHypotheses, onReviewerRevision } = params
     const runtime = new HarnessRuntime()
     // One harness run per (session, turn) — a run_id a resumed run can be found under if this
     // turn's process died mid-run before reaching the `finally` cleanup below.
@@ -516,6 +518,7 @@ export class HarnessBridge {
         changeReviewFacts: () => changeReviewFactList,
         onReviewConflict,
         onFailureModeSwitch,
+        onLearnedStrategySwitch,
         // AUDIT_SEMANTIC_HYPOTHESES (default off): ask once for competing explanations, but only for a request the
         // classifier judged underdetermined — every other turn keeps the template seeds and pays for no call.
         // The judge is wired alongside, and the harness only consults it once semantic hypotheses exist.

@@ -27,3 +27,14 @@ export function recoveryNoteText(failureClass: string, strategy: string): string
   const hint = STRATEGY_HINTS[strategy] ?? 'try a different approach rather than repeating the same action'
   return `That failed with a recognized pattern (${failureClass}) — ${hint}.`
 }
+
+/**
+ * The proposer-facing note for a switch the experience-learning feed picked (AUDIT_EXPERIENCE_LEARNING): the same hint as a
+ * failure-mode switch, but it says why this approach — it is the one that worked after this kind of failure in earlier runs.
+ * `failureClass` is empty for a failure no curated pattern matched.
+ */
+export function learnedRecoveryNoteText(failureClass: string, strategy: string): string {
+  const hint = STRATEGY_HINTS[strategy] ?? 'try a different approach rather than repeating the same action'
+  const what = failureClass ? `That failed (${failureClass})` : 'That failed'
+  return `${what} — in earlier runs, after a failure like this, the approach that worked was to ${hint}.`
+}

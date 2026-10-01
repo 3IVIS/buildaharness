@@ -40,7 +40,7 @@ import type { UserFact } from './fact-extraction.js'
 import { REVIEW_NOTE_PREFIX, reviewNoticeText } from './review-checker.js'
 import { renderHypothesisNote, hypothesisContextMessage, proposeCompetingExplanations, semanticHypothesesEnabled, HYPOTHESIS_NOTE_PREFIX } from './semantic-hypotheses.js'
 import type { SemanticHypothesisProposal } from '@buildaharness/harness'
-import { RECOVERY_NOTE_PREFIX, recoveryNoteText } from './recovery-note.js'
+import { RECOVERY_NOTE_PREFIX, recoveryNoteText, learnedRecoveryNoteText } from './recovery-note.js'
 import { AssistantSession, type IndexedMessage, type TranscriptSearchHit } from './assistant-session.js'
 import { semanticCompactionEnabled, summarizeOlderMessages } from './semantic-compaction.js'
 import { AgentLoop, OneLoopPause, type BatchBudgetState, type BatchBudgetTrace, type ToolLoopResult, trimmedAverage, nextItemBudget } from './agent-loop.js'
@@ -1264,6 +1264,9 @@ export class PersonalAssistant {
         },
         onFailureModeSwitch: (e) => {
           recoveryNotes.push(`${RECOVERY_NOTE_PREFIX}${recoveryNoteText(e.failure_class, e.strategy)}`)
+        },
+        onLearnedStrategySwitch: (e) => {
+          recoveryNotes.push(`${RECOVERY_NOTE_PREFIX}${learnedRecoveryNoteText(e.failure_class, e.strategy)}`)
         },
       })
 
