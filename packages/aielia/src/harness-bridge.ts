@@ -57,7 +57,7 @@ import { harnessTokenBudgetTotal } from './harness-token-budget.js'
 import { semanticHypothesesEnabled, proposeCompetingExplanations, judgeHypothesesAgainstEvidence } from './semantic-hypotheses.js'
 import type { SemanticHypothesisEvent, SemanticHypothesisProposal } from '@buildaharness/harness'
 import { recordLayerTelemetry } from './layer-telemetry.js'
-import { resolveEscalationPlan, escalationEnabled, optInLayerEnabled, harnessGatePolicy, turnPolicyBudget, type EscalationPlan } from './layer-policy-wiring.js'
+import { resolveEscalationPlan, escalationEnabled, escalationHookWired, optInLayerEnabled, harnessGatePolicy, turnPolicyBudget, type EscalationPlan } from './layer-policy-wiring.js'
 import type { LayerPolicyMode } from '@buildaharness/harness'
 
 /**
@@ -349,6 +349,7 @@ export class HarnessBridge {
     // it as it would be after one failure, with this layer FIRST in the call budget (the fixed order spends a LOW-risk turn's
     // 3 calls on injection detection, contradiction and criterion coverage before it, starving the one layer a failure makes
     // relevant). Static and shadow are unchanged (the plan is the static one either way).
+    let livePlan = escalationPlan
     const failurePlan = this.layerPolicyMode === 'adaptive' && complexitySignal.runState
       ? resolveEscalationPlan(this.layerPolicyMode, escalationSignals, { ...complexitySignal.runState, consecutiveFailures: Math.max(1, complexitySignal.runState.consecutiveFailures) }, undefined, { ...turnPolicyBudget(escalationSignals), priority: ['failure_match'] })
       : escalationPlan
@@ -478,14 +479,24 @@ export class HarnessBridge {
         // fresh run state so an escalate-on-evidence rule can fire within the turn.
         layerPolicy: harnessGatePolicy(escalationPlan),
         reevaluateLayerPolicy: this.layerPolicyMode === 'adaptive'
-          ? ({ failures }: { failures: number }) => harnessGatePolicy(resolveEscalationPlan(
-              this.layerPolicyMode,
-              { ...complexitySignal, isTrivial: classification.isTrivial },
-              complexitySignal.runState ? { ...complexitySignal.runState, consecutiveFailures: failures } : undefined,
-              undefined,
-              turnPolicyBudget(escalationSignals),
-            ))
+          ? ({ failures }: { failures: number }) => {
+              // Keep the plan the host hooks (hookEnabled below) read in step with the one the harness gates read.
+              livePlan = resolveEscalationPlan(
+                this.layerPolicyMode,
+                { ...complexitySignal, isTrivial: classification.isTrivial },
+                complexitySignal.runState ? { ...complexitySignal.runState, consecutiveFailures: failures } : undefined,
+                undefined,
+                turnPolicyBudget(escalationSignals),
+              )
+              return harnessGatePolicy(livePlan)
+            }
           : undefined,
+        // The semantic escalation hooks are wired below whenever the operator has not switched them off, and gated per call:
+        // the plan can change mid-turn (reevaluateLayerPolicy above), so a layer a calm opening switched off can come back on
+        // once evidence arrives. The failure matcher is only ever asked about a task that has failed, so it is judged by the
+        // plan as it stands after a failure. Static and shadow: the plan never changes, so this is today's behaviour.
+        hookEnabled: (layer: 'semantic_contradiction' | 'change_review' | 'failure_match' | 'criterion_coverage') =>
+          escalationEnabled(layer, layer === 'failure_match' ? failurePlan : livePlan),
         // Forward every layer's fired/skipped report onto the same onTrace channel
         // harness_node/tool_call events already use — no new transport, just a new TraceEvent
         // kind a "Why?" panel can key off of — and also collect it into
@@ -543,7 +554,7 @@ export class HarnessBridge {
         // AUDIT_SEMANTIC_CONTRADICTION (feature-value audit, Phase A4) gates the whole hook: OFF
         // → no host contradictionChecker is wired at all, so the harness runs its always-on
         // lexical / negation-pair check only. Default ON — unchanged shipped behaviour.
-        contradictionChecker: escalationEnabled('semantic_contradiction', escalationPlan)
+        contradictionChecker: escalationHookWired('semantic_contradiction')
           ? async (newBeliefs: BeliefCandidate[], existingBeliefs: BeliefCandidate[]) => {
               const { contradictions } = await checkForContradictions(newBeliefs, existingBeliefs, this.llmClient, this.model(), onUsage)
               const statementById = new Map([...newBeliefs, ...existingBeliefs].map((b) => [b.id, b.statement]))
@@ -594,7 +605,7 @@ export class HarnessBridge {
               onSemanticHypothesis,
             }
           : {}),
-        semanticChangeReviewer: escalationEnabled('change_review', escalationPlan)
+        semanticChangeReviewer: escalationHookWired('change_review')
           ? (input: { changeDescription: string; highConfidenceBeliefs: BeliefCandidate[]; hypothesisPredictions: string[] }) =>
               checkSemanticReviewConflict(input.changeDescription, input.highConfidenceBeliefs, input.hypothesisPredictions, this.llmClient, this.model(), onUsage)
           : undefined,
@@ -604,7 +615,7 @@ export class HarnessBridge {
         // AUDIT_SEMANTIC_FAILURE_MATCH (feature-value audit, Phase A6) gates the whole hook: OFF →
         // no host semanticFailureMatcher is wired at all, so the harness runs its exact-match
         // FailureModeLibrary.match() only. Default ON — unchanged shipped behaviour.
-        semanticFailureMatcher: escalationEnabled('failure_match', failurePlan)
+        semanticFailureMatcher: escalationHookWired('failure_match')
           ? (symptoms: string[], libraryEntries: readonly FailureModeEntry[]) =>
               checkSemanticFailureMatch(symptoms, libraryEntries, this.llmClient, this.model(), onUsage)
           : undefined,
@@ -614,7 +625,7 @@ export class HarnessBridge {
         // AUDIT_SEMANTIC_CRITERION_COVERAGE (feature-value audit, Phase C1) gates the whole hook:
         // OFF → no host semanticCriterionCoverage is wired at all, so the reviewer's implementer
         // lens runs its `.includes()` substring check alone. Default ON — unchanged shipped behaviour.
-        semanticCriterionCoverage: escalationEnabled('criterion_coverage', escalationPlan)
+        semanticCriterionCoverage: escalationHookWired('criterion_coverage')
           ? (criterion: string, beliefs: Belief[]) =>
               checkSemanticCriterionCoverage(criterion, beliefs, this.llmClient, this.model(), onUsage)
           : undefined,

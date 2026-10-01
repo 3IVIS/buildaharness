@@ -393,6 +393,14 @@ export interface HarnessRunOptions extends HarnessInitOptions {
    */
   semanticCriterionCoverage?: SemanticCriterionCoverage
   /**
+   * Per-call gate for the host's semantic escalation hooks (`contradictionChecker`, `semanticChangeReviewer`,
+   * `semanticFailureMatcher`, `semanticCriterionCoverage`). Consulted immediately before each hook runs; `false` makes that
+   * call behave exactly as if the hook had not been supplied (a skipped contradiction check does not mark its beliefs covered).
+   * Lets a host that decides per iteration (the adaptive layer policy) turn a layer on or off mid-turn instead of binding it
+   * once when the run starts. Absent, or a throw, ⇒ the hook runs (today's behaviour).
+   */
+  hookEnabled?: (layer: EscalationHook) => boolean
+  /**
    * Trajectory Supervisor (the internal plan, S2) — an optional
    * async hook consulted ONLY when the run stalls (cannotMakeProgress() is true at the point a
    * failed task would be rolled back). Given the bounded stall digest, return one directive
@@ -433,6 +441,18 @@ export interface HarnessRunOptions extends HarnessInitOptions {
    * pre-Q1 output. `'enabled'` lets it populate the new `questions` batch instead.
    */
   askMode?: 'enabled' | 'disabled'
+}
+
+/** The host escalation hooks `hookEnabled` can gate. */
+export type EscalationHook = 'semantic_contradiction' | 'change_review' | 'failure_match' | 'criterion_coverage'
+
+/** True unless the host's `hookEnabled` says no for this call; a throwing gate keeps the hook running. */
+function hookOn(ctx: { hookEnabled?: (layer: EscalationHook) => boolean }, layer: EscalationHook): boolean {
+  try {
+    return ctx.hookEnabled ? ctx.hookEnabled(layer) !== false : true
+  } catch {
+    return true
+  }
 }
 
 export interface HarnessRunResult {
@@ -584,6 +604,14 @@ interface LoopContext {
     libraryEntries: readonly FailureModeEntry[],
   ) => Promise<{ failure_class: string; confidence: number; matched_pattern: string } | null>
   semanticCriterionCoverage?: SemanticCriterionCoverage
+  /**
+   * Per-call gate for the host's semantic escalation hooks (`contradictionChecker`, `semanticChangeReviewer`,
+   * `semanticFailureMatcher`, `semanticCriterionCoverage`). Consulted immediately before each hook runs; `false` makes that
+   * call behave exactly as if the hook had not been supplied (a skipped contradiction check does not mark its beliefs covered).
+   * Lets a host that decides per iteration (the adaptive layer policy) turn a layer on or off mid-turn instead of binding it
+   * once when the run starts. Absent, or a throw, ⇒ the hook runs (today's behaviour).
+   */
+  hookEnabled?: (layer: EscalationHook) => boolean
   supervisorDecider?: (digest: TrajectoryDigestData) => Promise<Partial<SupervisorDirectiveData> | null>
   onSupervisorDirective?: (directive: SupervisorDirective) => void
   runInvestigation?: (req: InvestigationRequestData) => Promise<InvestigationFinding[]>
@@ -679,6 +707,7 @@ function buildInitialContext(
     onLearnedStrategySwitch: options.onLearnedStrategySwitch,
     semanticFailureMatcher: options.semanticFailureMatcher,
     semanticCriterionCoverage: options.semanticCriterionCoverage,
+    hookEnabled: options.hookEnabled,
     supervisorDecider: options.supervisorDecider,
     onSupervisorDirective: options.onSupervisorDirective,
     runInvestigation: options.runInvestigation,
@@ -776,6 +805,7 @@ function buildResumedContext(rawCheckpoint: HarnessCheckpoint, options: HarnessR
     onLearnedStrategySwitch: options.onLearnedStrategySwitch,
     semanticFailureMatcher: options.semanticFailureMatcher,
     semanticCriterionCoverage: options.semanticCriterionCoverage,
+    hookEnabled: options.hookEnabled,
     supervisorDecider: options.supervisorDecider,
     onSupervisorDirective: options.onSupervisorDirective,
     runInvestigation: options.runInvestigation,
@@ -1226,7 +1256,7 @@ async function* driveMainLoop(ctx: LoopContext): AsyncGenerator<HarnessCheckpoin
     // caller's contradictionChecker decides the delta warrants it (e.g. it isn't all
     // coding/system-state facts the lexical check already handles — see personal-assistant's
     // looksLikeCodingFact).
-    if (ctx.contradictionChecker) {
+    if (ctx.contradictionChecker && hookOn(ctx, 'semantic_contradiction')) {
       const newBeliefs = ctx.worldModel.beliefs.slice(ctx.lastContradictionCheckCount)
       const existingBeliefs = ctx.worldModel.beliefs.slice(0, ctx.lastContradictionCheckCount)
       if (newBeliefs.length > 0 && (existingBeliefs.length > 0 || newBeliefs.length >= 2)) {
@@ -1354,7 +1384,7 @@ async function* driveMainLoop(ctx: LoopContext): AsyncGenerator<HarnessCheckpoin
     // available; no need to also ask an LLM), and only when there's a HIGH-confidence belief
     // or hypothesis prediction to actually check the change against. Never called per
     // candidate pair — one call reviewing the change against everything relevant at once.
-    if (reviewResult.passed && ctx.semanticChangeReviewer) {
+    if (reviewResult.passed && ctx.semanticChangeReviewer && hookOn(ctx, 'change_review')) {
       const highConfidenceBeliefs = ctx.worldModel.beliefs
         .filter(b => b.confidence >= 0.8)
         .map(b => ({ id: b.id, statement: b.statement }))
@@ -1764,7 +1794,7 @@ async function* driveMainLoop(ctx: LoopContext): AsyncGenerator<HarnessCheckpoin
     // iteration once ANY failure had been recorded, so a recovered turn paid for a call per remaining task), and once the matcher
     // has produced a match for a task it is not asked about that task again (the retry that recovers has nothing left to classify).
     const thisTaskFailed = !execResult.success || ctx.failureDiagnostics.failure_history.some(f => f.context?.['task_id'] === currentTask.id)
-    if (ctx.semanticFailureMatcher && ctx.failureDiagnostics.matched_pattern === null && thisTaskFailed && !ctx.failureMatchedTaskIds.has(currentTask.id)) {
+    if (ctx.semanticFailureMatcher && hookOn(ctx, 'failure_match') && ctx.failureDiagnostics.matched_pattern === null && thisTaskFailed && !ctx.failureMatchedTaskIds.has(currentTask.id)) {
       const libraryEntries = ctx.failureDiagnostics.failure_mode_library.getEntries()
       const symptoms = ctx.worldModel.observations.map(o => o.content)
       if (symptoms.length > 0 && libraryEntries.length > 0 && symptoms.length !== ctx.lastFailureMatchSymptomCount) {
@@ -2185,7 +2215,7 @@ async function driveToCompletion(ctx: LoopContext, options: HarnessRunOptions): 
     const reviewPassResult = await reviewerPass(
       ctx.worldModel, ctx.successCriteria, ctx.failureDiagnostics, ctx.beliefDepGraph,
       ctx.depGraphBudget, ctx.hypothesisSet, ctx.taskGraph, ctx.diagnostics, ctx.evidenceStore, ctx.propagationQueue,
-      runAdversarialLens, ctx.semanticCriterionCoverage, ctx.isCheckableCriterion,
+      runAdversarialLens, hookOn(ctx, 'criterion_coverage') ? ctx.semanticCriterionCoverage : undefined, ctx.isCheckableCriterion,
     )
     const allFindings = [...reviewPassResult.implementer_findings, ...reviewPassResult.reviewer_findings, ...reviewPassResult.adversarial_findings]
     reportLayer(ctx, 'reviewer_pass', allFindings.length > 0, allFindings.length > 0 ? allFindings[0] : 'self-review found nothing to flag')
@@ -2218,7 +2248,7 @@ async function driveToCompletion(ctx: LoopContext, options: HarnessRunOptions): 
       const reviewPassResult2 = await reviewerPass(
         ctx.worldModel, ctx.successCriteria, ctx.failureDiagnostics, ctx.beliefDepGraph,
         ctx.depGraphBudget, ctx.hypothesisSet, ctx.taskGraph, ctx.diagnostics, ctx.evidenceStore, ctx.propagationQueue,
-        runAdversarialLens, ctx.semanticCriterionCoverage, ctx.isCheckableCriterion,
+        runAdversarialLens, hookOn(ctx, 'criterion_coverage') ? ctx.semanticCriterionCoverage : undefined, ctx.isCheckableCriterion,
       )
       ctx.pendingReviewerVerdict = reviewPassResult2.pending_verdict
     }
