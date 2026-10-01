@@ -235,4 +235,25 @@ describe('opt-in layers obey the layer policy', () => {
       for (const l of off) expect(plan.policy[l].trigger).toBe('budget_exhausted')
     })
   })
+
+  it('adaptive T1 LITE turn switches every enabled opt-in layer off (except compaction, which reads only its flag)', () => {
+    withAllOn(() => {
+      const t1 = resolveEscalationPlan('adaptive', routineSignals, healthy)
+      expect(t1.tier).toBe('T1')
+      for (const l of OPT_IN_LAYERS) {
+        if (l === 'semantic_compaction') { expect(t1.policy[l].trigger).not.toBe('tier_t1'); continue }
+        expect(t1.policy[l].decision).toBe('off')
+        expect(optInLayerEnabled(l, true, t1)).toBe(false)
+      }
+      expect(OPT_IN_LAYERS.filter((l) => l !== 'semantic_compaction').every((l) => t1.policy[l].trigger === 'tier_t1' || t1.policy[l].trigger === 'budget_exhausted')).toBe(true)
+    })
+  })
+
+  it('negative control — a T2 turn does not switch them off for the tier', () => {
+    withAllOn(() => {
+      const t2 = resolveEscalationPlan('adaptive', riskySignals, healthy)
+      expect(t2.tier).toBe('T2')
+      for (const l of OPT_IN_LAYERS) expect(t2.policy[l].trigger).not.toBe('tier_t1')
+    })
+  })
 })

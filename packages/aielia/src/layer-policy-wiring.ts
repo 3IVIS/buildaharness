@@ -146,6 +146,12 @@ export function resolveEscalationPlan(
       for (const layer of SEMANTIC_ESCALATIONS) {
         policy[layer] = { decision: 'off', trigger: 'tier_t1', reason: 'T1 LITE turn: routine, floor layers only' }
       }
+      // The enabled opt-in layers are extras too. Semantic compaction is left as it is: it runs before any signal exists and
+      // reads only its flag, so recording it `off` here would not be true.
+      for (const layer of OPT_IN_LAYERS) {
+        if (layer === 'semantic_compaction' || policy[layer]?.decision === 'off') continue
+        policy[layer] = { decision: 'off', trigger: 'tier_t1', reason: 'T1 LITE turn: routine, floor layers only' }
+      }
     }
     return { mode: moded.mode, tier: moded.executedTier, policy, shadow: moded.shadow }
   } catch {
