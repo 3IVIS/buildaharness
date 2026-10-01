@@ -273,6 +273,14 @@ export interface HarnessRunOptions extends HarnessInitOptions {
    * still bound the retries. Absent/false ⇒ exactly as before.
    */
   retryFailedTask?: boolean
+  /**
+   * Like `retryFailedTask`, but only for a task whose failure was a SYSTEM error — the executor threw, or reported a failure
+   * without a kind (the tool or model call broke). A task that exhausted its iteration budget, was rejected by the
+   * completion check, or failed verification is NOT retried (that is the runaway loop / plan-rejection behaviour
+   * `retryFailedTask` also covers). Each task is retried at most ONCE this way, so a persistent outage ends in the honest
+   * could-not-complete reply rather than the stall escalation. Ignored when `retryFailedTask` is on (it already retries everything).
+   */
+  retryFailedSystemErrors?: boolean
   /** See `ReviewerRevision`. */
   reviewerRevision?: ReviewerRevision
   /**
@@ -385,6 +393,14 @@ export interface HarnessRunOptions extends HarnessInitOptions {
    */
   semanticCriterionCoverage?: SemanticCriterionCoverage
   /**
+   * Per-call gate for the host's semantic escalation hooks (`contradictionChecker`, `semanticChangeReviewer`,
+   * `semanticFailureMatcher`, `semanticCriterionCoverage`). Consulted immediately before each hook runs; `false` makes that
+   * call behave exactly as if the hook had not been supplied (a skipped contradiction check does not mark its beliefs covered).
+   * Lets a host that decides per iteration (the adaptive layer policy) turn a layer on or off mid-turn instead of binding it
+   * once when the run starts. Absent, or a throw, ⇒ the hook runs (today's behaviour).
+   */
+  hookEnabled?: (layer: EscalationHook) => boolean
+  /**
    * Trajectory Supervisor (the internal plan, S2) — an optional
    * async hook consulted ONLY when the run stalls (cannotMakeProgress() is true at the point a
    * failed task would be rolled back). Given the bounded stall digest, return one directive
@@ -425,6 +441,18 @@ export interface HarnessRunOptions extends HarnessInitOptions {
    * pre-Q1 output. `'enabled'` lets it populate the new `questions` batch instead.
    */
   askMode?: 'enabled' | 'disabled'
+}
+
+/** The host escalation hooks `hookEnabled` can gate. */
+export type EscalationHook = 'semantic_contradiction' | 'change_review' | 'failure_match' | 'criterion_coverage'
+
+/** True unless the host's `hookEnabled` says no for this call; a throwing gate keeps the hook running. */
+function hookOn(ctx: { hookEnabled?: (layer: EscalationHook) => boolean }, layer: EscalationHook): boolean {
+  try {
+    return ctx.hookEnabled ? ctx.hookEnabled(layer) !== false : true
+  } catch {
+    return true
+  }
 }
 
 export interface HarnessRunResult {
@@ -514,6 +542,14 @@ interface LoopContext {
   skipControlState?: boolean
   experienceLearning?: boolean
   retryFailedTask?: boolean
+  /**
+   * Like `retryFailedTask`, but only for a task whose failure was a SYSTEM error — the executor threw, or reported a failure
+   * without a kind (the tool or model call broke). A task that exhausted its iteration budget, was rejected by the
+   * completion check, or failed verification is NOT retried (that is the runaway loop / plan-rejection behaviour
+   * `retryFailedTask` also covers). Each task is retried at most ONCE this way, so a persistent outage ends in the honest
+   * could-not-complete reply rather than the stall escalation. Ignored when `retryFailedTask` is on (it already retries everything).
+   */
+  retryFailedSystemErrors?: boolean
   reviewerRevision?: ReviewerRevision
   onReviewerRevision?: (event: { taskId: string; note: string }) => void
   isCheckableCriterion?: CriterionCheckable
@@ -549,6 +585,8 @@ interface LoopContext {
   constraintRevisionDone?: boolean
   /** The text of the harness's own could-not-complete reply, set when a stalled run ends with it. It is not the model's answer, so the constraint judge skips it. */
   stalledFallbackText?: string
+  /** Tasks `retryFailedSystemErrors` has already re-queued once: a second system error on the same task is not retried, so a persistent outage ends in the honest could-not-complete reply instead of the stall escalation. */
+  systemErrorRetried?: Set<string>
   /** Called when the completion check judged a task's output did not do the task — the host can persist why (e.g. on a durable plan's task). Observability only: a throwing handler never breaks the run. */
   onTaskNotAccomplished?: (event: { taskId: string; reason: string }) => void
   /** The most recent task the completion check judged not done — read only by stalledTurnFallbackResult so the stranded reply can say why. Not checkpointed. */
@@ -566,6 +604,14 @@ interface LoopContext {
     libraryEntries: readonly FailureModeEntry[],
   ) => Promise<{ failure_class: string; confidence: number; matched_pattern: string } | null>
   semanticCriterionCoverage?: SemanticCriterionCoverage
+  /**
+   * Per-call gate for the host's semantic escalation hooks (`contradictionChecker`, `semanticChangeReviewer`,
+   * `semanticFailureMatcher`, `semanticCriterionCoverage`). Consulted immediately before each hook runs; `false` makes that
+   * call behave exactly as if the hook had not been supplied (a skipped contradiction check does not mark its beliefs covered).
+   * Lets a host that decides per iteration (the adaptive layer policy) turn a layer on or off mid-turn instead of binding it
+   * once when the run starts. Absent, or a throw, ⇒ the hook runs (today's behaviour).
+   */
+  hookEnabled?: (layer: EscalationHook) => boolean
   supervisorDecider?: (digest: TrajectoryDigestData) => Promise<Partial<SupervisorDirectiveData> | null>
   onSupervisorDirective?: (directive: SupervisorDirective) => void
   runInvestigation?: (req: InvestigationRequestData) => Promise<InvestigationFinding[]>
@@ -638,6 +684,7 @@ function buildInitialContext(
     skipControlState: options.skipControlState,
     experienceLearning: options.experienceLearning,
     retryFailedTask: options.retryFailedTask,
+    retryFailedSystemErrors: options.retryFailedSystemErrors,
     reviewerRevision: options.reviewerRevision,
     onReviewerRevision: options.onReviewerRevision,
     tokenBudget: options.tokenBudget,
@@ -660,6 +707,7 @@ function buildInitialContext(
     onLearnedStrategySwitch: options.onLearnedStrategySwitch,
     semanticFailureMatcher: options.semanticFailureMatcher,
     semanticCriterionCoverage: options.semanticCriterionCoverage,
+    hookEnabled: options.hookEnabled,
     supervisorDecider: options.supervisorDecider,
     onSupervisorDirective: options.onSupervisorDirective,
     runInvestigation: options.runInvestigation,
@@ -730,6 +778,7 @@ function buildResumedContext(rawCheckpoint: HarnessCheckpoint, options: HarnessR
     skipControlState: options.skipControlState,
     experienceLearning: options.experienceLearning,
     retryFailedTask: options.retryFailedTask,
+    retryFailedSystemErrors: options.retryFailedSystemErrors,
     reviewerRevision: options.reviewerRevision,
     onReviewerRevision: options.onReviewerRevision,
     tokenBudget: options.tokenBudget,
@@ -756,6 +805,7 @@ function buildResumedContext(rawCheckpoint: HarnessCheckpoint, options: HarnessR
     onLearnedStrategySwitch: options.onLearnedStrategySwitch,
     semanticFailureMatcher: options.semanticFailureMatcher,
     semanticCriterionCoverage: options.semanticCriterionCoverage,
+    hookEnabled: options.hookEnabled,
     supervisorDecider: options.supervisorDecider,
     onSupervisorDirective: options.onSupervisorDirective,
     runInvestigation: options.runInvestigation,
@@ -1004,6 +1054,18 @@ function maybeReopenForReviewerRevision(ctx: LoopContext, result: { pending_verd
 }
 
 /** The constraints the host's judge says the final reply violates; empty when there is no judge, no constraint, no reply, or the judge fails (a failing check never fails a reply that would have passed). */
+/**
+ * `retryFailedSystemErrors`: true for the FIRST system-error failure of a task (the executor threw / reported a failure
+ * without a kind), false for any later one or any other kind of failure. Marks the task as retried.
+ */
+function retrySystemErrorOnce(ctx: LoopContext, taskId: string, execResult: { success: boolean; failure_kind?: string }): boolean {
+  if (ctx.retryFailedSystemErrors !== true || execResult.success || execResult.failure_kind !== 'system_error') return false
+  const retried = (ctx.systemErrorRetried ??= new Set<string>())
+  if (retried.has(taskId)) return false
+  retried.add(taskId)
+  return true
+}
+
 async function judgeConstraints(ctx: LoopContext, judge: SemanticConstraintJudge | undefined): Promise<Array<{ constraint: string; reason?: string }>> {
   if (!judge || ctx.callerState.current_constraints.length === 0) return []
   const reply = typeof ctx.finalResult === 'string' ? ctx.finalResult : ctx.finalResult == null ? '' : JSON.stringify(ctx.finalResult)
@@ -1194,7 +1256,7 @@ async function* driveMainLoop(ctx: LoopContext): AsyncGenerator<HarnessCheckpoin
     // caller's contradictionChecker decides the delta warrants it (e.g. it isn't all
     // coding/system-state facts the lexical check already handles — see personal-assistant's
     // looksLikeCodingFact).
-    if (ctx.contradictionChecker) {
+    if (ctx.contradictionChecker && hookOn(ctx, 'semantic_contradiction')) {
       const newBeliefs = ctx.worldModel.beliefs.slice(ctx.lastContradictionCheckCount)
       const existingBeliefs = ctx.worldModel.beliefs.slice(0, ctx.lastContradictionCheckCount)
       if (newBeliefs.length > 0 && (existingBeliefs.length > 0 || newBeliefs.length >= 2)) {
@@ -1322,7 +1384,7 @@ async function* driveMainLoop(ctx: LoopContext): AsyncGenerator<HarnessCheckpoin
     // available; no need to also ask an LLM), and only when there's a HIGH-confidence belief
     // or hypothesis prediction to actually check the change against. Never called per
     // candidate pair — one call reviewing the change against everything relevant at once.
-    if (reviewResult.passed && ctx.semanticChangeReviewer) {
+    if (reviewResult.passed && ctx.semanticChangeReviewer && hookOn(ctx, 'change_review')) {
       const highConfidenceBeliefs = ctx.worldModel.beliefs
         .filter(b => b.confidence >= 0.8)
         .map(b => ({ id: b.id, statement: b.statement }))
@@ -1732,7 +1794,7 @@ async function* driveMainLoop(ctx: LoopContext): AsyncGenerator<HarnessCheckpoin
     // iteration once ANY failure had been recorded, so a recovered turn paid for a call per remaining task), and once the matcher
     // has produced a match for a task it is not asked about that task again (the retry that recovers has nothing left to classify).
     const thisTaskFailed = !execResult.success || ctx.failureDiagnostics.failure_history.some(f => f.context?.['task_id'] === currentTask.id)
-    if (ctx.semanticFailureMatcher && ctx.failureDiagnostics.matched_pattern === null && thisTaskFailed && !ctx.failureMatchedTaskIds.has(currentTask.id)) {
+    if (ctx.semanticFailureMatcher && hookOn(ctx, 'failure_match') && ctx.failureDiagnostics.matched_pattern === null && thisTaskFailed && !ctx.failureMatchedTaskIds.has(currentTask.id)) {
       const libraryEntries = ctx.failureDiagnostics.failure_mode_library.getEntries()
       const symptoms = ctx.worldModel.observations.map(o => o.content)
       if (symptoms.length > 0 && libraryEntries.length > 0 && symptoms.length !== ctx.lastFailureMatchSymptomCount) {
@@ -1935,7 +1997,8 @@ async function* driveMainLoop(ctx: LoopContext): AsyncGenerator<HarnessCheckpoin
         supervisorDirective,
         requeueLeafOnLocal,
         ctx.experienceLearning === true,
-        ctx.retryFailedTask === true,
+        // Everything (retryFailedTask), or just this iteration's failure when the executor itself broke (retryFailedSystemErrors).
+        ctx.retryFailedTask === true || retrySystemErrorOnce(ctx, currentTask.id, execResult),
       )
       // Adopt the recovery ladder's output — parity with loop.py (strategy_state /
       // task_graph reassigned after switch_strategy / apply_replan, loop.py:480-534).
@@ -2152,7 +2215,7 @@ async function driveToCompletion(ctx: LoopContext, options: HarnessRunOptions): 
     const reviewPassResult = await reviewerPass(
       ctx.worldModel, ctx.successCriteria, ctx.failureDiagnostics, ctx.beliefDepGraph,
       ctx.depGraphBudget, ctx.hypothesisSet, ctx.taskGraph, ctx.diagnostics, ctx.evidenceStore, ctx.propagationQueue,
-      runAdversarialLens, ctx.semanticCriterionCoverage, ctx.isCheckableCriterion,
+      runAdversarialLens, hookOn(ctx, 'criterion_coverage') ? ctx.semanticCriterionCoverage : undefined, ctx.isCheckableCriterion,
     )
     const allFindings = [...reviewPassResult.implementer_findings, ...reviewPassResult.reviewer_findings, ...reviewPassResult.adversarial_findings]
     reportLayer(ctx, 'reviewer_pass', allFindings.length > 0, allFindings.length > 0 ? allFindings[0] : 'self-review found nothing to flag')
@@ -2185,7 +2248,7 @@ async function driveToCompletion(ctx: LoopContext, options: HarnessRunOptions): 
       const reviewPassResult2 = await reviewerPass(
         ctx.worldModel, ctx.successCriteria, ctx.failureDiagnostics, ctx.beliefDepGraph,
         ctx.depGraphBudget, ctx.hypothesisSet, ctx.taskGraph, ctx.diagnostics, ctx.evidenceStore, ctx.propagationQueue,
-        runAdversarialLens, ctx.semanticCriterionCoverage, ctx.isCheckableCriterion,
+        runAdversarialLens, hookOn(ctx, 'criterion_coverage') ? ctx.semanticCriterionCoverage : undefined, ctx.isCheckableCriterion,
       )
       ctx.pendingReviewerVerdict = reviewPassResult2.pending_verdict
     }

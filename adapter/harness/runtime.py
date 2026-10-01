@@ -285,6 +285,11 @@ class HarnessRunOptions:
     skip_control_state: bool = False
     experience_learning: bool = False
     retry_failed_task: bool = False  # re-queue the failed leaf after the ladder switches strategy (TS retryFailedTask)
+    # Like retry_failed_task but only when this iteration's failure was a system error: the executor raised or reported
+    # a failure without a kind (TS retryFailedSystemErrors). An exhausted iteration budget, a rejected completion check
+    # or a failed verification is not retried. Each task is retried at most ONCE this way (a persistent outage ends in
+    # the honest could-not-complete reply, not the stall escalation). Ignored when retry_failed_task is on.
+    retry_failed_system_errors: bool = False
     is_checkable_criterion: Callable[[str], bool] | None = None
     # (criterion, beliefs) -> covered?  Asked only for a criterion the substring check did not cover
     # (TS semanticCriterionCoverage).
@@ -373,6 +378,8 @@ class LoopContext:
     # The harness's own could-not-complete reply, set when a stalled run ends with it; not the model's answer, so the
     # constraint judge skips it (TS stalledFallbackText).
     stalled_fallback_text: str | None = None
+    # Tasks retry_failed_system_errors has already re-queued once (TS systemErrorRetried).
+    system_error_retried: set[str] = field(default_factory=set)
     last_completed_task_id: str | None = None
     recovery_budget: RecoveryBudget | None = None
     last_not_accomplished: dict[str, str] | None = None
@@ -1373,7 +1380,9 @@ def drive_main_loop(ctx: LoopContext) -> Iterator[dict[str, Any]]:
         else:
             if task_accomplished:
                 ctx.last_not_accomplished = None
-            _rollback_and_replan(ctx, current)
+            _rollback_and_replan(
+                ctx, current, system_error=not exec_result.success and exec_result.failure_kind == "system_error"
+            )
 
         if branch_world is not None and concurrent is not None:
             reconciled = reconcile_parallel_branches(
@@ -1431,7 +1440,15 @@ def _default_tool() -> dict[str, bool]:
     return {"completed": True}
 
 
-def _rollback_and_replan(ctx: LoopContext, current: Task) -> None:
+def _retry_system_error_once(ctx: LoopContext, task_id: str, system_error: bool) -> bool:
+    """TS retrySystemErrorOnce: True for a task's FIRST system-error failure when retry_failed_system_errors is on."""
+    if not ctx.options.retry_failed_system_errors or not system_error or task_id in ctx.system_error_retried:
+        return False
+    ctx.system_error_retried.add(task_id)
+    return True
+
+
+def _rollback_and_replan(ctx: LoopContext, current: Task, *, system_error: bool = False) -> None:
     """The failure branch of update_task_state (TS `rollback_replan`), incl. the supervisor consultation."""
     from .progress import cannot_make_progress
 
@@ -1522,7 +1539,7 @@ def _rollback_and_replan(ctx: LoopContext, current: Task) -> None:
         directive,
         requeue_leaf_on_local,
         ctx.options.experience_learning,
-        ctx.options.retry_failed_task,
+        ctx.options.retry_failed_task or _retry_system_error_once(ctx, current.id, system_error),
     )
     ctx.strategy_state = result.new_strategy_state
     if result.replan_scope == "GLOBAL":

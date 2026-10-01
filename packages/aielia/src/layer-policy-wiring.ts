@@ -179,6 +179,16 @@ export function escalationEnabled(
   }
 }
 
+/**
+ * Whether a semantic escalation hook is supplied to the harness at all: unless the operator's explicit `AUDIT_*` value switches
+ * it off. The plan no longer decides this — it is consulted per call (`HarnessRunOptions.hookEnabled`), so a hook the opening
+ * plan would have left off can still run once mid-turn evidence changes the plan. With a static plan the result is exactly
+ * what `escalationEnabled` gave (the plan says `full`, so only the env override mattered).
+ */
+export function escalationHookWired(layer: SemanticEscalation, env?: Record<string, string | undefined>): boolean {
+  return explicitEnvOverride(ESCALATION_ENV[layer], env) !== false
+}
+
 // ── AL8b ────────────────────────────────────────────────────────────────────────────────────────
 
 /** The policy the harness runtime's ad hoc gates read: only an executed `adaptive` policy differs from today's. */

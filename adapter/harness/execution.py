@@ -71,6 +71,10 @@ class ExecutionResult:
     strategy: ReversibilityStrategy = "ephemeral"
     rollback_ref: str | None = None
     status: ExecutionStatus = "complete"
+    # Why a failed execution failed (TS failure_kind): "system_error" (the executor raised, or reported a failure
+    # without a kind — the tool or model call broke) or "exhausted" (it ran out of its own iteration budget).
+    # None when it did not fail.
+    failure_kind: str | None = None
 
 
 @dataclass
@@ -175,6 +179,7 @@ def execute(
     error: str | None = None
     success = False
     status: ExecutionStatus = "failed"
+    failure_kind: str | None = None
 
     def record_failure(message: str) -> None:
         symptom = _classify_system_error_symptom(message)
@@ -241,6 +246,7 @@ def execute(
             success = status != "failed"
             if status == "failed":
                 error = raw.get("error") or "execution reported a failed status"
+                failure_kind = "exhausted" if raw.get("__harnessFailureKind") == "exhausted" else "system_error"
                 record_failure(error)
         else:
             output = raw
@@ -252,12 +258,19 @@ def execute(
     except Exception as exc:
         error = str(exc)
         status = "failed"
+        failure_kind = "system_error"
         record_failure(error)
 
     log_change()
 
     return ExecutionResult(
-        success=success, output=output, error=error, strategy=strategy, rollback_ref=rollback_ref, status=status
+        success=success,
+        output=output,
+        error=error,
+        strategy=strategy,
+        rollback_ref=rollback_ref,
+        status=status,
+        failure_kind=failure_kind,
     )
 
 

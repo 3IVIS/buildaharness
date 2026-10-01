@@ -1,6 +1,6 @@
 import { describe, it, expect, vi } from 'vitest'
 import { OPT_IN_LAYERS, type PolicyRules, type RunState, type TurnSignals } from '@buildaharness/harness'
-import { resolveEscalationPlan, resolveOptInPlan, optInLayerEnabled, enabledOptInLayers, turnPolicyBudget, escalationEnabled, explicitEnvOverride, SEMANTIC_ESCALATIONS, ESCALATION_ENV } from './layer-policy-wiring.js'
+import { escalationHookWired, resolveEscalationPlan, resolveOptInPlan, optInLayerEnabled, enabledOptInLayers, turnPolicyBudget, escalationEnabled, explicitEnvOverride, SEMANTIC_ESCALATIONS, ESCALATION_ENV } from './layer-policy-wiring.js'
 import { buildTurnFacts } from './memory-service.js'
 
 const routineSignals: TurnSignals = {
@@ -255,5 +255,23 @@ describe('opt-in layers obey the layer policy', () => {
       expect(t2.tier).toBe('T2')
       for (const l of OPT_IN_LAYERS) expect(t2.policy[l].trigger).not.toBe('tier_t1')
     })
+  })
+})
+
+describe('escalationHookWired', () => {
+  it('is on unless the operator switched that layer off — the plan does not decide it', () => {
+    for (const l of SEMANTIC_ESCALATIONS) {
+      expect(escalationHookWired(l, {})).toBe(true)
+      expect(escalationHookWired(l, { [ESCALATION_ENV[l]]: '0' })).toBe(false)
+      expect(escalationHookWired(l, { [ESCALATION_ENV[l]]: '1' })).toBe(true)
+    }
+  })
+
+  it('a layer the calm opening plan switched off is still wired, and the live plan decides per call', () => {
+    const calm = resolveEscalationPlan('adaptive', routineSignals, healthy)
+    expect(escalationEnabled('semantic_contradiction', calm, {})).toBe(false)
+    expect(escalationHookWired('semantic_contradiction', {})).toBe(true)
+    const afterFailure = resolveEscalationPlan('adaptive', routineSignals, { ...healthy, consecutiveFailures: 1 } as RunState)
+    expect(escalationEnabled('semantic_contradiction', afterFailure, {})).toBe(true)
   })
 })
