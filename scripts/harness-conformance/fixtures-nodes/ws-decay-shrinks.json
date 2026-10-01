@@ -1,0 +1,16 @@
+{
+ "node": "warm_start",
+ "state": {
+  "depGraphBudget": {
+   "confidence_decay_rate": 0.05
+  }
+ },
+ "args": {
+  "store": {
+   "weights": {
+    "DIRECT_EDIT:A": 30,
+    "REIMPLEMENT:A": 40
+   }
+  }
+ }
+}

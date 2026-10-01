@@ -1,0 +1,39 @@
+{
+ "node": "detect_contradictions",
+ "state": {
+  "worldModel": {
+   "beliefs": [
+    {
+     "id": "b1",
+     "statement": "config loaded",
+     "confidence": 0.8,
+     "derived_from": [
+      "o1"
+     ],
+     "recorded_at": "2026-01-01T00:00:00.000Z",
+     "supporting_evidence": [
+      "db.sqlite"
+     ]
+    }
+   ],
+   "environment_change_log": [
+    {
+     "id": "e1",
+     "description": "edit",
+     "affected_paths": [
+      "db.sqlite"
+     ],
+     "timestamp": "2026-02-01T00:00:00.000Z"
+    },
+    {
+     "id": "e2",
+     "description": "bad ts",
+     "affected_paths": [
+      "o1"
+     ],
+     "timestamp": "not-a-date"
+    }
+   ]
+  }
+ }
+}

@@ -1,0 +1,27 @@
+{
+ "node": "context_compression",
+ "state": {
+  "worldModel": {
+   "beliefs": [
+    {
+     "id": "old",
+     "statement": "old",
+     "confidence": 0.8,
+     "derived_from": [
+      "o1"
+     ],
+     "recorded_at": "2026-01-01T00:00:00.000Z"
+    },
+    {
+     "id": "new",
+     "statement": "new",
+     "confidence": 0.8,
+     "derived_from": [
+      "o1"
+     ],
+     "recorded_at": "2999-01-01T00:00:00.000Z"
+    }
+   ]
+  }
+ }
+}

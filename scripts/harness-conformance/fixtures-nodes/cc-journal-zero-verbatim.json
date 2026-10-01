@@ -1,0 +1,103 @@
+{
+ "node": "context_compression",
+ "state": {
+  "memoryState": {
+   "token_budget": {
+    "total": 1000,
+    "used": 0
+   },
+   "compression_risk": {
+    "compressed_structures": [],
+    "pruned_regions": [],
+    "dependent_tasks": []
+   },
+   "journal": [
+    {
+     "step": 0,
+     "action_class": "DIRECT_EDIT",
+     "outcome": "failed:X",
+     "success": false
+    },
+    {
+     "step": 1,
+     "action_class": "DIRECT_EDIT",
+     "outcome": "completed",
+     "success": true,
+     "verbatim": "v1"
+    },
+    {
+     "step": 2,
+     "action_class": "DIRECT_EDIT",
+     "outcome": "completed",
+     "success": true,
+     "verbatim": "v2"
+    },
+    {
+     "step": 3,
+     "action_class": "DIRECT_EDIT",
+     "outcome": "failed:X",
+     "success": false
+    },
+    {
+     "step": 4,
+     "action_class": "DIRECT_EDIT",
+     "outcome": "completed",
+     "success": true,
+     "verbatim": "v4"
+    },
+    {
+     "step": 5,
+     "action_class": "DIRECT_EDIT",
+     "outcome": "completed",
+     "success": true,
+     "verbatim": "v5"
+    },
+    {
+     "step": 6,
+     "action_class": "DIRECT_EDIT",
+     "outcome": "failed:X",
+     "success": false
+    },
+    {
+     "step": 7,
+     "action_class": "DIRECT_EDIT",
+     "outcome": "completed",
+     "success": true,
+     "verbatim": "v7"
+    },
+    {
+     "step": 8,
+     "action_class": "DIRECT_EDIT",
+     "outcome": "completed",
+     "success": true,
+     "verbatim": "v8"
+    },
+    {
+     "step": 9,
+     "action_class": "DIRECT_EDIT",
+     "outcome": "failed:X",
+     "success": false
+    },
+    {
+     "step": 10,
+     "action_class": "DIRECT_EDIT",
+     "outcome": "completed",
+     "success": true,
+     "verbatim": "v10"
+    },
+    {
+     "step": 11,
+     "action_class": "DIRECT_EDIT",
+     "outcome": "completed",
+     "success": true,
+     "verbatim": "v11"
+    }
+   ],
+   "journal_retention_policy": {
+    "retain_failures_permanently": true,
+    "max_passing_verbatim": 0,
+    "compress_older_passing": true
+   }
+  }
+ }
+}

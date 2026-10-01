@@ -1,0 +1,16 @@
+{
+ "node": "update_diagnostics",
+ "state": {
+  "worldModel": {
+   "observations": [
+    {
+     "id": "o1",
+     "content": "a",
+     "source": "tool",
+     "recorded_at": "2026-01-01T00:00:00.000Z"
+    }
+   ]
+  }
+ },
+ "args": {}
+}

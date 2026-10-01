@@ -82,8 +82,8 @@ class BeliefHealth:
 
 @dataclass
 class CoverageHealth:
-    symptom_coverage: float = 1.0  # entropy: fraction of symptoms with a hypothesis
-    explanation_coverage: float = 1.0  # entropy: fraction of hypotheses with discriminating evidence
+    symptom_coverage: float = 0.5  # entropy: fraction of symptoms with a hypothesis
+    explanation_coverage: float = 0.5  # entropy: fraction of hypotheses with discriminating evidence
 
     def to_dict(self) -> dict[str, Any]:
         return {
@@ -94,8 +94,8 @@ class CoverageHealth:
     @classmethod
     def from_dict(cls, d: dict[str, Any]) -> CoverageHealth:
         return cls(
-            symptom_coverage=d.get("symptom_coverage", 1.0),
-            explanation_coverage=d.get("explanation_coverage", 1.0),
+            symptom_coverage=d.get("symptom_coverage", 0.5),
+            explanation_coverage=d.get("explanation_coverage", 0.5),
         )
 
 

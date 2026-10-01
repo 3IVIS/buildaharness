@@ -1,0 +1,13 @@
+{
+ "node": "estimate_risk",
+ "state": {},
+ "args": {
+  "action": {
+   "module_type": "business_logic",
+   "affected_files": [
+    "x"
+   ],
+   "lines_affected": 100
+  }
+ }
+}

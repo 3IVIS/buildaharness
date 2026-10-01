@@ -1,0 +1,27 @@
+{
+ "node": "generate_update_hypotheses",
+ "state": {
+  "worldModel": {
+   "beliefs": [
+    {
+     "id": "b1",
+     "statement": "alpha holds",
+     "confidence": 0.8,
+     "derived_from": [
+      "o1"
+     ],
+     "recorded_at": "2026-01-01T00:00:00.000Z"
+    },
+    {
+     "id": "b2",
+     "statement": "beta holds",
+     "confidence": 0.3,
+     "derived_from": [
+      "o1"
+     ],
+     "recorded_at": "2026-01-01T00:00:00.000Z"
+    }
+   ]
+  }
+ }
+}

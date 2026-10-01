@@ -1,0 +1,9 @@
+{
+ "node": "estimate_risk",
+ "state": {},
+ "args": {
+  "action": {
+   "module_type": "business_logic"
+  }
+ }
+}

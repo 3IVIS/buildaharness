@@ -1,0 +1,28 @@
+{
+ "node": "detect_contradictions",
+ "state": {
+  "worldModel": {
+   "beliefs": [
+    {
+     "id": "b1",
+     "statement": "config loaded",
+     "confidence": 0.8,
+     "derived_from": [
+      "config.yaml"
+     ],
+     "recorded_at": "2026-01-01T00:00:00.000Z"
+    }
+   ],
+   "environment_change_log": [
+    {
+     "id": "e1",
+     "description": "edit",
+     "affected_paths": [
+      "config.yaml"
+     ],
+     "timestamp": "2026-02-01T00:00:00.000Z"
+    }
+   ]
+  }
+ }
+}

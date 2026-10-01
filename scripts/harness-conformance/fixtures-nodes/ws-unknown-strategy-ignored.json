@@ -1,0 +1,12 @@
+{
+ "node": "warm_start",
+ "state": {},
+ "args": {
+  "store": {
+   "weights": {
+    "BOGUS:X": 5,
+    "ESCALATE:Y": 1
+   }
+  }
+ }
+}

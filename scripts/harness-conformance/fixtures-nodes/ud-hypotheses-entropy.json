@@ -1,0 +1,70 @@
+{
+ "node": "update_diagnostics",
+ "state": {
+  "hypothesisSet": {
+   "active": [
+    {
+     "id": "h1",
+     "explanation": "h1",
+     "confidence": 0.5,
+     "predicted_observations": [],
+     "discriminating_evidence": [],
+     "generation_sources": [
+      "symptom_inference"
+     ],
+     "diversity_score": 0.0
+    },
+    {
+     "id": "h2",
+     "explanation": "h2",
+     "confidence": 0.5,
+     "predicted_observations": [],
+     "discriminating_evidence": [],
+     "generation_sources": [
+      "counterfactual"
+     ],
+     "diversity_score": 0.0
+    },
+    {
+     "id": "h3",
+     "explanation": "h3",
+     "confidence": 0.5,
+     "predicted_observations": [],
+     "discriminating_evidence": [],
+     "generation_sources": [
+      "analogy"
+     ],
+     "diversity_score": 0.0
+    },
+    {
+     "id": "h4",
+     "explanation": "h4",
+     "confidence": 0.5,
+     "predicted_observations": [],
+     "discriminating_evidence": [],
+     "generation_sources": [
+      "symptom_inference"
+     ],
+     "diversity_score": 0.0
+    }
+   ]
+  },
+  "worldModel": {
+   "observations": [
+    {
+     "id": "o1",
+     "content": "a",
+     "source": "tool",
+     "recorded_at": "2026-01-01T00:00:00.000Z"
+    },
+    {
+     "id": "o2",
+     "content": "b",
+     "source": "tool",
+     "recorded_at": "2026-01-01T00:00:00.000Z"
+    }
+   ]
+  }
+ },
+ "args": {}
+}

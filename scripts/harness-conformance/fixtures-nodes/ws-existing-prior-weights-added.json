@@ -1,0 +1,18 @@
+{
+ "node": "warm_start",
+ "state": {
+  "strategyState": {
+   "prior_strategy_weights": {
+    "DIRECT_EDIT": 1.5
+   }
+  }
+ },
+ "args": {
+  "store": {
+   "weights": {
+    "DIRECT_EDIT:A": 1.0,
+    "TRACE_EXEC:A": 3.0
+   }
+  }
+ }
+}

@@ -1,0 +1,38 @@
+{
+ "node": "context_compression",
+ "state": {
+  "depGraph": {
+   "belief_nodes": [
+    {
+     "belief_id": "a",
+     "confidence": 0.9
+    },
+    {
+     "belief_id": "b",
+     "confidence": 0.5
+    }
+   ],
+   "derived_from_edges": [
+    {
+     "from": "a",
+     "to": "b",
+     "confidence": 0.6,
+     "verified": true
+    },
+    {
+     "from": "b",
+     "to": "a",
+     "confidence": 0.04,
+     "verified": false
+    }
+   ],
+   "invalidation_frontier": [],
+   "propagation_queue": [],
+   "unverified_edge_ratio": 0.5,
+   "confidence_decay_rate": 0.05
+  },
+  "depGraphBudget": {
+   "confidence_decay_rate": 0.1
+  }
+ }
+}

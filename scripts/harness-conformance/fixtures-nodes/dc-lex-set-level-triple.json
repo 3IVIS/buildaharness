@@ -1,0 +1,39 @@
+{
+ "node": "detect_contradictions",
+ "env": {
+  "HARNESS_LEXICAL_MODE": "enabled"
+ },
+ "state": {
+  "worldModel": {
+   "beliefs": [
+    {
+     "id": "a",
+     "statement": "x is true",
+     "confidence": 0.8,
+     "derived_from": [
+      "o1"
+     ],
+     "recorded_at": "2026-01-01T00:00:00.000Z"
+    },
+    {
+     "id": "b",
+     "statement": "x is not true",
+     "confidence": 0.8,
+     "derived_from": [
+      "o1"
+     ],
+     "recorded_at": "2026-01-01T00:00:00.000Z"
+    },
+    {
+     "id": "c",
+     "statement": "x is false",
+     "confidence": 0.8,
+     "derived_from": [
+      "o1"
+     ],
+     "recorded_at": "2026-01-01T00:00:00.000Z"
+    }
+   ]
+  }
+ }
+}
