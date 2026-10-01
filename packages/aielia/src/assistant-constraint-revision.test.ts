@@ -133,4 +133,20 @@ describe('stated constraint through a real turn', () => {
     await assistant.turn('Now the YAML one.', { sessionId: 'k2' })
     expect(JSON.parse(seen.judgedConstraints[1])).toEqual(['Do not use tabs', 'Five lines at most'])
   })
+
+  it('a second violation returns the answer with a note naming the constraint, instead of failing the turn', async () => {
+    const { assistant, seen } = build({ constraints: ['Do not use tabs'], replies: [BAD, BAD] })
+    const result = await assistant.turn(MESSAGE, { sessionId: 'u1' })
+    expect(result.status).toBe('ok')
+    expect(result.reply).toContain(BAD)
+    expect(result.reply).toContain('may not fully meet a constraint you set')
+    expect(result.reply).toContain('- Do not use tabs (indents with a tab)')
+    expect(seen.judged).toEqual([BAD, BAD])
+  })
+
+  it('negative control — a clean answer carries no note', async () => {
+    const { assistant } = build({ constraints: ['Do not use tabs'], replies: [GOOD] })
+    const result = await assistant.turn(MESSAGE, { sessionId: 'u2' })
+    expect(result.reply).toBe(GOOD)
+  })
 })

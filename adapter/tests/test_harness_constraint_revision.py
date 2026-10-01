@@ -64,9 +64,19 @@ def test_negative_control_no_handler_the_same_violation_fails_the_run():
         _run([BAD, GOOD], revise=False)
 
 
-def test_a_second_violation_still_fails_the_run_and_only_one_revision_is_attempted():
-    with pytest.raises(OutputContractError):
-        _run([BAD, BAD, BAD], revise=True)
+def test_a_second_violation_returns_the_answer_with_the_violation_attached_and_one_revision_is_attempted():
+    result, calls, events = _run([BAD, BAD, BAD], revise=True)
+    assert result.final_result == BAD
+    assert result.unresolved_constraint_violations == [
+        {"constraint": "Do not use tabs", "reason": "indents with a tab"}
+    ]
+    assert calls == 2
+    assert len(events) == 1
+
+
+def test_a_clean_answer_has_no_unresolved_violations():
+    result, _calls, _events = _run([BAD, GOOD], revise=True)
+    assert result.unresolved_constraint_violations is None
 
 
 def test_a_clean_first_answer_never_fires_the_handler():

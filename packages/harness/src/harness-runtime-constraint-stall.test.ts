@@ -46,4 +46,33 @@ describe('constraint judge and the could-not-complete reply', () => {
     expect(r.judged.length).toBeGreaterThan(0)
     expect(r.error).toBeDefined()
   })
+
+  it('the lexical caller-constraint match (opt-in, no judge) does not fire on the could-not-complete reply either', async () => {
+    const prev = process.env.HARNESS_LEXICAL_ON
+    process.env.HARNESS_LEXICAL_ON = 'constraint-negation'
+    try {
+    const run2 = async (failing: boolean) => {
+      try {
+        const outcome = await new HarnessRuntime().run('write the announcement', ['announcement written'], {
+          initialTasks: [{ ...task }],
+          max_steps: 12,
+          callerConstraints: ['Never write the announcement'],
+          toolExecutors: { default: () => { if (failing) throw new Error('model call failed'); return 'I will write the announcement tomorrow.' } },
+        })
+        return { outcome, error: undefined as unknown }
+      } catch (error) {
+        return { outcome: undefined, error }
+      }
+    }
+    const stalled = await run2(true)
+    expect(stalled.error).toBeUndefined()
+    expect(stalled.outcome?.status).toBe('complete')
+    // negative control: the same lexical match still fails a real answer that breaks the constraint.
+    const real = await run2(false)
+    expect(real.error).toBeDefined()
+    } finally {
+      if (prev === undefined) delete process.env.HARNESS_LEXICAL_ON
+      else process.env.HARNESS_LEXICAL_ON = prev
+    }
+  })
 })

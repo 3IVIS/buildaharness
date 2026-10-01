@@ -415,6 +415,9 @@ class HarnessRunResult:
     init_result: HarnessInitResult
     node_execution_order: list[str]
     context: LoopContext
+    # Constraints the judge still found violated after the host's one revision; only set when the host opted into
+    # `on_constraint_revision` (TS unresolvedConstraintViolations). Without that opt-in a violation raises as before.
+    unresolved_constraint_violations: list[dict[str, Any]] | None = None
 
 
 @dataclass
@@ -1597,7 +1600,11 @@ def _drive_to_completion(ctx: LoopContext) -> HarnessRunOutcome:
     _node(ctx, "output_validation")
     judge = ctx.options.semantic_constraint_judge
     validation = output_validation(
-        ctx.final_result, ctx.output_contract, ctx.caller_state, skip_caller_constraints=judge is not None
+        ctx.final_result,
+        ctx.output_contract,
+        ctx.caller_state,
+        skip_caller_constraints=judge is not None
+        or (ctx.stalled_fallback_text is not None and ctx.final_result == ctx.stalled_fallback_text),
     )
     violated = _judge_constraints(ctx)
     if violated:
@@ -1612,10 +1619,17 @@ def _drive_to_completion(ctx: LoopContext) -> HarnessRunOutcome:
                 return HarnessRunOutcome(status="paused", result=None, checkpoint=paused)
             _node(ctx, "output_validation_2")
             validation = output_validation(
-                ctx.final_result, ctx.output_contract, ctx.caller_state, skip_caller_constraints=judge is not None
+                ctx.final_result,
+                ctx.output_contract,
+                ctx.caller_state,
+                skip_caller_constraints=judge is not None
+                or (ctx.stalled_fallback_text is not None and ctx.final_result == ctx.stalled_fallback_text),
             )
             violated = _judge_constraints(ctx)
-    if violated:
+    # A host that can show a note (it opted into the revision) gets the answer back with the violation attached rather
+    # than a raised error (TS: unresolvedConstraintViolations).
+    unresolved = violated if violated and ctx.options.on_constraint_revision is not None else None
+    if violated and unresolved is None:
         raise OutputContractError(
             "caller_specific_constraints",
             [
@@ -1632,6 +1646,7 @@ def _drive_to_completion(ctx: LoopContext) -> HarnessRunOutcome:
         init_result=ctx.init,
         node_execution_order=ctx.node_execution_order,
         context=ctx,
+        unresolved_constraint_violations=unresolved,
     )
     if ctx.options.on_checkpoint is not None:
         ctx.options.on_checkpoint(to_checkpoint(ctx))
