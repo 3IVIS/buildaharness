@@ -58,3 +58,30 @@ describe('semanticFailureMatcher on the first failure', () => {
     expect(r.calls).toBe(1)
   })
 })
+
+describe('the matcher is only asked about a failing task, and once a match is produced not again for that task', () => {
+  const t = (id: string, depends_on: string[] = []): Task => ({ ...task, id, description: `task ${id}`, depends_on })
+
+  async function runGraph(failures: number, matcher: HarnessRunOptions['semanticFailureMatcher'], retryFailedTask = false) {
+    let calls = 0
+    await new HarnessRuntime().run('answer', ['answered'], {
+      initialTasks: [t('1'), t('2'), t('3', ['1', '2'])],
+      max_steps: 20,
+      retryFailedTask,
+      toolExecutors: { default: () => { calls++; if (calls <= failures) throw new Error(`API Error: 503 service unavailable (try ${calls})`); return `ok ${calls}` } },
+      semanticFailureMatcher: matcher,
+    })
+  }
+
+  it('a recovered decomposed turn asks once, not once per remaining task (it used to ask on every iteration after the first failure)', async () => {
+    let asked = 0
+    await runGraph(1, async () => { asked++; return match as never })
+    expect(asked).toBe(1)
+  })
+
+  it('a matcher that found nothing is asked again when the same task fails again (the later-pass behaviour is kept)', async () => {
+    let asked = 0
+    await runGraph(2, async () => { asked++; return null }, true)
+    expect(asked).toBeGreaterThan(1)
+  })
+})

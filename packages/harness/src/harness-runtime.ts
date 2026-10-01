@@ -569,6 +569,8 @@ interface LoopContext {
   supervisorAskUserCount: number
   /** How many worldModel.observations existed at the last semanticFailureMatcher call — re-checked only once this count changes (see the escalation block after update_diagnostics_post_exec). */
   lastFailureMatchSymptomCount: number
+  /** Tasks the semantic failure matcher already produced a match for — not asked again about the same task (a retry that recovers has nothing left to classify). Not persisted. */
+  failureMatchedTaskIds: Set<string>
   /** See PendingProposalData. Set right after action_gate decides, for the duration of the new suspend-point yield; cleared before execute() (or the BLOCK/ESCALATE consequence) runs. */
   pendingProposal?: PendingProposalData
   /** Phase I / INV-18: bounded, single-slot ReviewerVerdict set by reviewerPass(), consumed
@@ -658,6 +660,7 @@ function buildInitialContext(
     askMode: options.askMode,
     supervisorAskUserCount: 0,
     lastFailureMatchSymptomCount: 0,
+    failureMatchedTaskIds: new Set<string>(),
     pendingProposal: undefined,
     pendingReviewerVerdict: undefined,
   }
@@ -753,6 +756,7 @@ function buildResumedContext(rawCheckpoint: HarnessCheckpoint, options: HarnessR
     askMode: options.askMode,
     supervisorAskUserCount: checkpoint.progress.supervisorAskUserCount ?? 0,
     lastFailureMatchSymptomCount: 0,
+    failureMatchedTaskIds: new Set<string>(),
     pendingProposal: checkpoint.progress.pendingProposal ?? undefined,
     pendingReviewerVerdict: checkpoint.progress.pendingReviewerVerdict ?? undefined,
   }
@@ -1712,13 +1716,18 @@ async function* driveMainLoop(ctx: LoopContext): AsyncGenerator<HarnessCheckpoin
     // history is still empty and the matcher never got to classify it, only a later one (a transient service error on a
     // single-task turn was never matched before it was already given up on). The failure this very iteration just recorded
     // (`!execResult.success`, its SYSTEM_ERROR observation already in the world model) counts too.
-    if (ctx.semanticFailureMatcher && ctx.failureDiagnostics.matched_pattern === null && (ctx.failureDiagnostics.failure_history.length > 0 || !execResult.success)) {
+    // Only a failure of THIS task is worth a call: a task that never failed has nothing to classify (the check used to run on every
+    // iteration once ANY failure had been recorded, so a recovered turn paid for a call per remaining task), and once the matcher
+    // has produced a match for a task it is not asked about that task again (the retry that recovers has nothing left to classify).
+    const thisTaskFailed = !execResult.success || ctx.failureDiagnostics.failure_history.some(f => f.context?.['task_id'] === currentTask.id)
+    if (ctx.semanticFailureMatcher && ctx.failureDiagnostics.matched_pattern === null && thisTaskFailed && !ctx.failureMatchedTaskIds.has(currentTask.id)) {
       const libraryEntries = ctx.failureDiagnostics.failure_mode_library.getEntries()
       const symptoms = ctx.worldModel.observations.map(o => o.content)
       if (symptoms.length > 0 && libraryEntries.length > 0 && symptoms.length !== ctx.lastFailureMatchSymptomCount) {
         ctx.lastFailureMatchSymptomCount = symptoms.length
         const semanticMatch = await ctx.semanticFailureMatcher(symptoms, libraryEntries)
         if (semanticMatch) {
+          ctx.failureMatchedTaskIds.add(currentTask.id)
           ctx.failureDiagnostics.matched_pattern = {
             ...semanticMatch,
             confidence: normalise(semanticMatch.confidence, DimensionType.match_confidence),

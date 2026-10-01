@@ -353,6 +353,8 @@ class LoopContext:
     pending_reviewer_verdict: Any = None
     last_contradiction_check_count: int = 0
     last_failure_match_symptom_count: int = 0
+    # Tasks the semantic failure matcher already produced a match for; not asked again about the same task.
+    failure_matched_task_ids: set[str] = field(default_factory=set)
     supervisor_ask_user_count: int = 0
     pending_proposal: dict[str, Any] | None = None  # TS PendingProposalData (camelCase, checkpointed)
     should_gather_evidence: bool = False
@@ -1275,11 +1277,16 @@ def drive_main_loop(ctx: LoopContext) -> Iterator[dict[str, Any]]:
         fd = ctx.failure_diagnostics
         # failure_history is only written by rollback_and_replan, which runs AFTER this block, so on a task's first
         # failure it is still empty; the failure this very iteration just recorded (not exec_result.success) counts
-        # too — see harness-runtime.ts.
+        # too. Only a failure of THIS task is worth a call, and a task the matcher already matched is not asked about
+        # again — see harness-runtime.ts.
+        this_task_failed = not exec_result.success or any(
+            f.context.get("task_id") == current.id for f in fd.failure_history
+        )
         if (
             opts.semantic_failure_matcher is not None
             and fd.matched_pattern is None
-            and (fd.failure_history or not exec_result.success)
+            and this_task_failed
+            and current.id not in ctx.failure_matched_task_ids
         ):
             entries = fd.failure_mode_library.get_entries()
             symptoms = [o.content for o in ctx.world_model.observations]
@@ -1287,6 +1294,7 @@ def drive_main_loop(ctx: LoopContext) -> Iterator[dict[str, Any]]:
                 ctx.last_failure_match_symptom_count = len(symptoms)
                 match = opts.semantic_failure_matcher(symptoms, entries)
                 if match is not None:
+                    ctx.failure_matched_task_ids.add(current.id)
                     m = match if isinstance(match, MatchResult) else MatchResult.from_dict(dict(match))
                     fd.matched_pattern = MatchResult(
                         failure_class=m.failure_class,

@@ -123,3 +123,31 @@ def test_a_confident_match_requeues_a_failed_root_that_has_dependents_and_a_pend
 def test_negative_control_no_match_the_same_failed_root_stays_failed():
     r = _fail_root(False)
     assert {t.id: t.status for t in r.new_task_graph.tasks}["1"] == "FAILED"
+
+
+def test_a_recovered_decomposed_turn_asks_the_matcher_once_not_once_per_remaining_task():
+    calls = {"n": 0}
+    asked = {"n": 0}
+
+    def tool(_ctx=None):
+        calls["n"] += 1
+        if calls["n"] == 1:
+            raise RuntimeError("API Error: 503 service unavailable")
+        return f"ok {calls['n']}"
+
+    def matcher(_symptoms, _entries):
+        asked["n"] += 1
+        return MATCH
+
+    opts = HarnessRunOptions(
+        max_steps=20,
+        initial_tasks=[
+            Task(id="1", description="task 1", status="PENDING", risk_level="LOW"),
+            Task(id="2", description="task 2", status="PENDING", risk_level="LOW"),
+            Task(id="3", description="task 3", status="PENDING", risk_level="LOW", depends_on=["1", "2"]),
+        ],
+        tool_executors={"default": tool},
+        semantic_failure_matcher=matcher,
+    )
+    HarnessRuntime().run("answer", ["answered"], opts)
+    assert asked["n"] == 1
