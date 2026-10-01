@@ -327,6 +327,13 @@ export interface HarnessRunOptions extends HarnessInitOptions {
   }) => Promise<{ conflict: boolean; reason?: string }>
   semanticTaskCompletion?: SemanticTaskCompletion
   semanticConstraintJudge?: SemanticConstraintJudge
+  /**
+   * Opt-in: when the constraint judge finds a violation and every task is done, reopen the last completed task ONCE so the
+   * host's proposer answers again, and call this with the violated constraints and a note describing them. Only the second
+   * answer is judged for real — if it still violates, the run throws OutputContractError as before. Absent ⇒ a violation
+   * throws straight away. A throwing handler never breaks the run.
+   */
+  onConstraintRevision?: (event: { taskId: string; note: string; violated: Array<{ constraint: string; reason?: string }> }) => void
   /** Called when the completion check judged a task's output did not do the task — the host can persist why (e.g. on a durable plan's task). Observability only: a throwing handler never breaks the run. */
   onTaskNotAccomplished?: (event: { taskId: string; reason: string }) => void
   /**
@@ -525,6 +532,9 @@ interface LoopContext {
   }) => Promise<{ conflict: boolean; reason?: string }>
   semanticTaskCompletion?: SemanticTaskCompletion
   semanticConstraintJudge?: SemanticConstraintJudge
+  onConstraintRevision?: (event: { taskId: string; note: string; violated: Array<{ constraint: string; reason?: string }> }) => void
+  /** True once a constraint violation has reopened a task this run (at most once). */
+  constraintRevisionDone?: boolean
   /** Called when the completion check judged a task's output did not do the task — the host can persist why (e.g. on a durable plan's task). Observability only: a throwing handler never breaks the run. */
   onTaskNotAccomplished?: (event: { taskId: string; reason: string }) => void
   /** The most recent task the completion check judged not done — read only by stalledTurnFallbackResult so the stranded reply can say why. Not checkpointed. */
@@ -625,6 +635,7 @@ function buildInitialContext(
     semanticChangeReviewer: options.semanticChangeReviewer,
     semanticTaskCompletion: options.semanticTaskCompletion,
     semanticConstraintJudge: options.semanticConstraintJudge,
+    onConstraintRevision: options.onConstraintRevision,
     onTaskNotAccomplished: options.onTaskNotAccomplished,
     changeReviewFacts: options.changeReviewFacts,
     onReviewConflict: options.onReviewConflict,
@@ -718,6 +729,7 @@ function buildResumedContext(rawCheckpoint: HarnessCheckpoint, options: HarnessR
     semanticChangeReviewer: options.semanticChangeReviewer,
     semanticTaskCompletion: options.semanticTaskCompletion,
     semanticConstraintJudge: options.semanticConstraintJudge,
+    onConstraintRevision: options.onConstraintRevision,
     onTaskNotAccomplished: options.onTaskNotAccomplished,
     changeReviewFacts: options.changeReviewFacts,
     onReviewConflict: options.onReviewConflict,
@@ -965,6 +977,37 @@ function maybeReopenForReviewerRevision(ctx: LoopContext, result: { pending_verd
   ctx.reviewerRevisionDone = true
   try {
     ctx.onReviewerRevision?.({ taskId, note })
+  } catch {
+    /* an observability handler must never break the run */
+  }
+  return taskId
+}
+
+/** The constraints the host's judge says the final reply violates; empty when there is no judge, no constraint, no reply, or the judge fails (a failing check never fails a reply that would have passed). */
+async function judgeConstraints(ctx: LoopContext, judge: SemanticConstraintJudge | undefined): Promise<Array<{ constraint: string; reason?: string }>> {
+  if (!judge || ctx.callerState.current_constraints.length === 0) return []
+  const reply = typeof ctx.finalResult === 'string' ? ctx.finalResult : ctx.finalResult == null ? '' : JSON.stringify(ctx.finalResult)
+  if (reply.trim() === '') return []
+  try {
+    return (await judge({ constraints: [...ctx.callerState.current_constraints], reply })).violated ?? []
+  } catch {
+    return []
+  }
+}
+
+/**
+ * Returns the id of the task to reopen when the host opted into `onConstraintRevision`: only once per run, only at the end
+ * of a run (every task COMPLETE). Fires the handler with the note the proposer should see.
+ */
+function maybeReopenForConstraintRevision(ctx: LoopContext, violated: Array<{ constraint: string; reason?: string }>): string | undefined {
+  if (!ctx.onConstraintRevision || ctx.constraintRevisionDone) return undefined
+  if (!ctx.taskGraph.tasks.every((t) => t.status === 'COMPLETE')) return undefined
+  const taskId = ctx.lastCompletedTaskId
+  if (!taskId || !ctx.taskGraph.getTask(taskId)) return undefined
+  ctx.constraintRevisionDone = true
+  const note = violated.map(v => `Your answer violates the constraint "${v.constraint}"${v.reason ? ` (${v.reason})` : ''}.`).join(' ')
+  try {
+    ctx.onConstraintRevision({ taskId, note, violated })
   } catch {
     /* an observability handler must never break the run */
   }
@@ -2112,23 +2155,28 @@ async function driveToCompletion(ctx: LoopContext, options: HarnessRunOptions): 
 
   ctx.nodeExecutionOrder.push('output_validation')
   const judge = ctx.semanticConstraintJudge
-  const validationResult = outputValidation(ctx.finalResult, ctx.outputContract, ctx.callerState, { skipCallerConstraints: judge !== undefined })
-  if (judge && ctx.callerState.current_constraints.length > 0) {
-    const reply = typeof ctx.finalResult === 'string' ? ctx.finalResult : ctx.finalResult == null ? '' : JSON.stringify(ctx.finalResult)
-    let violated: Array<{ constraint: string; reason?: string }> = []
-    if (reply.trim() !== '') {
-      try {
-        violated = (await judge({ constraints: [...ctx.callerState.current_constraints], reply })).violated ?? []
-      } catch {
-        /* a failing check must never fail a reply that would have passed */
+  let validationResult = outputValidation(ctx.finalResult, ctx.outputContract, ctx.callerState, { skipCallerConstraints: judge !== undefined })
+  let violated = await judgeConstraints(ctx, judge)
+  if (violated.length > 0) {
+    const reopened = maybeReopenForConstraintRevision(ctx, violated)
+    if (reopened) {
+      const task = ctx.taskGraph.getTask(reopened)
+      if (task) {
+        task.status = 'PENDING'
+        ctx.taskGraph.changed = true
       }
+      const again = await runMainLoopWithCheckpoints(ctx, options)
+      if (again.status === 'paused') return again
+      ctx.nodeExecutionOrder.push('output_validation_2')
+      validationResult = outputValidation(ctx.finalResult, ctx.outputContract, ctx.callerState, { skipCallerConstraints: judge !== undefined })
+      violated = await judgeConstraints(ctx, judge)
     }
-    if (violated.length > 0) {
-      throw new OutputContractError(
-        'caller_specific_constraints',
-        violated.map(v => `caller_specific_constraints: constraint violated: "${v.constraint}"${v.reason ? ` (${v.reason})` : ''}`),
-      )
-    }
+  }
+  if (violated.length > 0) {
+    throw new OutputContractError(
+      'caller_specific_constraints',
+      violated.map(v => `caller_specific_constraints: constraint violated: "${v.constraint}"${v.reason ? ` (${v.reason})` : ''}`),
+    )
   }
 
   // propagateBeliefs available for introspection but not part of the return

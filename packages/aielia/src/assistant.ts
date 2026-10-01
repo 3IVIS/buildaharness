@@ -41,6 +41,7 @@ import { REVIEW_NOTE_PREFIX, reviewNoticeText } from './review-checker.js'
 import { renderHypothesisNote, hypothesisContextMessage, proposeCompetingExplanations, semanticHypothesesEnabled, HYPOTHESIS_NOTE_PREFIX } from './semantic-hypotheses.js'
 import type { SemanticHypothesisProposal } from '@buildaharness/harness'
 import { RECOVERY_NOTE_PREFIX, recoveryNoteText, learnedRecoveryNoteText } from './recovery-note.js'
+import { REVISION_NOTE_PREFIX } from './reviewer-revision.js'
 import { AssistantSession, type IndexedMessage, type TranscriptSearchHit } from './assistant-session.js'
 import { semanticCompactionEnabled, summarizeOlderMessages } from './semantic-compaction.js'
 import { AgentLoop, OneLoopPause, type BatchBudgetState, type BatchBudgetTrace, type ToolLoopResult, trimmedAverage, nextItemBudget } from './agent-loop.js'
@@ -1255,6 +1256,7 @@ export class PersonalAssistant {
         updateChannel: steeringAdapter?.channel,
         precomputedHypotheses,
         onReviewerRevision: (e) => { revisionNotes.push(e.note) },
+        onConstraintRevision: (e) => { revisionNotes.push(`${REVISION_NOTE_PREFIX}${e.note}`) },
         onSemanticHypothesis: (e) => {
           if (e.kind === 'generated') hypothesisNotes.push(renderHypothesisNote(e.hypotheses))
         },

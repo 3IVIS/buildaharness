@@ -86,6 +86,7 @@ describe('classifyTurnIntent — happy path field derivation', () => {
       userPosture: 'informational',
       pushbackOnPriorTurn: false,
       statesConstraint: false,
+      statedConstraints: [],
     })
     expect(llm.calls).toBe(1)
   })
@@ -408,6 +409,7 @@ describe('classifyTurnIntent — fail-safe fallback', () => {
     userPosture: 'unknown',
     pushbackOnPriorTurn: false,
     statesConstraint: false,
+    statedConstraints: [],
   }
 
   it('falls back on malformed JSON instead of throwing, folding the JSON.parse error into riskReason (same classifyError path as a genuine LLM-call throw, since JSON.parse throwing inside parseTurnIntent is likewise a real caught error, not a semantic-validation null-return)', async () => {
@@ -561,5 +563,21 @@ describe('classifyTurnIntent — output a backend could not constrain to bare JS
     const result = await classifyTurnIntent('Where does the plan stand?', new StructuredOnlyLLMClient('I cannot classify that.'), NO_PLAN)
     expect(result.riskLevel).toBe('UNKNOWN')
     expect(result.requiresApproval).toBe(true)
+  })
+})
+
+describe('statedConstraints', () => {
+  const stated = async (overrides: Record<string, unknown>) =>
+    (await classifyTurnIntent('Never use tabs.', new StructuredOnlyLLMClient(response(overrides)), NO_PLAN)).statedConstraints
+
+  it('keeps trimmed, non-empty strings when the message states a constraint, capped at MAX_STATED_CONSTRAINTS', async () => {
+    expect(await stated({ statesConstraint: true, statedConstraints: [' Do not use tabs ', '', 7, 'a', 'b', 'c', 'd'] })).toEqual(['Do not use tabs', 'a', 'b', 'c'])
+  })
+  it('is empty when statesConstraint is false, even if the model listed some', async () => {
+    expect(await stated({ statesConstraint: false, statedConstraints: ['Do not use tabs'] })).toEqual([])
+  })
+  it('is empty when the field is missing or malformed', async () => {
+    expect(await stated({ statesConstraint: true })).toEqual([])
+    expect(await stated({ statesConstraint: true, statedConstraints: 'no tabs' })).toEqual([])
   })
 })

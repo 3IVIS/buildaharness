@@ -166,6 +166,8 @@ export interface HarnessRunParams {
   precomputedHypotheses?: SemanticHypothesisProposal[] | null
   /** The reviewer pass's verdict sent the last answer back for one revision (AUDIT_REVIEWER_REVISION): the note to put in front of the proposer. */
   onReviewerRevision?: (event: { taskId: string; note: string }) => void
+  /** A constraint the user stated this turn was violated by the finished answer: the note to hand the proposer for its one second answer. */
+  onConstraintRevision?: (event: { taskId: string; note: string }) => void
   /** A confident failure-mode match picked the recovery strategy — advisory (see HarnessRunOptions.onFailureModeSwitch). The caller decides how to surface it. */
   onFailureModeSwitch?: (event: { taskId: string; failure_class: string; strategy: string }) => void
   /** With AUDIT_EXPERIENCE_LEARNING on, a ranking learned from earlier runs picked the recovery strategy — advisory (see HarnessRunOptions.onLearnedStrategySwitch). */
@@ -284,7 +286,7 @@ export class HarnessBridge {
   }
 
   async run(params: HarnessRunParams): Promise<HarnessOutcome> {
-    const { sessionId, userMessage, facts, currentTurnFacts = [], draftReply, classification, initialTasks, activePlan, sources, onProgress, onUsage, oneLoopProposer, runInvestigation, askModeEnabled = false, updateChannel, onReviewConflict, onFailureModeSwitch, onLearnedStrategySwitch, onSemanticHypothesis, precomputedHypotheses, onReviewerRevision } = params
+    const { sessionId, userMessage, facts, currentTurnFacts = [], draftReply, classification, initialTasks, activePlan, sources, onProgress, onUsage, oneLoopProposer, runInvestigation, askModeEnabled = false, updateChannel, onReviewConflict, onFailureModeSwitch, onLearnedStrategySwitch, onSemanticHypothesis, precomputedHypotheses, onReviewerRevision, onConstraintRevision } = params
     const runtime = new HarnessRuntime()
     // One harness run per (session, turn) — a run_id a resumed run can be found under if this
     // turn's process died mid-run before reaching the `finally` cleanup below.
@@ -589,6 +591,12 @@ export class HarnessBridge {
         semanticConstraintJudge: semanticConstraintCheckEnabled()
           ? (input: { constraints: string[]; reply: string }) => checkConstraints(input, this.llmClient, this.model(), onUsage)
           : undefined,
+        // The constraints the user stated THIS turn, extracted by the classifier. Fed to the harness only where the semantic judge
+        // replaces the lexical match (a word match would fail an acknowledging reply) AND there is a proposer to ask again — a
+        // violation sends the answer back once, and a tool-less turn's reply is already drafted. This turn only: nothing is persisted.
+        ...(semanticConstraintCheckEnabled() && oneLoopProposer && classification.statedConstraints && classification.statedConstraints.length > 0
+          ? { callerConstraints: classification.statedConstraints, onConstraintRevision }
+          : {}),
         semanticTaskCompletion:
           activePlan?.executingOnPlan && semanticTaskCompletionEnabled()
             ? (input: { taskDescription: string; output: unknown }) => checkTaskCompletion(input, this.llmClient, this.model(), onUsage)
