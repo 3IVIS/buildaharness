@@ -185,6 +185,21 @@ export function requeueFailedLeaves(taskGraph: TaskGraph): boolean {
   return changed
 }
 
+/** Flip EVERY FAILED task back to PENDING (retryFailedTask). Unlike requeueFailedLeaves this includes a failed task that has
+ *  dependents: those dependents were reset to PENDING by diagnoseAndReplan but cannot run while the task they depend on is still
+ *  FAILED, so leaving it failed strands the whole chain. Returns true iff at least one task was re-queued. */
+export function requeueFailedTasks(taskGraph: TaskGraph): boolean {
+  let changed = false
+  for (const t of taskGraph.tasks) {
+    if (t.status === 'FAILED') {
+      t.status = 'PENDING'
+      changed = true
+    }
+  }
+  if (changed) taskGraph.changed = true
+  return changed
+}
+
 function validateTaskGraph(taskGraph: TaskGraph): string[] {
   const errors: string[] = []
   const ids = new Set(taskGraph.tasks.map(t => t.id))
@@ -240,6 +255,7 @@ export function rollbackAndReplan(
   supervisorDirective?: SupervisorDirective | null,
   requeueLeafOnLocal = false,
   learnedLadder = false,
+  retryFailedTask = false,
 ): RollbackReplanResult {
   // Rollback
   rollbackFn?.()
@@ -305,16 +321,18 @@ export function rollbackAndReplan(
       risk_state_history: [...strategyState.risk_state_history],
     })
   } else {
-    const learnedRanking = learnedLadder && !redirectHint && !failureModeHint && !sameOrder(ordering, DEFAULT_STRATEGY_ORDER)
+    // A ranking learned from earlier runs (experienceLearning on, weights for this class) outranks a curated failure-mode
+    // match — it is empirical where the curated affinity is a static lookup — but never the supervisor's redirect, which
+    // reasoned about this specific stall.
+    const learnedRanking = learnedLadder && !redirectHint && !sameOrder(ordering, DEFAULT_STRATEGY_ORDER)
     const nextStrategy =
       redirectHint ??
-      failureModeHint ??
       (learnedRanking
         ? pickLearnedStrategy(ordering, strategyState.current_strategy, strategyState.switch_count)
-        : getNextStrategy(strategyState.current_strategy, ordering))
+        : (failureModeHint ?? getNextStrategy(strategyState.current_strategy, ordering)))
     learnedSwitch = learnedRanking ? { failure_class: failureClass, strategy: nextStrategy } : undefined
     failureModeSwitch =
-      !redirectHint && failureModeHint && failureDiagnostics.matched_pattern
+      !redirectHint && !learnedRanking && failureModeHint && failureDiagnostics.matched_pattern
         ? { failure_class: failureDiagnostics.matched_pattern.failure_class, strategy: failureModeHint }
         : undefined
     newStrategyState = new StrategyState({
@@ -325,6 +343,8 @@ export function rollbackAndReplan(
         ...strategyState.switch_triggers,
         redirectHint
           ? supTrigger('REDIRECT_STRATEGY')
+          : learnedRanking
+            ? `learned:${failureClass || 'unmatched'} -> ${nextStrategy}`
           : failureModeHint
             ? `failure_mode:${failureDiagnostics.matched_pattern?.failure_class} -> ${failureModeHint}`
             : `task_failed: ${currentTask.id}`,
@@ -364,7 +384,12 @@ export function rollbackAndReplan(
     // same requeue on its own — a curated pattern match is as good a reason to give this leaf
     // one more attempt as a supervisor directive is, and without it the classification + bias
     // + retry-hint chain has a real decision but nothing left PENDING to apply it to.
-    if ((requeueLeafOnLocal || failureModeSwitch) && !newTaskGraph.tasks.some(t => t.status === 'PENDING')) {
+    // retryFailedTask (HarnessRunOptions, off by default): the switch above only helps if the failed task runs again under the
+    // new strategy, so re-queue every failed task — not just leaves, and not just when nothing else is pending. The ladder's
+    // MAX_SWITCHES and the stall rule still bound the retries.
+    if (retryFailedTask) {
+      if (requeueFailedTasks(newTaskGraph)) newStrategyState.switch_triggers.push(`retry_failed_task: ${currentTask.id}`)
+    } else if ((requeueLeafOnLocal || failureModeSwitch) && !newTaskGraph.tasks.some(t => t.status === 'PENDING')) {
       if (requeueFailedLeaves(newTaskGraph)) {
         newStrategyState.switch_triggers.push(
           `supervisor:requeue_leaf ${supervisorDirective?.rationale ?? ''}`.trim().slice(0, 200),

@@ -284,12 +284,14 @@ class HarnessRunOptions:
     skip_reviewer_pass: bool = False
     skip_control_state: bool = False
     experience_learning: bool = False
+    retry_failed_task: bool = False  # re-queue the failed leaf after the ladder switches strategy (TS retryFailedTask)
     is_checkable_criterion: Callable[[str], bool] | None = None
     ask_mode: str | None = None  # "enabled" turns the structured ask-question shape on (TS askMode)
     # observability callbacks (a raising handler never breaks the run)
     on_verification: Callable[[VerificationResult], None] | None = None
     on_gate_decision: Callable[[dict[str, Any]], None] | None = None
     on_failure_mode_switch: Callable[[dict[str, Any]], None] | None = None
+    on_learned_strategy_switch: Callable[[dict[str, Any]], None] | None = None
     on_review_conflict: Callable[[dict[str, Any]], None] | None = None
     on_task_not_accomplished: Callable[[dict[str, Any]], None] | None = None
     on_supervisor_directive: Callable[[Any], None] | None = None
@@ -1443,6 +1445,8 @@ def _rollback_and_replan(ctx: LoopContext, current: Task) -> None:
         rollback_fn,
         directive,
         requeue_leaf_on_local,
+        ctx.options.experience_learning,
+        ctx.options.retry_failed_task,
     )
     ctx.strategy_state = result.new_strategy_state
     if result.replan_scope == "GLOBAL":
@@ -1453,6 +1457,8 @@ def _rollback_and_replan(ctx: LoopContext, current: Task) -> None:
         ctx.recovery_budget = ctx.recovery_budget.consume(plan_revisions=1)
     if result.failure_mode_switch:
         _safe(opts.on_failure_mode_switch, {"task_id": current.id, **result.failure_mode_switch})
+    if result.learned_switch:
+        _safe(opts.on_learned_strategy_switch, {"task_id": current.id, **result.learned_switch})
 
 
 # ── post-loop (TS driveToCompletion) ─────────────────────────────────────────

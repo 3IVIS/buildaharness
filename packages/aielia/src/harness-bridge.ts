@@ -86,6 +86,18 @@ export function experienceLearningEnabled(env?: Record<string, string | undefine
 }
 
 /**
+ * `AUDIT_RETRY_FAILED_TASK` gate. Default **OFF**. On (`1`/`true`/`on`/`yes`/`enabled`) makes HarnessBridge.run pass
+ * `retryFailedTask: true`: after the recovery ladder switches strategy for a failed task, the failed task is re-queued so the
+ * new strategy actually gets an attempt (HarnessRunOptions.retryFailedTask). Off, a failed single task — or a multi-task turn
+ * whose tasks fail together — ends with nothing to run and the turn answers "could not complete". Read fresh each run.
+ */
+export function retryFailedTaskEnabled(env?: Record<string, string | undefined>): boolean {
+  const source = env ?? (typeof process !== 'undefined' ? process.env : {})
+  const raw = String(source.AUDIT_RETRY_FAILED_TASK ?? '').trim().toLowerCase()
+  return ['1', 'true', 'on', 'yes', 'enabled'].includes(raw)
+}
+
+/**
  * `AUDIT_REVIEWER_PASS` gate — feature-value audit (Phase C6 of the internal plan). EVAL-ONLY:
  * default **ON** (an unset / empty / truthy value keeps today's always-on 3-lens reviewer pass).
  * Only the benchmark's `reviewerPassOff` arm sets a falsy value (`0` / `false` / `off` / `no` /
@@ -461,6 +473,7 @@ export class HarnessBridge {
         skipControlState: controlStateGateEnabled() ? undefined : true,
         // AUDIT_EXPERIENCE_LEARNING (default off): journal every executed task and teach the experience store when the run ends.
         experienceLearning: experienceLearningEnabled() ? true : undefined,
+        retryFailedTask: retryFailedTaskEnabled() ? true : undefined,
         // Trajectory Supervisor GATHER_EVIDENCE host (S5). Inert unless a supervisorDecider is
         // also wired and returns a GATHER_EVIDENCE directive at a stall edge; absent → the
         // harness degrades GATHER_EVIDENCE to CONTINUE.
