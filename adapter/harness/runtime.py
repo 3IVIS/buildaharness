@@ -315,6 +315,9 @@ class HarnessRunOptions:
     # reviewer revision (TS reviewerRevision / onReviewerRevision): a note reopens the last completed task once
     reviewer_revision: Callable[[Any], str | None] | None = None
     on_reviewer_revision: Callable[[dict[str, str]], None] | None = None
+    # constraint revision (TS onConstraintRevision): a judge-found violation at the END of a run reopens the last
+    # completed task once
+    on_constraint_revision: Callable[[dict[str, Any]], None] | None = None
     # Python-only features carried over from loop.run_one_iteration (off unless given)
     recovery_budget: RecoveryBudget | None = None  # bounds stall recovery; exhaustion halts with "recovery_budget"
     plan_template: Any | None = None  # PlanTemplate: the task graph is exported via plan_store.save_plan each iteration
@@ -357,6 +360,7 @@ class LoopContext:
     semantic_hypotheses_asked: bool = False
     last_judged_observation_count: int = 0
     reviewer_revision_done: bool = False
+    constraint_revision_done: bool = False
     last_completed_task_id: str | None = None
     recovery_budget: RecoveryBudget | None = None
     last_not_accomplished: dict[str, str] | None = None
@@ -622,6 +626,46 @@ def _maybe_reopen_for_reviewer_revision(ctx: LoopContext, review: Any) -> str | 
         return None
     ctx.reviewer_revision_done = True
     _safe(opts.on_reviewer_revision, {"task_id": task_id, "note": note})
+    return task_id
+
+
+def _judge_constraints(ctx: LoopContext) -> list[dict[str, Any]]:
+    """The constraints the host's judge says the final reply violates (TS judgeConstraints); empty when there is no
+    judge, no constraint, no reply, or the judge fails (a failing check never fails a reply that would have passed)."""
+    judge = ctx.options.semantic_constraint_judge
+    if judge is None or not ctx.caller_state.current_constraints:
+        return []
+    fr = ctx.final_result
+    reply = fr if isinstance(fr, str) else "" if fr is None else json.dumps(fr, default=str)
+    if not reply.strip():
+        return []
+    try:
+        return list(
+            judge({"constraints": list(ctx.caller_state.current_constraints), "reply": reply}).get("violated", [])
+        )
+    except Exception:
+        return []
+
+
+def _maybe_reopen_for_constraint_revision(ctx: LoopContext, violated: list[dict[str, Any]]) -> str | None:
+    """With `on_constraint_revision` set, a violation at the end of a run reopens the last completed task once and tells
+    the host what to put in front of the proposer (TS maybeReopenForConstraintRevision)."""
+    opts = ctx.options
+    if opts.on_constraint_revision is None or ctx.constraint_revision_done:
+        return None
+    if not all(t.status == "COMPLETE" for t in ctx.task_graph.tasks):
+        return None
+    task_id = ctx.last_completed_task_id
+    if not task_id or ctx.task_graph.get_task(task_id) is None:
+        return None
+    ctx.constraint_revision_done = True
+    note = " ".join(
+        f'Your answer violates the constraint "{v["constraint"]}"'
+        + (f" ({v['reason']})" if v.get("reason") else "")
+        + "."
+        for v in violated
+    )
+    _safe(opts.on_constraint_revision, {"task_id": task_id, "note": note, "violated": violated})
     return task_id
 
 
@@ -1534,26 +1578,31 @@ def _drive_to_completion(ctx: LoopContext) -> HarnessRunOutcome:
     validation = output_validation(
         ctx.final_result, ctx.output_contract, ctx.caller_state, skip_caller_constraints=judge is not None
     )
-    if judge is not None and ctx.caller_state.current_constraints:
-        fr = ctx.final_result
-        reply = fr if isinstance(fr, str) else "" if fr is None else json.dumps(fr, default=str)
-        violated: list[dict[str, Any]] = []
-        if reply.strip():
-            try:
-                violated = judge({"constraints": list(ctx.caller_state.current_constraints), "reply": reply}).get(
-                    "violated", []
-                )
-            except Exception:
-                violated = []  # a failing judge must never fail a run
-        if violated:
-            raise OutputContractError(
-                "caller_specific_constraints",
-                [
-                    f'caller_specific_constraints: constraint violated: "{v["constraint"]}"'
-                    + (f" ({v['reason']})" if v.get("reason") else "")
-                    for v in violated
-                ],
+    violated = _judge_constraints(ctx)
+    if violated:
+        reopened = _maybe_reopen_for_constraint_revision(ctx, violated)
+        if reopened:
+            task = ctx.task_graph.get_task(reopened)
+            if task is not None:
+                task.status = "PENDING"
+                ctx.task_graph.changed = True
+            paused = _run_main_loop(ctx)
+            if paused is not None:
+                return HarnessRunOutcome(status="paused", result=None, checkpoint=paused)
+            _node(ctx, "output_validation_2")
+            validation = output_validation(
+                ctx.final_result, ctx.output_contract, ctx.caller_state, skip_caller_constraints=judge is not None
             )
+            violated = _judge_constraints(ctx)
+    if violated:
+        raise OutputContractError(
+            "caller_specific_constraints",
+            [
+                f'caller_specific_constraints: constraint violated: "{v["constraint"]}"'
+                + (f" ({v['reason']})" if v.get("reason") else "")
+                for v in violated
+            ],
+        )
 
     result = HarnessRunResult(
         final_result=ctx.final_result,
