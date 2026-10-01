@@ -1,6 +1,6 @@
 import { deriveConsequentialTools } from '@buildaharness/harness'
 import { TOOL_EFFECT_CLASS } from './tool-effect-class.js'
-import { resolveEscalationPlan, injectionDetectionEnabled } from './layer-policy-wiring.js'
+import { resolveEscalationPlan, injectionDetectionEnabled, resolveOptInPlan, optInLayerEnabled } from './layer-policy-wiring.js'
 import {
   EscalationHalt,
   InMemoryExperienceStore,
@@ -369,6 +369,7 @@ export class PersonalAssistant {
   private readonly toolLoopWillRun: boolean
   /** R3 of the internal plan — mirrors the same flag HarnessBridge was given at construction, kept here too so runTurn can decide whether to defer the tool loop into a harness-driven proposer instead of precomputing draftReply. See PersonalAssistantOptions.oneLoopMode's doc comment. */
   private readonly oneLoopMode: OneLoopMode
+  private readonly layerPolicyMode: LayerPolicyMode
   /** Q2 — global-flag tier of the ask-question mechanism's three-tier INV-29 resolution. See PersonalAssistantOptions.askMode's doc comment. */
   private readonly askMode: AskMode
   /** P11 — gates whether P3's auto-trigger below can ever enter plan mode for real traffic. See PersonalAssistantOptions.planMode's doc comment. */
@@ -473,6 +474,7 @@ export class PersonalAssistant {
         return injectionDetectionEnabled(plan, { untrustedContentInContext: true, toolCapableNextStep: consequentialTools.size > 0 })
       }
     }
+    this.layerPolicyMode = options.layerPolicyMode ?? 'static'
     this.turnInterpreter = new TurnInterpreter(this.llmClient, model, this.planService, reminderStore, options.ambiguityGuardMode ?? DEFAULT_AMBIGUITY_GUARD_MODE, options.layerPolicyMode ?? 'static')
     this.harnessBridge = new HarnessBridge(
       this.memory, experienceStore, checkpointStore, this.llmClient, model, maxSteps,
@@ -963,6 +965,9 @@ export class PersonalAssistant {
     }
 
     const { classification, planForCancelCheck } = interpretation
+    // Opt-in layers obey the layer policy (adaptive mode only; otherwise undefined and each layer's own flag decides).
+    const optInPlan = resolveOptInPlan(this.layerPolicyMode, classification)
+    this.agentLoop.optInPlan = optInPlan
 
     // A message that only asks about the active plan is answered from the plan's recorded state; the
     // plan is not handed to the harness, so asking where it stands can never re-run (or strand) its tasks.
@@ -1153,7 +1158,7 @@ export class PersonalAssistant {
       // when no listener is attached.
       draftReply = ''
       let draftSystemPrompt = systemPrompt
-      if (semanticHypothesesEnabled() && classification.isUnderdetermined === true && !classification.isTrivial) {
+      if (optInLayerEnabled('semantic_hypotheses', semanticHypothesesEnabled(), optInPlan) && classification.isUnderdetermined === true && !classification.isTrivial) {
         precomputedHypotheses = await proposeCompetingExplanations({ request: userMessage, observations: [], beliefs: [] }, this.llmClient, this.model, accumulateUsage)
         if (precomputedHypotheses) {
           draftSystemPrompt = `${systemPrompt}\n\n${hypothesisContextMessage(renderHypothesisNote(precomputedHypotheses).slice(HYPOTHESIS_NOTE_PREFIX.length))}`
@@ -1255,6 +1260,7 @@ export class PersonalAssistant {
           : undefined,
         updateChannel: steeringAdapter?.channel,
         precomputedHypotheses,
+        optInPlan,
         onReviewerRevision: (e) => { revisionNotes.push(e.note) },
         onConstraintRevision: (e) => { revisionNotes.push(`${REVISION_NOTE_PREFIX}${e.note}`) },
         tokensUsed: () => (usageTotal?.inputTokens ?? 0) + (usageTotal?.outputTokens ?? 0),
