@@ -1,0 +1,8 @@
+{
+  "criteria": [
+    "deploy to production",
+    "only"
+  ],
+  "skipReviewerPass": false,
+  "criterionCoverage": false
+}

@@ -1,0 +1,7 @@
+{
+  "tokenBudget": {
+    "total": 1000,
+    "used": 950,
+    "throws": true
+  }
+}

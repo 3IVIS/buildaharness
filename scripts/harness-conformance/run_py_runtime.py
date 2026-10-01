@@ -133,6 +133,21 @@ if sc.get("semanticHypotheses"):
     )
 if sc.get("hypothesisJudge"):
     opts.semantic_hypothesis_judge = lambda _a: sc["hypothesisJudge"]
+if sc.get("criterionCoverage") is not None:
+    def _coverage(criterion, _beliefs):
+        log.append(["coverage", criterion])
+        return sc["criterionCoverage"]
+
+    opts.semantic_criterion_coverage = _coverage
+if sc.get("tokenBudget"):
+    _tb = sc["tokenBudget"]
+
+    def _used():
+        if _tb.get("throws"):
+            raise RuntimeError("reader down")
+        return _tb["used"]
+
+    opts.token_budget = {"total": _tb["total"], "used": _used}
 if sc.get("reviewerRevision"):
     opts.reviewer_revision = lambda _v: sc["reviewerRevision"]
     opts.on_reviewer_revision = lambda e: log.append(["revision", e["task_id"], e["note"]])
@@ -184,6 +199,7 @@ try:
             },
             "activeHypotheses": len(c.hypothesis_set.active),
             "journal": [[j.step, j.action_class, j.outcome] for j in c.memory_state.journal],
+            "tokenBudget": [c.memory_state.token_budget.total, c.memory_state.token_budget.used],
             "generationId": c.world_model.generation_id,
             "diagnostics": {
                 "progress": round6(c.diagnostics.execution_health.progress_rate),
