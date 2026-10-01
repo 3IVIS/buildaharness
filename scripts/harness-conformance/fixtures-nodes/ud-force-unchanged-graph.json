@@ -1,0 +1,107 @@
+{
+ "node": "update_diagnostics",
+ "state": {
+  "taskGraph": {
+   "tasks": [
+    {
+     "id": "t1",
+     "description": "t1",
+     "status": "COMPLETE",
+     "risk_level": "LOW",
+     "depends_on": [],
+     "parallel_write_domains": [],
+     "abstraction_level": 1,
+     "assigned_strategy": null
+    },
+    {
+     "id": "t2",
+     "description": "t2",
+     "status": "FAILED",
+     "risk_level": "LOW",
+     "depends_on": [],
+     "parallel_write_domains": [],
+     "abstraction_level": 1,
+     "assigned_strategy": null
+    },
+    {
+     "id": "t3",
+     "description": "t3",
+     "status": "COMPLETE",
+     "risk_level": "LOW",
+     "depends_on": [],
+     "parallel_write_domains": [],
+     "abstraction_level": 1,
+     "assigned_strategy": null
+    },
+    {
+     "id": "t4",
+     "description": "t4",
+     "status": "FAILED",
+     "risk_level": "LOW",
+     "depends_on": [],
+     "parallel_write_domains": [],
+     "abstraction_level": 3,
+     "assigned_strategy": null
+    },
+    {
+     "id": "t5",
+     "description": "t5",
+     "status": "PENDING",
+     "risk_level": "LOW",
+     "depends_on": [],
+     "parallel_write_domains": [],
+     "abstraction_level": 1,
+     "assigned_strategy": null
+    }
+   ],
+   "conflict_probability_cache": {},
+   "changed": false
+  },
+  "worldModel": {
+   "beliefs": [
+    {
+     "id": "b1",
+     "statement": "server is up",
+     "confidence": 0.9,
+     "derived_from": [
+      "o1"
+     ],
+     "recorded_at": "2026-01-01T00:00:00.000Z",
+     "reliability": "HIGH"
+    },
+    {
+     "id": "b2",
+     "statement": "server is not up",
+     "confidence": 0.6,
+     "derived_from": [
+      "o1"
+     ],
+     "recorded_at": "2026-01-01T00:00:00.000Z",
+     "reliability": "LOW"
+    },
+    {
+     "id": "b3",
+     "statement": "cache warm",
+     "confidence": 0.4,
+     "derived_from": [
+      "o1"
+     ],
+     "recorded_at": "2026-01-01T00:00:00.000Z",
+     "reliability": "MEDIUM"
+    },
+    {
+     "id": "b4",
+     "statement": "x",
+     "confidence": 0.7,
+     "derived_from": [
+      "o1"
+     ],
+     "recorded_at": "2026-01-01T00:00:00.000Z"
+    }
+   ]
+  }
+ },
+ "args": {
+  "force": true
+ }
+}

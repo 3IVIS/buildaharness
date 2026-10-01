@@ -1,0 +1,38 @@
+{
+ "node": "update_diagnostics",
+ "state": {
+  "failureDiagnostics": {
+   "failure_history": [
+    {
+     "id": "f0",
+     "timestamp": "2026-01-01T00:00:00.000Z",
+     "failure_class": "X",
+     "description": "d",
+     "context": {}
+    },
+    {
+     "id": "f1",
+     "timestamp": "2026-01-01T00:00:00.000Z",
+     "failure_class": "X",
+     "description": "d",
+     "context": {}
+    },
+    {
+     "id": "f2",
+     "timestamp": "2026-01-01T00:00:00.000Z",
+     "failure_class": "X",
+     "description": "d",
+     "context": {}
+    },
+    {
+     "id": "f3",
+     "timestamp": "2026-01-01T00:00:00.000Z",
+     "failure_class": "X",
+     "description": "d",
+     "context": {}
+    }
+   ]
+  }
+ },
+ "args": {}
+}

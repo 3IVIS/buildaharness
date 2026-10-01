@@ -1,0 +1,41 @@
+{
+ "node": "generate_update_hypotheses",
+ "state": {
+  "worldModel": {
+   "observations": [
+    {
+     "id": "o1",
+     "content": "tests fail on login",
+     "source": "tool",
+     "recorded_at": "2026-01-01T00:00:00.000Z"
+    },
+    {
+     "id": "o2",
+     "content": "timeout talking to db",
+     "source": "db",
+     "recorded_at": "2026-01-01T00:00:00.000Z"
+    }
+   ],
+   "beliefs": [
+    {
+     "id": "b1",
+     "statement": "login service is healthy",
+     "confidence": 0.9,
+     "derived_from": [
+      "o1"
+     ],
+     "recorded_at": "2026-01-01T00:00:00.000Z"
+    },
+    {
+     "id": "b2",
+     "statement": "db pool is sized correctly",
+     "confidence": 0.7,
+     "derived_from": [
+      "o1"
+     ],
+     "recorded_at": "2026-01-01T00:00:00.000Z"
+    }
+   ]
+  }
+ }
+}

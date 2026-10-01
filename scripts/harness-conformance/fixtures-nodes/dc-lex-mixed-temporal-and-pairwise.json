@@ -1,0 +1,40 @@
+{
+ "node": "detect_contradictions",
+ "env": {
+  "HARNESS_LEXICAL_MODE": "enabled"
+ },
+ "state": {
+  "worldModel": {
+   "beliefs": [
+    {
+     "id": "b1",
+     "statement": "config is loaded",
+     "confidence": 0.9,
+     "derived_from": [
+      "config.yaml"
+     ],
+     "recorded_at": "2026-01-01T00:00:00.000Z"
+    },
+    {
+     "id": "b2",
+     "statement": "config is not loaded",
+     "confidence": 0.8,
+     "derived_from": [
+      "o1"
+     ],
+     "recorded_at": "2026-01-01T00:00:00.000Z"
+    }
+   ],
+   "environment_change_log": [
+    {
+     "id": "e1",
+     "description": "edit",
+     "affected_paths": [
+      "config.yaml"
+     ],
+     "timestamp": "2026-02-01T00:00:00.000Z"
+    }
+   ]
+  }
+ }
+}

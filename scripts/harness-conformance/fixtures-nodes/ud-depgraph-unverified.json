@@ -1,0 +1,36 @@
+{
+ "node": "update_diagnostics",
+ "state": {
+  "depGraph": {
+   "belief_nodes": [
+    {
+     "belief_id": "b1",
+     "confidence": 0.9
+    },
+    {
+     "belief_id": "b2",
+     "confidence": 0.5
+    }
+   ],
+   "derived_from_edges": [
+    {
+     "from": "b1",
+     "to": "b2",
+     "confidence": 0.8,
+     "verified": false
+    },
+    {
+     "from": "b2",
+     "to": "b1",
+     "confidence": 0.7,
+     "verified": true
+    }
+   ],
+   "invalidation_frontier": [],
+   "propagation_queue": [],
+   "unverified_edge_ratio": 0.0,
+   "confidence_decay_rate": 0.05
+  }
+ },
+ "args": {}
+}

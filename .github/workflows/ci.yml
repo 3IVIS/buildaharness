@@ -209,6 +209,13 @@ jobs:
       - name: Harness TS/Python conformance — runtime scenarios
         run: node scripts/harness-conformance/compare-runtime.mjs
 
+      # Node-level differential: diagnostics, risk, VOI, hypothesis generation, contradiction detection, belief
+      # propagation, context compression, parallel merge, warm start and experience learning, each run on TS-wire-format
+      # state in both runtimes and compared on the full post-state. Reviewed differences go in
+      # known-discrepancies-nodes.json (tracked = exit 0, untracked = exit 1).
+      - name: Harness TS/Python conformance — node-level
+        run: node scripts/harness-conformance/compare-nodes.mjs
+
   runtime-package:
     name: '@buildaharness/runtime — typecheck, test, build'
     runs-on: ubuntu-latest

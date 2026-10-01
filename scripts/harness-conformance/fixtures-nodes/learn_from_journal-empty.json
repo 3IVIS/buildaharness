@@ -1,0 +1,8 @@
+{
+ "node": "learn_from_journal",
+ "state": {},
+ "args": {
+  "journal": [],
+  "store": {}
+ }
+}

@@ -1,0 +1,13 @@
+{
+ "node": "warm_start",
+ "state": {},
+ "args": {
+  "store": {
+   "weights": {
+    "DIRECT_EDIT:X": 0.8,
+    "MINIMAL_FIX:X": 0.2,
+    "TRACE_EXEC:": 0.5
+   }
+  }
+ }
+}

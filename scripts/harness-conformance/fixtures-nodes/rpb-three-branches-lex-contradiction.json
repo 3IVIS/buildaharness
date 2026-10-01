@@ -1,0 +1,48 @@
+{
+ "node": "reconcile_parallel_branches",
+ "env": {
+  "HARNESS_LEXICAL_MODE": "enabled"
+ },
+ "state": {},
+ "args": {
+  "branches": [
+   {
+    "worldModel": {
+     "generation_id": 1,
+     "beliefs": [
+      {
+       "id": "p",
+       "statement": "the cache is enabled",
+       "confidence": 0.9,
+       "derived_from": [
+        "o1"
+       ],
+       "recorded_at": "2026-01-01T00:00:00.000Z"
+      }
+     ]
+    }
+   },
+   {
+    "worldModel": {
+     "generation_id": 2,
+     "beliefs": [
+      {
+       "id": "q",
+       "statement": "the cache is not enabled",
+       "confidence": 0.85,
+       "derived_from": [
+        "o1"
+       ],
+       "recorded_at": "2026-01-01T00:00:00.000Z"
+      }
+     ]
+    }
+   },
+   {
+    "worldModel": {
+     "generation_id": 9
+    }
+   }
+  ]
+ }
+}

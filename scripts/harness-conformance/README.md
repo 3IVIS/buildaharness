@@ -441,3 +441,30 @@ tracked, and a tracked fixture that starts passing fails the run so the entry ge
 
 The `seeded-fail` tool mirrors `packages/harness/src/harness-runtime-stall.test.ts`: a stall (and so the supervisor consult)
 is otherwise unreachable, because the control state goes to DENY after two failures and blocks a third attempt.
+
+## Node-level differential (`compare-nodes.mjs`)
+
+`fixtures-nodes/*.json` (107) each name one harness node and the TS-wire-format state to run it on:
+`{ "node": "...", "state": { worldModel, hypothesisSet, ... }, "args": { ... }, "env": { ... } }`. `run-ts-nodes.mts` and
+`run_py_nodes.py` hydrate the state (fixture keys are shallow-merged over each class's defaults), run the node, and print the
+full post-state of every structure it may mutate plus its return value; `compare-nodes.mjs` diffs the two. One process per
+language, so the whole set runs in a few seconds.
+
+Nodes covered: `update_diagnostics`, `estimate_risk`, `estimate_voi`, `generate_update_hypotheses`, `detect_contradictions`,
+`propagate_beliefs`, `context_compression` (pressure, staleness sweep, decay, journal retention), `merge_world_models`,
+`reconcile_parallel_branches`, `warm_start`, `learn_from_journal`. Every node also has a `*-defaults` fixture, which pins the
+default value of every structure it touches (this is what caught the `CoverageHealth` default drift).
+
+Projection rules (the only places the comparison is not byte-equal):
+- floats are rounded to 6 dp (JS round-half-up on both sides);
+- wall-clock fields (`timestamp`, `recorded_at`, `last_update`, `escalated_at`) are masked;
+- contradiction ids are random on both sides, so they are renamed by position in `worldModel.contradictions`;
+- the four optional belief fields (`reliability`, `supporting_evidence`, `applied_contradiction_ids`, `pending_sweep`) are
+  dropped when unset/empty/false: TS omits them, Python always emits the empty default, and zod accepts both.
+
+Lexical checks default to `disabled` on both sides, so fixtures that exercise them set `env: {"HARNESS_LEXICAL_MODE": "enabled"}`
+(`dc-lex-*`, `ud-lex-*`, `guh-lex-*`). Adding a fixture: write the JSON, run `node scripts/harness-conformance/compare-nodes.mjs`.
+Reviewed differences go in `known-discrepancies-nodes.json`.
+
+Usage: `node scripts/harness-conformance/compare-nodes.mjs` (needs Python 3.12 as `python3.12`, or set `PYTHON`).
+

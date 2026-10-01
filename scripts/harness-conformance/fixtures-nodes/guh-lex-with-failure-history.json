@@ -1,0 +1,36 @@
+{
+ "node": "generate_update_hypotheses",
+ "env": {
+  "HARNESS_LEXICAL_MODE": "enabled"
+ },
+ "state": {
+  "worldModel": {
+   "observations": [
+    {
+     "id": "o1",
+     "content": "service unavailable",
+     "source": "tool",
+     "recorded_at": "2026-01-01T00:00:00.000Z"
+    }
+   ]
+  },
+  "failureDiagnostics": {
+   "failure_history": [
+    {
+     "id": "f1",
+     "timestamp": "2026-01-01T00:00:00.000Z",
+     "failure_class": "TOOL_UNAVAILABLE_CASCADE",
+     "description": "service unavailable",
+     "context": {}
+    },
+    {
+     "id": "f2",
+     "timestamp": "2026-01-01T00:00:00.000Z",
+     "failure_class": "CIRCULAR_DEPENDENCY",
+     "description": "circular dependency",
+     "context": {}
+    }
+   ]
+  }
+ }
+}

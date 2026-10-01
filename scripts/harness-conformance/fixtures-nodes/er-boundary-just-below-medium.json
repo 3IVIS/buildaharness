@@ -1,0 +1,55 @@
+{
+ "node": "estimate_risk",
+ "state": {
+  "taskGraph": {
+   "tasks": [
+    {
+     "id": "a",
+     "description": "a",
+     "status": "PENDING",
+     "risk_level": "LOW",
+     "depends_on": [],
+     "parallel_write_domains": [
+      "src/auth/login.py",
+      "src/db"
+     ],
+     "abstraction_level": 1,
+     "assigned_strategy": null
+    },
+    {
+     "id": "b",
+     "description": "b",
+     "status": "PENDING",
+     "risk_level": "LOW",
+     "depends_on": [],
+     "parallel_write_domains": [
+      "src/auth/session.py"
+     ],
+     "abstraction_level": 1,
+     "assigned_strategy": null
+    },
+    {
+     "id": "c",
+     "description": "c",
+     "status": "PENDING",
+     "risk_level": "LOW",
+     "depends_on": [],
+     "parallel_write_domains": [
+      "docs"
+     ],
+     "abstraction_level": 1,
+     "assigned_strategy": null
+    }
+   ],
+   "conflict_probability_cache": {},
+   "changed": false
+  }
+ },
+ "args": {
+  "action": {
+   "module_type": "business_logic",
+   "lines_affected": 240,
+   "functions_affected": 5
+  }
+ }
+}

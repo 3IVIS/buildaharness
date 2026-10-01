@@ -1,0 +1,33 @@
+{
+ "node": "estimate_risk",
+ "state": {
+  "taskGraph": {
+   "tasks": [
+    {
+     "id": "a",
+     "description": "a",
+     "status": "PENDING",
+     "risk_level": "LOW",
+     "depends_on": [],
+     "parallel_write_domains": [
+      "core"
+     ],
+     "abstraction_level": 1,
+     "assigned_strategy": null
+    }
+   ],
+   "conflict_probability_cache": {},
+   "changed": false
+  }
+ },
+ "args": {
+  "action": {
+   "module_type": "business_logic",
+   "affected_files": [
+    "core"
+   ],
+   "lines_affected": 350,
+   "functions_affected": 14
+  }
+ }
+}

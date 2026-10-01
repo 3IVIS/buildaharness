@@ -1,0 +1,45 @@
+{
+ "node": "context_compression",
+ "state": {
+  "worldModel": {
+   "beliefs": [
+    {
+     "id": "b1",
+     "statement": "x",
+     "confidence": 0.8,
+     "derived_from": [
+      "f.py"
+     ],
+     "recorded_at": "2999-01-01T00:00:00.000Z"
+    },
+    {
+     "id": "b2",
+     "statement": "y",
+     "confidence": 0.8,
+     "derived_from": [
+      "g.py"
+     ],
+     "recorded_at": "2999-01-01T00:00:00.000Z"
+    }
+   ],
+   "environment_change_log": [
+    {
+     "id": "e1",
+     "description": "d",
+     "affected_paths": [
+      "f.py"
+     ],
+     "timestamp": "3000-01-01T00:00:00.000Z"
+    },
+    {
+     "id": "e2",
+     "description": "old",
+     "affected_paths": [
+      "g.py"
+     ],
+     "timestamp": "2020-01-01T00:00:00.000Z"
+    }
+   ]
+  }
+ }
+}

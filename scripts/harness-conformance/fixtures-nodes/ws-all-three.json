@@ -1,0 +1,15 @@
+{
+ "node": "warm_start",
+ "state": {},
+ "args": {
+  "store": {
+   "weights": {
+    "MINIMAL_FIX:Z": 2,
+    "BROADER_SEARCH:Z": 1
+   },
+   "priors": {
+    "Z": 0.9
+   }
+  }
+ }
+}

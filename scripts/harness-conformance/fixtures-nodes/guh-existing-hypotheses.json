@@ -1,0 +1,54 @@
+{
+ "node": "generate_update_hypotheses",
+ "state": {
+  "worldModel": {
+   "observations": [
+    {
+     "id": "o1",
+     "content": "x",
+     "source": "tool",
+     "recorded_at": "2026-01-01T00:00:00.000Z"
+    }
+   ],
+   "beliefs": [
+    {
+     "id": "b1",
+     "statement": "alpha holds",
+     "confidence": 0.8,
+     "derived_from": [
+      "o1"
+     ],
+     "recorded_at": "2026-01-01T00:00:00.000Z"
+    }
+   ]
+  },
+  "hypothesisSet": {
+   "active": [
+    {
+     "id": "symp_o1",
+     "explanation": "symp_o1",
+     "confidence": 0.4,
+     "predicted_observations": [
+      "p"
+     ],
+     "discriminating_evidence": [],
+     "generation_sources": [
+      "symptom_inference"
+     ],
+     "diversity_score": 0.0
+    },
+    {
+     "id": "seed_x",
+     "explanation": "seed_x",
+     "confidence": 0.9,
+     "predicted_observations": [],
+     "discriminating_evidence": [],
+     "generation_sources": [
+      "analogy"
+     ],
+     "diversity_score": 0.0
+    }
+   ]
+  }
+ }
+}
