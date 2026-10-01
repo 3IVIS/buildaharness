@@ -340,10 +340,11 @@ def test_rollback_failure_mode_bias_reframe_and_requeue():
     assert result.new_strategy_state.current_strategy == "MINIMAL_FIX"
     assert result.new_strategy_state.switch_triggers == [
         "failure_mode:SCOPE_CREEP -> MINIMAL_FIX",
-        "supervisor:requeue_leaf",  # nothing runnable left after the LOCAL replan, so the failed leaf is requeued
+        # a confident match re-queues the task that failed (not only a leaf), under its own trigger
+        "failure_mode:requeue_task SCOPE_CREEP",
     ]
     assert result.failure_mode_switch == {"failure_class": "SCOPE_CREEP", "strategy": "MINIMAL_FIX"}
-    assert result.new_task_graph.tasks[0].status == "PENDING"  # nothing runnable left -> the failed leaf is requeued
+    assert result.new_task_graph.tasks[0].status == "PENDING"  # the confident match re-queued the failed task
 
     weak = FailureDiagnostics(matched_pattern=MatchResult("SCOPE_CREEP", 0.69, "scope-creep", "MINIMAL_FIX"))
     assert _rollback(task, fd=weak).new_strategy_state.current_strategy == "TRACE_EXEC"
