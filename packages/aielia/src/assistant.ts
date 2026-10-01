@@ -977,7 +977,13 @@ export class PersonalAssistant {
       await this.session.liftStandingConstraints(sessionId, classification.liftedConstraints)
     }
     if (semanticConstraintCheckEnabled() && classification.statedConstraints && classification.statedConstraints.length > 0) {
-      await this.session.recordStandingConstraints(sessionId, classification.statedConstraints)
+      await this.session.recordStandingConstraints(
+        sessionId,
+        // Only the rules meant to outlast this answer; a classifier that omitted the field keeps them all (the old behaviour).
+        classification.lastingConstraints
+          ? classification.statedConstraints.filter((_, i) => classification.lastingConstraints!.includes(i + 1))
+          : classification.statedConstraints,
+      )
     }
 
     // A message that only asks about the active plan is answered from the plan's recorded state; the

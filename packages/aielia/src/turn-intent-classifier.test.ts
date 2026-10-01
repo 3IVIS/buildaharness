@@ -612,3 +612,20 @@ describe('liftedConstraints', () => {
     expect(seen[1]).not.toContain('stated earlier in this conversation')
   })
 })
+
+describe('lastingConstraints', () => {
+  const lasting = async (overrides: Record<string, unknown>) =>
+    (await classifyTurnIntent('x', new StructuredOnlyLLMClient(response({ statesConstraint: true, statedConstraints: ['a', 'b'], ...overrides })), NO_PLAN)).lastingConstraints
+
+  it('keeps distinct in-range 1-based positions of statedConstraints', async () => {
+    expect(await lasting({ lastingConstraints: [2, 2, 0, 3, 'x'] })).toEqual([2])
+    expect(await lasting({ lastingConstraints: [] })).toEqual([])
+  })
+  it('is undefined (not []) when the model omitted the field or it is malformed', async () => {
+    expect(await lasting({})).toBeUndefined()
+    expect(await lasting({ lastingConstraints: 'a' })).toBeUndefined()
+  })
+  it('is undefined when the message states no constraint', async () => {
+    expect(await lasting({ statesConstraint: false, lastingConstraints: [1] })).toBeUndefined()
+  })
+})

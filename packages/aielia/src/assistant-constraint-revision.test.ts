@@ -21,17 +21,17 @@ function backend(): FsBackend {
   }
 }
 
-function build(opts: { constraints: string[]; replies: string[]; perTurn?: string[][]; lifted?: number[][] }) {
+function build(opts: { constraints: string[]; replies: string[]; perTurn?: string[][]; lifted?: number[][]; lasting?: number[][] }) {
   let turnNo = 0
   const inner = createScriptedLLMClient({
     responses: opts.replies,
     classify: () => {
       const constraints = opts.perTurn ? (opts.perTurn[turnNo++] ?? []) : opts.constraints
       const lifted = opts.lifted ? (opts.lifted[turnNo - 1] ?? []) : []
-      return { statesConstraint: constraints.length > 0, statedConstraints: constraints, liftedConstraints: lifted }
+      return { statesConstraint: constraints.length > 0, statedConstraints: constraints, liftedConstraints: lifted, ...(opts.lasting ? { lastingConstraints: opts.lasting[turnNo - 1] ?? [] } : {}) }
     },
   })
-  const seen = { judged: [] as string[], loopMessages: [] as ChatMessage[][] }
+  const seen = { judgedConstraints: [] as string[], judged: [] as string[], loopMessages: [] as ChatMessage[][] }
   const client: ILLMClient = {
     callChat: (m: ChatMessage[], o?: ChatOptions) => inner.callChat(m, o),
     callChatSync: (m: ChatMessage[], o?: ChatOptions) => inner.callChatSync(m, o),
@@ -40,6 +40,7 @@ function build(opts: { constraints: string[]; replies: string[]; perTurn?: strin
       if (system.includes(JUDGE_MARKER)) {
         const { constraints, reply } = JSON.parse(messages[messages.length - 1].content) as { constraints: string[]; reply: string }
         seen.judged.push(reply)
+        seen.judgedConstraints.push(JSON.stringify(constraints))
         return { content: JSON.stringify({ violations: reply.includes('tab.') ? [{ constraint: constraints[0], reason: 'indents with a tab' }] : [] }) }
       }
       if (tools && tools.length > 0) seen.loopMessages.push(messages.map((m) => ({ ...m })))
@@ -114,5 +115,22 @@ describe('stated constraint through a real turn', () => {
     await assistant.turn('No tabs, to be clear.', { sessionId: 'l2' })
     await assistant.turn('One more.', { sessionId: 'l2' })
     expect(seen.judged).toEqual([GOOD, GOOD, GOOD])
+  })
+
+  it('only a rule marked lasting persists; a one-answer rule is checked this turn and then dropped', async () => {
+    const { assistant, seen } = build({
+      constraints: [], perTurn: [['Do not use tabs', 'Five lines at most'], []], lasting: [[1], []], replies: [GOOD, GOOD],
+    })
+    await assistant.turn(MESSAGE, { sessionId: 'k1' })
+    expect(JSON.parse(seen.judgedConstraints[0])).toEqual(['Do not use tabs', 'Five lines at most'])
+    await assistant.turn('Now the YAML one.', { sessionId: 'k1' })
+    expect(JSON.parse(seen.judgedConstraints[1])).toEqual(['Do not use tabs'])
+  })
+
+  it('negative control — the classifier omits the field: every stated rule persists, as before', async () => {
+    const { assistant, seen } = build({ constraints: [], perTurn: [['Do not use tabs', 'Five lines at most'], []], replies: [GOOD, GOOD] })
+    await assistant.turn(MESSAGE, { sessionId: 'k2' })
+    await assistant.turn('Now the YAML one.', { sessionId: 'k2' })
+    expect(JSON.parse(seen.judgedConstraints[1])).toEqual(['Do not use tabs', 'Five lines at most'])
   })
 })

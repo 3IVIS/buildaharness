@@ -130,6 +130,13 @@ export interface TurnIntentClassification {
    */
   statedConstraints?: string[]
   /**
+   * 1-based positions in `statedConstraints` of the rules meant to keep governing LATER turns ("from now on", "always",
+   * "never ..."), as opposed to one that only shapes this answer ("five lines at most"). Only those are persisted for the
+   * session; every stated constraint is still checked this turn. `undefined` when the model omitted the field — callers
+   * then treat every stated constraint as lasting, as before the field existed.
+   */
+  lastingConstraints?: number[]
+  /**
    * 1-based positions, in the standing-constraint list the prompt showed, of the constraints this message lifts ("tabs are
    * fine now", "ignore the word limit"). Empty when none were shown or none lifted, and on a classifier failure.
    */
@@ -246,6 +253,7 @@ const TURN_INTENT_SCHEMA = {
     pushbackOnPriorTurn: { type: 'boolean' },
     statesConstraint: { type: 'boolean' },
     statedConstraints: { type: 'array', items: { type: 'string' } },
+    lastingConstraints: { type: 'array', items: { type: 'integer' } },
     liftedConstraints: { type: 'array', items: { type: 'integer' } },
   },
   required: [
@@ -355,7 +363,9 @@ const TURN_INTENT_SYSTEM_PROMPT =
   '13. statesConstraint: true if the message sets a rule, limit, or standing requirement that should ' +
   'govern this and later turns (a format, a prohibition, a scope restriction), not just a one-off ask. ' +
   'When true, also list each such rule in statedConstraints as a short standalone sentence a reply could be ' +
-  'checked against ("Do not use tabs"); empty when statesConstraint is false.\n\n' +
+  'checked against ("Do not use tabs"); empty when statesConstraint is false. In lastingConstraints give the 1-based ' +
+  'positions (in statedConstraints) of the rules meant to keep governing LATER turns ("from now on", "always", "never ..."), ' +
+  'not those that only shape this one answer ("five lines at most", "in a table").\n\n' +
   '14. isPlanQuestion: true only if told a plan is currently active AND the message only asks about or ' +
   'discusses that plan — where it stands, what a step is, what is left, why something did not finish — ' +
   'and asks for no new work and gives no go-ahead to continue. False for "go ahead", "continue", ' +
@@ -375,7 +385,7 @@ const TURN_INTENT_SYSTEM_PROMPT =
   '"location"|"occupation"|"relationships"|"project"|"other"}], "needsGrounding": boolean, ' +
   '"ambiguity": "none"|"some"|"high", "userPosture": "informational"|"directive"|"exploratory"|' +
   '"corrective", "pushbackOnPriorTurn": boolean, "statesConstraint": boolean, "statedConstraints": [string], ' +
-  '"liftedConstraints": [integer]}'
+  '"lastingConstraints": [integer], "liftedConstraints": [integer]}'
 
 interface RawTurnIntent {
   riskLevel?: unknown
@@ -396,6 +406,7 @@ interface RawTurnIntent {
   pushbackOnPriorTurn?: unknown
   statesConstraint?: unknown
   statedConstraints?: unknown
+  lastingConstraints?: unknown
   liftedConstraints?: unknown
 }
 
@@ -490,6 +501,9 @@ function parseTurnIntent(content: string, context: TurnIntentContext): TurnInten
         .map((c) => c.trim())
         .slice(0, MAX_STATED_CONSTRAINTS)
     : []
+  const lastingConstraints = statesConstraint && Array.isArray(parsed.lastingConstraints)
+    ? [...new Set((parsed.lastingConstraints as unknown[]).filter((n): n is number => Number.isInteger(n) && (n as number) >= 1 && (n as number) <= statedConstraints.length))]
+    : undefined
   const shown = context.standingConstraints?.length ?? 0
   const liftedConstraints = Array.isArray(parsed.liftedConstraints)
     ? [...new Set((parsed.liftedConstraints as unknown[]).filter((n): n is number => Number.isInteger(n) && (n as number) >= 1 && (n as number) <= shown))]
@@ -515,6 +529,7 @@ function parseTurnIntent(content: string, context: TurnIntentContext): TurnInten
     pushbackOnPriorTurn,
     statesConstraint,
     statedConstraints,
+    ...(lastingConstraints !== undefined ? { lastingConstraints } : {}),
     liftedConstraints,
   }
 }
