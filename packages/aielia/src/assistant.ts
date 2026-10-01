@@ -57,6 +57,7 @@ import { PlanSketchService } from './plan-sketch-service.js'
 import type { PlanRecord } from './plan-store.js'
 import { TurnInterpreter } from './turn-interpreter.js'
 import { HarnessBridge } from './harness-bridge.js'
+import { semanticConstraintCheckEnabled } from './constraint-check.js'
 import { wrapProposerWithInjectedFailure } from './benchmark-injected-failure.js'
 import { DEFAULT_ONE_LOOP_MODE, type OneLoopMode } from './one-loop-flag.js'
 import { DEFAULT_ASK_MODE, type AskMode } from './ask-mode-flag.js'
@@ -968,6 +969,11 @@ export class PersonalAssistant {
     // Opt-in layers obey the layer policy (adaptive mode only; otherwise undefined and each layer's own flag decides).
     const optInPlan = resolveOptInPlan(this.layerPolicyMode, classification)
     this.agentLoop.optInPlan = optInPlan
+    // A constraint the user states governs the rest of the session, not just this turn: remember it (even on a trivial
+    // turn that never reaches the harness) so later turns are checked against it. `/new` clears it with the session.
+    if (semanticConstraintCheckEnabled() && classification.statedConstraints && classification.statedConstraints.length > 0) {
+      await this.session.recordStandingConstraints(sessionId, classification.statedConstraints)
+    }
 
     // A message that only asks about the active plan is answered from the plan's recorded state; the
     // plan is not handed to the harness, so asking where it stands can never re-run (or strand) its tasks.

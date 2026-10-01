@@ -22,6 +22,7 @@ import {
 } from './action-snapshot.js'
 import type { ShellToolsContext } from './shell-tools.js'
 import type { ActionToolsContext } from './action-tools.js'
+import { mergeStandingConstraints } from './constraint-check.js'
 import { estimateCostUsd } from './model-pricing.js'
 import { checkSpendCap, EMPTY_SPEND_STATE, type SpendCapConfig, type SpendState } from './spend-cap.js'
 
@@ -178,6 +179,23 @@ export class AssistantSession {
 
   private static notifiedContradictionsKey(sessionId: string): string {
     return `notified-contradictions:${sessionId}`
+  }
+
+  private static standingConstraintsKey(sessionId: string): string {
+    return `standing-constraints:${sessionId}`
+  }
+
+  /** Constraints the user stated earlier in this session ("Do not use tabs") — they govern later turns too. */
+  async getStandingConstraints(sessionId: string): Promise<string[]> {
+    const stored = await this.memory.get(AssistantSession.standingConstraintsKey(sessionId))
+    return Array.isArray(stored) ? stored.filter((c): c is string => typeof c === 'string') : []
+  }
+
+  /** Adds constraints stated this turn to the session's standing list; returns the merged list. */
+  async recordStandingConstraints(sessionId: string, stated: readonly string[]): Promise<string[]> {
+    const merged = mergeStandingConstraints(await this.getStandingConstraints(sessionId), stated)
+    await this.memory.set(AssistantSession.standingConstraintsKey(sessionId), merged)
+    return merged
   }
 
   async getNotifiedContradictions(sessionId: string): Promise<Set<string>> {
@@ -462,6 +480,7 @@ export class AssistantSession {
     await this.memory.delete(resumeAttemptsKey(sessionId))
     this.notifiedContradictions.delete(sessionId)
     await this.memory.delete(AssistantSession.notifiedContradictionsKey(sessionId))
+    await this.memory.delete(AssistantSession.standingConstraintsKey(sessionId))
   }
 
   /**
