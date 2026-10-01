@@ -363,6 +363,9 @@ class LoopContext:
     last_judged_observation_count: int = 0
     reviewer_revision_done: bool = False
     constraint_revision_done: bool = False
+    # The harness's own could-not-complete reply, set when a stalled run ends with it; not the model's answer, so the
+    # constraint judge skips it (TS stalledFallbackText).
+    stalled_fallback_text: str | None = None
     last_completed_task_id: str | None = None
     recovery_budget: RecoveryBudget | None = None
     last_not_accomplished: dict[str, str] | None = None
@@ -640,6 +643,8 @@ def _judge_constraints(ctx: LoopContext) -> list[dict[str, Any]]:
     fr = ctx.final_result
     reply = fr if isinstance(fr, str) else "" if fr is None else json.dumps(fr, default=str)
     if not reply.strip():
+        return []
+    if reply == ctx.stalled_fallback_text:
         return []
     try:
         return list(
@@ -961,6 +966,7 @@ def _select_and_gate(ctx: LoopContext) -> tuple[str, Task | None, Task | None]:
         no_usable = not isinstance(ctx.final_result, str) or ctx.final_result.strip() == ""
         if no_usable and any(t.status == "FAILED" for t in ctx.task_graph.tasks):
             ctx.final_result = _stalled_fallback(ctx)
+            ctx.stalled_fallback_text = ctx.final_result
         return "done", None, None
 
     current = selected.task

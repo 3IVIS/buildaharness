@@ -542,6 +542,8 @@ interface LoopContext {
   onConstraintRevision?: (event: { taskId: string; note: string; violated: Array<{ constraint: string; reason?: string }> }) => void
   /** True once a constraint violation has reopened a task this run (at most once). */
   constraintRevisionDone?: boolean
+  /** The text of the harness's own could-not-complete reply, set when a stalled run ends with it. It is not the model's answer, so the constraint judge skips it. */
+  stalledFallbackText?: string
   /** Called when the completion check judged a task's output did not do the task — the host can persist why (e.g. on a durable plan's task). Observability only: a throwing handler never breaks the run. */
   onTaskNotAccomplished?: (event: { taskId: string; reason: string }) => void
   /** The most recent task the completion check judged not done — read only by stalledTurnFallbackResult so the stranded reply can say why. Not checkpointed. */
@@ -1001,6 +1003,9 @@ async function judgeConstraints(ctx: LoopContext, judge: SemanticConstraintJudge
   if (!judge || ctx.callerState.current_constraints.length === 0) return []
   const reply = typeof ctx.finalResult === 'string' ? ctx.finalResult : ctx.finalResult == null ? '' : JSON.stringify(ctx.finalResult)
   if (reply.trim() === '') return []
+  // The could-not-complete reply is the harness's own notice, not an answer: judging it against the user's constraints
+  // ("two sentences", "friendly tone") would throw a graceful failure message into a failed turn.
+  if (reply === ctx.stalledFallbackText) return []
   try {
     return (await judge({ constraints: [...ctx.callerState.current_constraints], reply })).violated ?? []
   } catch {
@@ -1269,7 +1274,9 @@ async function* driveMainLoop(ctx: LoopContext): AsyncGenerator<HarnessCheckpoin
       // untouched.
       const noUsableResult = typeof ctx.finalResult !== 'string' || ctx.finalResult.trim() === ''
       if (noUsableResult && ctx.taskGraph.tasks.some(t => t.status === 'FAILED')) {
-        ctx.finalResult = stalledTurnFallbackResult(ctx)
+        const fallback = stalledTurnFallbackResult(ctx)
+        ctx.finalResult = fallback
+        ctx.stalledFallbackText = typeof fallback === 'string' ? fallback : undefined
         reportLayer(ctx, 'recovery', true, 'turn stalled with no answer — returning an explicit could-not-complete reply')
       }
       return
