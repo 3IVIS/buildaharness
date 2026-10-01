@@ -19,7 +19,7 @@ const backend: FsBackend = {
   async readDir() { return [] },
 }
 
-function build(matcherAnswer: string) {
+function build(matcherAnswer: string, persistent = false) {
   const inner = createScriptedLLMClient({ responses: ['The answer is 42.'], sideResponses: [[MATCHER_MARKER, matcherAnswer]] })
   const seen = { loopCalls: 0, matcherCalls: 0, loopMessages: [] as ChatMessage[][] }
   const client = {
@@ -30,7 +30,7 @@ function build(matcherAnswer: string) {
       if (t && t.length > 0) {
         seen.loopCalls++
         seen.loopMessages.push(m.map((x) => ({ ...x })))
-        if (seen.loopCalls === 1) throw new Error('claude exited with code 1: API Error: 503 service unavailable')
+        if (persistent || seen.loopCalls === 1) throw new Error('claude exited with code 1: API Error: 503 service unavailable')
       }
       return inner.callChatStructured(m, t, o)
     },
@@ -41,7 +41,7 @@ function build(matcherAnswer: string) {
 const QUESTION = 'What is the answer? See notes.md'
 
 describe('a transient model error mid-turn', () => {
-  afterEach(() => { delete process.env.AUDIT_SEMANTIC_FAILURE_MATCH })
+  afterEach(() => { delete process.env.AUDIT_SEMANTIC_FAILURE_MATCH; delete process.env.AUDIT_RETRY_SYSTEM_ERRORS })
 
   it('is classified on its first failure and the task is retried to a real answer', async () => {
     const { assistant, seen } = build(MATCHED)
@@ -52,19 +52,45 @@ describe('a transient model error mid-turn', () => {
     expect(result.trace?.layerActivity.some((l) => l.layer === 'recovery' && l.reason.includes('REIMPLEMENT'))).toBe(true)
   })
 
-  it('negative control — the matcher finds no known failure pattern: the turn gives up after the one failure', async () => {
+  it('negative control — the matcher finds no known failure pattern and the system-error retry is off: the turn gives up after the one failure', async () => {
+    process.env.AUDIT_RETRY_SYSTEM_ERRORS = '0'
     const { assistant, seen } = build('{"matched":false}')
     const result = await assistant.turn(QUESTION, { sessionId: 't2' })
     expect(result.reply).toMatch(GAVE_UP)
     expect(seen.loopCalls).toBe(1)
   })
 
-  it('negative control — AUDIT_SEMANTIC_FAILURE_MATCH=0: no matcher call, the turn gives up', async () => {
+  it('negative control — AUDIT_SEMANTIC_FAILURE_MATCH=0 and the system-error retry off: no matcher call, the turn gives up', async () => {
     process.env.AUDIT_SEMANTIC_FAILURE_MATCH = '0'
+    process.env.AUDIT_RETRY_SYSTEM_ERRORS = '0'
     const { assistant, seen } = build(MATCHED)
     const result = await assistant.turn(QUESTION, { sessionId: 't3' })
     expect(result.reply).toMatch(GAVE_UP)
     expect(seen.matcherCalls).toBe(0)
     expect(seen.loopCalls).toBe(1)
+  })
+
+  it('system-error retry (default): with no matcher finding, the one transient error is retried and the turn recovers', async () => {
+    const { assistant, seen } = build('{"matched":false}')
+    const result = await assistant.turn(QUESTION, { sessionId: 't4' })
+    expect(result.reply).not.toMatch(GAVE_UP)
+    expect(seen.loopCalls).toBe(2)
+  })
+
+  it('system-error retry (default): with the matcher also off, the transient error is still retried', async () => {
+    process.env.AUDIT_SEMANTIC_FAILURE_MATCH = '0'
+    const { assistant, seen } = build(MATCHED)
+    const result = await assistant.turn(QUESTION, { sessionId: 't5' })
+    expect(result.reply).not.toMatch(GAVE_UP)
+    expect(seen.matcherCalls).toBe(0)
+    expect(seen.loopCalls).toBe(2)
+  })
+
+  it('a PERSISTENT error is retried once, then ends in the honest could-not-complete reply (not an escalation)', async () => {
+    const { assistant, seen } = build('{"matched":false}', true)
+    const result = await assistant.turn(QUESTION, { sessionId: 'p1' })
+    expect(result.status).toBe('ok')
+    expect(result.reply).toMatch(GAVE_UP)
+    expect(seen.loopCalls).toBe(2)
   })
 })

@@ -273,6 +273,14 @@ export interface HarnessRunOptions extends HarnessInitOptions {
    * still bound the retries. Absent/false ⇒ exactly as before.
    */
   retryFailedTask?: boolean
+  /**
+   * Like `retryFailedTask`, but only for a task whose failure was a SYSTEM error — the executor threw, or reported a failure
+   * without a kind (the tool or model call broke). A task that exhausted its iteration budget, was rejected by the
+   * completion check, or failed verification is NOT retried (that is the runaway loop / plan-rejection behaviour
+   * `retryFailedTask` also covers). Each task is retried at most ONCE this way, so a persistent outage ends in the honest
+   * could-not-complete reply rather than the stall escalation. Ignored when `retryFailedTask` is on (it already retries everything).
+   */
+  retryFailedSystemErrors?: boolean
   /** See `ReviewerRevision`. */
   reviewerRevision?: ReviewerRevision
   /**
@@ -514,6 +522,14 @@ interface LoopContext {
   skipControlState?: boolean
   experienceLearning?: boolean
   retryFailedTask?: boolean
+  /**
+   * Like `retryFailedTask`, but only for a task whose failure was a SYSTEM error — the executor threw, or reported a failure
+   * without a kind (the tool or model call broke). A task that exhausted its iteration budget, was rejected by the
+   * completion check, or failed verification is NOT retried (that is the runaway loop / plan-rejection behaviour
+   * `retryFailedTask` also covers). Each task is retried at most ONCE this way, so a persistent outage ends in the honest
+   * could-not-complete reply rather than the stall escalation. Ignored when `retryFailedTask` is on (it already retries everything).
+   */
+  retryFailedSystemErrors?: boolean
   reviewerRevision?: ReviewerRevision
   onReviewerRevision?: (event: { taskId: string; note: string }) => void
   isCheckableCriterion?: CriterionCheckable
@@ -549,6 +565,8 @@ interface LoopContext {
   constraintRevisionDone?: boolean
   /** The text of the harness's own could-not-complete reply, set when a stalled run ends with it. It is not the model's answer, so the constraint judge skips it. */
   stalledFallbackText?: string
+  /** Tasks `retryFailedSystemErrors` has already re-queued once: a second system error on the same task is not retried, so a persistent outage ends in the honest could-not-complete reply instead of the stall escalation. */
+  systemErrorRetried?: Set<string>
   /** Called when the completion check judged a task's output did not do the task — the host can persist why (e.g. on a durable plan's task). Observability only: a throwing handler never breaks the run. */
   onTaskNotAccomplished?: (event: { taskId: string; reason: string }) => void
   /** The most recent task the completion check judged not done — read only by stalledTurnFallbackResult so the stranded reply can say why. Not checkpointed. */
@@ -638,6 +656,7 @@ function buildInitialContext(
     skipControlState: options.skipControlState,
     experienceLearning: options.experienceLearning,
     retryFailedTask: options.retryFailedTask,
+    retryFailedSystemErrors: options.retryFailedSystemErrors,
     reviewerRevision: options.reviewerRevision,
     onReviewerRevision: options.onReviewerRevision,
     tokenBudget: options.tokenBudget,
@@ -730,6 +749,7 @@ function buildResumedContext(rawCheckpoint: HarnessCheckpoint, options: HarnessR
     skipControlState: options.skipControlState,
     experienceLearning: options.experienceLearning,
     retryFailedTask: options.retryFailedTask,
+    retryFailedSystemErrors: options.retryFailedSystemErrors,
     reviewerRevision: options.reviewerRevision,
     onReviewerRevision: options.onReviewerRevision,
     tokenBudget: options.tokenBudget,
@@ -1004,6 +1024,18 @@ function maybeReopenForReviewerRevision(ctx: LoopContext, result: { pending_verd
 }
 
 /** The constraints the host's judge says the final reply violates; empty when there is no judge, no constraint, no reply, or the judge fails (a failing check never fails a reply that would have passed). */
+/**
+ * `retryFailedSystemErrors`: true for the FIRST system-error failure of a task (the executor threw / reported a failure
+ * without a kind), false for any later one or any other kind of failure. Marks the task as retried.
+ */
+function retrySystemErrorOnce(ctx: LoopContext, taskId: string, execResult: { success: boolean; failure_kind?: string }): boolean {
+  if (ctx.retryFailedSystemErrors !== true || execResult.success || execResult.failure_kind !== 'system_error') return false
+  const retried = (ctx.systemErrorRetried ??= new Set<string>())
+  if (retried.has(taskId)) return false
+  retried.add(taskId)
+  return true
+}
+
 async function judgeConstraints(ctx: LoopContext, judge: SemanticConstraintJudge | undefined): Promise<Array<{ constraint: string; reason?: string }>> {
   if (!judge || ctx.callerState.current_constraints.length === 0) return []
   const reply = typeof ctx.finalResult === 'string' ? ctx.finalResult : ctx.finalResult == null ? '' : JSON.stringify(ctx.finalResult)
@@ -1935,7 +1967,8 @@ async function* driveMainLoop(ctx: LoopContext): AsyncGenerator<HarnessCheckpoin
         supervisorDirective,
         requeueLeafOnLocal,
         ctx.experienceLearning === true,
-        ctx.retryFailedTask === true,
+        // Everything (retryFailedTask), or just this iteration's failure when the executor itself broke (retryFailedSystemErrors).
+        ctx.retryFailedTask === true || retrySystemErrorOnce(ctx, currentTask.id, execResult),
       )
       // Adopt the recovery ladder's output — parity with loop.py (strategy_state /
       // task_graph reassigned after switch_strategy / apply_replan, loop.py:480-534).

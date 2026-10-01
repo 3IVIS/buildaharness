@@ -31,7 +31,15 @@ export interface ExecutionResult {
   strategy: ReversibilityStrategy
   rollback_ref: string | null
   status: ExecutionStatus
+  /**
+   * Why a failed execution failed. `system_error`: the executor threw, or reported a failure without saying why (the tool or
+   * model call itself broke). `exhausted`: the executor ran out of its own iteration budget — retrying the same task under
+   * a new strategy is the runaway loop all over again. Absent when the execution did not fail.
+   */
+  failure_kind?: ExecutionFailureKind
 }
+
+export type ExecutionFailureKind = 'system_error' | 'exhausted'
 
 /**
  * Opt-in structured return for a toolFn that needs to signal 'continue' or a non-throwing
@@ -42,6 +50,8 @@ export interface ContinuableExecutionOutcome {
   __harnessExecutionStatus: ExecutionStatus
   output?: unknown
   error?: string
+  /** Only read for a `failed` status; absent means `system_error`. */
+  __harnessFailureKind?: ExecutionFailureKind
 }
 
 function isContinuableOutcome(value: unknown): value is ContinuableExecutionOutcome {
@@ -223,6 +233,7 @@ export async function execute(
   let error: string | null = null
   let success = false
   let status: ExecutionStatus = 'failed'
+  let failureKind: ExecutionFailureKind | undefined
 
   const recordFailure = (message: string): void => {
     const symptom = classifySystemErrorSymptom(message)
@@ -268,6 +279,7 @@ export async function execute(
       success = status !== 'failed'
       if (status === 'failed') {
         error = raw.error ?? 'execution reported a failed status'
+        failureKind = raw.__harnessFailureKind === 'exhausted' ? 'exhausted' : 'system_error'
         recordFailure(error)
       }
     } else {
@@ -290,6 +302,7 @@ export async function execute(
     }
     error = err instanceof Error ? err.message : String(err)
     status = 'failed'
+    failureKind = 'system_error'
     recordFailure(error)
   }
 
@@ -301,5 +314,5 @@ export async function execute(
     timestamp: new Date().toISOString(),
   })
 
-  return { success, output, error, strategy, rollback_ref, status }
+  return { success, output, error, strategy, rollback_ref, status, ...(failureKind ? { failure_kind: failureKind } : {}) }
 }

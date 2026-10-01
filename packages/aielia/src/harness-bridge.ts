@@ -99,6 +99,21 @@ export function retryFailedTaskEnabled(env?: Record<string, string | undefined>)
 }
 
 /**
+ * `AUDIT_RETRY_SYSTEM_ERRORS` gate. Default **ON** (`0`/`false`/`off`/`no`/`disabled` restores the old behaviour). Makes
+ * HarnessBridge.run pass `retryFailedSystemErrors: true`: after the recovery ladder switches strategy for a task whose failure
+ * was a SYSTEM error (the model or a tool call threw), the task is re-queued so the new strategy gets an attempt, instead of
+ * the turn giving up with "I couldn't complete this" after one transient error. An exhausted tool-loop budget, a rejected
+ * completion check and a failed verification are NOT retried (the wider `AUDIT_RETRY_FAILED_TASK` retries those too and stays
+ * off). Bounded by the ladder's MAX_SWITCHES and the stall rule. Read fresh each run.
+ */
+export function retrySystemErrorsEnabled(env?: Record<string, string | undefined>): boolean {
+  const source = env ?? (typeof process !== 'undefined' ? process.env : {})
+  const raw = String(source.AUDIT_RETRY_SYSTEM_ERRORS ?? '').trim().toLowerCase()
+  if (raw === '') return true
+  return !['0', 'false', 'off', 'no', 'disabled'].includes(raw)
+}
+
+/**
  * `AUDIT_REVIEWER_PASS` gate — feature-value audit (Phase C6 of the internal plan). EVAL-ONLY:
  * default **ON** (an unset / empty / truthy value keeps today's always-on 3-lens reviewer pass).
  * Only the benchmark's `reviewerPassOff` arm sets a falsy value (`0` / `false` / `off` / `no` /
@@ -486,6 +501,7 @@ export class HarnessBridge {
         // AUDIT_EXPERIENCE_LEARNING (default off): journal every executed task and teach the experience store when the run ends.
         experienceLearning: optInLayerEnabled('experience_learning', experienceLearningEnabled(), optInPlan) ? true : undefined,
         retryFailedTask: retryFailedTaskEnabled() ? true : undefined,
+        retryFailedSystemErrors: retrySystemErrorsEnabled() ? true : undefined,
         // Trajectory Supervisor GATHER_EVIDENCE host (S5). Inert unless a supervisorDecider is
         // also wired and returns a GATHER_EVIDENCE directive at a stall edge; absent → the
         // harness degrades GATHER_EVIDENCE to CONTINUE.

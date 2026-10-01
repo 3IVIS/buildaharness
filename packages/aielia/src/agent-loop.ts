@@ -367,6 +367,8 @@ export class AgentLoop {
         iteration = 0
         return {
           __harnessExecutionStatus: 'failed',
+          // Not a broken tool or model call: retrying the same task under a new strategy would run the same loop again.
+          __harnessFailureKind: 'exhausted',
           error: `Tool loop exceeded ${input.maxIterations} iterations without producing a final answer.`,
         }
       }

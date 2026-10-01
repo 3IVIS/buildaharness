@@ -38,8 +38,8 @@ const params = (): HarnessRunParams => ({
   activePlan: null,
   sources: undefined,
   onUsage: () => {},
-  // t1 fails, the ladder switches strategy, and the independent t2 then succeeds under the new one
-  oneLoopProposer: (ctx) => (ctx.currentTaskId === 't1' ? { __harnessExecutionStatus: 'failed', error: 'boom' } : { __harnessExecutionStatus: 'complete', output: 'ok' }),
+  // t1 fails (kind 'exhausted' — not retried by the system-error rule), the ladder switches strategy, and the independent t2 then succeeds under the new one
+  oneLoopProposer: (ctx) => (ctx.currentTaskId === 't1' ? { __harnessExecutionStatus: 'failed', __harnessFailureKind: 'exhausted', error: 'boom' } : { __harnessExecutionStatus: 'complete', output: 'ok' }),
 })
 
 const learnedWeights = (store: InMemoryExperienceStore) => Object.fromEntries(Object.entries(store.getStrategyWeights()).filter(([k]) => !k.startsWith('layer_outcome')))
