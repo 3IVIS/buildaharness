@@ -191,6 +191,14 @@ export class AssistantSession {
     return Array.isArray(stored) ? stored.filter((c): c is string => typeof c === 'string') : []
   }
 
+  /** Drops the standing constraints at these 1-based positions (as shown to the classifier); returns what remains. */
+  async liftStandingConstraints(sessionId: string, positions: readonly number[]): Promise<string[]> {
+    const current = await this.getStandingConstraints(sessionId)
+    const remaining = current.filter((_, i) => !positions.includes(i + 1))
+    if (remaining.length !== current.length) await this.memory.set(AssistantSession.standingConstraintsKey(sessionId), remaining)
+    return remaining
+  }
+
   /** Adds constraints stated this turn to the session's standing list; returns the merged list. */
   async recordStandingConstraints(sessionId: string, stated: readonly string[]): Promise<string[]> {
     const merged = mergeStandingConstraints(await this.getStandingConstraints(sessionId), stated)

@@ -939,6 +939,7 @@ export class PersonalAssistant {
       dangerouslySkipPermissions: this.dangerouslySkipPermissions,
       onUsage: accumulateUsage,
       recentTranscript: transcript,
+      standingConstraints: semanticConstraintCheckEnabled() ? await this.session.getStandingConstraints(sessionId) : undefined,
     })
 
     if (interpretation.kind === 'bypass') {
@@ -971,6 +972,10 @@ export class PersonalAssistant {
     this.agentLoop.optInPlan = optInPlan
     // A constraint the user states governs the rest of the session, not just this turn: remember it (even on a trivial
     // turn that never reaches the harness) so later turns are checked against it. `/new` clears it with the session.
+    // A message can also lift one ("tabs are fine now") — those go first, so a rule restated in the same message survives.
+    if (semanticConstraintCheckEnabled() && classification.liftedConstraints && classification.liftedConstraints.length > 0) {
+      await this.session.liftStandingConstraints(sessionId, classification.liftedConstraints)
+    }
     if (semanticConstraintCheckEnabled() && classification.statedConstraints && classification.statedConstraints.length > 0) {
       await this.session.recordStandingConstraints(sessionId, classification.statedConstraints)
     }
