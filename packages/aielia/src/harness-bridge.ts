@@ -39,7 +39,7 @@ import { checkSemanticReviewConflict } from './review-checker.js'
 import { checkSemanticFailureMatch } from './failure-mode-matcher.js'
 import { checkSemanticCriterionCoverage, NON_CHECKABLE_DEFAULT_CRITERION } from './semantic-criterion-coverage.js'
 import { checkTaskCompletion, semanticTaskCompletionEnabled } from './task-completion-check.js'
-import { checkConstraints, semanticConstraintCheckEnabled } from './constraint-check.js'
+import { checkConstraints, mergeStandingConstraints, semanticConstraintCheckEnabled } from './constraint-check.js'
 import { toTaskRiskLevel } from './task-mapping.js'
 import { TOOL_EFFECT_CLASS } from './tool-effect-class.js'
 import { FACT_CAP } from './memory-service.js'
@@ -296,6 +296,11 @@ export class HarnessBridge {
     // One harness run per (session, turn) — a run_id a resumed run can be found under if this
     // turn's process died mid-run before reaching the `finally` cleanup below.
     const runId = `turn:${sessionId}`
+    // Constraints stated earlier this session plus this turn's. Only where the semantic judge replaces the lexical match
+    // (`=0` must not start failing turns on a word match) and there is a proposer to re-ask.
+    const standingConstraints = semanticConstraintCheckEnabled() && oneLoopProposer
+      ? mergeStandingConstraints(await this.assistantSession.getStandingConstraints(sessionId), classification.statedConstraints ?? [])
+      : []
 
     // One shared per-turn signal instead of each harness layer inventing its own gating
     // heuristic. AL5a: `consequentialTools` is derived from each tool's effect class (write /
@@ -598,12 +603,11 @@ export class HarnessBridge {
         semanticConstraintJudge: semanticConstraintCheckEnabled()
           ? (input: { constraints: string[]; reply: string }) => checkConstraints(input, this.llmClient, this.model(), onUsage)
           : undefined,
-        // The constraints the user stated THIS turn, extracted by the classifier. Fed to the harness only where the semantic judge
-        // replaces the lexical match (a word match would fail an acknowledging reply) AND there is a proposer to ask again — a
-        // violation sends the answer back once, and a tool-less turn's reply is already drafted. This turn only: nothing is persisted.
-        ...(semanticConstraintCheckEnabled() && oneLoopProposer && classification.statedConstraints && classification.statedConstraints.length > 0
-          ? { callerConstraints: classification.statedConstraints, onConstraintRevision }
-          : {}),
+        // The constraints the user has stated this session (earlier turns' plus this turn's, from the classifier). Fed to the
+        // harness only where the semantic judge replaces the lexical match (a word match would fail an acknowledging reply)
+        // AND there is a proposer to ask again — a violation sends the answer back once, and a tool-less turn's reply is
+        // already drafted. Persisted per session by assistant.ts (AssistantSession.recordStandingConstraints).
+        ...(standingConstraints.length > 0 ? { callerConstraints: standingConstraints, onConstraintRevision } : {}),
         semanticTaskCompletion:
           activePlan?.executingOnPlan && semanticTaskCompletionEnabled()
             ? (input: { taskDescription: string; output: unknown }) => checkTaskCompletion(input, this.llmClient, this.model(), onUsage)

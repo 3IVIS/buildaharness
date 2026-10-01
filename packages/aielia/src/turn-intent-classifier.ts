@@ -41,6 +41,8 @@ export interface TurnIntentContext {
    *  judgment means anything and whether plan-template matching should even be attempted
    *  (mirrors assistant.ts's own `if (activePlan) { ... } else { match a template } ` split). */
   hasActivePlan: boolean
+  /** Constraints the user stated earlier this session (numbered 1..N in the prompt) — lets the message lift one. */
+  standingConstraints?: string[]
 }
 
 export interface TurnIntentClassification {
@@ -127,6 +129,11 @@ export interface TurnIntentClassification {
    * failure. Capped at MAX_STATED_CONSTRAINTS.
    */
   statedConstraints?: string[]
+  /**
+   * 1-based positions, in the standing-constraint list the prompt showed, of the constraints this message lifts ("tabs are
+   * fine now", "ignore the word limit"). Empty when none were shown or none lifted, and on a classifier failure.
+   */
+  liftedConstraints?: number[]
 }
 
 /** The most constraints one message can hand the harness — a message with more is not a rule list but a spec. */
@@ -184,6 +191,7 @@ function failSafeClassification(cause?: unknown): TurnIntentClassification {
     pushbackOnPriorTurn: false,
     statesConstraint: false,
     statedConstraints: [],
+    liftedConstraints: [],
   }
 }
 
@@ -238,6 +246,7 @@ const TURN_INTENT_SCHEMA = {
     pushbackOnPriorTurn: { type: 'boolean' },
     statesConstraint: { type: 'boolean' },
     statedConstraints: { type: 'array', items: { type: 'string' } },
+    liftedConstraints: { type: 'array', items: { type: 'integer' } },
   },
   required: [
     'riskLevel',
@@ -365,7 +374,8 @@ const TURN_INTENT_SYSTEM_PROMPT =
   'boolean, "confidence": "high"|"medium"|"low", "category": "identity"|"health"|"preference"|' +
   '"location"|"occupation"|"relationships"|"project"|"other"}], "needsGrounding": boolean, ' +
   '"ambiguity": "none"|"some"|"high", "userPosture": "informational"|"directive"|"exploratory"|' +
-  '"corrective", "pushbackOnPriorTurn": boolean, "statesConstraint": boolean, "statedConstraints": [string]}'
+  '"corrective", "pushbackOnPriorTurn": boolean, "statesConstraint": boolean, "statedConstraints": [string], ' +
+  '"liftedConstraints": [integer]}'
 
 interface RawTurnIntent {
   riskLevel?: unknown
@@ -386,6 +396,7 @@ interface RawTurnIntent {
   pushbackOnPriorTurn?: unknown
   statesConstraint?: unknown
   statedConstraints?: unknown
+  liftedConstraints?: unknown
 }
 
 const FACT_CATEGORY_VALUES = new Set(FACT_CATEGORIES)
@@ -479,6 +490,10 @@ function parseTurnIntent(content: string, context: TurnIntentContext): TurnInten
         .map((c) => c.trim())
         .slice(0, MAX_STATED_CONSTRAINTS)
     : []
+  const shown = context.standingConstraints?.length ?? 0
+  const liftedConstraints = Array.isArray(parsed.liftedConstraints)
+    ? [...new Set((parsed.liftedConstraints as unknown[]).filter((n): n is number => Number.isInteger(n) && (n as number) >= 1 && (n as number) <= shown))]
+    : []
 
   return {
     riskLevel: parsed.riskLevel,
@@ -500,6 +515,7 @@ function parseTurnIntent(content: string, context: TurnIntentContext): TurnInten
     pushbackOnPriorTurn,
     statesConstraint,
     statedConstraints,
+    liftedConstraints,
   }
 }
 
@@ -538,9 +554,16 @@ export async function classifyTurnIntent(
     const contextNote = context.hasActivePlan
       ? 'An active multi-step plan is currently running for this user.'
       : 'No plan is currently active for this user.'
+    const standing = context.standingConstraints ?? []
+    const standingNote = standing.length > 0
+      ? '\n\nConstraints the user stated earlier in this conversation (numbered):\n' +
+        standing.map((c, i) => `${i + 1}. ${c}`).join('\n') +
+        '\nIf the message withdraws or relaxes one of them ("tabs are fine now", "ignore the word limit"), put its number in ' +
+        'liftedConstraints. Otherwise liftedConstraints is empty. Do not list a lifted rule in statedConstraints.'
+      : ''
     const response = await llmClient.callChatStructured(
       [
-        { role: 'system', content: `${turnIntentSystemPrompt()}\n\n${contextNote}` },
+        { role: 'system', content: `${turnIntentSystemPrompt()}\n\n${contextNote}${standingNote}` },
         { role: 'user', content: message },
       ],
       undefined,
