@@ -1707,7 +1707,12 @@ async function* driveMainLoop(ctx: LoopContext): AsyncGenerator<HarnessCheckpoin
     // `libraryEntries.length > 0` alone was already a de facto kill switch, so it went
     // unnoticed that "there's at least one observation" is true on almost any turn with a tool
     // call, seeded library or not — this is FAILURE match, not observation match.
-    if (ctx.semanticFailureMatcher && ctx.failureDiagnostics.matched_pattern === null && ctx.failureDiagnostics.failure_history.length > 0) {
+    //
+    // `failure_history` is only written by rollbackAndReplan, which runs AFTER this block — so on a task's FIRST failure the
+    // history is still empty and the matcher never got to classify it, only a later one (a transient service error on a
+    // single-task turn was never matched before it was already given up on). The failure this very iteration just recorded
+    // (`!execResult.success`, its SYSTEM_ERROR observation already in the world model) counts too.
+    if (ctx.semanticFailureMatcher && ctx.failureDiagnostics.matched_pattern === null && (ctx.failureDiagnostics.failure_history.length > 0 || !execResult.success)) {
       const libraryEntries = ctx.failureDiagnostics.failure_mode_library.getEntries()
       const symptoms = ctx.worldModel.observations.map(o => o.content)
       if (symptoms.length > 0 && libraryEntries.length > 0 && symptoms.length !== ctx.lastFailureMatchSymptomCount) {

@@ -1273,7 +1273,14 @@ def drive_main_loop(ctx: LoopContext) -> Iterator[dict[str, Any]]:
         )
 
         fd = ctx.failure_diagnostics
-        if opts.semantic_failure_matcher is not None and fd.matched_pattern is None and fd.failure_history:
+        # failure_history is only written by rollback_and_replan, which runs AFTER this block, so on a task's first
+        # failure it is still empty; the failure this very iteration just recorded (not exec_result.success) counts
+        # too — see harness-runtime.ts.
+        if (
+            opts.semantic_failure_matcher is not None
+            and fd.matched_pattern is None
+            and (fd.failure_history or not exec_result.success)
+        ):
             entries = fd.failure_mode_library.get_entries()
             symptoms = [o.content for o in ctx.world_model.observations]
             if symptoms and entries and len(symptoms) != ctx.last_failure_match_symptom_count:

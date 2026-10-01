@@ -185,6 +185,17 @@ export function requeueFailedLeaves(taskGraph: TaskGraph): boolean {
   return changed
 }
 
+/** Flip ONE failed task (by id) back to PENDING — even one with dependents (diagnoseAndReplan already reset those to PENDING; they
+ *  cannot run until it does). Used for a confident failure-mode match: the classified failure is this task's, so this task gets
+ *  the new strategy's attempt. Returns true iff it was FAILED and is now PENDING. */
+export function requeueFailedTask(taskGraph: TaskGraph, taskId: string): boolean {
+  const t = taskGraph.tasks.find(x => x.id === taskId)
+  if (!t || t.status !== 'FAILED') return false
+  t.status = 'PENDING'
+  taskGraph.changed = true
+  return true
+}
+
 /** Flip EVERY FAILED task back to PENDING (retryFailedTask). Unlike requeueFailedLeaves this includes a failed task that has
  *  dependents: those dependents were reset to PENDING by diagnoseAndReplan but cannot run while the task they depend on is still
  *  FAILED, so leaving it failed strands the whole chain. Returns true iff at least one task was re-queued. */
@@ -389,11 +400,21 @@ export function rollbackAndReplan(
     // MAX_SWITCHES and the stall rule still bound the retries.
     if (retryFailedTask) {
       if (requeueFailedTasks(newTaskGraph)) newStrategyState.switch_triggers.push(`retry_failed_task: ${currentTask.id}`)
-    } else if ((requeueLeafOnLocal || failureModeSwitch) && !newTaskGraph.tasks.some(t => t.status === 'PENDING')) {
-      if (requeueFailedLeaves(newTaskGraph)) {
-        newStrategyState.switch_triggers.push(
-          `supervisor:requeue_leaf ${supervisorDirective?.rationale ?? ''}`.trim().slice(0, 200),
-        )
+    } else {
+      // A confident failure-mode match re-queues the task that failed — on a decomposed turn too, where the old "only when nothing
+      // else is pending, and only a leaf" rule never applied (a failed root has dependents, and its siblings are pending), so the
+      // classification + bias + retry-hint chain chose a strategy for a task that was then never run again.
+      let requeued = false
+      if (failureModeSwitch && requeueFailedTask(newTaskGraph, currentTask.id)) {
+        requeued = true
+        newStrategyState.switch_triggers.push(`failure_mode:requeue_task ${failureModeSwitch.failure_class}`.slice(0, 200))
+      }
+      if (!requeued && requeueLeafOnLocal && !newTaskGraph.tasks.some(t => t.status === 'PENDING')) {
+        if (requeueFailedLeaves(newTaskGraph)) {
+          newStrategyState.switch_triggers.push(
+            `supervisor:requeue_leaf ${supervisorDirective?.rationale ?? ''}`.trim().slice(0, 200),
+          )
+        }
       }
     }
   }
