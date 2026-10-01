@@ -75,6 +75,13 @@ export interface TurnIntentClassification {
    */
   isPlanQuestion?: boolean
   /**
+   * Part of the plan judgment: with a plan active, the message tells the assistant to continue it (a go-ahead, "retry",
+   * "run the next step", details for a step that failed) as opposed to being about something else entirely. `undefined`
+   * when no plan is active or the model omitted/garbled it — callers then treat the message as continuing the plan, which
+   * is today's behaviour. Only an explicit `false` lets a stuck plan be set aside (see plan-question.ts).
+   */
+  continuesPlan?: boolean
+  /**
    * The 15th judgment: the message asks why something happened or which of several things is true, and the message
    * itself gives no way to tell the possible explanations apart. Optional and fail-safe false — a classifier failure
    * never claims a request is underdetermined. Only read by the semantic-hypotheses hook (AUDIT_SEMANTIC_HYPOTHESES).
@@ -129,6 +136,13 @@ export interface TurnIntentClassification {
    * failure. Capped at MAX_STATED_CONSTRAINTS.
    */
   statedConstraints?: string[]
+  /**
+   * 1-based positions in `statedConstraints` of the rules meant to keep governing LATER turns ("from now on", "always",
+   * "never ..."), as opposed to one that only shapes this answer ("five lines at most"). Only those are persisted for the
+   * session; every stated constraint is still checked this turn. `undefined` when the model omitted the field — callers
+   * then treat every stated constraint as lasting, as before the field existed.
+   */
+  lastingConstraints?: number[]
   /**
    * 1-based positions, in the standing-constraint list the prompt showed, of the constraints this message lifts ("tabs are
    * fine now", "ignore the word limit"). Empty when none were shown or none lifted, and on a classifier failure.
@@ -236,6 +250,7 @@ const TURN_INTENT_SCHEMA = {
     isBulkReminderRequest: { type: 'boolean' },
     isAbandonRequest: { type: 'boolean' },
     isPlanQuestion: { type: 'boolean' },
+    continuesPlan: { type: 'boolean' },
     isUnderdetermined: { type: 'boolean' },
     matchedPlanTemplate: { type: ['string', 'null'], enum: [PLAN_TEMPLATE_NAMES_TOKEN, null] },
     needsMultiStepPlan: { type: 'boolean' },
@@ -246,6 +261,7 @@ const TURN_INTENT_SCHEMA = {
     pushbackOnPriorTurn: { type: 'boolean' },
     statesConstraint: { type: 'boolean' },
     statedConstraints: { type: 'array', items: { type: 'string' } },
+    lastingConstraints: { type: 'array', items: { type: 'integer' } },
     liftedConstraints: { type: 'array', items: { type: 'integer' } },
   },
   required: [
@@ -355,12 +371,16 @@ const TURN_INTENT_SYSTEM_PROMPT =
   '13. statesConstraint: true if the message sets a rule, limit, or standing requirement that should ' +
   'govern this and later turns (a format, a prohibition, a scope restriction), not just a one-off ask. ' +
   'When true, also list each such rule in statedConstraints as a short standalone sentence a reply could be ' +
-  'checked against ("Do not use tabs"); empty when statesConstraint is false.\n\n' +
+  'checked against ("Do not use tabs"); empty when statesConstraint is false. In lastingConstraints give the 1-based ' +
+  'positions (in statedConstraints) of the rules meant to keep governing LATER turns ("from now on", "always", "never ..."), ' +
+  'not those that only shape this one answer ("five lines at most", "in a table").\n\n' +
   '14. isPlanQuestion: true only if told a plan is currently active AND the message only asks about or ' +
   'discusses that plan — where it stands, what a step is, what is left, why something did not finish — ' +
   'and asks for no new work and gives no go-ahead to continue. False for "go ahead", "continue", ' +
   '"run the plan", "do the next step", an edit to the plan, an approval, or anything that asks the ' +
-  'assistant to do work. If told no plan is active, always return false.\n\n' +
+  'assistant to do work. If told no plan is active, always return false. Also give continuesPlan: with a plan active, ' +
+  'true if the message tells the assistant to carry the plan on (a go-ahead, "continue", "retry", "run the next step", ' +
+  'details or a fix for a step that failed); false if it is about something else entirely. Omit it when no plan is active.\n\n' +
   '15. isUnderdetermined: true if the message asks WHY something happened, or WHICH of several things is true, ' +
   'and the facts it gives (if any) are consistent with more than one explanation — a discrepancy, an unexplained ' +
   'result, a symptom with several plausible causes — even when one explanation seems the most likely. Supplied facts ' +
@@ -369,13 +389,13 @@ const TURN_INTENT_SYSTEM_PROMPT =
   'Respond with JSON only, matching this shape exactly: {"riskLevel": "LOW"|"MEDIUM"|"HIGH", ' +
   '"riskReason": string, "isTrivial": boolean, "decomposedTasks": [{"id": string, "description": ' +
   'string, "depends_on": string[], "riskLevel": "LOW"|"MEDIUM"|"HIGH"}], "isReminderRequest": ' +
-  'boolean, "isBulkReminderRequest": boolean, "isAbandonRequest": boolean, "isPlanQuestion": boolean, "isUnderdetermined": boolean, "matchedPlanTemplate": ' +
+  'boolean, "isBulkReminderRequest": boolean, "isAbandonRequest": boolean, "isPlanQuestion": boolean, "continuesPlan": boolean, "isUnderdetermined": boolean, "matchedPlanTemplate": ' +
   'string|null, "needsMultiStepPlan": boolean, "statesDurableFacts": [{"text": string, "durable": ' +
   'boolean, "confidence": "high"|"medium"|"low", "category": "identity"|"health"|"preference"|' +
   '"location"|"occupation"|"relationships"|"project"|"other"}], "needsGrounding": boolean, ' +
   '"ambiguity": "none"|"some"|"high", "userPosture": "informational"|"directive"|"exploratory"|' +
   '"corrective", "pushbackOnPriorTurn": boolean, "statesConstraint": boolean, "statedConstraints": [string], ' +
-  '"liftedConstraints": [integer]}'
+  '"lastingConstraints": [integer], "liftedConstraints": [integer]}'
 
 interface RawTurnIntent {
   riskLevel?: unknown
@@ -386,6 +406,7 @@ interface RawTurnIntent {
   isBulkReminderRequest?: unknown
   isAbandonRequest?: unknown
   isPlanQuestion?: unknown
+  continuesPlan?: unknown
   isUnderdetermined?: unknown
   matchedPlanTemplate?: unknown
   needsMultiStepPlan?: unknown
@@ -396,6 +417,7 @@ interface RawTurnIntent {
   pushbackOnPriorTurn?: unknown
   statesConstraint?: unknown
   statedConstraints?: unknown
+  lastingConstraints?: unknown
   liftedConstraints?: unknown
 }
 
@@ -467,6 +489,7 @@ function parseTurnIntent(content: string, context: TurnIntentContext): TurnInten
   const isAbandonRequest = context.hasActivePlan && parsed.isAbandonRequest
   // Tolerant like the other additive signals: absent or malformed is false (an active plan drives the turn, as before).
   const isPlanQuestion = context.hasActivePlan && !isAbandonRequest && parsed.isPlanQuestion === true
+  const continuesPlan = context.hasActivePlan && !isAbandonRequest && typeof parsed.continuesPlan === 'boolean' ? parsed.continuesPlan : undefined
   // Tolerant like the other additive signals: absent or malformed is false.
   const isUnderdetermined = parsed.isUnderdetermined === true
   const matchedPlanTemplate =
@@ -490,6 +513,9 @@ function parseTurnIntent(content: string, context: TurnIntentContext): TurnInten
         .map((c) => c.trim())
         .slice(0, MAX_STATED_CONSTRAINTS)
     : []
+  const lastingConstraints = statesConstraint && Array.isArray(parsed.lastingConstraints)
+    ? [...new Set((parsed.lastingConstraints as unknown[]).filter((n): n is number => Number.isInteger(n) && (n as number) >= 1 && (n as number) <= statedConstraints.length))]
+    : undefined
   const shown = context.standingConstraints?.length ?? 0
   const liftedConstraints = Array.isArray(parsed.liftedConstraints)
     ? [...new Set((parsed.liftedConstraints as unknown[]).filter((n): n is number => Number.isInteger(n) && (n as number) >= 1 && (n as number) <= shown))]
@@ -505,6 +531,7 @@ function parseTurnIntent(content: string, context: TurnIntentContext): TurnInten
     isBulkReminderRequest,
     isAbandonRequest,
     isPlanQuestion,
+    ...(continuesPlan !== undefined ? { continuesPlan } : {}),
     isUnderdetermined,
     matchedPlanTemplate,
     needsMultiStepPlan,
@@ -515,6 +542,7 @@ function parseTurnIntent(content: string, context: TurnIntentContext): TurnInten
     pushbackOnPriorTurn,
     statesConstraint,
     statedConstraints,
+    ...(lastingConstraints !== undefined ? { lastingConstraints } : {}),
     liftedConstraints,
   }
 }

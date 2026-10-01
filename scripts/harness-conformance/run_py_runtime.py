@@ -126,6 +126,8 @@ if sc.get("failureMatcher"):
     opts.semantic_failure_matcher = lambda _s, _e: sc["failureMatcher"]
 if sc.get("constraintJudge"):
     opts.semantic_constraint_judge = lambda _a: sc["constraintJudge"]
+if sc.get("constraintRevision"):
+    opts.on_constraint_revision = lambda e: log.append(["constraintRevision", e["task_id"], [v["constraint"] for v in e["violated"]]])
 if sc.get("semanticHypotheses"):
     opts.semantic_hypotheses = lambda _a: sc["semanticHypotheses"]
     opts.on_semantic_hypothesis = lambda e: log.append(
@@ -181,6 +183,7 @@ try:
             "stepsUsed": r.steps_used,
             "tasks": [[t.id, t.status] for t in c.task_graph.tasks],
             "finalResult": r.final_result,
+            "unresolved": r.unresolved_constraint_violations,
             "strategy": {
                 "current": c.strategy_state.current_strategy,
                 "switchCount": c.strategy_state.switch_count,

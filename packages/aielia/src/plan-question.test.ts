@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { isPlanStuck, planQuestionRoutingMode, planTasksForRun, renderPlanStateBlock, renderPlanStopNote, shouldRoutePlanQuestion } from './plan-question.js'
+import { isPlanStuck, planQuestionRoutingMode, planTasksForRun, renderPlanStateBlock, renderPlanStopNote, renderStuckPlanNudge, shouldRoutePlanQuestion, shouldSetAsideStuckPlan, stuckPlanResumeEnabled } from './plan-question.js'
 import { createPlanRecord, type PlanRecord } from './plan-store.js'
 
 const plan = createPlanRecord({
@@ -118,5 +118,27 @@ describe('renderPlanStopNote', () => {
     expect(renderPlanStopNote(plan, {})).toBe('')
     expect(renderPlanStopNote(plan, { nope: 'x' })).toBe('')
     expect(renderPlanStopNote({ ...plan, tasks: [{ ...plan.tasks[1], cancelled: true }] }, { t2: 'x' })).toBe('')
+  })
+})
+
+describe('stuck plan resume', () => {
+  it('is on by default and read off by the usual falsy values', () => {
+    expect(stuckPlanResumeEnabled({})).toBe(true)
+    for (const v of ['0', 'false', 'OFF', 'no', 'disabled']) expect(stuckPlanResumeEnabled({ AUDIT_STUCK_PLAN_RESUME: v })).toBe(false)
+  })
+  it('sets a plan aside only when it is stuck, the message is not a plan question, and continuesPlan is an explicit false', () => {
+    const base = { enabled: true, plan: stuck, isPlanQuestion: false, continuesPlan: false as boolean | undefined }
+    expect(shouldSetAsideStuckPlan(base)).toBe(true)
+    expect(shouldSetAsideStuckPlan({ ...base, continuesPlan: undefined })).toBe(false)
+    expect(shouldSetAsideStuckPlan({ ...base, continuesPlan: true })).toBe(false)
+    expect(shouldSetAsideStuckPlan({ ...base, isPlanQuestion: true })).toBe(false)
+    expect(shouldSetAsideStuckPlan({ ...base, plan: plan })).toBe(false)
+    expect(shouldSetAsideStuckPlan({ ...base, plan: null })).toBe(false)
+    expect(shouldSetAsideStuckPlan({ ...base, enabled: false })).toBe(false)
+  })
+  it('the nudge names the failed step and its reason and asks about retrying', () => {
+    const text = renderStuckPlanNudge(stuck)
+    expect(text).toContain('- Define scope — not accepted because: it only asked questions')
+    expect(text).toContain('retry the stuck step')
   })
 })

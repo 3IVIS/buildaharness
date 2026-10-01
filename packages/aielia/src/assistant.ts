@@ -49,7 +49,7 @@ import type { TurnIntentClassification, FactCategory } from './turn-intent-class
 import { ActionApprovalService } from './action-approval-service.js'
 import { PlanService } from './plan-service.js'
 import { PlanDraftingService } from './plan-drafting-service.js'
-import { planQuestionRoutingMode, renderPlanStateBlock, shouldRoutePlanQuestion } from './plan-question.js'
+import { planQuestionRoutingMode, renderPlanStateBlock, renderStuckPlanNudge, shouldRoutePlanQuestion, shouldSetAsideStuckPlan, stuckPlanResumeEnabled } from './plan-question.js'
 import { buildStepInstruction, planStepPromptEnabled } from './plan-step-prompt.js'
 import { decomposedAnswerOnceEnabled } from './decomposed-answer.js'
 import { PlanApprovalService, type PlanDecision, type PlanApprovalEdits } from './plan-approval-service.js'
@@ -977,13 +977,23 @@ export class PersonalAssistant {
       await this.session.liftStandingConstraints(sessionId, classification.liftedConstraints)
     }
     if (semanticConstraintCheckEnabled() && classification.statedConstraints && classification.statedConstraints.length > 0) {
-      await this.session.recordStandingConstraints(sessionId, classification.statedConstraints)
+      await this.session.recordStandingConstraints(
+        sessionId,
+        // Only the rules meant to outlast this answer; a classifier that omitted the field keeps them all (the old behaviour).
+        classification.lastingConstraints
+          ? classification.statedConstraints.filter((_, i) => classification.lastingConstraints!.includes(i + 1))
+          : classification.statedConstraints,
+      )
     }
 
     // A message that only asks about the active plan is answered from the plan's recorded state; the
     // plan is not handed to the harness, so asking where it stands can never re-run (or strand) its tasks.
     const planQuestionPlan = shouldRoutePlanQuestion({ mode: planQuestionRoutingMode(), plan: planForCancelCheck, isPlanQuestion: classification.isPlanQuestion }) ? planForCancelCheck : null
     if (planQuestionPlan) systemPrompt += renderPlanStateBlock(planQuestionPlan)
+    // A stuck plan is resumed only by a message that says to carry it on. Anything else is answered on its own terms, the
+    // plan is kept out of the harness (so the failed step is not silently retried), and the reply asks whether to retry it.
+    const setAsidePlan = !planQuestionPlan && shouldSetAsideStuckPlan({ enabled: stuckPlanResumeEnabled(), plan: planForCancelCheck, isPlanQuestion: classification.isPlanQuestion, continuesPlan: classification.continuesPlan }) ? planForCancelCheck : null
+    if (setAsidePlan) systemPrompt += renderStuckPlanNudge(setAsidePlan)
 
     // P3 of the internal plan — the generalized, judgment-based auto-entry
     // into plan mode's exclusive drafting loop (P1/P2), replacing the old direct-to-active
@@ -1227,12 +1237,12 @@ export class PersonalAssistant {
     // A compound-looking request decomposes into multiple tasks, and/or an active/matched
     // durable plan drives this turn's task graph instead — see TurnInterpreter.resolveTasks.
     const { initialTasks, activePlan, planClassifiedTrace } =
-      await this.turnInterpreter.resolveTasks({ userMessage, sessionId, classification, planForCancelCheck, onUsage: accumulateUsage, planQuestion: planQuestionPlan !== null })
+      await this.turnInterpreter.resolveTasks({ userMessage, sessionId, classification, planForCancelCheck, onUsage: accumulateUsage, planQuestion: planQuestionPlan !== null || setAsidePlan !== null })
     if (planClassifiedTrace) {
       this.onTrace?.({ kind: 'plan_classified', isCandidate: planClassifiedTrace.isCandidate, matchedTemplate: planClassifiedTrace.matchedTemplate })
     }
     // An approved plan drives this turn: each of its steps is its own piece of work for the model.
-    if (activePlan && !planQuestionPlan) planStepDescriptions = new Map(initialTasks.map((t) => [t.id, t.description]))
+    if (activePlan && !planQuestionPlan && !setAsidePlan) planStepDescriptions = new Map(initialTasks.map((t) => [t.id, t.description]))
     // A request split into subtasks without a plan is still ONE answer to the user.
     shareAnswerAcrossTasks = !activePlan && initialTasks.length > 1
 
@@ -1257,7 +1267,7 @@ export class PersonalAssistant {
         classification,
         initialTasks,
         // Null for a plan question: the harness must not execute, pace or check the plan's tasks.
-        activePlan: planQuestionPlan ? null : activePlan,
+        activePlan: planQuestionPlan || setAsidePlan ? null : activePlan,
         sources,
         onProgress: options.onProgress,
         onUsage: accumulateUsage,

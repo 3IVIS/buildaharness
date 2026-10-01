@@ -53,11 +53,18 @@ describe('onConstraintRevision', () => {
     expect(r.calls).toBe(1)
   })
 
-  it('a second violation still fails the run, and only one revision is attempted', async () => {
+  it('a second violation returns the answer with the violation attached, and only one revision is attempted', async () => {
     const r = await run([BAD, BAD, BAD], { revise: true })
-    expect(r.error).toBeInstanceOf(OutputContractError)
+    expect(r.error).toBeUndefined()
+    expect(r.outcome?.status === 'complete' && r.outcome.result.finalResult).toBe(BAD)
+    expect(r.outcome?.status === 'complete' && r.outcome.result.unresolvedConstraintViolations).toEqual([{ constraint: 'Do not use tabs', reason: 'indents with a tab' }])
     expect(r.calls).toBe(2)
     expect(r.events).toHaveLength(1)
+  })
+
+  it('a clean answer carries no unresolved violations', async () => {
+    const r = await run([BAD, GOOD], { revise: true })
+    expect(r.outcome?.status === 'complete' && r.outcome.result.unresolvedConstraintViolations).toBeUndefined()
   })
 
   it('a clean first answer never fires the handler or asks again', async () => {

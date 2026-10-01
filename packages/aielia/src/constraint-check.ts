@@ -46,6 +46,16 @@ export function semanticConstraintCheckEnabled(env?: Record<string, string | und
   return !['0', 'false', 'off', 'no', 'disabled'].includes(raw)
 }
 
+/**
+ * What to append to a reply the judge still found breaking a constraint after the one revision (the harness hands the answer
+ * back with the violation instead of failing the turn). Empty when nothing is unresolved.
+ */
+export function renderUnresolvedConstraintNote(violations: ReadonlyArray<ConstraintViolation> | undefined): string {
+  if (!violations || violations.length === 0) return ''
+  const lines = violations.map((v) => `- ${v.constraint}${v.reason ? ` (${v.reason})` : ''}`)
+  return `\n\n---\nI tried to fix this once, but the answer above may not fully meet ${violations.length === 1 ? 'a constraint' : 'constraints'} you set:\n${lines.join('\n')}`
+}
+
 /** Most standing constraints kept per session; the oldest drop first. */
 export const MAX_STANDING_CONSTRAINTS = 8
 

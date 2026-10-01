@@ -2642,6 +2642,67 @@ describe('PersonalAssistant structured planning', () => {
       expect(result.planStatus?.completionPct).toBe(100)
     })
 
+    describe('a stuck plan is resumed only by a message that continues it (continuesPlan)', () => {
+      const unrelated = 'Please draft a short note to the team about the office move next week, and keep it friendly.'
+      const stuckClient = (continuesPlan: boolean | undefined, message = unrelated) =>
+        new ChatRecordingClient(() => ({ content: 'unused' }), ['Here is the note. Want me to retry the stuck step?'], undefined, overrideFor([[message, continuesPlan === undefined ? { isPlanQuestion: false } : { isPlanQuestion: false, continuesPlan }]]))
+      const nudgeSeen = (llm: ChatRecordingClient) => llm.chatMessages.flat().some((m) => m.role === 'system' && m.content.includes('retry the stuck step'))
+
+      it('an unrelated message is answered, the failed step is NOT retried, and the prompt asks about the stuck step', async () => {
+        const { memory } = await stuckPlan()
+        const llm = stuckClient(false)
+        const result = await new PersonalAssistant({ llmClient: llm, memory, planMode: 'gated' }).turn(unrelated, { sessionId: 'stuck-session' })
+
+        expect(result.status).toBe('ok')
+        expect(result.reply).toBe('Here is the note. Want me to retry the stuck step?')
+        expect(result.planStatus?.tasks.map((t) => [t.id, t.status, t.note])).toEqual([['t1', 'FAILED', 'the reply only asked questions'], ['t2', 'PENDING', undefined]])
+        const system = llm.chatMessages.at(-1)!.find((m) => m.role === 'system')!.content
+        expect(system).toContain('- Define the launch scope — not accepted because: the reply only asked questions')
+        expect(system).toContain('do NOT run, retry or mention the plan')
+      })
+
+      it('a message that says to carry the plan on retries the failed step (continuesPlan true)', async () => {
+        const { memory } = await stuckPlan()
+        const llm = stuckClient(true, 'Yes, go ahead and retry it.')
+        const result = await new PersonalAssistant({ llmClient: llm, memory, planMode: 'gated' }).turn('Yes, go ahead and retry it.', { sessionId: 'stuck-session' })
+
+        expect(result.planStatus?.tasks.map((t) => t.status)).toEqual(['COMPLETE', 'COMPLETE'])
+        expect(nudgeSeen(llm)).toBe(false)
+      })
+
+      it('negative control — a classifier that omits continuesPlan keeps today\'s behaviour (the step is retried)', async () => {
+        const { memory } = await stuckPlan()
+        const llm = stuckClient(undefined)
+        const result = await new PersonalAssistant({ llmClient: llm, memory, planMode: 'gated' }).turn(unrelated, { sessionId: 'stuck-session' })
+
+        expect(result.planStatus?.tasks.map((t) => t.status)).toEqual(['COMPLETE', 'COMPLETE'])
+        expect(nudgeSeen(llm)).toBe(false)
+      })
+
+      it('AUDIT_STUCK_PLAN_RESUME=0 restores the old behaviour for an unrelated message', async () => {
+        const prev = process.env.AUDIT_STUCK_PLAN_RESUME
+        process.env.AUDIT_STUCK_PLAN_RESUME = '0'
+        try {
+          const { memory } = await stuckPlan()
+          const llm = stuckClient(false)
+          const result = await new PersonalAssistant({ llmClient: llm, memory, planMode: 'gated' }).turn(unrelated, { sessionId: 'stuck-session' })
+          expect(result.planStatus?.tasks.map((t) => t.status)).toEqual(['COMPLETE', 'COMPLETE'])
+          expect(nudgeSeen(llm)).toBe(false)
+        } finally {
+          if (prev === undefined) delete process.env.AUDIT_STUCK_PLAN_RESUME
+          else process.env.AUDIT_STUCK_PLAN_RESUME = prev
+        }
+      })
+
+      it('a HEALTHY plan is untouched by the rule: an unrelated message still drives it', async () => {
+        const { memory } = await healthyPlan()
+        const llm = stuckClient(false)
+        const result = await new PersonalAssistant({ llmClient: llm, memory, planMode: 'gated' }).turn(unrelated, { sessionId: 'stuck-session' })
+        expect(result.planStatus?.tasks.map((t) => t.status)).toEqual(['COMPLETE', 'COMPLETE'])
+        expect(nudgeSeen(llm)).toBe(false)
+      })
+    })
+
     it('a plan run that stops on a rejected step says so in its reply, after the last step that did complete', async () => {
       const prev = process.env.AUDIT_SEMANTIC_TASK_COMPLETION
       process.env.AUDIT_SEMANTIC_TASK_COMPLETION = '1'

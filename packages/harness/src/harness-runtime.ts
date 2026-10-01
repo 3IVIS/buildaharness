@@ -433,6 +433,11 @@ export interface HarnessRunResult {
   stepsUsed: number
   initResult: HarnessInitResult
   nodeExecutionOrder: string[]
+  /**
+   * Constraints the semantic judge still found violated after the host's one revision (only set when the host opted into
+   * `onConstraintRevision`, i.e. can show a note). Without that opt-in a violation throws OutputContractError as before.
+   */
+  unresolvedConstraintViolations?: Array<{ constraint: string; reason?: string }>
 }
 
 export type HarnessRunOutcome =
@@ -542,6 +547,8 @@ interface LoopContext {
   onConstraintRevision?: (event: { taskId: string; note: string; violated: Array<{ constraint: string; reason?: string }> }) => void
   /** True once a constraint violation has reopened a task this run (at most once). */
   constraintRevisionDone?: boolean
+  /** The text of the harness's own could-not-complete reply, set when a stalled run ends with it. It is not the model's answer, so the constraint judge skips it. */
+  stalledFallbackText?: string
   /** Called when the completion check judged a task's output did not do the task — the host can persist why (e.g. on a durable plan's task). Observability only: a throwing handler never breaks the run. */
   onTaskNotAccomplished?: (event: { taskId: string; reason: string }) => void
   /** The most recent task the completion check judged not done — read only by stalledTurnFallbackResult so the stranded reply can say why. Not checkpointed. */
@@ -1001,6 +1008,9 @@ async function judgeConstraints(ctx: LoopContext, judge: SemanticConstraintJudge
   if (!judge || ctx.callerState.current_constraints.length === 0) return []
   const reply = typeof ctx.finalResult === 'string' ? ctx.finalResult : ctx.finalResult == null ? '' : JSON.stringify(ctx.finalResult)
   if (reply.trim() === '') return []
+  // The could-not-complete reply is the harness's own notice, not an answer: judging it against the user's constraints
+  // ("two sentences", "friendly tone") would throw a graceful failure message into a failed turn.
+  if (reply === ctx.stalledFallbackText) return []
   try {
     return (await judge({ constraints: [...ctx.callerState.current_constraints], reply })).violated ?? []
   } catch {
@@ -1269,7 +1279,9 @@ async function* driveMainLoop(ctx: LoopContext): AsyncGenerator<HarnessCheckpoin
       // untouched.
       const noUsableResult = typeof ctx.finalResult !== 'string' || ctx.finalResult.trim() === ''
       if (noUsableResult && ctx.taskGraph.tasks.some(t => t.status === 'FAILED')) {
-        ctx.finalResult = stalledTurnFallbackResult(ctx)
+        const fallback = stalledTurnFallbackResult(ctx)
+        ctx.finalResult = fallback
+        ctx.stalledFallbackText = typeof fallback === 'string' ? fallback : undefined
         reportLayer(ctx, 'recovery', true, 'turn stalled with no answer — returning an explicit could-not-complete reply')
       }
       return
@@ -2183,7 +2195,7 @@ async function driveToCompletion(ctx: LoopContext, options: HarnessRunOptions): 
 
   ctx.nodeExecutionOrder.push('output_validation')
   const judge = ctx.semanticConstraintJudge
-  let validationResult = outputValidation(ctx.finalResult, ctx.outputContract, ctx.callerState, { skipCallerConstraints: judge !== undefined })
+  let validationResult = outputValidation(ctx.finalResult, ctx.outputContract, ctx.callerState, { skipCallerConstraints: judge !== undefined || (ctx.stalledFallbackText !== undefined && ctx.finalResult === ctx.stalledFallbackText) })
   let violated = await judgeConstraints(ctx, judge)
   if (violated.length > 0) {
     const reopened = maybeReopenForConstraintRevision(ctx, violated)
@@ -2196,11 +2208,14 @@ async function driveToCompletion(ctx: LoopContext, options: HarnessRunOptions): 
       const again = await runMainLoopWithCheckpoints(ctx, options)
       if (again.status === 'paused') return again
       ctx.nodeExecutionOrder.push('output_validation_2')
-      validationResult = outputValidation(ctx.finalResult, ctx.outputContract, ctx.callerState, { skipCallerConstraints: judge !== undefined })
+      validationResult = outputValidation(ctx.finalResult, ctx.outputContract, ctx.callerState, { skipCallerConstraints: judge !== undefined || (ctx.stalledFallbackText !== undefined && ctx.finalResult === ctx.stalledFallbackText) })
       violated = await judgeConstraints(ctx, judge)
     }
   }
-  if (violated.length > 0) {
+  // A host that can show a note (it opted into the revision) gets the answer back with the violation attached rather than a
+  // thrown error: the model's reply is still the best answer there is, and the user should be told what it did not meet.
+  const unresolved = violated.length > 0 && ctx.onConstraintRevision ? violated : undefined
+  if (violated.length > 0 && !unresolved) {
     throw new OutputContractError(
       'caller_specific_constraints',
       violated.map(v => `caller_specific_constraints: constraint violated: "${v.constraint}"${v.reason ? ` (${v.reason})` : ''}`),
@@ -2216,6 +2231,7 @@ async function driveToCompletion(ctx: LoopContext, options: HarnessRunOptions): 
     stepsUsed: ctx.stepsUsed,
     initResult: toInitResultShape(ctx),
     nodeExecutionOrder: ctx.nodeExecutionOrder,
+    ...(unresolved ? { unresolvedConstraintViolations: unresolved } : {}),
   }
 
   // Always emit one final checkpoint on completion so a caller persisting

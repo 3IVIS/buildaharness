@@ -67,6 +67,7 @@ if (sc.changeReviewer) { opts.semanticChangeReviewer = async () => sc.changeRevi
 opts.onTaskNotAccomplished = (e: any) => log.push(['notDone', e.taskId, e.reason])
 if (sc.failureMatcher) opts.semanticFailureMatcher = async () => sc.failureMatcher
 if (sc.constraintJudge) opts.semanticConstraintJudge = async () => sc.constraintJudge
+if (sc.constraintRevision) opts.onConstraintRevision = (e: any) => log.push(['constraintRevision', e.taskId, e.violated.map((v: any) => v.constraint)])
 if (sc.semanticHypotheses) { opts.semanticHypotheses = async () => sc.semanticHypotheses; opts.onSemanticHypothesis = (e: any) => log.push(['semHyp', e.kind, e.id ?? (e.hypotheses ?? []).map((h: any) => h.id).join(',')]) }
 if (sc.hypothesisJudge) opts.semanticHypothesisJudge = async () => sc.hypothesisJudge
 if (sc.criterionCoverage !== undefined) opts.semanticCriterionCoverage = async (c: string) => { log.push(['coverage', c]); return sc.criterionCoverage }
@@ -92,6 +93,7 @@ try {
     stepsUsed: r.stepsUsed,
     tasks: s.taskGraph.tasks.map((t: any) => [t.id, t.status]),
     finalResult: r.finalResult ?? null,
+    unresolved: r.unresolvedConstraintViolations ?? null,
     strategy: {
       current: s.strategyState.current_strategy,
       switchCount: s.strategyState.switch_count,

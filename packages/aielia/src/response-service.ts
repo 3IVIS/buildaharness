@@ -1,4 +1,5 @@
 import { renderPlanStopNote } from './plan-question.js'
+import { renderUnresolvedConstraintNote } from './constraint-check.js'
 import { NOT_ACCOMPLISHED_REPLY_PREFIX } from '@buildaharness/harness'
 import {
   riskSummary,
@@ -269,7 +270,7 @@ export class ResponseService {
     const baseReply = typeof result.finalResult === 'string' ? result.finalResult : draftReply
     // A plan run that stopped on a rejected step says so, unless the reply already is that news.
     const stopNote = activePlan && !baseReply.startsWith(NOT_ACCOMPLISHED_REPLY_PREFIX) ? renderPlanStopNote(activePlan, taskNotes) : ''
-    const reply = `${baseReply}${stopNote}`
+    const reply = `${baseReply}${stopNote}${renderUnresolvedConstraintNote(result.unresolvedConstraintViolations)}`
 
     await this.session.appendTranscriptMessage(sessionId, transcriptKey, { role: 'user', content: userMessage })
     await this.session.appendTranscriptMessage(sessionId, transcriptKey, { role: 'assistant', content: reply })
