@@ -57,7 +57,7 @@ import { harnessTokenBudgetTotal } from './harness-token-budget.js'
 import { semanticHypothesesEnabled, proposeCompetingExplanations, judgeHypothesesAgainstEvidence } from './semantic-hypotheses.js'
 import type { SemanticHypothesisEvent, SemanticHypothesisProposal } from '@buildaharness/harness'
 import { recordLayerTelemetry } from './layer-telemetry.js'
-import { resolveEscalationPlan, escalationEnabled, harnessGatePolicy, turnPolicyBudget, type EscalationPlan } from './layer-policy-wiring.js'
+import { resolveEscalationPlan, escalationEnabled, optInLayerEnabled, harnessGatePolicy, turnPolicyBudget, type EscalationPlan } from './layer-policy-wiring.js'
 import type { LayerPolicyMode } from '@buildaharness/harness'
 
 /**
@@ -165,6 +165,8 @@ export interface HarnessRunParams {
   onSemanticHypothesis?: (event: SemanticHypothesisEvent) => void
   /** The competing explanations were already asked for (a tool-less turn drafts its reply first): the harness registers this answer instead of making a second call. `null` = asked, none. `undefined` = not asked. */
   precomputedHypotheses?: SemanticHypothesisProposal[] | null
+  /** The opt-in layers' plan for this turn (adaptive mode only); see resolveOptInPlan. Absent: each layer's own flag decides. */
+  optInPlan?: EscalationPlan
   /** The reviewer pass's verdict sent the last answer back for one revision (AUDIT_REVIEWER_REVISION): the note to put in front of the proposer. */
   onReviewerRevision?: (event: { taskId: string; note: string }) => void
   /** A constraint the user stated this turn was violated by the finished answer: the note to hand the proposer for its one second answer. */
@@ -289,7 +291,7 @@ export class HarnessBridge {
   }
 
   async run(params: HarnessRunParams): Promise<HarnessOutcome> {
-    const { sessionId, userMessage, facts, currentTurnFacts = [], draftReply, classification, initialTasks, activePlan, sources, onProgress, onUsage, oneLoopProposer, runInvestigation, askModeEnabled = false, updateChannel, onReviewConflict, onFailureModeSwitch, onLearnedStrategySwitch, onSemanticHypothesis, precomputedHypotheses, onReviewerRevision, onConstraintRevision, tokensUsed } = params
+    const { sessionId, userMessage, facts, currentTurnFacts = [], draftReply, classification, initialTasks, activePlan, sources, onProgress, onUsage, oneLoopProposer, runInvestigation, askModeEnabled = false, updateChannel, onReviewConflict, onFailureModeSwitch, onLearnedStrategySwitch, onSemanticHypothesis, precomputedHypotheses, optInPlan, onReviewerRevision, onConstraintRevision, tokensUsed } = params
     const runtime = new HarnessRuntime()
     // One harness run per (session, turn) — a run_id a resumed run can be found under if this
     // turn's process died mid-run before reaching the `finally` cleanup below.
@@ -477,7 +479,7 @@ export class HarnessBridge {
         // own ControlState stays ALLOW/NORMAL (no gate BLOCK/ESCALATE). Default ON — unchanged.
         skipControlState: controlStateGateEnabled() ? undefined : true,
         // AUDIT_EXPERIENCE_LEARNING (default off): journal every executed task and teach the experience store when the run ends.
-        experienceLearning: experienceLearningEnabled() ? true : undefined,
+        experienceLearning: optInLayerEnabled('experience_learning', experienceLearningEnabled(), optInPlan) ? true : undefined,
         retryFailedTask: retryFailedTaskEnabled() ? true : undefined,
         // Trajectory Supervisor GATHER_EVIDENCE host (S5). Inert unless a supervisorDecider is
         // also wired and returns a GATHER_EVIDENCE directive at a stall edge; absent → the
@@ -548,10 +550,10 @@ export class HarnessBridge {
         isCheckableCriterion,
         // AUDIT_HARNESS_TOKEN_BUDGET (default off): the memory layer's token budget, fed from this turn's real usage.
         ...(harnessTokenBudgetTotal() !== undefined && tokensUsed ? { tokenBudget: { total: harnessTokenBudgetTotal()!, used: tokensUsed } } : {}),
-        ...(reviewerRevisionEnabled() && oneLoopProposer
+        ...(optInLayerEnabled('reviewer_revision', reviewerRevisionEnabled(), optInPlan) && oneLoopProposer
           ? { reviewerRevision: reviewerRevisionNote, onReviewerRevision }
           : {}),
-        ...(semanticHypothesesEnabled() && classification.isUnderdetermined === true
+        ...(optInLayerEnabled('semantic_hypotheses', semanticHypothesesEnabled(), optInPlan) && classification.isUnderdetermined === true
           ? {
               semanticHypotheses: (input: { objective: string; observations: string[]; beliefs: string[] }) =>
                 precomputedHypotheses !== undefined

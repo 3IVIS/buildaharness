@@ -33,6 +33,8 @@ import { semanticCompactionEnabled } from './semantic-compaction.js'
 import { reviewerRevisionEnabled } from './reviewer-revision.js'
 import { semanticHypothesesEnabled } from './semantic-hypotheses.js'
 import { sourceReliabilityEnabled } from './source-reliability.js'
+import { toTaskRiskLevel } from './task-mapping.js'
+import type { TurnIntentClassification } from './turn-intent-classifier.js'
 
 /**
  * The opt-in layers (default OFF, one `AUDIT_*` flag each) the operator has switched on. Each flag is still read
@@ -47,6 +49,44 @@ export function enabledOptInLayers(env?: Record<string, string | undefined>): Op
     semantic_compaction: semanticCompactionEnabled(env),
   }
   return OPT_IN_LAYERS.filter((l) => on[l])
+}
+
+/**
+ * Whether an opt-in layer runs this turn. Restrict-only (AL-1): the layer's own `AUDIT_*` flag must be on (`flagOn`) AND the
+ * plan must not have switched it `off` (`budget_exhausted`) — a plan can never turn a disabled layer on. Only an `adaptive`
+ * plan exists (`resolveOptInPlan`); with none, or a decision the plan lacks, or a plan that throws, the flag alone decides,
+ * i.e. today's behaviour.
+ */
+export function optInLayerEnabled(layer: OptInLayer, flagOn: boolean, plan: EscalationPlan | undefined): boolean {
+  if (!flagOn) return false
+  try {
+    return plan?.policy[layer]?.decision !== 'off'
+  } catch {
+    return true
+  }
+}
+
+/**
+ * The plan the opt-in layers are gated by, resolved once per turn right after classification — before the tool-less draft
+ * and the harness run, which is where the earliest opt-in call sits. Their decisions depend only on which are enabled and on
+ * the per-turn call budget (risk and posture), none of which needs the task graph, so the minimal signals here give the same
+ * answer the harness's own plan would. `undefined` unless `adaptive`: static and shadow execute today's behaviour.
+ */
+export function resolveOptInPlan(mode: LayerPolicyMode, classification: TurnIntentClassification): EscalationPlan | undefined {
+  if (mode !== 'adaptive') return undefined
+  const signals: TurnSignals = {
+    riskLevel: toTaskRiskLevel(classification.riskLevel),
+    taskCount: 1,
+    hasDurablePlan: false,
+    consequentialTools: new Set(),
+    needsGrounding: classification.needsGrounding,
+    ambiguity: classification.ambiguity,
+    userPosture: classification.userPosture,
+    pushbackOnPriorTurn: classification.pushbackOnPriorTurn,
+    statesConstraint: classification.statesConstraint,
+    isTrivial: classification.isTrivial,
+  }
+  return resolveEscalationPlan(mode, signals, undefined, undefined, turnPolicyBudget(signals))
 }
 
 export const SEMANTIC_ESCALATIONS = [
