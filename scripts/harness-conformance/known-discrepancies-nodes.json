@@ -1,3 +1,1 @@
-{
-  "cc-journal-zero-verbatim": "TS bug, left as is pending a decision: context-compression.ts uses passingVerbatim.slice(-max_passing_verbatim), and JS slice(-0) returns the WHOLE array, so max_passing_verbatim = 0 keeps every passing entry's verbatim text (and the compress branch's slice(0, -0) is empty). Python keeps none, which is what the policy says. The default is 20, so nothing in production hits it."
-}
+{}
