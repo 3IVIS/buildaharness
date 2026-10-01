@@ -1,0 +1,51 @@
+{
+ "node": "propagate_beliefs",
+ "state": {
+  "depGraph": {
+   "belief_nodes": [
+    {
+     "belief_id": "a",
+     "confidence": 0.9
+    },
+    {
+     "belief_id": "b",
+     "confidence": 0.9
+    },
+    {
+     "belief_id": "c",
+     "confidence": 0.9
+    },
+    {
+     "belief_id": "d",
+     "confidence": 0.9
+    }
+   ],
+   "derived_from_edges": [
+    {
+     "from": "a",
+     "to": "b",
+     "confidence": 0.9,
+     "verified": false
+    },
+    {
+     "from": "b",
+     "to": "c",
+     "confidence": 0.9,
+     "verified": false
+    },
+    {
+     "from": "c",
+     "to": "d",
+     "confidence": 0.9,
+     "verified": true
+    }
+   ],
+   "invalidation_frontier": [
+    "a"
+   ],
+   "propagation_queue": [],
+   "unverified_edge_ratio": 0.0,
+   "confidence_decay_rate": 0.05
+  }
+ }
+}

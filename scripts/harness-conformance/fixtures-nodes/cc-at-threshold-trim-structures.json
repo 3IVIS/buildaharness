@@ -1,0 +1,88 @@
+{
+ "node": "context_compression",
+ "state": {
+  "memoryState": {
+   "token_budget": {
+    "total": 1000,
+    "used": 900
+   },
+   "compression_risk": {
+    "compressed_structures": [
+     {
+      "id": "s0",
+      "description": "d",
+      "token_count": 0
+     },
+     {
+      "id": "s1",
+      "description": "d",
+      "token_count": 1
+     },
+     {
+      "id": "s2",
+      "description": "d",
+      "token_count": 2
+     },
+     {
+      "id": "s3",
+      "description": "d",
+      "token_count": 3
+     },
+     {
+      "id": "s4",
+      "description": "d",
+      "token_count": 4
+     },
+     {
+      "id": "s5",
+      "description": "d",
+      "token_count": 5
+     },
+     {
+      "id": "s6",
+      "description": "d",
+      "token_count": 6
+     },
+     {
+      "id": "s7",
+      "description": "d",
+      "token_count": 7
+     },
+     {
+      "id": "s8",
+      "description": "d",
+      "token_count": 8
+     },
+     {
+      "id": "s9",
+      "description": "d",
+      "token_count": 9
+     },
+     {
+      "id": "s10",
+      "description": "d",
+      "token_count": 10
+     },
+     {
+      "id": "s11",
+      "description": "d",
+      "token_count": 11
+     },
+     {
+      "id": "s12",
+      "description": "d",
+      "token_count": 12
+     },
+     {
+      "id": "s13",
+      "description": "d",
+      "token_count": 13
+     }
+    ],
+    "pruned_regions": [],
+    "dependent_tasks": []
+   },
+   "journal": []
+  }
+ }
+}

@@ -1,0 +1,67 @@
+{
+ "node": "estimate_voi",
+ "state": {
+  "hypothesisSet": {
+   "active": [
+    {
+     "id": "h0",
+     "explanation": "h0",
+     "confidence": 0.5,
+     "predicted_observations": [],
+     "discriminating_evidence": [],
+     "generation_sources": [
+      "symptom_inference"
+     ],
+     "diversity_score": 0.0
+    },
+    {
+     "id": "h1",
+     "explanation": "h1",
+     "confidence": 0.5,
+     "predicted_observations": [],
+     "discriminating_evidence": [],
+     "generation_sources": [
+      "symptom_inference"
+     ],
+     "diversity_score": 0.0
+    },
+    {
+     "id": "h2",
+     "explanation": "h2",
+     "confidence": 0.5,
+     "predicted_observations": [],
+     "discriminating_evidence": [],
+     "generation_sources": [
+      "symptom_inference"
+     ],
+     "diversity_score": 0.0
+    },
+    {
+     "id": "h3",
+     "explanation": "h3",
+     "confidence": 0.5,
+     "predicted_observations": [],
+     "discriminating_evidence": [],
+     "generation_sources": [
+      "symptom_inference"
+     ],
+     "diversity_score": 0.0
+    }
+   ]
+  },
+  "diagnostics": {
+   "verification_health": {
+    "strength": 0.95,
+    "feasibility": 1.0
+   }
+  }
+ },
+ "args": {
+  "tools": {
+   "a": {
+    "available": true,
+    "fallback_tool": null
+   }
+  }
+ }
+}

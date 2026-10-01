@@ -1,0 +1,32 @@
+{
+ "node": "learn_from_journal",
+ "args": {
+  "journal": [
+   {
+    "step": 0,
+    "action_class": "DIRECT_EDIT",
+    "outcome": "failed:A",
+    "success": false
+   },
+   {
+    "step": 1,
+    "action_class": "TRACE_EXEC",
+    "outcome": "completed",
+    "success": true
+   },
+   {
+    "step": 2,
+    "action_class": "MINIMAL_FIX",
+    "outcome": "failed:B",
+    "success": false
+   },
+   {
+    "step": 3,
+    "action_class": "ESCALATE",
+    "outcome": "failed:B",
+    "success": false
+   }
+  ],
+  "store": {}
+ }
+}

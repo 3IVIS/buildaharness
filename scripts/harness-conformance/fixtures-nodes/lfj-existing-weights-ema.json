@@ -1,0 +1,40 @@
+{
+ "node": "learn_from_journal",
+ "args": {
+  "journal": [
+   {
+    "step": 0,
+    "action_class": "DIRECT_EDIT",
+    "outcome": "failed:X",
+    "success": false
+   },
+   {
+    "step": 1,
+    "action_class": "TRACE_EXEC",
+    "outcome": "completed",
+    "success": true
+   },
+   {
+    "step": 2,
+    "action_class": "DIRECT_EDIT",
+    "outcome": "failed:X",
+    "success": false
+   },
+   {
+    "step": 3,
+    "action_class": "TRACE_EXEC",
+    "outcome": "completed",
+    "success": true
+   }
+  ],
+  "store": {
+   "weights": {
+    "DIRECT_EDIT:X": 0.9,
+    "TRACE_EXEC:X": 0.4
+   },
+   "priors": {
+    "X": 0.6
+   }
+  }
+ }
+}

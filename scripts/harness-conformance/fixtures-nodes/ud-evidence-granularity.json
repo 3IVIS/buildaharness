@@ -1,0 +1,54 @@
+{
+ "node": "update_diagnostics",
+ "state": {
+  "worldModel": {
+   "beliefs": [
+    {
+     "id": "b1",
+     "statement": "The module architecture overall design",
+     "confidence": 0.8,
+     "derived_from": [
+      "o1"
+     ],
+     "recorded_at": "2026-01-01T00:00:00.000Z"
+    },
+    {
+     "id": "b2",
+     "statement": "line 12 variable x",
+     "confidence": 0.8,
+     "derived_from": [
+      "o1"
+     ],
+     "recorded_at": "2026-01-01T00:00:00.000Z"
+    }
+   ]
+  },
+  "taskGraph": {
+   "tasks": [
+    {
+     "id": "t1",
+     "description": "t1",
+     "status": "PENDING",
+     "risk_level": "LOW",
+     "depends_on": [],
+     "parallel_write_domains": [],
+     "abstraction_level": 1,
+     "assigned_strategy": null
+    },
+    {
+     "id": "t2",
+     "description": "t2",
+     "status": "PENDING",
+     "risk_level": "LOW",
+     "depends_on": [],
+     "parallel_write_domains": [],
+     "abstraction_level": 5,
+     "assigned_strategy": null
+    }
+   ],
+   "conflict_probability_cache": {},
+   "changed": true
+  }
+ },
+ "args": {}
+}

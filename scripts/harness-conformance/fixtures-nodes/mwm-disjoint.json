@@ -1,0 +1,33 @@
+{
+ "node": "merge_world_models",
+ "state": {
+  "worldModel": {
+   "beliefs": [
+    {
+     "id": "x1",
+     "statement": "1",
+     "confidence": 0.8,
+     "derived_from": [
+      "o1"
+     ],
+     "recorded_at": "2026-01-01T00:00:00.000Z"
+    }
+   ]
+  }
+ },
+ "args": {
+  "other": {
+   "beliefs": [
+    {
+     "id": "x2",
+     "statement": "2",
+     "confidence": 0.8,
+     "derived_from": [
+      "o1"
+     ],
+     "recorded_at": "2026-01-01T00:00:00.000Z"
+    }
+   ]
+  }
+ }
+}

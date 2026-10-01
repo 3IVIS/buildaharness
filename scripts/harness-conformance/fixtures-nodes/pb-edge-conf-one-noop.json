@@ -1,0 +1,29 @@
+{
+ "node": "propagate_beliefs",
+ "state": {
+  "depGraph": {
+   "belief_nodes": [
+    {
+     "belief_id": "a",
+     "confidence": 0.5
+    },
+    {
+     "belief_id": "b",
+     "confidence": 0.9
+    }
+   ],
+   "derived_from_edges": [
+    {
+     "from": "a",
+     "to": "b",
+     "confidence": 1.0,
+     "verified": true
+    }
+   ],
+   "invalidation_frontier": [],
+   "propagation_queue": [],
+   "unverified_edge_ratio": 0.0,
+   "confidence_decay_rate": 0.05
+  }
+ }
+}

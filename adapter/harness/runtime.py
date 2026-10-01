@@ -70,7 +70,7 @@ from .failure_modes import (
 from .gates import action_gate, post_exec_gate
 from .hypothesis import HypothesisSet, generate_update_hypotheses
 from .investigation import INVESTIGATION_DONE_PREFIX, resolve_gather_evidence
-from .memory import JournalRetentionPolicy, MemoryState, context_compression
+from .memory import JournalRetentionPolicy, MemoryState, TokenBudget, context_compression
 from .output_contract import OutputContract, OutputContractError, output_validation
 from .parallel_merge import ParallelBranch, reconcile_parallel_branches
 from .process_registry import DEFAULT_REGISTRY, ProcessRegistry
@@ -286,6 +286,13 @@ class HarnessRunOptions:
     experience_learning: bool = False
     retry_failed_task: bool = False  # re-queue the failed leaf after the ladder switches strategy (TS retryFailedTask)
     is_checkable_criterion: Callable[[str], bool] | None = None
+    # (criterion, beliefs) -> covered?  Asked only for a criterion the substring check did not cover
+    # (TS semanticCriterionCoverage).
+    semantic_criterion_coverage: Callable[[str, list[Any]], bool] | None = None
+    # Opt-in: feeds memory_state.token_budget from real usage; `used` is read once per iteration just before
+    # context_compression (TS tokenBudget {total, used()}). Absent => token_budget.used stays 0 and the pressure
+    # branch never runs.
+    token_budget: dict[str, Any] | None = None
     ask_mode: str | None = None  # "enabled" turns the structured ask-question shape on (TS askMode)
     # observability callbacks (a raising handler never breaks the run)
     on_verification: Callable[[VerificationResult], None] | None = None
@@ -891,6 +898,7 @@ def _select_and_gate(ctx: LoopContext) -> tuple[str, Task | None, Task | None]:
         raise _budget_halt(ctx, f"Exhausted at step {ctx.steps_used} (no iteration reached completion)")
 
     _node(ctx, "context_compression")
+    _feed_token_budget(ctx)
     context_compression(
         ctx.memory_state,
         ctx.world_model,
@@ -1532,6 +1540,18 @@ def _rollback_and_replan(ctx: LoopContext, current: Task) -> None:
 # ── post-loop (TS driveToCompletion) ─────────────────────────────────────────
 
 
+def _feed_token_budget(ctx: LoopContext) -> None:
+    tb = ctx.options.token_budget
+    if not tb:
+        return
+    used = 0
+    try:
+        used = int(tb["used"]())
+    except Exception:  # a failing host reader leaves the pressure at 0
+        used = 0
+    ctx.memory_state.token_budget = TokenBudget(total=max(1, int(tb["total"])), used=max(used, 0))
+
+
 def _run_reviewer_pass(ctx: LoopContext) -> Any:
     sig_adversarial = len(ctx.task_graph.tasks) >= 3 or any(t.risk_level != "LOW" for t in ctx.task_graph.tasks)
     return reviewer_pass(
@@ -1546,7 +1566,7 @@ def _run_reviewer_pass(ctx: LoopContext) -> Any:
         ctx.evidence_store,
         ctx.propagation_queue,
         sig_adversarial,
-        None,
+        ctx.options.semantic_criterion_coverage,
         ctx.options.is_checkable_criterion,
     )
 

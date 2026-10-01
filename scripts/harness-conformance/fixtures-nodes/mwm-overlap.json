@@ -1,0 +1,141 @@
+{
+ "node": "merge_world_models",
+ "state": {
+  "worldModel": {
+   "generation_id": 3,
+   "beliefs": [
+    {
+     "id": "b1",
+     "statement": "a-version",
+     "confidence": 0.9,
+     "derived_from": [
+      "o1"
+     ],
+     "recorded_at": "2026-01-01T00:00:00.000Z"
+    },
+    {
+     "id": "b2",
+     "statement": "shared-a",
+     "confidence": 0.5,
+     "derived_from": [
+      "o1"
+     ],
+     "recorded_at": "2026-01-01T00:00:00.000Z"
+    }
+   ],
+   "observations": [
+    {
+     "id": "o1",
+     "content": "a",
+     "source": "tool",
+     "recorded_at": "2026-01-01T00:00:00.000Z"
+    }
+   ],
+   "contradictions": [
+    {
+     "id": "c1",
+     "type": "pairwise",
+     "severity": "LOW",
+     "scope": "local",
+     "description": "x",
+     "involved_belief_ids": [
+      "b1"
+     ]
+    }
+   ],
+   "assumptions": [
+    "x",
+    "y"
+   ],
+   "completeness_flags": {
+    "r1": true,
+    "r2": false
+   },
+   "stale_flags": {
+    "b1": true
+   },
+   "environment_change_log": [
+    {
+     "id": "e1",
+     "description": "d",
+     "affected_paths": [
+      "p"
+     ],
+     "timestamp": "2026-01-01T00:00:00.000Z"
+    }
+   ]
+  }
+ },
+ "args": {
+  "other": {
+   "generation_id": 7,
+   "beliefs": [
+    {
+     "id": "b2",
+     "statement": "shared-b",
+     "confidence": 0.7,
+     "derived_from": [
+      "o1"
+     ],
+     "recorded_at": "2026-01-01T00:00:00.000Z"
+    },
+    {
+     "id": "b3",
+     "statement": "b-only",
+     "confidence": 0.4,
+     "derived_from": [
+      "o1"
+     ],
+     "recorded_at": "2026-01-01T00:00:00.000Z"
+    }
+   ],
+   "observations": [
+    {
+     "id": "o1",
+     "content": "b-wins",
+     "source": "tool",
+     "recorded_at": "2026-01-01T00:00:00.000Z"
+    },
+    {
+     "id": "o2",
+     "content": "b",
+     "source": "tool",
+     "recorded_at": "2026-01-01T00:00:00.000Z"
+    }
+   ],
+   "contradictions": [
+    {
+     "id": "c1",
+     "type": "pairwise",
+     "severity": "HIGH",
+     "scope": "local",
+     "description": "x",
+     "involved_belief_ids": [
+      "b2"
+     ]
+    },
+    {
+     "id": "c2",
+     "type": "pairwise",
+     "severity": "LOW",
+     "scope": "local",
+     "description": "x",
+     "involved_belief_ids": [
+      "b3"
+     ]
+    }
+   ],
+   "assumptions": [
+    "y",
+    "z"
+   ],
+   "completeness_flags": {
+    "r2": true,
+    "r3": true
+   },
+   "stale_flags": {
+    "b3": true
+   }
+  }
+ }
+}

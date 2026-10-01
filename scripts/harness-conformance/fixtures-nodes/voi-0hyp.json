@@ -1,0 +1,22 @@
+{
+ "node": "estimate_voi",
+ "state": {
+  "hypothesisSet": {
+   "active": []
+  },
+  "diagnostics": {
+   "verification_health": {
+    "strength": 1.0,
+    "feasibility": 1.0
+   }
+  }
+ },
+ "args": {
+  "tools": {
+   "a": {
+    "available": true,
+    "fallback_tool": null
+   }
+  }
+ }
+}

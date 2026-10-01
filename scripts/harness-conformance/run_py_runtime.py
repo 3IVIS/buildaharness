@@ -126,6 +126,8 @@ if sc.get("failureMatcher"):
     opts.semantic_failure_matcher = lambda _s, _e: sc["failureMatcher"]
 if sc.get("constraintJudge"):
     opts.semantic_constraint_judge = lambda _a: sc["constraintJudge"]
+if sc.get("constraintRevision"):
+    opts.on_constraint_revision = lambda e: log.append(["constraintRevision", e["task_id"], [v["constraint"] for v in e["violated"]]])
 if sc.get("semanticHypotheses"):
     opts.semantic_hypotheses = lambda _a: sc["semanticHypotheses"]
     opts.on_semantic_hypothesis = lambda e: log.append(
@@ -133,6 +135,21 @@ if sc.get("semanticHypotheses"):
     )
 if sc.get("hypothesisJudge"):
     opts.semantic_hypothesis_judge = lambda _a: sc["hypothesisJudge"]
+if sc.get("criterionCoverage") is not None:
+    def _coverage(criterion, _beliefs):
+        log.append(["coverage", criterion])
+        return sc["criterionCoverage"]
+
+    opts.semantic_criterion_coverage = _coverage
+if sc.get("tokenBudget"):
+    _tb = sc["tokenBudget"]
+
+    def _used():
+        if _tb.get("throws"):
+            raise RuntimeError("reader down")
+        return _tb["used"]
+
+    opts.token_budget = {"total": _tb["total"], "used": _used}
 if sc.get("reviewerRevision"):
     opts.reviewer_revision = lambda _v: sc["reviewerRevision"]
     opts.on_reviewer_revision = lambda e: log.append(["revision", e["task_id"], e["note"]])
@@ -166,6 +183,7 @@ try:
             "stepsUsed": r.steps_used,
             "tasks": [[t.id, t.status] for t in c.task_graph.tasks],
             "finalResult": r.final_result,
+            "unresolved": r.unresolved_constraint_violations,
             "strategy": {
                 "current": c.strategy_state.current_strategy,
                 "switchCount": c.strategy_state.switch_count,
@@ -184,6 +202,7 @@ try:
             },
             "activeHypotheses": len(c.hypothesis_set.active),
             "journal": [[j.step, j.action_class, j.outcome] for j in c.memory_state.journal],
+            "tokenBudget": [c.memory_state.token_budget.total, c.memory_state.token_budget.used],
             "generationId": c.world_model.generation_id,
             "diagnostics": {
                 "progress": round6(c.diagnostics.execution_health.progress_rate),

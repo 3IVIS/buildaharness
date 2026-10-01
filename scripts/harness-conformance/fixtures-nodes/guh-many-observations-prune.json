@@ -1,0 +1,155 @@
+{
+ "node": "generate_update_hypotheses",
+ "state": {
+  "worldModel": {
+   "observations": [
+    {
+     "id": "o0",
+     "content": "symptom number 0 observed",
+     "source": "tool",
+     "recorded_at": "2026-01-01T00:00:00.000Z"
+    },
+    {
+     "id": "o1",
+     "content": "symptom number 1 observed",
+     "source": "tool",
+     "recorded_at": "2026-01-01T00:00:00.000Z"
+    },
+    {
+     "id": "o2",
+     "content": "symptom number 2 observed",
+     "source": "tool",
+     "recorded_at": "2026-01-01T00:00:00.000Z"
+    },
+    {
+     "id": "o3",
+     "content": "symptom number 3 observed",
+     "source": "tool",
+     "recorded_at": "2026-01-01T00:00:00.000Z"
+    },
+    {
+     "id": "o4",
+     "content": "symptom number 4 observed",
+     "source": "tool",
+     "recorded_at": "2026-01-01T00:00:00.000Z"
+    },
+    {
+     "id": "o5",
+     "content": "symptom number 5 observed",
+     "source": "tool",
+     "recorded_at": "2026-01-01T00:00:00.000Z"
+    },
+    {
+     "id": "o6",
+     "content": "symptom number 6 observed",
+     "source": "tool",
+     "recorded_at": "2026-01-01T00:00:00.000Z"
+    },
+    {
+     "id": "o7",
+     "content": "symptom number 7 observed",
+     "source": "tool",
+     "recorded_at": "2026-01-01T00:00:00.000Z"
+    },
+    {
+     "id": "o8",
+     "content": "symptom number 8 observed",
+     "source": "tool",
+     "recorded_at": "2026-01-01T00:00:00.000Z"
+    },
+    {
+     "id": "o9",
+     "content": "symptom number 9 observed",
+     "source": "tool",
+     "recorded_at": "2026-01-01T00:00:00.000Z"
+    },
+    {
+     "id": "o10",
+     "content": "symptom number 10 observed",
+     "source": "tool",
+     "recorded_at": "2026-01-01T00:00:00.000Z"
+    },
+    {
+     "id": "o11",
+     "content": "symptom number 11 observed",
+     "source": "tool",
+     "recorded_at": "2026-01-01T00:00:00.000Z"
+    }
+   ],
+   "beliefs": [
+    {
+     "id": "b0",
+     "statement": "belief 0 holds",
+     "confidence": 0.6,
+     "derived_from": [
+      "o1"
+     ],
+     "recorded_at": "2026-01-01T00:00:00.000Z"
+    },
+    {
+     "id": "b1",
+     "statement": "belief 1 holds",
+     "confidence": 0.62,
+     "derived_from": [
+      "o1"
+     ],
+     "recorded_at": "2026-01-01T00:00:00.000Z"
+    },
+    {
+     "id": "b2",
+     "statement": "belief 2 holds",
+     "confidence": 0.64,
+     "derived_from": [
+      "o1"
+     ],
+     "recorded_at": "2026-01-01T00:00:00.000Z"
+    },
+    {
+     "id": "b3",
+     "statement": "belief 3 holds",
+     "confidence": 0.6599999999999999,
+     "derived_from": [
+      "o1"
+     ],
+     "recorded_at": "2026-01-01T00:00:00.000Z"
+    },
+    {
+     "id": "b4",
+     "statement": "belief 4 holds",
+     "confidence": 0.6799999999999999,
+     "derived_from": [
+      "o1"
+     ],
+     "recorded_at": "2026-01-01T00:00:00.000Z"
+    },
+    {
+     "id": "b5",
+     "statement": "belief 5 holds",
+     "confidence": 0.7,
+     "derived_from": [
+      "o1"
+     ],
+     "recorded_at": "2026-01-01T00:00:00.000Z"
+    },
+    {
+     "id": "b6",
+     "statement": "belief 6 holds",
+     "confidence": 0.72,
+     "derived_from": [
+      "o1"
+     ],
+     "recorded_at": "2026-01-01T00:00:00.000Z"
+    },
+    {
+     "id": "b7",
+     "statement": "belief 7 holds",
+     "confidence": 0.74,
+     "derived_from": [
+      "o1"
+     ],
+     "recorded_at": "2026-01-01T00:00:00.000Z"
+    }
+   ]
+  }
+ }
+}
