@@ -343,6 +343,15 @@ export class HarnessBridge {
     // AL8a: one policy per turn; the semantic escalation hooks below are gated through it.
     const escalationSignals = { ...complexitySignal, isTrivial: classification.isTrivial }
     const escalationPlan = resolveEscalationPlan(this.layerPolicyMode, escalationSignals, complexitySignal.runState, undefined, turnPolicyBudget(escalationSignals))
+    // The failure-mode matcher is asked only about a task that has FAILED, so the question "does this layer run?" is always
+    // asked with at least one failure behind it. Judged from the turn's opening state (no failures yet) an adaptive turn is
+    // routine (T1) and the layer is off for the whole turn — it could never run on exactly the turns it exists for. Resolve
+    // it as it would be after one failure, with this layer FIRST in the call budget (the fixed order spends a LOW-risk turn's
+    // 3 calls on injection detection, contradiction and criterion coverage before it, starving the one layer a failure makes
+    // relevant). Static and shadow are unchanged (the plan is the static one either way).
+    const failurePlan = this.layerPolicyMode === 'adaptive' && complexitySignal.runState
+      ? resolveEscalationPlan(this.layerPolicyMode, escalationSignals, { ...complexitySignal.runState, consecutiveFailures: Math.max(1, complexitySignal.runState.consecutiveFailures) }, undefined, { ...turnPolicyBudget(escalationSignals), priority: ['failure_match'] })
+      : escalationPlan
     // AL9b: this turn's pushback tells us whether the PREVIOUS turn needed correcting.
     if (this.lastOutcomeRunId !== undefined) {
       recordLayerTelemetry(this.experienceStore, buildFeedbackRow(this.lastOutcomeRunId, classification.pushbackOnPriorTurn === true), `layer_outcome_feedback:${this.lastOutcomeRunId}`)
@@ -595,7 +604,7 @@ export class HarnessBridge {
         // AUDIT_SEMANTIC_FAILURE_MATCH (feature-value audit, Phase A6) gates the whole hook: OFF →
         // no host semanticFailureMatcher is wired at all, so the harness runs its exact-match
         // FailureModeLibrary.match() only. Default ON — unchanged shipped behaviour.
-        semanticFailureMatcher: escalationEnabled('failure_match', escalationPlan)
+        semanticFailureMatcher: escalationEnabled('failure_match', failurePlan)
           ? (symptoms: string[], libraryEntries: readonly FailureModeEntry[]) =>
               checkSemanticFailureMatch(symptoms, libraryEntries, this.llmClient, this.model(), onUsage)
           : undefined,

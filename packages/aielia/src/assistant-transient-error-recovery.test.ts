@@ -19,7 +19,7 @@ const backend: FsBackend = {
   async readDir() { return [] },
 }
 
-function build(matcherAnswer: string, persistent = false) {
+function build(matcherAnswer: string, persistent = false, layerPolicyMode?: 'static' | 'shadow' | 'adaptive') {
   const inner = createScriptedLLMClient({ responses: ['The answer is 42.'], sideResponses: [[MATCHER_MARKER, matcherAnswer]] })
   const seen = { loopCalls: 0, matcherCalls: 0, loopMessages: [] as ChatMessage[][] }
   const client = {
@@ -35,7 +35,7 @@ function build(matcherAnswer: string, persistent = false) {
       return inner.callChatStructured(m, t, o)
     },
   } as ILLMClient
-  return { assistant: new PersonalAssistant({ llmClient: client, fileTools: { backend, workspaceRoot: '/ws' } }), seen }
+  return { assistant: new PersonalAssistant({ llmClient: client, fileTools: { backend, workspaceRoot: '/ws' }, ...(layerPolicyMode ? { layerPolicyMode } : {}) }), seen }
 }
 
 const QUESTION = 'What is the answer? See notes.md'
@@ -92,5 +92,13 @@ describe('a transient model error mid-turn', () => {
     expect(result.status).toBe('ok')
     expect(result.reply).toMatch(GAVE_UP)
     expect(seen.loopCalls).toBe(2)
+  })
+
+  it('adaptive layer policy: a turn that starts routine still gets the failure matcher once a task fails', async () => {
+    const { assistant, seen } = build(MATCHED, false, 'adaptive')
+    const result = await assistant.turn(QUESTION, { sessionId: 'a1' })
+    expect(result.reply).toBe('The answer is 42.')
+    expect(seen.matcherCalls).toBeGreaterThan(0)
+    expect(result.trace?.layerActivity.some((l) => l.layer === 'recovery' && l.reason.includes('REIMPLEMENT'))).toBe(true)
   })
 })
