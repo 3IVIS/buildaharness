@@ -69,28 +69,6 @@ export function warmStart(
     }
   }
 
-  // Loader 4: structural decompositions → seed taskGraph patterns (no-op when empty)
-  const decompositions = experienceStore.getDecompositions()
-  if (decompositions.length > 0) {
-    // Seeding happens at HarnessRuntime level when tasks are created;
-    // decompositions are stored and referenced by task creation logic.
-    // Here we just confirm they loaded — taskGraph seeding is deferred to runtime.
-  }
-
-  // Loader 5: tool workflow seeds → seed plan_tool_workflow() (no-op when empty)
-  const toolWorkflows = experienceStore.getToolWorkflows()
-  if (toolWorkflows.length > 0) {
-    // Tool workflows inform plan_tool_workflow() selections at runtime.
-    // No direct mutation here — used as read-only reference during execution.
-  }
-
-  // Loader 6: verification plan seeds → seed verification_adequacy_critic (no-op when empty)
-  const verificationPlans = experienceStore.getVerificationPlans()
-  if (verificationPlans.length > 0) {
-    // Verification plans inform verification layer selection at runtime.
-    // No direct mutation here — used as read-only reference during execute/verify nodes.
-  }
-
   // Apply softmax policy to derive recovery strategy order from loaded weights
   const policy = softmaxStrategyPolicy(strategyState, 1.0)
   const ordered = (Object.entries(policy) as [StrategyType, number][])

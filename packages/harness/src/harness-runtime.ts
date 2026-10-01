@@ -275,6 +275,12 @@ export interface HarnessRunOptions extends HarnessInitOptions {
   retryFailedTask?: boolean
   /** See `ReviewerRevision`. */
   reviewerRevision?: ReviewerRevision
+  /**
+   * Opt-in: feeds the memory layer's `token_budget` from real usage. `used` returns the tokens spent so far this run (the host
+   * sums its model calls); it is read once per iteration, just before the context-compression node, so that node's 90% pressure
+   * test is real instead of always reading 0 of 200,000. Absent ⇒ `token_budget.used` stays 0 and the pressure branch never runs.
+   */
+  tokenBudget?: { total: number; used: () => number }
   /** Fired when a reviewer revision reopens a task, with the task id and the text `reviewerRevision` returned. A throwing handler never breaks the run. */
   onReviewerRevision?: (event: { taskId: string; note: string }) => void
   /** See `CriterionCheckable`: a success criterion this says is not checkable is skipped by the implementer lens instead of being reported as uncovered. */
@@ -508,6 +514,7 @@ interface LoopContext {
   isCheckableCriterion?: CriterionCheckable
   /** The last task to reach COMPLETE — the one a reviewer revision reopens. Not persisted. */
   lastCompletedTaskId?: string
+  tokenBudget?: { total: number; used: () => number }
   /** True once a reviewer revision has reopened a task this run (it happens at most once). */
   reviewerRevisionDone?: boolean
   semanticHypotheses?: SemanticHypothesesHook
@@ -624,6 +631,7 @@ function buildInitialContext(
     retryFailedTask: options.retryFailedTask,
     reviewerRevision: options.reviewerRevision,
     onReviewerRevision: options.onReviewerRevision,
+    tokenBudget: options.tokenBudget,
     isCheckableCriterion: options.isCheckableCriterion,
     semanticHypotheses: options.semanticHypotheses,
     semanticHypothesisJudge: options.semanticHypothesisJudge,
@@ -714,6 +722,7 @@ function buildResumedContext(rawCheckpoint: HarnessCheckpoint, options: HarnessR
     retryFailedTask: options.retryFailedTask,
     reviewerRevision: options.reviewerRevision,
     onReviewerRevision: options.onReviewerRevision,
+    tokenBudget: options.tokenBudget,
     isCheckableCriterion: options.isCheckableCriterion,
     semanticHypotheses: options.semanticHypotheses,
     semanticHypothesisJudge: options.semanticHypothesisJudge,
@@ -1138,6 +1147,11 @@ async function* driveMainLoop(ctx: LoopContext): AsyncGenerator<HarnessCheckpoin
       })
     }
     ctx.nodeExecutionOrder.push('context_compression')
+    if (ctx.tokenBudget) {
+      let used = 0
+      try { used = Math.floor(ctx.tokenBudget.used()) } catch { /* a failing host reader leaves the pressure at 0 */ }
+      ctx.memoryState.token_budget = { total: Math.max(1, Math.floor(ctx.tokenBudget.total)), used: Number.isFinite(used) && used > 0 ? used : 0 }
+    }
 
     contextCompression(
       ctx.memoryState, ctx.worldModel, ctx.beliefDepGraph, ctx.depGraphBudget,

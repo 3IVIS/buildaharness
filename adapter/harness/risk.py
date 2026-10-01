@@ -29,16 +29,13 @@ class RiskableAction:
 
 
 def estimate_risk(action: RiskableAction, task_graph: Any, world_model: Any = None) -> RiskLevel:
-    """Risk of `action` (TS estimateRisk). HIGH results set `reduce_edit_size` and `increase_verification` on
-    `action.metadata`.
+    """Risk of `action` (TS estimateRisk).
 
     business_logic composite = 0.3 * file_centrality + 0.4 * change_scope + 0.3 * 0.5, where file_centrality is the
     share of the graph's write domains that mention the touched files and change_scope averages
     `lines_affected / 500` and `functions_affected / 20` (each capped at 1). HIGH >= 0.5, MEDIUM >= 0.3, else LOW.
     """
     if action.module_type == "infrastructure":
-        action.metadata["reduce_edit_size"] = True
-        action.metadata["increase_verification"] = True
         return "HIGH"
     if action.module_type == "test":
         return "LOW"
@@ -65,7 +62,4 @@ def estimate_risk(action: RiskableAction, task_graph: Any, world_model: Any = No
     else:
         risk = "LOW"
 
-    if risk == "HIGH":
-        action.metadata["reduce_edit_size"] = True
-        action.metadata["increase_verification"] = True
     return risk

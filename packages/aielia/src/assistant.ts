@@ -1257,6 +1257,7 @@ export class PersonalAssistant {
         precomputedHypotheses,
         onReviewerRevision: (e) => { revisionNotes.push(e.note) },
         onConstraintRevision: (e) => { revisionNotes.push(`${REVISION_NOTE_PREFIX}${e.note}`) },
+        tokensUsed: () => (usageTotal?.inputTokens ?? 0) + (usageTotal?.outputTokens ?? 0),
         onSemanticHypothesis: (e) => {
           if (e.kind === 'generated') hypothesisNotes.push(renderHypothesisNote(e.hypotheses))
         },

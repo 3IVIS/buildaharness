@@ -504,15 +504,12 @@ describe('estimate_risk', () => {
     expect(estimateRisk(test, tg, wm)).toBe('LOW')
   })
 
-  it('HIGH risk action carries reduce_edit_size + increase_verification recommendations in metadata', () => {
-    const tg = new TaskGraph()
-    const wm = new WorldModel()
+  it('an infrastructure action is HIGH and leaves its metadata untouched (the old reduce_edit_size / increase_verification flags were read by nothing)', () => {
     const action: RiskableAction = { module_type: 'infrastructure', metadata: {} }
 
-    estimateRisk(action, tg, wm)
+    expect(estimateRisk(action, new TaskGraph(), new WorldModel())).toBe('HIGH')
 
-    expect(action.metadata['reduce_edit_size']).toBe(true)
-    expect(action.metadata['increase_verification']).toBe(true)
+    expect(action.metadata).toEqual({})
   })
 })
 

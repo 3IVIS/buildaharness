@@ -170,11 +170,12 @@ def _graph_with_domains(*domains: str) -> TaskGraph:
     )
 
 
-def test_T01_infrastructure_is_always_high_and_flags_metadata():
-    """T01a — infrastructure modules are HIGH regardless of size and set reduce_edit_size / increase_verification."""
+def test_T01_infrastructure_is_always_high_and_leaves_metadata_alone():
+    """T01a — infrastructure modules are HIGH regardless of size; the old reduce_edit_size / increase_verification
+    metadata flags were read by nothing and are gone."""
     action = RiskableAction(module_type="infrastructure", lines_affected=1)
     assert estimate_risk(action, TaskGraph(), WorldModel()) == "HIGH"
-    assert action.metadata == {"reduce_edit_size": True, "increase_verification": True}
+    assert action.metadata == {}
 
 
 def test_T01_test_modules_are_always_low():
@@ -189,10 +190,10 @@ def test_T01_business_logic_composite_thresholds():
     graph = _graph_with_domains("core/engine.py")
     # nothing changed, nothing central: 0.15 -> LOW
     assert estimate_risk(RiskableAction("business_logic"), graph, WorldModel()) == "LOW"
-    # max size, fully central file: 0.3 + 0.4 + 0.15 = 0.85 -> HIGH (and flags set)
+    # max size, fully central file: 0.3 + 0.4 + 0.15 = 0.85 -> HIGH
     big = RiskableAction("business_logic", ["core/engine.py"], lines_affected=500, functions_affected=20)
     assert estimate_risk(big, graph, WorldModel()) == "HIGH"
-    assert big.metadata["increase_verification"] is True
+    assert big.metadata == {}
     # scope 0.5 only: 0.2 + 0.15 = 0.35 -> MEDIUM
     mid = RiskableAction("business_logic", [], lines_affected=250, functions_affected=10)
     assert estimate_risk(mid, graph, WorldModel()) == "MEDIUM"

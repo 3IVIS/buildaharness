@@ -68,6 +68,7 @@ from .memory import (
     apply_retention_policy,
     check_max_steps,
     compress_memory,
+    record_compression,
     should_compress,
 )
 from .policy import select_best_action
@@ -358,9 +359,7 @@ def run_one_iteration(
     if memory_state is not None:
         # P6.5 — compression trigger
         if should_compress(memory_state):
-            compression = compress_memory(memory_state)
-            memory_state.compression_risk.compressed_structures.extend(compression.dropped)
-            memory_state.compression_risk.pruned_regions.extend(compression.pruned)
+            record_compression(memory_state, compress_memory(memory_state))
             increment_generation_id(world_model)
             memory_state.journal.append(
                 JournalEntry(step=step_count, action_class="compression", outcome="completed", success=True)
