@@ -140,7 +140,10 @@ export function contextCompression(
 
     // Track compression risk separately
     memoryState.compression_risk.compressed_structures.push(...result.dropped)
-    memoryState.compression_risk.pruned_regions.push(...result.pruned)
+    // `compressMemory` reports every region outside the preserve set as pruned — including ones already recorded. Appending them
+    // again would grow the list on every iteration that stays above the threshold, so only an unrecorded region is added.
+    const known = new Set(memoryState.compression_risk.pruned_regions.map(r => r.id))
+    memoryState.compression_risk.pruned_regions.push(...result.pruned.filter(r => !known.has(r.id)))
   }
 
   // Staleness sweep: TTL + environment-change invalidation

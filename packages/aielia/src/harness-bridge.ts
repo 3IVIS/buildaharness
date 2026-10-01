@@ -53,6 +53,7 @@ import type { TraceEvent } from './trace-events.js'
 import { resolveSupervisorEnabled } from './supervisor-flag.js'
 import { controlStateGateEnabled } from './tool-control-plane.js'
 import { reviewerRevisionEnabled, reviewerRevisionNote, isCheckableCriterion } from './reviewer-revision.js'
+import { harnessTokenBudgetTotal } from './harness-token-budget.js'
 import { semanticHypothesesEnabled, proposeCompetingExplanations, judgeHypothesesAgainstEvidence } from './semantic-hypotheses.js'
 import type { SemanticHypothesisEvent, SemanticHypothesisProposal } from '@buildaharness/harness'
 import { recordLayerTelemetry } from './layer-telemetry.js'
@@ -168,6 +169,8 @@ export interface HarnessRunParams {
   onReviewerRevision?: (event: { taskId: string; note: string }) => void
   /** A constraint the user stated this turn was violated by the finished answer: the note to hand the proposer for its one second answer. */
   onConstraintRevision?: (event: { taskId: string; note: string }) => void
+  /** Tokens this turn's model calls have used so far (input + output) — what AUDIT_HARNESS_TOKEN_BUDGET reports to the harness. */
+  tokensUsed?: () => number
   /** A confident failure-mode match picked the recovery strategy — advisory (see HarnessRunOptions.onFailureModeSwitch). The caller decides how to surface it. */
   onFailureModeSwitch?: (event: { taskId: string; failure_class: string; strategy: string }) => void
   /** With AUDIT_EXPERIENCE_LEARNING on, a ranking learned from earlier runs picked the recovery strategy — advisory (see HarnessRunOptions.onLearnedStrategySwitch). */
@@ -286,7 +289,7 @@ export class HarnessBridge {
   }
 
   async run(params: HarnessRunParams): Promise<HarnessOutcome> {
-    const { sessionId, userMessage, facts, currentTurnFacts = [], draftReply, classification, initialTasks, activePlan, sources, onProgress, onUsage, oneLoopProposer, runInvestigation, askModeEnabled = false, updateChannel, onReviewConflict, onFailureModeSwitch, onLearnedStrategySwitch, onSemanticHypothesis, precomputedHypotheses, onReviewerRevision, onConstraintRevision } = params
+    const { sessionId, userMessage, facts, currentTurnFacts = [], draftReply, classification, initialTasks, activePlan, sources, onProgress, onUsage, oneLoopProposer, runInvestigation, askModeEnabled = false, updateChannel, onReviewConflict, onFailureModeSwitch, onLearnedStrategySwitch, onSemanticHypothesis, precomputedHypotheses, onReviewerRevision, onConstraintRevision, tokensUsed } = params
     const runtime = new HarnessRuntime()
     // One harness run per (session, turn) — a run_id a resumed run can be found under if this
     // turn's process died mid-run before reaching the `finally` cleanup below.
@@ -543,6 +546,8 @@ export class HarnessBridge {
         // The generic default criterion is never checkable, so the implementer lens always flagged it "not covered" (243 of 243
         // reviewer findings across the eval transcripts) — skipped in the default flow too, not only with the flag on.
         isCheckableCriterion,
+        // AUDIT_HARNESS_TOKEN_BUDGET (default off): the memory layer's token budget, fed from this turn's real usage.
+        ...(harnessTokenBudgetTotal() !== undefined && tokensUsed ? { tokenBudget: { total: harnessTokenBudgetTotal()!, used: tokensUsed } } : {}),
         ...(reviewerRevisionEnabled() && oneLoopProposer
           ? { reviewerRevision: reviewerRevisionNote, onReviewerRevision }
           : {}),
