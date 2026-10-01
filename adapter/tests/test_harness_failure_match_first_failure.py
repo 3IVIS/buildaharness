@@ -151,3 +151,19 @@ def test_a_recovered_decomposed_turn_asks_the_matcher_once_not_once_per_remainin
     )
     HarnessRuntime().run("answer", ["answered"], opts)
     assert asked["n"] == 1
+
+
+def test_the_unavailable_service_entry_covers_rate_limits_and_timeouts_in_both_twins():
+    from harness.failure_modes import DEFAULT_FAILURE_MODE_ENTRIES
+
+    entry = next(e for e in DEFAULT_FAILURE_MODE_ENTRIES if e.id == "tool-unavailable-cascade")
+    for symptom in (
+        "service unavailable",
+        "connection refused",
+        "rate limit exceeded",
+        "too many requests",
+        "request timed out",
+    ):
+        assert symptom in entry.symptoms
+    assert "rate-limited" in entry.pattern_description
+    assert entry.strategy_affinity == "REIMPLEMENT"
