@@ -466,5 +466,5 @@ Lexical checks default to `disabled` on both sides, so fixtures that exercise th
 (`dc-lex-*`, `ud-lex-*`, `guh-lex-*`). Adding a fixture: write the JSON, run `node scripts/harness-conformance/compare-nodes.mjs`.
 Reviewed differences go in `known-discrepancies-nodes.json`.
 
-Usage: `node scripts/harness-conformance/compare-nodes.mjs` (needs Python 3.12 as `python3.12`, or set `PYTHON`).
+Usage: `node scripts/harness-conformance/compare-nodes.mjs` (uses `python3` (must be 3.12), or set `PYTHON`).
 

@@ -11,7 +11,7 @@ const dir = dirname(fileURLToPath(import.meta.url))
 const known = JSON.parse(readFileSync(join(dir, 'known-discrepancies-nodes.json'), 'utf-8'))
 const run = (cmd, args) => JSON.parse(execFileSync(cmd, args, { cwd: dir, encoding: 'utf-8', maxBuffer: 1 << 28 }))
 const ts = run('npx', ['tsx', join(dir, 'run-ts-nodes.mts')])
-const py = run(process.env.PYTHON ?? 'python3.12', [join(dir, 'run_py_nodes.py')])
+const py = run(process.env.PYTHON ?? 'python3', [join(dir, 'run_py_nodes.py')])
 
 function diff(a, b, path = '') {
   if (JSON.stringify(a) === JSON.stringify(b)) return []
