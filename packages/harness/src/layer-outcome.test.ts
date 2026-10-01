@@ -81,3 +81,33 @@ describe('AL9b shadow telemetry', () => {
     expect(summarizeShadow(rows).layers).toEqual([])
   })
 })
+
+describe('measured layer use (2026-10-01)', () => {
+  it('layerUse becomes one outcome entry per instrumented layer with real calls and tokens; none given ⇒ none added', () => {
+    const withUse = buildLayerOutcomeRow({
+      runId: 'm1', mode: 'shadow', tier: 'T2', activity: [{ layer: 'contradiction', fired: false }], completed: true,
+      layerUse: { failure_match: { calls: 2, tokens: 340 }, change_review: { calls: 0, tokens: 0 }, 'bad id!': { calls: 9, tokens: 9 } },
+    })!
+    expect(withUse.layers.find(l => l.layer === 'failure_match')).toMatchObject({ fired: true, calls: 2, tokens: 340, changed: false })
+    expect(withUse.layers.find(l => l.layer === 'change_review')).toMatchObject({ fired: false, calls: 0 })
+    expect(withUse.layers.some(l => l.layer === 'bad id!')).toBe(false)
+    const without = buildLayerOutcomeRow({ runId: 'm2', mode: 'shadow', tier: 'T2', activity: [{ layer: 'contradiction', fired: false }], completed: true })!
+    expect(without.layers.map(l => l.layer)).toEqual(['contradiction'])
+    const y = summarizeLayerYield([withUse])
+    expect(y.find(r => r.layer === 'failure_match')).toMatchObject({ calls: 2, tokens: 340 })
+  })
+
+  it('summarizeShadow reports measured calls and how many fell on layers the shadow policy would skip; a legacy row without observedByLayer counts none', () => {
+    const executed = staticLayerPolicy()
+    const shadow = { ...executed, failure_match: { decision: 'off' as const, trigger: 'calm_low_risk', reason: 'x' }, semantic_contradiction: { decision: 'off' as const, trigger: 'calm_low_risk', reason: 'x' } }
+    const measured = buildShadowRow({ runId: 'm3', executed, executedTier: 'T2', shadow: { policy: shadow, tier: 'T2' }, layerCosts: LAYER_CALL_COST, observedCalls: 3, observedByLayer: { failure_match: 2, change_review: 1 }, verificationFailed: false })!
+    const legacy = buildShadowRow({ runId: 'm4', executed, executedTier: 'T2', shadow: { policy: shadow, tier: 'T2' }, layerCosts: LAYER_CALL_COST, observedCalls: 0, verificationFailed: false })!
+    expect(measured.observedByLayer).toEqual({ failure_match: 2, change_review: 1 })
+    expect(legacy.observedByLayer).toBeUndefined()
+    const rep = summarizeShadow([measured, legacy])
+    expect(rep.observedCalls).toBe(3)
+    expect(rep.observedCallsSkipped).toBe(2) // only failure_match's 2 calls were on a layer shadow would skip
+    expect(rep.layers.find(l => l.layer === 'failure_match')!.observedCallsSkipped).toBe(2)
+    expect(rep.layers.find(l => l.layer === 'semantic_contradiction')!.observedCallsSkipped).toBe(0)
+  })
+})

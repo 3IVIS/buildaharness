@@ -12,13 +12,15 @@ import { parseTelemetryLog, summarizeShadow } from '@buildaharness/harness'
 export function renderShadowReport(text: string): string {
   const r = summarizeShadow(parseTelemetryLog(text))
   const lines = [
-    `shadow turns: ${r.turns}; LLM calls executed ${r.executedCalls} vs adaptive ${r.shadowCalls} (adaptive would have saved ${r.callsSaved})`,
+    `shadow turns: ${r.turns}`,
+    `MODELLED (every full layer = 1 call per turn): executed ${r.executedCalls} vs adaptive ${r.shadowCalls} (would save ${r.callsSaved}) — an upper bound, not a measurement`,
+    `MEASURED (instrumented escalation hooks): ${r.observedCalls} calls made; ${r.observedCallsSkipped} of them on layers adaptive would have skipped`,
     '',
-    '| layer | disagreement rate | would skip | skip coincided with correction/failure |',
-    '|---|---|---|---|',
+    '| layer | disagreement rate | would skip | skip coincided with correction/failure | measured calls skipped |',
+    '|---|---|---|---|---|',
   ]
   for (const l of r.layers) {
-    lines.push(`| ${l.layer} | ${(l.disagreementRate * 100).toFixed(0)}% (${l.disagreements}/${l.turns}) | ${l.wouldSkip} | ${l.skipCoincidedWithCorrection}/${l.skipKnown} |`)
+    lines.push(`| ${l.layer} | ${(l.disagreementRate * 100).toFixed(0)}% (${l.disagreements}/${l.turns}) | ${l.wouldSkip} | ${l.skipCoincidedWithCorrection}/${l.skipKnown} | ${l.observedCallsSkipped} |`)
   }
   return lines.join('\n')
 }

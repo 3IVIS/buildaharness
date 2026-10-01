@@ -58,7 +58,7 @@ import { semanticHypothesesEnabled, proposeCompetingExplanations, judgeHypothese
 import type { SemanticHypothesisEvent, SemanticHypothesisProposal } from '@buildaharness/harness'
 import { recordLayerTelemetry } from './layer-telemetry.js'
 import { resolveEscalationPlan, escalationEnabled, escalationHookWired, optInLayerEnabled, harnessGatePolicy, turnPolicyBudget, type EscalationPlan } from './layer-policy-wiring.js'
-import type { LayerPolicyMode } from '@buildaharness/harness'
+import type { LayerDecision, LayerPolicyMode } from '@buildaharness/harness'
 
 /**
  * `AUDIT_VERIFICATION` gate — feature-value audit (Phase C5 of the internal plan). EVAL-ONLY:
@@ -261,6 +261,7 @@ export class HarnessBridge {
     activity: readonly LayerActivityEvent[],
     verification: VerificationResult | null,
     completed: boolean,
+    measured?: { layerUse: Record<string, { calls: number; tokens: number }>; shadowFailureDecision?: LayerDecision },
   ): void {
     try {
       const verificationFailed = verification?.has_critical_failure === true
@@ -274,19 +275,23 @@ export class HarnessBridge {
         // `fired` on these layers means a finding was produced (see harness-runtime's reportLayer reasons).
         changedLayers: ['contradiction', 'reviewer_pass', 'recovery', ...(verificationFailed ? ['verification'] : [])],
         completed,
+        ...(measured ? { layerUse: measured.layerUse } : {}),
       })
       if (row === undefined) return
       recordLayerTelemetry(this.experienceStore, row, `layer_outcome:${turnId}`)
       this.lastOutcomeRunId = turnId
       if (plan.shadow !== undefined) {
-        const observedCalls = row.layers.reduce((n, l) => n + l.calls, 0)
+        const observedByLayer = Object.fromEntries(Object.entries(measured?.layerUse ?? {}).map(([k, v]) => [k, v.calls]))
+        const observedCalls = Object.values(observedByLayer).reduce((n, c) => n + c, 0)
+        const shadowPolicy = measured?.shadowFailureDecision ? { ...plan.shadow.policy, failure_match: measured.shadowFailureDecision } : plan.shadow.policy
         recordLayerTelemetry(this.experienceStore, buildShadowRow({
           runId: turnId,
           executed: plan.policy,
           executedTier: plan.tier,
-          shadow: { policy: plan.shadow.policy, tier: plan.shadow.tier },
+          shadow: { policy: shadowPolicy, tier: plan.shadow.tier },
           layerCosts: LAYER_CALL_COST,
           observedCalls,
+          observedByLayer,
           verificationFailed,
         }), `shadow_turn:${turnId}`)
       }
@@ -307,6 +312,14 @@ export class HarnessBridge {
 
   async run(params: HarnessRunParams): Promise<HarnessOutcome> {
     const { sessionId, userMessage, facts, currentTurnFacts = [], draftReply, classification, initialTasks, activePlan, sources, onProgress, onUsage, oneLoopProposer, runInvestigation, askModeEnabled = false, updateChannel, onReviewConflict, onFailureModeSwitch, onLearnedStrategySwitch, onSemanticHypothesis, precomputedHypotheses, optInPlan, onReviewerRevision, onConstraintRevision, tokensUsed } = params
+    // Measured LLM use of the instrumented escalation hooks this turn (telemetry only): each hook's usage callback also lands here.
+    const layerUse: Record<string, { calls: number; tokens: number }> = {}
+    const usageFor = (layer: string) => (usage: TokenUsage): void => {
+      onUsage(usage)
+      const e = (layerUse[layer] ??= { calls: 0, tokens: 0 })
+      e.calls++
+      e.tokens += (usage.inputTokens ?? 0) + (usage.outputTokens ?? 0)
+    }
     const runtime = new HarnessRuntime()
     // One harness run per (session, turn) — a run_id a resumed run can be found under if this
     // turn's process died mid-run before reaching the `finally` cleanup below.
@@ -353,6 +366,11 @@ export class HarnessBridge {
     const failurePlan = this.layerPolicyMode === 'adaptive' && complexitySignal.runState
       ? resolveEscalationPlan(this.layerPolicyMode, escalationSignals, { ...complexitySignal.runState, consecutiveFailures: Math.max(1, complexitySignal.runState.consecutiveFailures) }, undefined, { ...turnPolicyBudget(escalationSignals), priority: ['failure_match'] })
       : escalationPlan
+    // Shadow mode records what adaptive would decide. Adaptive judges the failure matcher as it stands after a failure (above),
+    // so the shadow record must too — otherwise the report says adaptive would skip it on turns that failed.
+    const shadowFailureDecision = this.layerPolicyMode === 'shadow' && complexitySignal.runState
+      ? resolveEscalationPlan('adaptive', escalationSignals, { ...complexitySignal.runState, consecutiveFailures: Math.max(1, complexitySignal.runState.consecutiveFailures) }, undefined, { ...turnPolicyBudget(escalationSignals), priority: ['failure_match'] }).policy.failure_match
+      : undefined
     // AL9b: this turn's pushback tells us whether the PREVIOUS turn needed correcting.
     if (this.lastOutcomeRunId !== undefined) {
       recordLayerTelemetry(this.experienceStore, buildFeedbackRow(this.lastOutcomeRunId, classification.pushbackOnPriorTurn === true), `layer_outcome_feedback:${this.lastOutcomeRunId}`)
@@ -556,7 +574,7 @@ export class HarnessBridge {
         // lexical / negation-pair check only. Default ON — unchanged shipped behaviour.
         contradictionChecker: escalationHookWired('semantic_contradiction')
           ? async (newBeliefs: BeliefCandidate[], existingBeliefs: BeliefCandidate[]) => {
-              const { contradictions } = await checkForContradictions(newBeliefs, existingBeliefs, this.llmClient, this.model(), onUsage)
+              const { contradictions } = await checkForContradictions(newBeliefs, existingBeliefs, this.llmClient, this.model(), usageFor('semantic_contradiction'))
               const statementById = new Map([...newBeliefs, ...existingBeliefs].map((b) => [b.id, b.statement]))
               const seen = await this.assistantSession.getNotifiedContradictions(sessionId)
               const filtered: typeof contradictions = []
@@ -607,7 +625,7 @@ export class HarnessBridge {
           : {}),
         semanticChangeReviewer: escalationHookWired('change_review')
           ? (input: { changeDescription: string; highConfidenceBeliefs: BeliefCandidate[]; hypothesisPredictions: string[] }) =>
-              checkSemanticReviewConflict(input.changeDescription, input.highConfidenceBeliefs, input.hypothesisPredictions, this.llmClient, this.model(), onUsage)
+              checkSemanticReviewConflict(input.changeDescription, input.highConfidenceBeliefs, input.hypothesisPredictions, this.llmClient, this.model(), usageFor('change_review'))
           : undefined,
         // Layered on top of FailureModeLibrary's own exact-string-overlap match() — see
         // failure-mode-matcher.ts's doc comment for why exact equality against a curated symptom
@@ -617,7 +635,7 @@ export class HarnessBridge {
         // FailureModeLibrary.match() only. Default ON — unchanged shipped behaviour.
         semanticFailureMatcher: escalationHookWired('failure_match')
           ? (symptoms: string[], libraryEntries: readonly FailureModeEntry[]) =>
-              checkSemanticFailureMatch(symptoms, libraryEntries, this.llmClient, this.model(), onUsage)
+              checkSemanticFailureMatch(symptoms, libraryEntries, this.llmClient, this.model(), usageFor('failure_match'))
           : undefined,
         // Layered on top of reviewerPass's implementerLens's own `.includes()` substring check —
         // called only for a success criterion that substring check found no coverage for. See
@@ -627,7 +645,7 @@ export class HarnessBridge {
         // lens runs its `.includes()` substring check alone. Default ON — unchanged shipped behaviour.
         semanticCriterionCoverage: escalationHookWired('criterion_coverage')
           ? (criterion: string, beliefs: Belief[]) =>
-              checkSemanticCriterionCoverage(criterion, beliefs, this.llmClient, this.model(), onUsage)
+              checkSemanticCriterionCoverage(criterion, beliefs, this.llmClient, this.model(), usageFor('criterion_coverage'))
           : undefined,
         // A plan task is complete only if its output actually did the task — without this the harness
         // completes it as soon as a reply is produced, so a run of refusals reads as a 100%-done plan.
@@ -747,11 +765,11 @@ export class HarnessBridge {
         // An intentional plan-pacing stop — not a bug. Keep the checkpoint (resume() picks it up
         // via the priorCheckpoint branch above on the next turn() call).
         pausedThisTurn = true
-        this.recordTurnTelemetry(runId, escalationPlan, layerActivityThisTurn, lastVerification, false)
+        this.recordTurnTelemetry(runId, escalationPlan, layerActivityThisTurn, lastVerification, false, { layerUse, shadowFailureDecision })
         return { status: 'paused', checkpoint: outcome.checkpoint, lastVerification, layerActivity: layerActivityThisTurn, taskNotes }
       }
 
-      this.recordTurnTelemetry(runId, escalationPlan, layerActivityThisTurn, lastVerification, true)
+      this.recordTurnTelemetry(runId, escalationPlan, layerActivityThisTurn, lastVerification, true, { layerUse, shadowFailureDecision })
       return { status: 'completed', result: outcome.result, lastVerification, layerActivity: layerActivityThisTurn, taskNotes }
     } catch (err) {
       // Q2 — inspected only to decide checkpoint retention below, never transformed or

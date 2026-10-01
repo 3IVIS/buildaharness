@@ -64,8 +64,10 @@ export interface ShadowRow {
   /** LLM calls the executed (static) policy would draw vs what the shadow policy would. */
   executedCalls: number
   shadowCalls: number
-  /** Actual LLM calls the turn made across layers, from the outcome log. */
+  /** Actual LLM calls the turn made across the instrumented escalation layers (measured, not modelled). */
   observedCalls: number
+  /** Measured calls per escalation layer (only layers that made at least one). Absent on rows written before it existed. */
+  observedByLayer?: Record<string, number>
   verificationFailed: boolean
   nextTurnCorrection: boolean | null
 }
@@ -87,6 +89,12 @@ export function buildLayerOutcomeRow(input: {
   /** Layers that produced a finding this turn (caller decides; names only). */
   changedLayers?: readonly string[]
   completed: boolean
+  /**
+   * MEASURED LLM use of the escalation layers whose hooks the host instruments (escalation-layer id → calls and tokens). Each
+   * becomes its own outcome entry (`fired` = made at least one call), so `layer-yield` shows real calls and tokens instead of 0.
+   * A layer that is not instrumented simply has no entry — absence means "not measured", not "made no calls".
+   */
+  layerUse?: Readonly<Record<string, { calls: number; tokens: number }>>
 }): LayerOutcomeRow | undefined {
   const runId = id(input.runId)
   if (runId === undefined) return undefined
@@ -104,6 +112,12 @@ export function buildLayerOutcomeRow(input: {
   for (const o of byLayer.values()) {
     o.changed = o.fired && changedSet.has(o.layer)
     o.actedOn = o.changed && input.completed
+  }
+  for (const [layer, use] of Object.entries(input.layerUse ?? {})) {
+    const lid = id(layer)
+    if (lid === undefined || byLayer.has(lid)) continue
+    const calls = count(use?.calls)
+    byLayer.set(lid, { layer: lid, fired: calls > 0, calls, tokens: count(use?.tokens), changed: false, actedOn: false })
   }
   return {
     kind: 'layer_outcome',
@@ -126,6 +140,16 @@ const costOf = (policy: LayerPolicy, costs: Readonly<Record<string, number>>): n
   return total
 }
 
+function sanitizeObserved(by: Readonly<Record<string, number>>): Record<string, number> {
+  const out: Record<string, number> = {}
+  for (const [layer, n] of Object.entries(by)) {
+    const lid = id(layer)
+    const c = count(n)
+    if (lid !== undefined && c > 0) out[lid] = c
+  }
+  return out
+}
+
 export function buildShadowRow(input: {
   runId: string
   executed: LayerPolicy
@@ -133,6 +157,8 @@ export function buildShadowRow(input: {
   shadow: { policy: LayerPolicy; tier: string }
   layerCosts: Readonly<Record<string, number>>
   observedCalls: number
+  /** Measured calls per escalation layer; layers with none are left out. */
+  observedByLayer?: Readonly<Record<string, number>>
   verificationFailed: boolean
 }): ShadowRow | undefined {
   const runId = id(input.runId)
@@ -153,6 +179,7 @@ export function buildShadowRow(input: {
     executedCalls: costOf(input.executed, input.layerCosts),
     shadowCalls: costOf(input.shadow.policy, input.layerCosts),
     observedCalls: count(input.observedCalls),
+    ...(input.observedByLayer ? { observedByLayer: sanitizeObserved(input.observedByLayer) } : {}),
     verificationFailed: flag(input.verificationFailed),
     nextTurnCorrection: null,
   }
@@ -215,6 +242,8 @@ export interface ShadowLayerReport {
   /** Of those, turns where the next turn (or verification) was a correction/failure — a possible miss. */
   skipCoincidedWithCorrection: number
   skipKnown: number
+  /** MEASURED calls this layer made on the turns where the shadow policy would have skipped it — what adaptive would really have saved. */
+  observedCallsSkipped: number
 }
 
 export interface ShadowReport {
@@ -222,6 +251,9 @@ export interface ShadowReport {
   callsSaved: number
   executedCalls: number
   shadowCalls: number
+  /** Measured calls across the instrumented layers, and how many of them fall on turns/layers the shadow policy would have skipped. */
+  observedCalls: number
+  observedCallsSkipped: number
   layers: ShadowLayerReport[]
 }
 
@@ -232,19 +264,23 @@ export function summarizeShadow(rows: readonly LayerTelemetryRow[]): ShadowRepor
   const acc = new Map<string, ShadowLayerReport>()
   const touch = (layer: string) => {
     let r = acc.get(layer)
-    if (!r) acc.set(layer, (r = { layer, turns: 0, disagreements: 0, disagreementRate: 0, wouldSkip: 0, skipCoincidedWithCorrection: 0, skipKnown: 0 }))
+    if (!r) acc.set(layer, (r = { layer, turns: 0, disagreements: 0, disagreementRate: 0, wouldSkip: 0, skipCoincidedWithCorrection: 0, skipKnown: 0, observedCallsSkipped: 0 }))
     return r
   }
-  let callsSaved = 0, executedCalls = 0, shadowCalls = 0
+  let callsSaved = 0, executedCalls = 0, shadowCalls = 0, observedCalls = 0, observedCallsSkipped = 0
   for (const row of shadows) {
     executedCalls += row.executedCalls
     shadowCalls += row.shadowCalls
     callsSaved += Math.max(0, row.executedCalls - row.shadowCalls)
+    observedCalls += row.observedCalls
     for (const d of row.disagreements) {
       const r = touch(d.layer)
       r.disagreements++
       if (RANK[d.shadow] < RANK[d.executed]) {
         r.wouldSkip++
+        const measured = row.observedByLayer?.[d.layer] ?? 0
+        r.observedCallsSkipped += measured
+        observedCallsSkipped += measured
         if (row.nextTurnCorrection !== null) {
           r.skipKnown++
           if (row.nextTurnCorrection || row.verificationFailed) r.skipCoincidedWithCorrection++
@@ -260,7 +296,7 @@ export function summarizeShadow(rows: readonly LayerTelemetryRow[]): ShadowRepor
     r.turns = shadows.length
     r.disagreementRate = shadows.length > 0 ? r.disagreements / shadows.length : 0
   }
-  return { turns: shadows.length, callsSaved, executedCalls, shadowCalls, layers: [...acc.values()].sort((a, b) => a.layer.localeCompare(b.layer)) }
+  return { turns: shadows.length, callsSaved, executedCalls, shadowCalls, observedCalls, observedCallsSkipped, layers: [...acc.values()].sort((a, b) => a.layer.localeCompare(b.layer)) }
 }
 
 /** Parses a JSONL (or JSON array) telemetry log; malformed lines are skipped. */
