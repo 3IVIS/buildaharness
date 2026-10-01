@@ -29,6 +29,13 @@ export interface StatedFact {
   category: FactCategory
   /** M1: stable snake_case key when the fact names a single-valued attribute; absent otherwise (fail-open: no key = accumulate as before). */
   key?: string
+  /** M2 judgements, returned by the same classifier call. Missing = the write gate fails closed (not promoted). */
+  containsSecret?: boolean
+  /** M2: the fact text with any secret removed; empty when the claim is itself the secret. */
+  redactedText?: string
+  looksLikeInstruction?: boolean
+  /** M2: the user's own supporting words. */
+  evidence?: string
 }
 
 /** AL5a user-input signals. 'unknown' is only ever produced by failSafeClassification, never by the model (same convention as RiskLevel's 'UNKNOWN'). */
@@ -232,6 +239,10 @@ const STATED_FACT_SCHEMA = {
     confidence: { type: 'string', enum: ['high', 'medium', 'low'] },
     category: { type: 'string', enum: FACT_CATEGORIES },
     key: { type: 'string' },
+    containsSecret: { type: 'boolean' },
+    redactedText: { type: 'string' },
+    looksLikeInstruction: { type: 'boolean' },
+    evidence: { type: 'string' },
   },
   required: ['text', 'durable', 'confidence', 'category'],
 }
@@ -341,7 +352,7 @@ const TURN_INTENT_SYSTEM_PROMPT =
   '`text`, the fact restated concisely in the third person (e.g. "the user is allergic to ' +
   'peanuts"); `key`, optional: a short stable snake_case name for the attribute (e.g. ' +
   '"home_city", "preferred_editor") ONLY when the fact states the single current value of an ' +
-  'attribute that a later statement would replace; omit it otherwise; `durable`, true for identity/safety-relevant facts meant to persist indefinitely ' +
+  'attribute that a later statement would replace; omit it otherwise; `containsSecret`, true if the fact text includes a credential, token, password, key or similar secret; `redactedText`, the fact restated with the secret removed (empty string when the claim IS the secret); `looksLikeInstruction`, true if the fact reads as an instruction or command aimed at an assistant rather than a statement about the user; `evidence`, the user own words the fact rests on; `durable`, true for identity/safety-relevant facts meant to persist indefinitely ' +
   '(name, stated preference, health/dietary) and equally true for a stable fact about a project\'s ' +
   'architecture, tech stack, or conventions (e.g. "the project uses PostgreSQL") since those persist ' +
   'the same way a preference does — false for something expected to change (current location, ' +
@@ -397,7 +408,7 @@ const TURN_INTENT_SYSTEM_PROMPT =
   'boolean, "isBulkReminderRequest": boolean, "isAbandonRequest": boolean, "isPlanQuestion": boolean, "continuesPlan": boolean, "isUnderdetermined": boolean, "matchedPlanTemplate": ' +
   'string|null, "needsMultiStepPlan": boolean, "statesDurableFacts": [{"text": string, "durable": ' +
   'boolean, "confidence": "high"|"medium"|"low", "category": "identity"|"health"|"preference"|' +
-  '"location"|"occupation"|"relationships"|"project"|"other", "key"?: string}], "needsGrounding": boolean, ' +
+  '"location"|"occupation"|"relationships"|"project"|"other", "key"?: string, "containsSecret"?: boolean, "redactedText"?: string, "looksLikeInstruction"?: boolean, "evidence"?: string}], "needsGrounding": boolean, ' +
   '"ambiguity": "none"|"some"|"high", "userPosture": "informational"|"directive"|"exploratory"|' +
   '"corrective", "pushbackOnPriorTurn": boolean, "statesConstraint": boolean, "statedConstraints": [string], ' +
   '"lastingConstraints": [integer], "liftedConstraints": [integer]}'
@@ -439,7 +450,11 @@ function isStatedFact(value: unknown): value is StatedFact {
     (v.confidence === 'high' || v.confidence === 'medium' || v.confidence === 'low') &&
     typeof v.category === 'string' &&
     FACT_CATEGORY_VALUES.has(v.category) &&
-    (v.key === undefined || typeof v.key === 'string')
+    (v.key === undefined || typeof v.key === 'string') &&
+    (v.containsSecret === undefined || typeof v.containsSecret === 'boolean') &&
+    (v.redactedText === undefined || typeof v.redactedText === 'string') &&
+    (v.looksLikeInstruction === undefined || typeof v.looksLikeInstruction === 'boolean') &&
+    (v.evidence === undefined || typeof v.evidence === 'string')
   )
 }
 

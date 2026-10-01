@@ -831,6 +831,18 @@ export async function runCli(options: RunCliOptions = {}): Promise<CliInstance> 
       await handleMemoryForget(args.slice(1))
       return
     }
+    if (args[0] === 'history') {
+      const entries = await assistant.memoryHistory()
+      console.log(entries.length === 0
+        ? '\nNo memory changes recorded (the audit log is empty or AUDIT_MEMORY_AUDIT_LOG is off).\n'
+        : `\n${entries.map((e) => `#${e.seq} ${e.at} ${e.op} [${e.store}] ${(e.after ?? e.before)?.text ?? e.factId} (${e.writer})`).join('\n')}\n`)
+      return
+    }
+    if (args[0] === 'undo') {
+      const outcome = await assistant.undoMemoryChange(args[1] ?? '', 'cli')
+      console.log(`\n${outcome.message}\n`)
+      return
+    }
     await printMemory()
   }
 

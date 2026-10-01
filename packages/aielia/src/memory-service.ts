@@ -1,7 +1,7 @@
 import type { ExperienceStore, StrategyWeightKey, DecompositionEntry, RecoverySequenceEntry, ExperienceStoreData, ExternalContradictionInput } from '@buildaharness/harness'
 import type { MemoryAdapter, ReminderStore, ReminderRecord, ILLMClient, TokenUsage } from '@buildaharness/runtime'
 import { explicitEnvOverride } from './layer-policy-wiring.js'
-import { extractFactsFromTurn, migrateFact, tierForFact, isKnowledgeTier, type UserFact } from './fact-extraction.js'
+import { extractFactsFromTurn, migrateFact, tierForFact, isKnowledgeTier, type UserFact, type CandidateJudgement } from './fact-extraction.js'
 import { checkForContradictions, semanticContradictionEnabled, type BeliefCandidate, type Corroboration } from './contradiction-checker.js'
 import type { StatedFact, FactCategory, FactConfidence } from './turn-intent-classifier.js'
 
@@ -14,6 +14,34 @@ export const DEFAULT_MEMORY_BUDGET_CHARS = 4000
 
 /** Append-only store of entries a keyed fact replaced (M1); the M2 audit log will subsume it. */
 export const RETIRED_FACTS_KEY = 'facts:retired'
+
+/** M2: append-only change log with pre-images. Global, never cleared by `/new` (same convention as DURABLE_FACTS_KEY). */
+export const AUDIT_LOG_KEY = 'memory:audit'
+/** M2/M5: highest audit `seq` already consolidated; the audit log never rotates away an entry newer than this. Absent until M5 writes it. */
+export const CONSOLIDATION_STATE_KEY = 'memory:consolidation-state'
+/** M2: how many audit entries rotation keeps (plus any newer than the consolidation watermark). */
+export const AUDIT_LOG_KEEP = 500
+
+export type AuditOp = 'add' | 'replace' | 'retire' | 'remove' | 'confirm' | 'reject' | 'undo'
+
+export interface AuditEntry {
+  seq: number
+  at: string
+  op: AuditOp
+  /** `text|extractedAt` of the fact the entry concerns (M1's id convention). */
+  factId: string
+  /** Pre-image (redacted text only — the gate redacts before anything reaches the log). */
+  before?: UserFact
+  after?: UserFact
+  /** Which store the change was made to. */
+  store: 'durable' | 'pending' | 'rejected'
+  writer: string
+  turn: string
+  /** Set on an `undo` entry: the seq it reverted. */
+  undoes?: number
+}
+
+type AuditDraft = Omit<AuditEntry, 'seq' | 'at'>
 
 // Deliberately NOT suffixed with a sessionId — clearSession() only deletes `facts:${sessionId}`,
 // so a fact stored here (see recordFacts()) survives /new the same way reminderStore/
@@ -112,6 +140,57 @@ export function memoryBudgetedRenderEnabled(env?: Record<string, string | undefi
   const source = env ?? (typeof process !== 'undefined' ? process.env : {})
   const raw = String(source.AUDIT_MEMORY_BUDGETED_RENDER ?? '').trim().toLowerCase()
   return ['1', 'true', 'on', 'yes', 'enabled'].includes(raw)
+}
+
+/** `AUDIT_MEMORY_WRITE_GATE`: semantic secret redaction + injection judgement before promotion, failing closed. Default OFF until the real-model pilot (plan defaults rule); `1/true/on/yes/enabled` enables. */
+export function memoryWriteGateEnabled(env?: Record<string, string | undefined>): boolean {
+  const source = env ?? (typeof process !== 'undefined' ? process.env : {})
+  return ['1', 'true', 'on', 'yes', 'enabled'].includes(String(source.AUDIT_MEMORY_WRITE_GATE ?? '').trim().toLowerCase())
+}
+
+/** `AUDIT_MEMORY_AUDIT_LOG`: append-only `memory:audit`. Default OFF until the pilot; `=0` restores the unlogged path. */
+export function memoryAuditLogEnabled(env?: Record<string, string | undefined>): boolean {
+  const source = env ?? (typeof process !== 'undefined' ? process.env : {})
+  return ['1', 'true', 'on', 'yes', 'enabled'].includes(String(source.AUDIT_MEMORY_AUDIT_LOG ?? '').trim().toLowerCase())
+}
+
+/** Outcome of `admitCandidate()` for one candidate. `session` = kept session-scoped only, never durable or pending. */
+export interface AdmitDecision {
+  action: 'admit' | 'session' | 'flag' | 'drop'
+  fact: UserFact
+}
+
+/**
+ * The single judgement step every writer's candidate passes through before it can be promoted (M2).
+ * Pure: the judgements were produced by the same LLM call that produced the fact. Always strips the
+ * transient `judgement`. With the gate off the candidate is returned unchanged (`admit`). With it on,
+ * for a `model_inferred` candidate: a missing judgement fails closed (`session`, durable bit cleared);
+ * a secret is replaced by the model's secret-free text, or dropped when the claim is the secret; an
+ * instruction-shaped claim is `flag`ged for the pending queue. A non-`user` origin never promotes.
+ */
+export function admitCandidate(candidate: UserFact, gateOn: boolean): AdmitDecision {
+  const { judgement, ...bare } = candidate
+  let fact: UserFact = { origin: 'user', ...bare }
+  if (!gateOn) return { action: 'admit', fact: bare }
+  if (fact.origin !== 'user') return { action: 'session', fact: { ...fact, durable: false } }
+  if (fact.source !== 'model_inferred') return { action: 'admit', fact }
+  const j: CandidateJudgement = judgement ?? {}
+  if (typeof j.containsSecret !== 'boolean' || typeof j.looksLikeInstruction !== 'boolean') {
+    return { action: 'session', fact: { ...fact, durable: false } }
+  }
+  if (j.containsSecret) {
+    const redacted = (j.redactedText ?? '').trim()
+    if (!redacted) return { action: 'drop', fact }
+    fact = { ...fact, text: redacted, evidence: undefined }
+  }
+  if (j.looksLikeInstruction) return { action: 'flag', fact: { ...fact, flagged: true } }
+  return { action: 'admit', fact }
+}
+
+/** Removes verbatim copies of the injected memory block from text bound for candidate extraction (feedback-loop prevention). Structural: it removes the exact block this service rendered, not a pattern. */
+export function excludeInjectedBlock(text: string, injectedBlock: string): string {
+  const block = injectedBlock.trim()
+  return block ? text.split(block).join('') : text
 }
 
 const TIER_PRIORITY: Record<string, number> = { identity: 0, preference: 0, semantic: 1, episodic: 2 }
@@ -231,6 +310,9 @@ export function buildTurnFacts(sessionId: string, userMessage: string, statedFac
         confidence: fact.confidence,
         category: fact.category,
         ...(fact.key ? { key: fact.key } : {}),
+        origin: 'user' as const,
+        ...(fact.evidence ? { evidence: fact.evidence } : {}),
+        judgement: { containsSecret: fact.containsSecret, redactedText: fact.redactedText, looksLikeInstruction: fact.looksLikeInstruction },
       }))
     : []
   return mergeTurnFacts(lexicalFacts, llmFacts)
@@ -251,6 +333,10 @@ function shouldAutoPromote(fact: UserFact): boolean {
 /** Text-and-timestamp identity match — the same (text, extractedAt) pair a fact was captured with, used to find-and-remove/find-and-update one specific entry in a UserFact[] without a dedicated id field. */
 function sameFact(a: UserFact, b: UserFact): boolean {
   return a.text === b.text && a.extractedAt === b.extractedAt
+}
+
+function factId(f: UserFact): string {
+  return `${f.text}|${f.extractedAt}`
 }
 
 function toBeliefCandidates(facts: UserFact[], prefix: string): BeliefCandidate[] {
@@ -297,6 +383,78 @@ export class MemoryService {
   private pendingInjections = new Map<string, number>()
   /** Number of in-scope facts the last budgeted render could not show — `/memory` says "N facts not shown this turn". */
   lastDroppedCount = 0
+  /** The facts block most recently rendered into a prompt; excluded verbatim from candidate extraction (M2 feedback-loop prevention). */
+  private lastInjectedBlock = ''
+
+  /**
+   * M2: the ONLY place `DURABLE_FACTS_KEY` is written. Every add, replace, retire, remove, confirm
+   * and usage-flush goes through here, so a new writer cannot skip the audit log. A structural test
+   * (memory-write-gate.test.ts) asserts this is the only call in the file that writes the durable key.
+   */
+  private async commitDurable(next: UserFact[], drafts: AuditDraft[] = []): Promise<void> {
+    await this.memory.set(DURABLE_FACTS_KEY, next)
+    await this.appendAudit(drafts)
+  }
+
+  private async appendAudit(drafts: AuditDraft[]): Promise<void> {
+    if (drafts.length === 0 || !memoryAuditLogEnabled()) return
+    const log = ((await this.memory.get(AUDIT_LOG_KEY)) as AuditEntry[] | undefined) ?? []
+    let seq = log.length > 0 ? log[log.length - 1].seq : 0
+    const at = new Date().toISOString()
+    let next = [...log, ...drafts.map((d) => ({ ...d, seq: ++seq, at }))]
+    if (next.length > AUDIT_LOG_KEEP) {
+      const watermark = ((await this.memory.get(CONSOLIDATION_STATE_KEY)) as { lastSeq?: number } | undefined)?.lastSeq ?? 0
+      const cutoff = next.length - AUDIT_LOG_KEEP
+      next = next.filter((e, i) => i >= cutoff || e.seq > watermark)
+    }
+    await this.memory.set(AUDIT_LOG_KEY, next)
+  }
+
+  /** `/memory history` — newest last; the last `limit` entries. */
+  async getAuditLog(limit = 20): Promise<AuditEntry[]> {
+    const log = ((await this.memory.get(AUDIT_LOG_KEY)) as AuditEntry[] | undefined) ?? []
+    return log.slice(-limit)
+  }
+
+  /**
+   * `/memory undo <seq>` — restores the pre-image of one audit entry exactly (and removes what that
+   * entry added), then appends an `undo` entry. An entry can be undone once. Returns a message for
+   * the caller, or undefined when the seq is unknown.
+   */
+  async undoAudit(seq: number, sessionId = 'undo'): Promise<{ ok: boolean; message: string }> {
+    const log = ((await this.memory.get(AUDIT_LOG_KEY)) as AuditEntry[] | undefined) ?? []
+    const entry = log.find((e) => e.seq === seq)
+    if (!entry) return { ok: false, message: `No audit entry #${seq}.` }
+    if (entry.op === 'undo') return { ok: false, message: `Entry #${seq} is itself an undo.` }
+    if (log.some((e) => e.undoes === seq)) return { ok: false, message: `Entry #${seq} was already undone.` }
+    const strip = (f: UserFact): UserFact => { const { retiredAt: _r, ...rest } = f; return rest }
+    const withoutFact = <T extends UserFact>(list: T[], f?: UserFact): T[] => (f ? list.filter((x) => !sameFact(x, f)) : list)
+    const durable = (((await this.memory.get(DURABLE_FACTS_KEY)) as UserFact[] | undefined) ?? []).map(migrateFact)
+    const pending = ((await this.memory.get(PENDING_CONFIRMATION_KEY)) as PendingFact[] | undefined) ?? []
+    let nextDurable = durable
+    if (entry.store === 'durable') {
+      nextDurable = withoutFact(durable, entry.after)
+      if (entry.before && entry.op !== 'confirm') nextDurable = [...withoutFact(nextDurable, entry.before), strip(entry.before)]
+      if (entry.op === 'replace' || entry.op === 'retire') {
+        const retired = ((await this.memory.get(RETIRED_FACTS_KEY)) as UserFact[] | undefined) ?? []
+        await this.memory.set(RETIRED_FACTS_KEY, withoutFact(retired, entry.before))
+      }
+      if (entry.op === 'confirm' && entry.before) await this.memory.set(PENDING_CONFIRMATION_KEY, [...withoutFact(pending, entry.before), entry.before])
+    } else if (entry.store === 'pending') {
+      const restored = entry.before ? [...withoutFact(pending, entry.before), entry.before as PendingFact] : withoutFact(pending, entry.after)
+      await this.memory.set(PENDING_CONFIRMATION_KEY, restored)
+      if (entry.op === 'reject' && entry.before) {
+        const rejected = ((await this.memory.get(REJECTED_FACTS_KEY)) as RejectedFact[] | undefined) ?? []
+        await this.memory.set(REJECTED_FACTS_KEY, rejected.filter((r) => r.text !== entry.before!.text))
+      }
+    }
+    if (entry.store === 'durable') {
+      await this.commitDurable(nextDurable, [{ op: 'undo', factId: entry.factId, before: entry.after, after: entry.before, store: 'durable', writer: 'undo', turn: sessionId, undoes: seq }])
+    } else {
+      await this.appendAudit([{ op: 'undo', factId: entry.factId, before: entry.after, after: entry.before, store: entry.store, writer: 'undo', turn: sessionId, undoes: seq }])
+    }
+    return { ok: true, message: `Undid #${seq} (${entry.op}): ${(entry.before ?? entry.after)?.text ?? entry.factId}` }
+  }
 
   /**
    * Durable + session facts for `sessionId`, plus the ready-to-splice system-prompt block — see
@@ -315,6 +473,7 @@ export class MemoryService {
     if (memoryBudgetedRenderEnabled()) {
       const rendered = renderFactsBlock(inScope, this.memoryBudgetChars())
       this.lastDroppedCount = rendered.droppedCount
+      this.lastInjectedBlock = rendered.block
       for (const f of rendered.shown) {
         const id = `${f.text}|${f.extractedAt}`
         this.pendingInjections.set(id, (this.pendingInjections.get(id) ?? 0) + 1)
@@ -324,6 +483,7 @@ export class MemoryService {
     const factsBlock = inScope.length > 0
       ? `\nKnown facts about the user:\n${inScope.slice(-FACT_CAP).map(factLine).join('\n')}`
       : ''
+    this.lastInjectedBlock = factsBlock
     return { facts, factsBlock }
   }
 
@@ -345,7 +505,9 @@ export class MemoryService {
     const fact = merged[index]
     const remainingDurable = durableFacts.filter((f) => !sameFact(f, fact))
     const remainingSession = sessionFacts.filter((f) => !sameFact(f, fact))
-    if (remainingDurable.length !== durableFacts.length) await this.memory.set(DURABLE_FACTS_KEY, remainingDurable)
+    if (remainingDurable.length !== durableFacts.length) {
+      await this.commitDurable(remainingDurable, [{ op: 'remove', factId: factId(fact), before: fact, store: 'durable', writer: 'forget', turn: sessionId }])
+    }
     if (remainingSession.length !== sessionFacts.length) await this.memory.set(`facts:${sessionId}`, remainingSession)
     return fact
   }
@@ -415,15 +577,22 @@ export class MemoryService {
     // resolved — see the constructor's default) leaves the fact unscoped rather than tagging it
     // with a meaningless empty string.
     const project = this.currentProject()
-    const newFacts = buildTurnFacts(sessionId, userMessage, statedFacts).map((f) =>
-      f.category === 'project' && project ? { ...f, project } : f,
-    )
+    const gateOn = memoryWriteGateEnabled()
+    const flaggedForPending: UserFact[] = []
+    const newFacts: UserFact[] = []
+    for (const candidate of buildTurnFacts(sessionId, gateOn ? excludeInjectedBlock(userMessage, this.lastInjectedBlock) : userMessage, statedFacts)) {
+      const decision = admitCandidate(candidate, gateOn)
+      if (decision.action === 'drop') continue
+      const f = decision.fact.category === 'project' && project ? { ...decision.fact, project } : decision.fact
+      if (decision.action === 'flag') flaggedForPending.push(f)
+      else newFacts.push(f)
+    }
     // A no-op turn (neither pass found anything) must stay a true no-op — no store touched at
     // all, not even an empty-array write — matching every reader that treats an absent key the
     // same as an empty one, and the "records nothing" test's expectation that the key itself
     // stays unset until a fact is actually captured.
     if (memoryBudgetedRenderEnabled()) await this.flushInjectionUsage(sessionId)
-    if (newFacts.length === 0) return { contradictions: [], corroborations: [] }
+    if (newFacts.length === 0 && flaggedForPending.length === 0) return { contradictions: [], corroborations: [] }
 
     let sessionFacts = (((await this.memory.get(`facts:${sessionId}`)) as UserFact[] | undefined) ?? []).map(migrateFact)
     let durableFacts = (((await this.memory.get(DURABLE_FACTS_KEY)) as UserFact[] | undefined) ?? []).map(migrateFact)
@@ -436,6 +605,9 @@ export class MemoryService {
     let durableChanged = false
     let pendingChanged = false
     let rejectedChanged = false
+    const audits: AuditDraft[] = []
+    const auditPending: AuditDraft[] = []
+    const turn = sessionId
 
     const uncertainPool = sessionFacts
       .filter((f) => f.source === 'model_inferred' && (f.confidence === 'medium' || f.confidence === 'low'))
@@ -473,6 +645,7 @@ export class MemoryService {
       rejectedFacts = [...rejectedFacts, { text: fact.text, rejectedAt: new Date().toISOString(), rejectionSource: 'auto_retracted' }]
       pendingChanged = true
       rejectedChanged = true
+      auditPending.push({ op: 'reject', factId: factId(fact), before: fact, store: 'pending', writer: 'recordFacts:retract', turn })
     }
 
     // Corroboration: upgrade an uncertain-pool fact's confidence in place (low→medium queues
@@ -494,6 +667,7 @@ export class MemoryService {
           durableFacts = [...durableFacts, upgraded]
           durableChanged = true
           pendingChanged = true
+          audits.push({ op: 'add', factId: factId(upgraded), after: upgraded, store: 'durable', writer: 'recordFacts:corroborate', turn })
         }
         continue
       }
@@ -531,10 +705,14 @@ export class MemoryService {
           const retiredAt = new Date().toISOString()
           const seen = new Set<string>()
           for (const old of priorLive) {
-            const id = `${old.text}|${old.extractedAt}`
+            const id = factId(old)
             if (seen.has(id)) continue
             seen.add(id)
             retiredNow.push({ ...old, retiredAt })
+            if (durableFacts.some((d) => sameFact(d, old))) {
+              const isLast = old === priorLive[priorLive.length - 1]
+              audits.push({ op: isLast ? 'replace' : 'retire', factId: id, before: old, ...(isLast ? { after: { ...fact, supersedes: old.text } } : {}), store: 'durable', writer: 'recordFacts:supersede', turn })
+            }
           }
           if (durableFacts.some(sameKey)) { durableFacts = durableFacts.filter((f) => !sameKey(f)); durableChanged = true }
           sessionFacts = sessionFacts.filter((f) => !sameKey(f))
@@ -545,10 +723,23 @@ export class MemoryService {
       if (shouldAutoPromote(fact)) {
         durableFacts = [...durableFacts, fact]
         durableChanged = true
+        if (!audits.some((a) => a.op === 'replace' && a.after && sameFact(a.after, fact))) {
+          audits.push({ op: 'add', factId: factId(fact), after: fact, store: 'durable', writer: 'recordFacts', turn })
+        }
       } else if (fact.source === 'model_inferred' && fact.durable && fact.confidence === 'medium') {
-        pendingFacts = [...pendingFacts, { ...fact, category: fact.category ?? 'other' }]
+        const queued = { ...fact, category: fact.category ?? 'other' }
+        pendingFacts = [...pendingFacts, queued]
         pendingChanged = true
+        auditPending.push({ op: 'add', factId: factId(fact), after: queued, store: 'pending', writer: 'recordFacts', turn })
       }
+    }
+    // M2: an instruction-shaped candidate is never auto-promoted and never enters the session
+    // store (so it can't render); it waits in the pending queue, marked, for the user to see.
+    for (const fact of flaggedForPending) {
+      const queued = { ...fact, category: fact.category ?? 'other' }
+      pendingFacts = [...pendingFacts, queued]
+      pendingChanged = true
+      auditPending.push({ op: 'add', factId: factId(fact), after: queued, store: 'pending', writer: 'recordFacts:flagged', turn })
     }
 
     if (retiredNow.length > 0) {
@@ -556,9 +747,10 @@ export class MemoryService {
       await this.memory.set(RETIRED_FACTS_KEY, [...retired, ...retiredNow])
     }
     await this.memory.set(`facts:${sessionId}`, sessionFacts)
-    if (durableChanged) await this.memory.set(DURABLE_FACTS_KEY, durableFacts)
+    if (durableChanged) await this.commitDurable(durableFacts, audits)
     if (pendingChanged) await this.memory.set(PENDING_CONFIRMATION_KEY, pendingFacts)
     if (rejectedChanged) await this.memory.set(REJECTED_FACTS_KEY, rejectedFacts)
+    await this.appendAudit(auditPending)
 
     return { contradictions, corroborations }
   }
@@ -582,7 +774,7 @@ export class MemoryService {
     const session = apply((((await this.memory.get(`facts:${sessionId}`)) as UserFact[] | undefined) ?? []).map(migrateFact))
     if (session.changed) await this.memory.set(`facts:${sessionId}`, session.facts)
     const durable = apply((((await this.memory.get(DURABLE_FACTS_KEY)) as UserFact[] | undefined) ?? []).map(migrateFact))
-    if (durable.changed) await this.memory.set(DURABLE_FACTS_KEY, durable.facts)
+    if (durable.changed) await this.commitDurable(durable.facts)
   }
 
   /**
@@ -639,6 +831,7 @@ export class MemoryService {
     const rejected = ((await this.memory.get(REJECTED_FACTS_KEY)) as RejectedFact[] | undefined) ?? []
     const rejectedAt = new Date().toISOString()
     await this.memory.set(REJECTED_FACTS_KEY, [...rejected, ...facts.map((f) => ({ text: f.text, rejectedAt, rejectionSource }))])
+    await this.appendAudit(facts.map((f) => ({ op: 'reject' as const, factId: factId(f), before: f, store: 'pending' as const, writer: `reject:${rejectionSource}`, turn: 'memory' })))
   }
 
   private async promoteConfirmedFact(fact: PendingFact, onUsage?: (usage: TokenUsage) => void): Promise<PendingConfirmationOutcome> {
@@ -661,8 +854,9 @@ export class MemoryService {
     // regardless of that bit, with no special case needed in tierForFact() itself. `confidence` is
     // cleared to `undefined` to match that field's own contract (no gradient for
     // `externally_verified`/`user_asserted`/`observed`).
-    const confirmed: UserFact = { ...fact, source: 'externally_verified', confidence: undefined }
-    await this.memory.set(DURABLE_FACTS_KEY, [...durableFacts, confirmed])
+    const { flagged: _flagged, ...unflagged } = fact
+    const confirmed: UserFact = { ...unflagged, source: 'externally_verified', confidence: undefined }
+    await this.commitDurable([...durableFacts, confirmed], [{ op: 'confirm', factId: factId(fact), before: fact, after: confirmed, store: 'durable', writer: 'confirm', turn: 'memory' }])
     return { fact: confirmed, conflictNotice: contradictions[0]?.description }
   }
 

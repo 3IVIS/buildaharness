@@ -35,7 +35,7 @@ import type { TraceEvent } from './trace-events.js'
 import type { AssistantToolStep } from './tool-step.js'
 
 import type { LayerPolicyMode } from '@buildaharness/harness'
-import { MemoryService, DEFAULT_MEMORY_BUDGET_CHARS, buildTurnFacts, type MemorySummary, type MemoryExport, type PendingFact } from './memory-service.js'
+import { MemoryService, DEFAULT_MEMORY_BUDGET_CHARS, buildTurnFacts, type MemorySummary, type MemoryExport, type PendingFact, type AuditEntry } from './memory-service.js'
 import type { UserFact } from './fact-extraction.js'
 import { REVIEW_NOTE_PREFIX, reviewNoticeText } from './review-checker.js'
 import { renderHypothesisNote, hypothesisContextMessage, proposeCompetingExplanations, semanticHypothesesEnabled, HYPOTHESIS_NOTE_PREFIX } from './semantic-hypotheses.js'
@@ -795,6 +795,18 @@ export class PersonalAssistant {
     const fact = await this.memoryService.forgetFact(index, sessionId)
     if (!fact) return { ok: false, error: `No fact #${index + 1}.` }
     return { ok: true, facts: [fact], conflictNotices: [] }
+  }
+
+  /** `/memory history` — the newest audit-log entries (M2). Empty unless `AUDIT_MEMORY_AUDIT_LOG` is on. */
+  async memoryHistory(limit = 20): Promise<AuditEntry[]> {
+    return this.memoryService.getAuditLog(limit)
+  }
+
+  /** `/memory undo <seq>` — restores the pre-image of one audit entry (M2). */
+  async undoMemoryChange(selector: string, sessionId: string): Promise<{ ok: boolean; message: string }> {
+    const seq = Number(selector)
+    if (!Number.isInteger(seq) || seq <= 0) return { ok: false, message: 'Usage: /memory undo <seq>' }
+    return this.memoryService.undoAudit(seq, sessionId)
   }
 
   /** Ranked search over the per-message index — see AssistantSession.searchTranscript's doc comment. Used by `/search`. */

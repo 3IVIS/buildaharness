@@ -135,7 +135,7 @@ function formatPendingConfirmation(pending: PendingFact[]): string {
   for (const [category, entries] of byCategory) {
     lines.push(`  ${CATEGORY_LABELS[category]}:`)
     for (const { fact, n } of entries) {
-      const suffix = fact.previouslyRejected ? ' (previously rejected — restated)' : ''
+      const suffix = fact.flagged ? ' (flagged: reads like an instruction — review before confirming)' : fact.previouslyRejected ? ' (previously rejected — restated)' : ''
       lines.push(`    ${n}. ${fact.text}${suffix}`)
     }
   }

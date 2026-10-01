@@ -91,6 +91,25 @@ export interface UserFact {
   /** M1 usage fields, updated lazily (batched, flushed from `recordFacts()`) when the fact is rendered into a prompt. */
   injectedCount?: number
   lastInjectedAt?: string
+  /** M2: where the claim came from. Undefined = `user`. A non-`user` origin can only ever be episodic (see `tierForFact`). */
+  origin?: FactOrigin
+  /** M2: the user's own supporting words for a `model_inferred` claim, returned by the classifier. Stored for audit/`/memory` display, never string-matched. */
+  evidence?: string
+  /** M2: set on a pending entry the write gate's semantic injection judgement flagged as instruction-shaped; never auto-promoted. */
+  flagged?: boolean
+  /** M2: transient classifier judgement carried from `buildTurnFacts` to the write gate; stripped before anything is persisted. */
+  judgement?: CandidateJudgement
+}
+
+/** M2: structured provenance next to `FactSource`; only `user` may reach a Knowledge tier. */
+export type FactOrigin = 'user' | 'agent' | 'tool' | 'web'
+
+/** M2: the classifier's per-fact judgement. Either field undefined means the judgement is missing (the gate fails closed). */
+export interface CandidateJudgement {
+  containsSecret?: boolean
+  /** Fact text with the secret removed; empty/undefined when the whole claim is the secret. */
+  redactedText?: string
+  looksLikeInstruction?: boolean
 }
 
 /** Every fact has a certainty for `/memory` display purposes, even one with no `confidence` gradient (user_asserted/observed/externally_verified) — those are exactly as certain as a stated fact gets, so they display as 'high' rather than blank. Never used for promotion/tier logic, which still reads `fact.confidence` directly and treats undefined as "no LLM confidence signal" (see that field's own doc comment) — this is purely a rendering convenience. */
@@ -185,6 +204,8 @@ const PREFERENCE_TIER_PATTERN = /\b(i (?:like|love|enjoy|prefer|hate|dislike)|my
  * `procedural`/`commitment` are never returned (see `TIER_RULES`'s doc comment).
  */
 export function tierForFact(fact: UserFact): MemoryTier {
+  // M2 (extended INV-16): a non-user origin populates the episodic tier only.
+  if (fact.origin !== undefined && fact.origin !== 'user') return 'episodic'
   if (fact.source === 'observed') return 'episodic'
   if (fact.source === 'model_inferred' && !(fact.durable && fact.confidence === 'high')) return 'episodic'
   if (fact.durable) {
