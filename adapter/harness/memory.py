@@ -272,6 +272,19 @@ def compress_memory(memory_state: MemoryState, preserve_set: list[str] | None = 
     return CompressionResult(dropped=dropped, pruned=pruned)
 
 
+def record_compression(memory_state: MemoryState, result: CompressionResult) -> None:
+    """Fold a compression pass into the risk record (TS contextCompression).
+
+    `compress_memory` reports every region outside the preserve set as pruned — including ones already recorded — so
+    appending them again would grow the list on every pass that stays above the threshold; only an unrecorded region
+    is added.
+    """
+    risk = memory_state.compression_risk
+    risk.compressed_structures.extend(result.dropped)
+    known = {r.id for r in risk.pruned_regions}
+    risk.pruned_regions.extend(r for r in result.pruned if r.id not in known)
+
+
 # ── P6.6 — Journal retention + max_steps ─────────────────────────────────────
 
 
@@ -326,9 +339,7 @@ def context_compression(
             "controlState",
             "callerState",
         ]
-        result = compress_memory(memory_state, preserve)
-        memory_state.compression_risk.compressed_structures.extend(result.dropped)
-        memory_state.compression_risk.pruned_regions.extend(result.pruned)
+        record_compression(memory_state, compress_memory(memory_state, preserve))
 
     staleness_sweep(world_model, world_model.environment_change_log)
     apply_decay(belief_dep_graph, dep_graph_budget)
