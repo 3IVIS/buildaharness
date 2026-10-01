@@ -36,7 +36,7 @@ import { braveSearch } from './web-search-provider.js'
 import { resolveConfig, validateConfig, ConfigValidationError, type AssistantConfig, type ConfigStore } from './config.js'
 import { NodeConfigStore } from './node-config-store.js'
 import { isConfigKey, envOverridesFromProcessEnv, parseConfigValue, ConfigValueParseError, formatConfigListing, ENV_VAR_FOR_CONFIG_KEY, CONFIG_KEYS } from './cli-config.js'
-import { formatHelp, formatStatus, formatTranscriptMarkdown, defaultExportFilename, formatMemorySummary, formatMemoryExport, defaultMemoryExportFilename, formatSearchResults, formatGoalGraphState, formatNextSteps, formatCostSummary, formatDoctorReport, formatUndoLogListing, formatMemoryPendingOutcome } from './cli-session.js'
+import { formatHelp, isQuitCommand, formatStatus, formatTranscriptMarkdown, defaultExportFilename, formatMemorySummary, formatMemoryExport, defaultMemoryExportFilename, formatSearchResults, formatGoalGraphState, formatNextSteps, formatCostSummary, formatDoctorReport, formatUndoLogListing, formatMemoryPendingOutcome } from './cli-session.js'
 import { estimateCostUsd } from './model-pricing.js'
 import { formatSpendCapStatus } from './spend-cap.js'
 import { checkProxyHealth, checkClaudeCli, checkWorkspaceRoot, checkDataDirWritable } from './doctor-checks.js'
@@ -1563,6 +1563,16 @@ export async function runCli(options: RunCliOptions = {}): Promise<CliInstance> 
   // resolves before the next begins — matching what a human typing into the prompt would
   // experience anyway.
   async function dispatchOne(message: string): Promise<void> {
+    if (quitting) return
+    // The documented piped workflow ends with a bare `exit` line (`printf 'msg\nexit\n' | node dist/cli.js`);
+    // with no handler it used to go to the model as an ordinary turn (and mint a goal thread). Only the
+    // bare word counts — "exit strategy for my startup" is still a message.
+    if (isQuitCommand(message)) {
+      quitting = true
+      console.log('Exiting.')
+      rl.close()
+      return
+    }
     // A bare 1/2/3 right after a turn's next-step options runs that option; anything else drops them.
     const pick = /^[1-3]$/.test(message) && lastNextSteps ? lastNextSteps[Number(message) - 1] : undefined
     lastNextSteps = undefined
@@ -1596,6 +1606,7 @@ export async function runCli(options: RunCliOptions = {}): Promise<CliInstance> 
     }
   }
 
+  let quitting = false
   let dispatchQueue: Promise<void> = Promise.resolve()
   // One command fully resolves before the next begins — see the comment this used to carry
   // inline here (still true): readline's 'line' event doesn't wait for a previous line's async
@@ -1614,7 +1625,7 @@ export async function runCli(options: RunCliOptions = {}): Promise<CliInstance> 
 
   function isKnownCommand(message: string): boolean {
     const [token] = message.split(/\s+/)
-    return token in commands
+    return token in commands || isQuitCommand(message)
   }
 
   /**

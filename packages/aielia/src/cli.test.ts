@@ -298,6 +298,50 @@ describe('/config', () => {
   })
 })
 
+describe('exit / quit', () => {
+  it.each(['exit', 'quit', '/exit', '/quit', 'EXIT', '  Exit  '])('a bare %j ends the session without a model turn', async (word) => {
+    const assistant = new PersonalAssistant({ llmClient: new FakeLLMClient() })
+    const turn = vi.spyOn(assistant, 'turn')
+    const { cli } = await setupCli({ assistant })
+    const lines = captureOutput()
+
+    await cli.dispatchLine(word)
+
+    expect(turn).not.toHaveBeenCalled()
+    expect(lines.join('\n')).toContain('Exiting.')
+  })
+
+  it('a message that merely starts with the word is still an ordinary turn', async () => {
+    const assistant = new PersonalAssistant({ llmClient: new FakeLLMClient() })
+    const turn = vi.spyOn(assistant, 'turn')
+    const { cli } = await setupCli({ assistant })
+    captureOutput()
+
+    await cli.dispatchLine('exit strategy for my startup')
+
+    expect(turn).toHaveBeenCalledTimes(1)
+  })
+
+  it('lines still buffered behind the quit command are dropped, not run', async () => {
+    const assistant = new PersonalAssistant({ llmClient: new FakeLLMClient() })
+    const turn = vi.spyOn(assistant, 'turn')
+    const { cli } = await setupCli({ assistant })
+    captureOutput()
+
+    await cli.dispatchLine('exit')
+    await cli.dispatchLine('hello after exit')
+
+    expect(turn).not.toHaveBeenCalled()
+  })
+
+  it('/help lists it', async () => {
+    const { cli } = await setupCli()
+    const lines = captureOutput()
+    await cli.dispatchLine('/help')
+    expect(lines.join('\n')).toContain('/exit')
+  })
+})
+
 describe('mid-task steering — LiveSteeringChannel routing (Phase 3, hierarchical_goal_tree_and_steering_plan.html)', () => {
   it('goalGraphMode explicitly disabled: a message sent while a turn is running still blocks on dispatchQueue, byte-identical to before the mechanism existed (INV-43)', async () => {
     const llm = new DeferredReplyLLMClient()
