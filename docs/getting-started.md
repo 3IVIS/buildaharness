@@ -205,7 +205,7 @@ Confirm everything is working with the test suites. No running stack is required
 # Frontend
 npm test
 
-# Adapter (1530 tests)
+# Adapter (1532 tests)
 pytest adapter/tests/ -v
 
 # Harness unit tests
