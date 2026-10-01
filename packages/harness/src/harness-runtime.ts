@@ -265,6 +265,14 @@ export interface HarnessRunOptions extends HarnessInitOptions {
    * Absent/false ⇒ the journal is never written and the store is never updated, exactly as before.
    */
   experienceLearning?: boolean
+  /**
+   * Opt-in: after the recovery ladder switches strategy for a failed task, re-queue every failed leaf so the new strategy
+   * actually gets an attempt. Without it a LOCAL replan re-queues only the failed task's dependents (and the failed leaf itself
+   * only after a supervisor redirect / evidence run / curated failure-mode match, and only when nothing else is pending), so a
+   * one-node turn — or a multi-task turn whose tasks fail together — ends with nothing to run. MAX_SWITCHES and the stall rule
+   * still bound the retries. Absent/false ⇒ exactly as before.
+   */
+  retryFailedTask?: boolean
   /** See `ReviewerRevision`. */
   reviewerRevision?: ReviewerRevision
   /** Fired when a reviewer revision reopens a task, with the task id and the text `reviewerRevision` returned. A throwing handler never breaks the run. */
@@ -339,6 +347,8 @@ export interface HarnessRunOptions extends HarnessInitOptions {
   onReviewConflict?: (event: { taskId: string; reason: string }) => void
   /** A confident failure-mode match picked the next recovery strategy — see nodes/rollback-replan.ts's RollbackReplanResult.failureModeSwitch. Bookkeeping only unless the host surfaces this to the proposer. */
   onFailureModeSwitch?: (event: { taskId: string; failure_class: string; strategy: string }) => void
+  /** With `experienceLearning` on, a LEARNED ranking (not the default order) picked the next recovery strategy — see nodes/rollback-replan.ts's RollbackReplanResult.learnedSwitch. Bookkeeping only unless the host surfaces this to the proposer. */
+  onLearnedStrategySwitch?: (event: { taskId: string; failure_class: string; strategy: string }) => void
   /**
    * Optional semantic escalation layered on top of FailureModeLibrary's own exact-string-
    * overlap `match()` — called only when the exact match found nothing (matched_pattern is
@@ -485,6 +495,7 @@ interface LoopContext {
   skipReviewerPass?: boolean
   skipControlState?: boolean
   experienceLearning?: boolean
+  retryFailedTask?: boolean
   reviewerRevision?: ReviewerRevision
   onReviewerRevision?: (event: { taskId: string; note: string }) => void
   isCheckableCriterion?: CriterionCheckable
@@ -524,6 +535,8 @@ interface LoopContext {
   onReviewConflict?: (event: { taskId: string; reason: string }) => void
   /** A confident failure-mode match picked the next recovery strategy — see nodes/rollback-replan.ts's RollbackReplanResult.failureModeSwitch. Bookkeeping only unless the host surfaces this to the proposer. */
   onFailureModeSwitch?: (event: { taskId: string; failure_class: string; strategy: string }) => void
+  /** With `experienceLearning` on, a LEARNED ranking (not the default order) picked the next recovery strategy — see nodes/rollback-replan.ts's RollbackReplanResult.learnedSwitch. Bookkeeping only unless the host surfaces this to the proposer. */
+  onLearnedStrategySwitch?: (event: { taskId: string; failure_class: string; strategy: string }) => void
   semanticFailureMatcher?: (
     symptoms: string[],
     libraryEntries: readonly FailureModeEntry[],
@@ -598,6 +611,7 @@ function buildInitialContext(
     skipReviewerPass: options.skipReviewerPass,
     skipControlState: options.skipControlState,
     experienceLearning: options.experienceLearning,
+    retryFailedTask: options.retryFailedTask,
     reviewerRevision: options.reviewerRevision,
     onReviewerRevision: options.onReviewerRevision,
     isCheckableCriterion: options.isCheckableCriterion,
@@ -615,6 +629,7 @@ function buildInitialContext(
     changeReviewFacts: options.changeReviewFacts,
     onReviewConflict: options.onReviewConflict,
     onFailureModeSwitch: options.onFailureModeSwitch,
+    onLearnedStrategySwitch: options.onLearnedStrategySwitch,
     semanticFailureMatcher: options.semanticFailureMatcher,
     semanticCriterionCoverage: options.semanticCriterionCoverage,
     supervisorDecider: options.supervisorDecider,
@@ -685,6 +700,7 @@ function buildResumedContext(rawCheckpoint: HarnessCheckpoint, options: HarnessR
     skipReviewerPass: options.skipReviewerPass,
     skipControlState: options.skipControlState,
     experienceLearning: options.experienceLearning,
+    retryFailedTask: options.retryFailedTask,
     reviewerRevision: options.reviewerRevision,
     onReviewerRevision: options.onReviewerRevision,
     isCheckableCriterion: options.isCheckableCriterion,
@@ -706,6 +722,7 @@ function buildResumedContext(rawCheckpoint: HarnessCheckpoint, options: HarnessR
     changeReviewFacts: options.changeReviewFacts,
     onReviewConflict: options.onReviewConflict,
     onFailureModeSwitch: options.onFailureModeSwitch,
+    onLearnedStrategySwitch: options.onLearnedStrategySwitch,
     semanticFailureMatcher: options.semanticFailureMatcher,
     semanticCriterionCoverage: options.semanticCriterionCoverage,
     supervisorDecider: options.supervisorDecider,
@@ -1834,6 +1851,8 @@ async function* driveMainLoop(ctx: LoopContext): AsyncGenerator<HarnessCheckpoin
         rollbackFn,
         supervisorDirective,
         requeueLeafOnLocal,
+        ctx.experienceLearning === true,
+        ctx.retryFailedTask === true,
       )
       // Adopt the recovery ladder's output — parity with loop.py (strategy_state /
       // task_graph reassigned after switch_strategy / apply_replan, loop.py:480-534).
@@ -1845,6 +1864,9 @@ async function* driveMainLoop(ctx: LoopContext): AsyncGenerator<HarnessCheckpoin
       reportLayer(ctx, 'recovery', true, `Trying a different approach — switched to "${rollbackResult.newStrategyState.current_strategy}" (${rollbackResult.replanScope ?? 'local'} replan)`)
       if (rollbackResult.failureModeSwitch) {
         ctx.onFailureModeSwitch?.({ taskId: currentTask.id, ...rollbackResult.failureModeSwitch })
+      }
+      if (rollbackResult.learnedSwitch) {
+        ctx.onLearnedStrategySwitch?.({ taskId: currentTask.id, ...rollbackResult.learnedSwitch })
       }
     }
 

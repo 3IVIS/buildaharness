@@ -86,3 +86,40 @@ describe('experience learning through a real run', () => {
     expect(store.getStrategyWeights()['TRACE_EXEC:']).toBeCloseTo(0.65, 4)
   })
 })
+
+describe('the learned ranking reaches the host (onLearnedStrategySwitch)', () => {
+  const events = () => {
+    const seen: Array<{ taskId: string; failure_class: string; strategy: string }> = []
+    return { seen, hook: (e: { taskId: string; failure_class: string; strategy: string }) => seen.push(e) }
+  }
+
+  async function run(store: InMemoryExperienceStore, experienceLearning: boolean, onLearnedStrategySwitch: (e: { taskId: string; failure_class: string; strategy: string }) => void) {
+    return new HarnessRuntime().run('do two things', ['done'], {
+      initialTasks: [task('t1'), task('t2')],
+      max_steps: 20,
+      experienceStore: store,
+      experienceLearning,
+      onLearnedStrategySwitch,
+      toolExecutors: { default: (ctx: { currentTaskId?: string }) => (ctx.currentTaskId === 't1' ? { __harnessExecutionStatus: 'failed', error: 'boom' } : { __harnessExecutionStatus: 'complete', output: 'ok' }) },
+    } as never)
+  }
+
+  it('the first run (nothing learned yet) switches on the default order and reports nothing; the second run starts from what the first learned', async () => {
+    const store = new InMemoryExperienceStore()
+    const first = events()
+    await run(store, true, first.hook)
+    expect(first.seen).toEqual([])
+
+    const second = events()
+    await run(store, true, second.hook)
+    expect(second.seen).toEqual([{ taskId: 't1', failure_class: '', strategy: 'TRACE_EXEC' }])
+  })
+
+  it('flag off: even with learned weights in the store nothing is reported', async () => {
+    const store = new InMemoryExperienceStore()
+    await run(store, true, () => {})
+    const off = events()
+    await run(store, false, off.hook)
+    expect(off.seen).toEqual([])
+  })
+})

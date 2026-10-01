@@ -20,8 +20,16 @@ export interface CliCommandHelp {
 }
 
 /** Kept as a hand-maintained list rather than derived from cli.ts's dispatch table — see /help's task note on why this can drift and needs manual upkeep when a command is added. */
+const QUIT_WORDS: ReadonlySet<string> = new Set(['exit', 'quit', '/exit', '/quit'])
+
+/** A bare `exit` / `quit` (with or without a leading slash, any case) ends the session; anything longer is an ordinary message. An exact command match, not a reading of the message. */
+export function isQuitCommand(message: string): boolean {
+  return QUIT_WORDS.has(message.trim().toLowerCase())
+}
+
 export const CLI_COMMANDS_HELP: CliCommandHelp[] = [
   { command: '/help', description: 'Show this list' },
+  { command: '/exit (/quit, exit, quit)', description: 'End the session' },
   { command: '/clear (/new)', description: 'Start a fresh conversation' },
   { command: '/status', description: 'Show current model, backend, workspace, and enabled capabilities' },
   { command: '/export [file]', description: "Save this session's transcript to a markdown file" },

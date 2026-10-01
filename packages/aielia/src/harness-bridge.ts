@@ -86,6 +86,18 @@ export function experienceLearningEnabled(env?: Record<string, string | undefine
 }
 
 /**
+ * `AUDIT_RETRY_FAILED_TASK` gate. Default **OFF**. On (`1`/`true`/`on`/`yes`/`enabled`) makes HarnessBridge.run pass
+ * `retryFailedTask: true`: after the recovery ladder switches strategy for a failed task, the failed task is re-queued so the
+ * new strategy actually gets an attempt (HarnessRunOptions.retryFailedTask). Off, a failed single task — or a multi-task turn
+ * whose tasks fail together — ends with nothing to run and the turn answers "could not complete". Read fresh each run.
+ */
+export function retryFailedTaskEnabled(env?: Record<string, string | undefined>): boolean {
+  const source = env ?? (typeof process !== 'undefined' ? process.env : {})
+  const raw = String(source.AUDIT_RETRY_FAILED_TASK ?? '').trim().toLowerCase()
+  return ['1', 'true', 'on', 'yes', 'enabled'].includes(raw)
+}
+
+/**
  * `AUDIT_REVIEWER_PASS` gate — feature-value audit (Phase C6 of the internal plan). EVAL-ONLY:
  * default **ON** (an unset / empty / truthy value keeps today's always-on 3-lens reviewer pass).
  * Only the benchmark's `reviewerPassOff` arm sets a falsy value (`0` / `false` / `off` / `no` /
@@ -156,6 +168,8 @@ export interface HarnessRunParams {
   onReviewerRevision?: (event: { taskId: string; note: string }) => void
   /** A confident failure-mode match picked the recovery strategy — advisory (see HarnessRunOptions.onFailureModeSwitch). The caller decides how to surface it. */
   onFailureModeSwitch?: (event: { taskId: string; failure_class: string; strategy: string }) => void
+  /** With AUDIT_EXPERIENCE_LEARNING on, a ranking learned from earlier runs picked the recovery strategy — advisory (see HarnessRunOptions.onLearnedStrategySwitch). */
+  onLearnedStrategySwitch?: (event: { taskId: string; failure_class: string; strategy: string }) => void
   /**
    * Trajectory Supervisor GATHER_EVIDENCE host (S5 of
    * the internal plan) — AgentLoop.runSupervisorInvestigation bound
@@ -270,7 +284,7 @@ export class HarnessBridge {
   }
 
   async run(params: HarnessRunParams): Promise<HarnessOutcome> {
-    const { sessionId, userMessage, facts, currentTurnFacts = [], draftReply, classification, initialTasks, activePlan, sources, onProgress, onUsage, oneLoopProposer, runInvestigation, askModeEnabled = false, updateChannel, onReviewConflict, onFailureModeSwitch, onSemanticHypothesis, precomputedHypotheses, onReviewerRevision } = params
+    const { sessionId, userMessage, facts, currentTurnFacts = [], draftReply, classification, initialTasks, activePlan, sources, onProgress, onUsage, oneLoopProposer, runInvestigation, askModeEnabled = false, updateChannel, onReviewConflict, onFailureModeSwitch, onLearnedStrategySwitch, onSemanticHypothesis, precomputedHypotheses, onReviewerRevision } = params
     const runtime = new HarnessRuntime()
     // One harness run per (session, turn) — a run_id a resumed run can be found under if this
     // turn's process died mid-run before reaching the `finally` cleanup below.
@@ -459,6 +473,7 @@ export class HarnessBridge {
         skipControlState: controlStateGateEnabled() ? undefined : true,
         // AUDIT_EXPERIENCE_LEARNING (default off): journal every executed task and teach the experience store when the run ends.
         experienceLearning: experienceLearningEnabled() ? true : undefined,
+        retryFailedTask: retryFailedTaskEnabled() ? true : undefined,
         // Trajectory Supervisor GATHER_EVIDENCE host (S5). Inert unless a supervisorDecider is
         // also wired and returns a GATHER_EVIDENCE directive at a stall edge; absent → the
         // harness degrades GATHER_EVIDENCE to CONTINUE.
@@ -516,6 +531,7 @@ export class HarnessBridge {
         changeReviewFacts: () => changeReviewFactList,
         onReviewConflict,
         onFailureModeSwitch,
+        onLearnedStrategySwitch,
         // AUDIT_SEMANTIC_HYPOTHESES (default off): ask once for competing explanations, but only for a request the
         // classifier judged underdetermined — every other turn keeps the template seeds and pays for no call.
         // The judge is wired alongside, and the harness only consults it once semantic hypotheses exist.
@@ -608,6 +624,11 @@ export class HarnessBridge {
                 autoAdvanceBudget = autoAdvanceBudget.consume({ calls: resolvedThisCheck })
                 if (autoAdvanceBudget.isExhausted()) pause = true
               }
+              // A pause is only worth keeping when something is left to run. When the task that just resolved was the
+              // plan's last (the ceiling is hit exactly on the final step), pausing would leave a finished run's checkpoint
+              // behind, and the NEXT turn — whatever the user said — would resume it and answer with that run's stale result
+              // instead of the new message.
+              if (pause && !cp.runState.taskGraph.tasks.some((t) => t.status === 'PENDING' || t.status === 'RUNNING')) pause = false
               return pause
             }
           : undefined,

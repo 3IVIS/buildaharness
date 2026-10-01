@@ -18,6 +18,12 @@ export interface NextStepGoalOverview {
   /** True for the thread the suggestion is about (the finished thread, or the active one at turn end). */
   focus: boolean
   tasks: { description: string; status: string }[]
+  /**
+   * Next steps already proposed for this goal when it finished (the high/medium-confidence ones the
+   * thread persisted), for goals other than the focus one. They are how an open item of an earlier
+   * goal survives after that goal has left the conversation window. Absent when there are none.
+   */
+  openSuggestions?: string[]
 }
 
 export interface NextStepContext {
@@ -33,6 +39,7 @@ const MAX_MESSAGES = 8
 const MAX_MESSAGE_CHARS = 500
 const MAX_GOALS = 8
 const MAX_TASKS_PER_GOAL = 8
+const MAX_SUGGESTIONS_PER_GOAL = 3
 const MAX_STEPS = 12
 
 function clip(text: string, max: number): string {
@@ -65,15 +72,20 @@ export function summarizeGoalGraph(record: GoalGraphRecord | undefined, focusThr
   if (!record) return []
   return record.threads
     .filter((t) => t.status !== 'ABANDONED')
-    .map((t) => ({
-      goal: clip(t.successCriteria, MAX_MESSAGE_CHARS),
-      status: t.status,
-      focus: t.id === focusThreadId,
-      tasks: t.tasks
-        .filter((task) => !task.cancelled)
-        .slice(0, MAX_TASKS_PER_GOAL)
-        .map((task) => ({ description: clip(task.description, 200), status: task.status })),
-    }))
+    .map((t) => {
+      const focus = t.id === focusThreadId
+      const suggestions = focus ? [] : (t.suggestions ?? []).slice(0, MAX_SUGGESTIONS_PER_GOAL).map((sg) => clip(sg.description, 200))
+      return {
+        goal: clip(t.successCriteria, MAX_MESSAGE_CHARS),
+        status: t.status,
+        focus,
+        tasks: t.tasks
+          .filter((task) => !task.cancelled)
+          .slice(0, MAX_TASKS_PER_GOAL)
+          .map((task) => ({ description: clip(task.description, 200), status: task.status })),
+        ...(suggestions.length > 0 ? { openSuggestions: suggestions } : {}),
+      }
+    })
     .sort((a, b) => Number(b.focus) - Number(a.focus) || (STATUS_RANK[a.status] ?? 9) - (STATUS_RANK[b.status] ?? 9))
     .slice(0, MAX_GOALS)
 }

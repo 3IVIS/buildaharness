@@ -72,6 +72,22 @@ def requeue_failed_leaves(task_graph: TaskGraph) -> bool:
     return changed
 
 
+def requeue_failed_tasks(task_graph: TaskGraph) -> bool:
+    """Flip EVERY FAILED task back to PENDING (TS requeueFailedTasks, retry_failed_task).
+
+    Unlike requeue_failed_leaves this includes a failed task that has dependents: those dependents were reset to PENDING
+    by diagnose_and_replan but cannot run while the task they depend on is still FAILED. Returns True iff re-queued.
+    """
+    changed = False
+    for t in task_graph.tasks:
+        if t.status == "FAILED":
+            t.status = "PENDING"
+            changed = True
+    if changed:
+        task_graph.changed = True
+    return changed
+
+
 def rebuild_task_graph(world_model: Any, caller_state: Any, plan_note: str | None = None) -> TaskGraph:
     """GLOBAL replan (TS rebuildTaskGraph): a fresh TaskGraph from success_criteria (abstraction level 1, MEDIUM
     risk) plus one `Verify: <statement>` task per each of the first five beliefs (abstraction level 2, LOW risk).
@@ -119,6 +135,20 @@ class RollbackReplanResult:
     new_task_graph: TaskGraph
     replan_scope: ReplanScope | None
     failure_mode_switch: dict[str, str] | None = None
+    # With experience learning on, a ranking learned from earlier runs picked the strategy (TS learnedSwitch).
+    learned_switch: dict[str, str] | None = None
+
+
+def pick_learned_strategy(ordering: list[str], current: str, switch_count: int) -> str:
+    """The next strategy from a LEARNED ranking (TS pickLearnedStrategy).
+
+    The ladder's next-after-current rule is right for the fixed default order but, for a ranking, skips the top
+    choice whenever the current strategy sits above it. Here the nth switch takes the nth-ranked strategy, stepping
+    past the one already in effect, so the learned winner is tried first and later switches walk down the ranking.
+    """
+    i = min(switch_count, len(ordering) - 1)
+    candidate = ordering[i]
+    return ordering[min(i + 1, len(ordering) - 1)] if candidate == current else candidate
 
 
 def rollback_and_replan(
@@ -132,6 +162,8 @@ def rollback_and_replan(
     rollback_fn: Callable[[], None] | None = None,
     supervisor_directive: Any | None = None,
     requeue_leaf_on_local: bool = False,
+    learned_ladder: bool = False,
+    retry_failed_task: bool = False,
 ) -> RollbackReplanResult:
     """Handle a failed task (TS rollbackAndReplan): roll back, record the failure, decide GLOBAL vs LOCAL replan.
 
@@ -195,6 +227,7 @@ def rollback_and_replan(
         return f"supervisor:{tag} {rationale}".strip()[:200]
 
     failure_mode_switch: dict[str, str] | None = None
+    learned_switch: dict[str, str] | None = None
     if is_reframe:
         new_state = replace(
             strategy_state,
@@ -203,15 +236,30 @@ def rollback_and_replan(
             risk_state_history=list(strategy_state.risk_state_history),
         )
     else:
-        try:
-            idx = ordering.index(strategy_state.current_strategy)
-        except ValueError:
-            idx = -1
-        next_strategy: StrategyType = redirect_hint or failure_mode_hint or ordering[min(idx + 1, len(ordering) - 1)]  # type: ignore[assignment]
-        if not redirect_hint and failure_mode_hint and matched is not None:
+        # A ranking learned from earlier runs (experience learning on, weights for this class) outranks a curated
+        # failure-mode match, but never the supervisor's redirect.
+        learned_ranking = learned_ladder and not redirect_hint and ordering != list(STRATEGY_ORDER)
+        if redirect_hint:
+            next_strategy: StrategyType = redirect_hint  # type: ignore[assignment]
+        elif learned_ranking:
+            next_strategy = pick_learned_strategy(  # type: ignore[assignment]
+                ordering, strategy_state.current_strategy, strategy_state.switch_count
+            )
+            learned_switch = {"failure_class": failure_class, "strategy": next_strategy}
+        elif failure_mode_hint:
+            next_strategy = failure_mode_hint  # type: ignore[assignment]
+        else:
+            try:
+                idx = ordering.index(strategy_state.current_strategy)
+            except ValueError:
+                idx = -1
+            next_strategy = ordering[min(idx + 1, len(ordering) - 1)]  # type: ignore[assignment]
+        if not redirect_hint and not learned_ranking and failure_mode_hint and matched is not None:
             failure_mode_switch = {"failure_class": matched.failure_class, "strategy": failure_mode_hint}
         if redirect_hint:
             trigger = sup_trigger("REDIRECT_STRATEGY")
+        elif learned_ranking:
+            trigger = f"learned:{failure_class or 'unmatched'} -> {next_strategy}"
         elif failure_mode_hint:
             trigger = f"failure_mode:{matched.failure_class} -> {failure_mode_hint}"
         else:
@@ -240,7 +288,12 @@ def rollback_and_replan(
     else:
         scope = "LOCAL"
         new_graph = diagnose_and_replan(current_task, task_graph)
-        if (requeue_leaf_on_local or failure_mode_switch) and not any(t.status == "PENDING" for t in new_graph.tasks):
+        # retry_failed_task (opt-in): the switch only helps if the failed task runs again under it, so re-queue every
+        # failed task — not just leaves, and not just when nothing else is pending (TS retryFailedTask).
+        if retry_failed_task:
+            if requeue_failed_tasks(new_graph):
+                new_state.switch_triggers.append(f"retry_failed_task: {current_task.id}")
+        elif (requeue_leaf_on_local or failure_mode_switch) and not any(t.status == "PENDING" for t in new_graph.tasks):
             if requeue_failed_leaves(new_graph):
                 new_state.switch_triggers.append(sup_trigger("requeue_leaf"))
 
@@ -251,6 +304,7 @@ def rollback_and_replan(
         new_task_graph=new_graph,
         replan_scope=scope,
         failure_mode_switch=failure_mode_switch,
+        learned_switch=learned_switch,
     )
 
 

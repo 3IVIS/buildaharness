@@ -14,9 +14,9 @@ describe('formatHelp', () => {
     }
   })
 
-  it('includes all 24 commands documented for this plan', () => {
+  it('includes all 25 commands documented for this plan', () => {
     expect(CLI_COMMANDS_HELP.map((c) => c.command)).toEqual([
-      '/help', '/clear (/new)', '/status', '/export [file]', '/undo', '/undo-action [id]', '/memory',
+      '/help', '/exit (/quit, exit, quit)', '/clear (/new)', '/status', '/export [file]', '/undo', '/undo-action [id]', '/memory',
       '/memory export [file]', '/memory confirm <n|category>', '/memory reject <n|category>', '/memory forget <n>', '/search <query>',
       '/model [name]', '/project [name]', '/cost', '/doctor', '/why', '/layers',
       '/sources', '/plan', '/plan sketch <request>', '/goals', '/config ...', '/checkpoint [clear]',
