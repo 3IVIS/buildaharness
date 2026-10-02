@@ -1,0 +1,79 @@
+{
+ "description": "TRACKED DISCREPANCY: undo of a consolidation-grouped entry. TS reverts the whole group; Python (group ops are deferred) refuses with a fixed message and changes nothing.",
+ "flags": {
+  "writeGate": false,
+  "auditLog": true
+ },
+ "config": {},
+ "clock": [
+  "2026-05-01T00:00:00.000Z",
+  "2026-05-01T00:00:01.000Z",
+  "2026-05-01T00:00:02.000Z",
+  "2026-05-01T00:00:03.000Z",
+  "2026-05-01T00:00:04.000Z",
+  "2026-05-01T00:00:05.000Z",
+  "2026-05-01T00:00:06.000Z",
+  "2026-05-01T00:00:07.000Z",
+  "2026-05-01T00:00:08.000Z",
+  "2026-05-01T00:00:09.000Z",
+  "2026-05-01T00:00:10.000Z",
+  "2026-05-01T00:00:11.000Z",
+  "2026-05-01T00:00:12.000Z",
+  "2026-05-01T00:00:13.000Z",
+  "2026-05-01T00:00:14.000Z",
+  "2026-05-01T00:00:15.000Z",
+  "2026-05-01T00:00:16.000Z",
+  "2026-05-01T00:00:17.000Z",
+  "2026-05-01T00:00:18.000Z",
+  "2026-05-01T00:00:19.000Z",
+  "2026-05-01T00:00:20.000Z",
+  "2026-05-01T00:00:21.000Z",
+  "2026-05-01T00:00:22.000Z",
+  "2026-05-01T00:00:23.000Z",
+  "2026-05-01T00:00:24.000Z",
+  "2026-05-01T00:00:25.000Z",
+  "2026-05-01T00:00:26.000Z",
+  "2026-05-01T00:00:27.000Z",
+  "2026-05-01T00:00:28.000Z",
+  "2026-05-01T00:00:29.000Z"
+ ],
+ "initial": {
+  "facts:durable": [
+   {
+    "text": "Grouped fact",
+    "extractedAt": "2026-01-01T00:00:00.000Z",
+    "sourceTurn": "turn:s0",
+    "source": "user_asserted",
+    "durable": true
+   }
+  ],
+  "memory:audit": [
+   {
+    "seq": 1,
+    "at": "2026-03-01T00:00:00.000Z",
+    "op": "add",
+    "factId": "Grouped fact|2026-01-01T00:00:00.000Z",
+    "after": {
+     "text": "Grouped fact",
+     "extractedAt": "2026-01-01T00:00:00.000Z",
+     "sourceTurn": "turn:s0",
+     "source": "user_asserted",
+     "durable": true
+    },
+    "store": "durable",
+    "writer": "consolidation:merge",
+    "turn": "s1",
+    "group": "g1"
+   }
+  ]
+ },
+ "steps": [
+  {
+   "call": "undo",
+   "args": {
+    "seq": 1,
+    "sessionId": "s1"
+   }
+  }
+ ]
+}

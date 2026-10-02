@@ -468,3 +468,79 @@ Reviewed differences go in `known-discrepancies-nodes.json`.
 
 Usage: `node scripts/harness-conformance/compare-nodes.mjs` (uses `python3` (must be 3.12), or set `PYTHON`).
 
+
+## MEMORY-EQUIVALENCE CONTRACT (`compare-memory.mjs`)
+
+**MEMORY-EQUIVALENCE CONTRACT.** The `fixtures-memory/*.json` set is the executable definition of "the same" for the agent-memory
+port: `packages/aielia`'s `MemoryService` (budgeted render, keyed supersession, write gate, write-route table, audit log and undo,
+pending confirm/reject, forget) and `adapter/harness/agent_memory`'s `AgentMemoryService`. A change to render, gate, routing, tier
+or audit behaviour on either side ships with a fixture change; `compare-memory.mjs` exits 1 on any untracked TS-vs-Python
+mismatch, any fixture whose own `expected` oracle fails on either runtime, and any forbidden string (secret canary) found in either
+output. Constants (budget, header, store keys, tier rules, write-route table, undo messages) are generated from
+`spec/memory-core.json` (`spec/gen-memory-core.mjs`, checked in CI); algorithms are hand-mirrored, and these fixtures pin them.
+
+Scope boundary, same carve-out as the other pairs: only the ported contract is compared. Not compared (deferred in Python by the
+M8 scoping addendum): corroboration and the entry/promotion-time contradiction checks (disabled in the TS runner with
+`AUDIT_SEMANTIC_CONTRADICTION=0`), the legacy 20-fact cap, digests, reviewer, consolidation, the lexical fact pass.
+
+### Fixture shape
+
+```jsonc
+{ "description": "...",
+  "flags":   { "writeGate": true, "auditLog": true },          // AUDIT_MEMORY_WRITE_GATE / AUDIT_MEMORY_AUDIT_LOG
+  "config":  { "budgetChars": 4000, "writeMode": "staged", "project": null },
+  "clock":   ["2026-01-01T00:00:00.000Z"],                     // see "Clock"
+  "initial": { "facts:durable": [...], "facts:s1": [...], "memory:audit": [...] },   // wire stores, verbatim
+  "steps":   [ { "call": "load_facts|record_facts|admit|route|tier|forget|confirm|reject|undo|history", "args": {...} } ],
+  "expected": { ... },          // optional hand-reviewed oracle, matched as a SUBSET against BOTH runtimes
+  "mustNotContain": ["..."] }   // optional: strings that must appear nowhere in either output (secret canaries)
+```
+
+Both runners print `{ steps: [result per step], final: { every store key present }, diagnostics }`. `final` omits absent keys, so
+"absent" and "empty list" stay distinguishable (undo of a change that created a side store must leave it absent again).
+`diagnostics` (the clock-call count) is informational and not compared. Keys are deep-sorted before comparing.
+
+- **Judgements are plain data.** `candidate.judgement` (`containsSecret`, `redactedText`, `looksLikeInstruction`) is injected; no
+  model is involved on either side. TS in-turn candidates go through `recordFacts()` as the classifier's `StatedFact`s (empty user
+  message, so the lexical pass adds nothing); other writers (`writer: "digest"` etc.) go through `submitCandidate()`.
+- **Clock.** Every timestamp a service writes (`extractedAt` of in-turn facts, audit `at`, `retiredAt`, usage flush, `rejectedAt`)
+  comes from the injected clock: each call pops the next entry; once the list is exhausted it keeps ticking one second past the last
+  entry. The pop order is therefore part of the contract (a Python port that stamps in a different order produces a different
+  `at`/`extractedAt` and fails the fixture).
+- **`expected` subset matching.** Objects: listed keys must match. Arrays: same length, element-wise subset. `{"$absent": true}`:
+  key must be absent. `{"$length": n, "$first": x, "$last": y}`: array shape check (used for bulk audit logs).
+- **`{"$repeat": N, "template": {...}, "seqFrom": 1}`** inside an `initial` list expands to N audit entries (rotation fixtures);
+  the audit keep is the contract constant (500).
+- Step results: `load_facts` -> `{facts, factsBlock, droppedCount}` (`droppedCount` is `null` for `record: false`);
+  `record_facts` -> `{}` for the in-turn writer, `{routes: [{route, fact}]}` otherwise; `admit` -> `{action, fact}`;
+  `route` -> `{routes}` (one row, or `rows` for a matrix; the mode goes through the unknown-resolves-to-staged rule);
+  `tier` -> `{tiers: [{tier, knowledge}]}`; `forget`/`confirm`/`reject` -> `{fact}`; `undo` -> `{ok, message}`; `history` -> `{entries}`.
+
+### Coverage
+
+| Group | Fixtures |
+|---|---|
+| Render | 01-08: durable before session under a budget, exact-fit / 1-over / shorter-later skip rule and dropped count, retired excluded, empty block, `(unconfirmed)` suffix, tie-breaks, project scope + durable-first merge, usage flush (once per render batch; `record:false` writes nothing) |
+| Keys and supersession | 09-15: keyed update (retire + add, see below), same-value no-op, pending does not retire the live value, two live priors (retire then replace), other project, unkeyed accumulate, pre-M1 fact migration |
+| Gate | 16-24: secret redaction (canary in no store), secret-only drop, fail-closed on missing judgement, instruction flagged to pending, non-user origin, user_asserted bypass, gate off, full write-route matrix (384 rows vs an independent oracle), unknown mode -> staged |
+| Tiers | 25-28: the structural rule over a 216-row category-bearing matrix, non-user origin never Knowledge, category-less cases |
+| Audit and undo | 29-40: entries and seq, undo of add / replace / index restore, refusal messages, grouped undo, rotation and the consolidation watermark, forget + undo, confirm / reject + undo, apply-then-undo identity on the durable store, audit log off |
+
+Two TS behaviours the fixtures pin that are easy to misread: (1) a keyed update of a fact held in BOTH the durable and the session
+store (the normal state of an in-turn durable fact) audits `retire` + `add`, not `replace`, because the `isLast` test compares the
+durable copy against the session copy; `replace` appears only when the old fact is durable-only (fixture 12). (2) Audit rotation
+never drops an entry newer than `memory:consolidation-state.lastSeq`, whose default is 0, so without a consolidation state the log
+is never trimmed (fixtures 35 vs 36).
+
+### Tracked discrepancies (`known-discrepancies-memory.json`)
+
+- `27-tier-category-less-identity-text`: TS keeps its two regexes as a fallback ONLY for a category-less fact (the lexical pass);
+  Python has only the structural, category-first rule (no lexical code is ever ported).
+- `34-audit-undo-grouped`: consolidation groups are deferred in Python; undo of a grouped entry refuses with a fixed message.
+
+### Usage
+
+`node scripts/harness-conformance/compare-memory.mjs` (needs `python3.12`, `npx tsx`, and `packages/harness` + `packages/runtime`
+built, because aielia resolves them from `dist`; CI builds them first). `--ts-only` checks the TS runner against each fixture's
+`expected` and `mustNotContain` only. Adding a fixture: write the JSON in `fixtures-memory/` (numbered, one scenario each), run the
+comparer, and hand-review the `expected` oracle before trusting a green run.

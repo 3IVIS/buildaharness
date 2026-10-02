@@ -1,0 +1,29 @@
+{
+ "description": "Empty store gives an empty block (no header) and writes nothing.",
+ "flags": {
+  "writeGate": false,
+  "auditLog": true
+ },
+ "config": {},
+ "clock": [
+  "2026-03-01T00:00:00.000Z"
+ ],
+ "initial": {},
+ "steps": [
+  {
+   "call": "load_facts",
+   "args": {
+    "sessionId": "s1"
+   }
+  }
+ ],
+ "expected": {
+  "steps": [
+   {
+    "factsBlock": "",
+    "droppedCount": 0
+   }
+  ],
+  "final": {}
+ }
+}

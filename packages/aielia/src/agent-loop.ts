@@ -28,6 +28,7 @@ import { SHELL_TOOLS, executeShellTool, commandMayLeaveWorkspace, type ShellTool
 import { ACTION_TOOLS, executeActionTool, type ActionToolsContext } from './action-tools.js'
 import { formatEmailApprovalReason } from './email.js'
 import { REMINDER_TOOLS, executeReminderTool } from './reminder-tools.js'
+import { RECALL_TOOLS, executeRecallTool, recallToolEnabled, type DigestReader } from './recall-tool.js'
 
 /** How much of each tool result is kept on its AssistantSource for the answer-claim grounding check. */
 const GROUNDING_EXCERPT_CHARS = 6000
@@ -266,6 +267,7 @@ export class AgentLoop {
       ...(this.shellTools ? SHELL_TOOLS : []),
       ...(this.actionTools ? ACTION_TOOLS : []),
       ...REMINDER_TOOLS,
+      ...this.recallTools(),
     ].map((tool) => tool.name)
     // AUDIT_CONTROL_STATE_TOOL_POLICY (feature-value audit, eval-only): the one read site.
     return createTurnControlPlaneState(toolNames, { pinNormal: !controlStateToolPolicyEnabled() })
@@ -522,6 +524,7 @@ export class AgentLoop {
       ...(this.shellTools ? SHELL_TOOLS : []),
       ...(this.actionTools ? ACTION_TOOLS : []),
       ...REMINDER_TOOLS,
+      ...this.recallTools(),
     ]
     const messages: ChatMessage[] = [
       { role: 'system', content: systemPrompt },
@@ -712,6 +715,7 @@ export class AgentLoop {
       ...(this.shellTools ? SHELL_TOOLS : []),
       ...(this.actionTools ? ACTION_TOOLS : []),
       ...REMINDER_TOOLS,
+      ...this.recallTools(),
     ]
     const messages: ChatMessage[] = [
       { role: 'system', content: systemPrompt },
@@ -862,6 +866,10 @@ export class AgentLoop {
         // loop gives the proxy backend (executeToolCall). Declines (undefined) without webTools —
         // the MCP server then fetches for itself, as before.
         onToolExecute: async (tool, input) => {
+          if (tool === 'recall_memory') {
+            // Served on this side: the MCP subprocess has no digest store. Already passed the gate above.
+            return this.digestReader && recallToolEnabled() ? this.executeToolCall(tool, input, userMessage, onUsage) : undefined
+          }
           if (!this.webTools || (tool !== 'fetch_url' && tool !== 'web_search')) return undefined
           const text = await this.executeToolCall(tool, input, userMessage, onUsage)
           sources.push({ tool, path: String(input.query ?? input.url), excerpt: text.slice(0, GROUNDING_EXCERPT_CHARS) })
@@ -1154,6 +1162,7 @@ export class AgentLoop {
       ...(this.shellTools ? SHELL_TOOLS : []),
       ...(this.actionTools ? ACTION_TOOLS : []),
       ...REMINDER_TOOLS,
+      ...this.recallTools(),
     ]
     const itemPrompt =
       `You are working through one item from a batch research request covering ${batchItems.length} similar ` +
@@ -1383,6 +1392,11 @@ export class AgentLoop {
    */
   /** AL8b: optional policy gate for LLM injection detection; `undefined` (default) ⇒ always detect. */
   injectionDetectionGate?: () => boolean
+  /** Episodic digest source for `recall_memory` (M3); set by the assistant. The tool is offered only when this is set AND AUDIT_RECALL_TOOL is on. */
+  digestReader?: DigestReader
+  private recallTools(): ToolDefinition[] {
+    return this.digestReader && recallToolEnabled() ? RECALL_TOOLS : []
+  }
   /** The opt-in layers' plan for the turn in flight (adaptive mode only), set by the assistant each turn; see resolveOptInPlan. */
   optInPlan?: EscalationPlan
 
@@ -1408,6 +1422,11 @@ export class AgentLoop {
     }
     if (name === 'create_reminder' || name === 'list_reminders') {
       return executeReminderTool(this.reminderStore, name, input, userMessage)
+    }
+    if (name === 'recall_memory') {
+      // Digest text is the assistant's own stored state; the tool wraps it as untrusted itself.
+      if (!this.digestReader || !recallToolEnabled()) throw new Error('Tool "recall_memory" called but recall is not enabled')
+      return executeRecallTool(this.digestReader, input)
     }
     throw new Error(`Unknown tool: ${name}`)
   }

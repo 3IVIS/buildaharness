@@ -190,7 +190,10 @@ describe('buildTurnFacts', () => {
 })
 
 describe('MemoryService.loadFacts factsBlock confidence annotation', () => {
-  it('annotates medium/low-confidence model_inferred facts as (unconfirmed); leaves high-confidence and user_asserted facts unqualified', async () => {
+  afterEach(() => { delete process.env.AUDIT_MEMORY_BUDGETED_RENDER })
+
+  it('legacy path (AUDIT_MEMORY_BUDGETED_RENDER=0), insertion order: annotates medium/low-confidence model_inferred facts as (unconfirmed); leaves high-confidence and user_asserted facts unqualified', async () => {
+    process.env.AUDIT_MEMORY_BUDGETED_RENDER = '0'
     const { service, memory } = newService(new QueuedStructuredLLMClient([]))
     const facts: UserFact[] = [
       { text: 'the user is allergic to peanuts', extractedAt: 't1', sourceTurn: 'turn:s1', durable: true, source: 'user_asserted' },
@@ -207,6 +210,26 @@ describe('MemoryService.loadFacts factsBlock confidence annotation', () => {
       '- the user might be lactose intolerant (unconfirmed)',
       '- the user may be tired lately (unconfirmed)',
       '- the user is definitely vegetarian',
+    ])
+  })
+
+  it('default ON (env unset): same annotations, priority-ranked order (order-independent assertion)', async () => {
+    const { service, memory } = newService(new QueuedStructuredLLMClient([]))
+    const facts: UserFact[] = [
+      { text: 'the user is allergic to peanuts', extractedAt: 't1', sourceTurn: 'turn:s1', durable: true, source: 'user_asserted' },
+      { text: 'the user might be lactose intolerant', extractedAt: 't2', sourceTurn: 'turn:s1', durable: true, source: 'model_inferred', confidence: 'medium' },
+      { text: 'the user may be tired lately', extractedAt: 't3', sourceTurn: 'turn:s1', durable: false, source: 'model_inferred', confidence: 'low' },
+      { text: 'the user is definitely vegetarian', extractedAt: 't4', sourceTurn: 'turn:s1', durable: true, source: 'model_inferred', confidence: 'high' },
+    ]
+    await memory.set('facts:s1', facts)
+    const { factsBlock } = await service.loadFacts('s1')
+    const lines = factsBlock.split('\n').filter(Boolean)
+    expect(lines[0]).toBe('Known facts about the user:')
+    expect(lines.slice(1).sort()).toEqual([
+      '- the user is allergic to peanuts',
+      '- the user is definitely vegetarian',
+      '- the user may be tired lately (unconfirmed)',
+      '- the user might be lactose intolerant (unconfirmed)',
     ])
   })
 })

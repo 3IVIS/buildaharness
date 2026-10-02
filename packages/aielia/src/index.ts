@@ -1,5 +1,10 @@
 export { PersonalAssistant } from './assistant.js'
 export type { AssistantTurnResult, ProposerKind, PersonalAssistantOptions, AssistantProgress, AssistantTrace, AssistantSource, MemorySummary, TranscriptSearchHit, DebugLogEntry } from './assistant.js'
+export type { MemoryStatus, MemoryInjection, AuditEntry, ConsolidationOutcome } from './memory-service.js'
+export type { ConsolidationProposal } from './memory-consolidation.js'
+export type { SessionDigest } from './episodic-digest.js'
+export type { MemoryWriteMode } from './memory-governance.js'
+export { MEMORY_WRITE_MODES, DEFAULT_MEMORY_WRITE_MODE, resolveMemoryWriteMode } from './memory-governance.js'
 export type { GoalGraphState, GoalThreadView, GoalThreadVisibility, GoalTaskSummary } from './goal-graph-service.js'
 export type { AnswerClaim, AnswerClaimSourceType, AnswerClaimVerificationStatus } from './answer-claim.js'
 export { lowerConfidenceSourceLines } from './source-reliability.js'
@@ -119,7 +124,7 @@ export type { ScriptedLLMClientScript } from './scripted-llm-client.js'
 // formatters with no Node-only imports, reused as-is by chat-ui's header Export button and
 // Settings > Diagnostics section so the CLI and GUI never drift into two descriptions of the
 // same facts.
-export { formatMemorySummary, formatSearchResults, formatGoalGraphState, formatCostSummary, formatDoctorReport, formatTranscriptMarkdown, defaultExportFilename } from './cli-session.js'
+export { formatMemorySummary, formatMemoryHistory, formatMemoryArchive, formatMemoryInjection, formatMemoryStatus, memoryStatusChecks, formatSearchResults, formatGoalGraphState, formatCostSummary, formatDoctorReport, formatTranscriptMarkdown, defaultExportFilename } from './cli-session.js'
 export type { CostSummaryInfo, DoctorCheck } from './cli-session.js'
 export { estimateCostUsd } from './model-pricing.js'
 // First-run setup pieces shared by the CLI (first-run.ts) and chat-ui's SetupWizard — browser-safe.

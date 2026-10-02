@@ -1,0 +1,4 @@
+{
+  "27-tier-category-less-identity-text": "TS tierForFact() keeps its two regexes (IDENTITY_TIER_PATTERN / PREFERENCE_TIER_PATTERN) as a fallback ONLY for a fact with no category (the lexical pass), so a category-less 'My name is Priya.' is identity/preference in TS. Python has only the structural rule (D2: no lexical code is ever ported), so the same fact is semantic. Facts the TS classifier writes carry a category, so the live path is identical; identity/preference share render priority 0 but semantic is 1, and the Python writer never produces a category-less fact.",
+  "34-audit-undo-grouped": "Consolidation groups (audit `group`, M5) are deferred in Python: it reads and preserves the field but never writes it, and undo of a grouped entry refuses with a fixed message and changes nothing, whereas TS reverts the whole group. See UNDO_MESSAGES_PYTHON_ONLY in spec/memory-core.json."
+}

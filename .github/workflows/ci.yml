@@ -54,6 +54,14 @@ jobs:
       - name: Check harness core generated files are current
         run: node spec/gen-harness-core.mjs --check
 
+      # M8 (agent memory): the same shared-contract pattern for the memory
+      # port — spec/memory-core.json generates adapter/harness/agent_memory/_core_generated.py
+      # and packages/aielia/src/_memory-core-generated.ts. Fail if either is stale.
+      # The cross-runtime half of the contract (field/tier/route agreement, no
+      # hand-typed contract literals) runs in the adapter job, which has Python.
+      - name: Check memory core generated files are current
+        run: node spec/gen-memory-core.mjs --check
+
       # Adoption plan F1: default model ids live only in
       # packages/runtime/src/model-defaults.ts — fail if a previous-generation
       # or dated-snapshot id reappears as a literal in a client or a display surface.
@@ -215,6 +223,29 @@ jobs:
       # known-discrepancies-nodes.json (tracked = exit 0, untracked = exit 1).
       - name: Harness TS/Python conformance — node-level
         run: node scripts/harness-conformance/compare-nodes.mjs
+
+      # M8 (agent memory): the TS memory service (packages/aielia) resolves
+      # @buildaharness/harness and @buildaharness/runtime from dist, so build them
+      # first (the older conformance runners import harness src directly and need no build).
+      - name: Build harness + runtime (aielia resolves them from dist)
+        run: |
+          npm run build:harness
+          npm run build:runtime
+
+      # M8: contract sync that generation cannot guarantee — UserFact/Fact field
+      # coverage, TS and Python tier/route functions agreeing with the contract tables,
+      # and no hand-typed contract literal in adapter/harness/agent_memory/.
+      - name: Check memory core sync (TS + Python vs spec/memory-core.json)
+        run: node scripts/check-memory-core-sync.mjs
+
+      # M8: the MEMORY-EQUIVALENCE CONTRACT. fixtures-memory/ scenarios (budgeted
+      # render, keyed supersession, write gate, write-route table, tier rule, audit
+      # log + undo) run through the real TS MemoryService and the Python
+      # AgentMemoryService with an injected clock and plain-data judgements (no model);
+      # { steps, final } must match, and each fixture's own `expected` oracle must hold on
+      # both. Tracked divergences in known-discrepancies-memory.json exit 0, untracked exit 1.
+      - name: Harness TS/Python conformance — memory
+        run: node scripts/harness-conformance/compare-memory.mjs
 
   runtime-package:
     name: '@buildaharness/runtime — typecheck, test, build'

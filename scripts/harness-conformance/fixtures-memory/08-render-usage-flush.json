@@ -1,0 +1,130 @@
+{
+ "description": "Two recorded renders then a record_facts: injectedCount/lastInjectedAt are flushed once, at the start of that write (count 2, flush clock). A record:false view adds nothing, so the second write flushes nothing.",
+ "flags": {
+  "writeGate": false,
+  "auditLog": false
+ },
+ "config": {},
+ "clock": [
+  "2026-04-01T00:00:00.000Z",
+  "2026-04-01T00:00:01.000Z",
+  "2026-04-01T00:00:02.000Z",
+  "2026-04-01T00:00:03.000Z",
+  "2026-04-01T00:00:04.000Z"
+ ],
+ "initial": {
+  "facts:durable": [
+   {
+    "text": "Alpha",
+    "extractedAt": "2026-01-02T00:00:00.000Z",
+    "sourceTurn": "turn:s0",
+    "source": "user_asserted",
+    "durable": true
+   },
+   {
+    "text": "Beta",
+    "extractedAt": "2026-01-01T00:00:00.000Z",
+    "sourceTurn": "turn:s0",
+    "source": "user_asserted",
+    "durable": true
+   }
+  ],
+  "facts:s1": [
+   {
+    "text": "Gamma",
+    "extractedAt": "2026-01-03T00:00:00.000Z",
+    "sourceTurn": "turn:s0",
+    "source": "user_asserted",
+    "durable": false
+   }
+  ]
+ },
+ "steps": [
+  {
+   "call": "load_facts",
+   "args": {
+    "sessionId": "s1"
+   }
+  },
+  {
+   "call": "load_facts",
+   "args": {
+    "sessionId": "s1"
+   }
+  },
+  {
+   "call": "record_facts",
+   "args": {
+    "sessionId": "s1",
+    "candidates": [
+     {
+      "text": "New keyed one",
+      "durable": true,
+      "confidence": "high",
+      "category": "other",
+      "key": "k1"
+     }
+    ]
+   }
+  },
+  {
+   "call": "load_facts",
+   "args": {
+    "sessionId": "s1",
+    "record": false
+   }
+  },
+  {
+   "call": "record_facts",
+   "args": {
+    "sessionId": "s1",
+    "candidates": [
+     {
+      "text": "New keyed two",
+      "durable": true,
+      "confidence": "high",
+      "category": "other",
+      "key": "k2"
+     }
+    ]
+   }
+  }
+ ],
+ "expected": {
+  "final": {
+   "facts:durable": [
+    {
+     "text": "Alpha",
+     "injectedCount": 2,
+     "lastInjectedAt": "2026-04-01T00:00:01.000Z"
+    },
+    {
+     "text": "Beta",
+     "injectedCount": 2,
+     "lastInjectedAt": "2026-04-01T00:00:01.000Z"
+    },
+    {
+     "text": "New keyed one",
+     "extractedAt": "2026-04-01T00:00:00.000Z"
+    },
+    {
+     "text": "New keyed two",
+     "extractedAt": "2026-04-01T00:00:02.000Z"
+    }
+   ],
+   "facts:s1": [
+    {
+     "text": "Gamma",
+     "injectedCount": 2,
+     "lastInjectedAt": "2026-04-01T00:00:01.000Z"
+    },
+    {
+     "text": "New keyed one"
+    },
+    {
+     "text": "New keyed two"
+    }
+   ]
+  }
+ }
+}

@@ -1,0 +1,177 @@
+{
+ "description": "A non-user origin (agent/tool/web) is judged too: clean gives session (never admit), a secret is redacted first, an instruction is flagged, a missing judgement fails closed. A digest write lands session-scoped only.",
+ "flags": {
+  "writeGate": true,
+  "auditLog": true
+ },
+ "config": {},
+ "clock": [
+  "2026-03-01T00:00:00.000Z"
+ ],
+ "initial": {},
+ "steps": [
+  {
+   "call": "admit",
+   "args": {
+    "candidate": {
+     "text": "Digest claim",
+     "durable": true,
+     "confidence": "high",
+     "source": "model_inferred",
+     "origin": "agent",
+     "extractedAt": "2026-01-01T00:00:00.000Z",
+     "sourceTurn": "turn:s1",
+     "judgement": {
+      "containsSecret": false,
+      "looksLikeInstruction": false
+     }
+    }
+   }
+  },
+  {
+   "call": "admit",
+   "args": {
+    "candidate": {
+     "text": "Digest claim",
+     "durable": true,
+     "confidence": "high",
+     "source": "model_inferred",
+     "origin": "tool",
+     "extractedAt": "2026-01-01T00:00:00.000Z",
+     "sourceTurn": "turn:s1",
+     "judgement": {
+      "containsSecret": true,
+      "looksLikeInstruction": false,
+      "redactedText": "Digest claim redacted"
+     },
+     "evidence": "canary"
+    }
+   }
+  },
+  {
+   "call": "admit",
+   "args": {
+    "candidate": {
+     "text": "Digest claim",
+     "durable": true,
+     "confidence": "high",
+     "source": "model_inferred",
+     "origin": "web",
+     "extractedAt": "2026-01-01T00:00:00.000Z",
+     "sourceTurn": "turn:s1",
+     "judgement": {
+      "containsSecret": false,
+      "looksLikeInstruction": true
+     }
+    }
+   }
+  },
+  {
+   "call": "admit",
+   "args": {
+    "candidate": {
+     "text": "Digest claim",
+     "durable": true,
+     "confidence": "high",
+     "source": "model_inferred",
+     "origin": "agent",
+     "extractedAt": "2026-01-01T00:00:00.000Z",
+     "sourceTurn": "turn:s1"
+    }
+   }
+  },
+  {
+   "call": "admit",
+   "args": {
+    "candidate": {
+     "text": "Digest claim",
+     "durable": true,
+     "confidence": "high",
+     "source": "model_inferred",
+     "origin": "web",
+     "extractedAt": "2026-01-01T00:00:00.000Z",
+     "sourceTurn": "turn:s1",
+     "judgement": {
+      "containsSecret": true,
+      "looksLikeInstruction": false,
+      "redactedText": ""
+     }
+    }
+   }
+  },
+  {
+   "call": "record_facts",
+   "args": {
+    "sessionId": "s1",
+    "candidates": [
+     {
+      "text": "Digest claim",
+      "durable": true,
+      "confidence": "high",
+      "source": "model_inferred",
+      "origin": "agent",
+      "extractedAt": "2026-01-01T00:00:00.000Z",
+      "sourceTurn": "turn:s1",
+      "judgement": {
+       "containsSecret": false,
+       "looksLikeInstruction": false
+      }
+     }
+    ],
+    "writer": "digest"
+   }
+  }
+ ],
+ "expected": {
+  "steps": [
+   {
+    "action": "session",
+    "fact": {
+     "durable": false,
+     "origin": "agent"
+    }
+   },
+   {
+    "action": "session",
+    "fact": {
+     "text": "Digest claim redacted",
+     "durable": false
+    }
+   },
+   {
+    "action": "flag",
+    "fact": {
+     "flagged": true
+    }
+   },
+   {
+    "action": "session",
+    "fact": {
+     "durable": false
+    }
+   },
+   {
+    "action": "drop"
+   },
+   {
+    "routes": [
+     {
+      "route": "session"
+     }
+    ]
+   }
+  ],
+  "final": {
+   "facts:s1": [
+    {
+     "text": "Digest claim",
+     "durable": false,
+     "origin": "agent"
+    }
+   ],
+   "facts:durable": {
+    "$absent": true
+   }
+  }
+ }
+}

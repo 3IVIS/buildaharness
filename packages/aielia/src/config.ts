@@ -15,6 +15,7 @@ import type { UpdateCheckMode } from './update-check-flag.js'
 import type { GoalGraphMode } from './goal-graph-flag.js'
 import type { LayerPolicyMode } from './layer-policy-flag.js'
 import type { GoalGraphSuggestMode } from './goal-graph-suggest-flag.js'
+import type { MemoryWriteMode } from './memory-governance.js'
 
 export interface AssistantConfig {
   llmBackend: 'proxy' | 'claude-cli' | 'anthropic' | 'openai' | 'openrouter'
@@ -103,6 +104,10 @@ export interface AssistantConfig {
   sessionCostLimitUsd?: number
   /** Secondary ceiling on completed turns this session — see SpendCapConfig's doc comment in spend-cap.ts for why this counts turns, not raw internal LLM calls. */
   sessionCallLimit?: number
+  /** M1: character budget for the per-turn facts block under `AUDIT_MEMORY_BUDGETED_RENDER`. Undefined = DEFAULT_MEMORY_BUDGET_CHARS (memory-service.ts). */
+  memoryBudgetChars?: number
+  /** M6: where model-originated memory writes may land — `auto` | `staged` (default) | `user_only`; see memory-governance.ts. */
+  memoryWriteMode?: MemoryWriteMode
   /**
    * R5 of the internal plan — the rollout flag for the harness-driven
    * one-loop proposer (see one-loop-flag.ts's doc comment for the full rationale). Undefined (the
@@ -224,6 +229,8 @@ export const CONFIG_KEYS: readonly (keyof AssistantConfig)[] = [
   'dangerouslySkipPermissions',
   'sessionCostLimitUsd',
   'sessionCallLimit',
+  'memoryBudgetChars',
+  'memoryWriteMode',
   'oneLoopMode',
   'askMode',
   'planMode',

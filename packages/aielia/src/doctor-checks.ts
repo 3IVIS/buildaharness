@@ -2,7 +2,8 @@ import { stat } from 'node:fs/promises'
 import { spawn } from 'node:child_process'
 import { join } from 'node:path'
 import type { FsBackend } from '@buildaharness/runtime'
-import type { DoctorCheck } from './cli-session.js'
+import { memoryStatusChecks, type DoctorCheck } from './cli-session.js'
+import type { MemoryStatus } from './memory-service.js'
 
 /**
  * Real I/O backing /doctor's checks (network fetch, subprocess spawn, filesystem stat) —
@@ -57,6 +58,11 @@ export function checkClaudeCli(claudePath: string): Promise<DoctorCheck> {
       resolvePromise({ label, ok: code === 0, detail: code === 0 ? undefined : `exited with code ${code}` })
     })
   })
+}
+
+/** M6: memory store size vs budget, pending count, last consolidation, audit-log size. The rendering is the shared pure `memoryStatusChecks` (chat-ui calls it too). */
+export function checkMemoryHealth(status: MemoryStatus): DoctorCheck[] {
+  return memoryStatusChecks(status)
 }
 
 export async function checkWorkspaceRoot(workspaceRoot: string): Promise<DoctorCheck> {

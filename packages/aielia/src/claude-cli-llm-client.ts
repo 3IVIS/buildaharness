@@ -8,6 +8,7 @@ import { buildClaudePrompt, parseClaudeCliOutput, stripJsonCodeFence, ALREADY_ST
 import { stripMcpToolPrefix } from './tool-step.js'
 import { resolveMcpServerPath } from './mcp-server-asset.js'
 import { lexicalOffEnvValue } from './lexical/lexical-mode.js'
+import { recallToolEnabled } from './recall-tool.js'
 
 /**
  * `--tools ""` only disables Claude Code's own built-in tools (Read/Write/Bash/etc.) — it
@@ -168,7 +169,7 @@ function invokeClaudeStreaming(claudePath: string, args: string[], onToolStep?: 
  * Phase D0 (harness_consolidation_and_control_plane_plan.html): a synchronous, per-call gate the
  * file-tools MCP server (spawned as this `claude` subprocess's own child — see
  * file-tools-mcp-server.mjs) blocks on before executing a read-only tool (read_file/
- * list_directory/fetch_url/web_search/create_reminder/list_reminders). write_file/
+ * list_directory/fetch_url/web_search/create_reminder/list_reminders/recall_memory). write_file/
  * run_shell_command/send_email are unaffected — they already stage unconditionally and never
  * call this gate.
  *
@@ -376,7 +377,8 @@ export class ClaudeCliLLMClient implements ILLMClient {
       const content = await this.callChatSync(messages, options)
       return { content: options.structuredOutput ? stripJsonCodeFence(content) : content }
     }
-    if (!this.fileTools && !this.shellTools && !this.webTools && !this.actionTools) {
+    // M3: recall_memory is served by the parent (onToolExecute), so a client with no other tool family still has a real tool to offer when it is enabled.
+    if (!this.fileTools && !this.shellTools && !this.webTools && !this.actionTools && !recallToolEnabled()) {
       throw new Error(
         'ClaudeCliLLMClient does not support tool calls unless constructed with fileTools, shellTools, webTools, or actionTools configured',
       )
@@ -415,6 +417,8 @@ export class ClaudeCliLLMClient implements ILLMClient {
               ...(this.shellTools ? { ENABLE_SHELL_TOOLS: '1' } : {}),
               ...(this.webTools?.braveApiKey ? { BRAVE_SEARCH_API_KEY: this.webTools.braveApiKey } : {}),
               ...(this.actionTools ? { ENABLE_EMAIL_TOOL: '1' } : {}),
+              // M3: recall_memory is registered (gated, then served by the parent via onToolExecute) only under AUDIT_RECALL_TOOL.
+              ...(recallToolEnabled() ? { ENABLE_RECALL_TOOL: '1' } : {}),
               // Always passed (even empty): the server reads an unset value as the default, every family off.
               ASSISTANT_LEXICAL_RESOLVED_OFF: lexicalOffEnvValue(),
             },

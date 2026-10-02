@@ -13,6 +13,8 @@ import {
   type AssistantToolStep,
   type AssistantTurnResult,
   type AnswerClaim,
+  type MemoryInjection,
+  formatMemoryInjection,
 } from '@buildaharness/aielia'
 
 // A <table> laid out at its natural (often wider-than-bubble) width needs its own scroll
@@ -32,6 +34,8 @@ interface Props {
   toolSteps?: AssistantToolStep[]
   planStatus?: AssistantTurnResult['planStatus']
   answerClaim?: AnswerClaim
+  /** M6: which stored facts were in this turn's prompt, and how many were not shown — rendered in the "Why?" panel via the same formatter the CLI's /why uses. */
+  memoryInjection?: MemoryInjection
   /**
    * Which proposer drove this turn (see AssistantTurnResult.proposerKind). Rendered only as a
    * hidden `data-testid="proposer-kind"` element, and only in a dev/E2E build — a test affordance
@@ -110,7 +114,7 @@ const SOURCE_TOOL_LABEL: Record<AssistantSource['tool'], string> = {
 // doesn't vouch for the same way it does its own workspace files.
 const EXTERNAL_SOURCE_TOOLS: ReadonlySet<AssistantSource['tool']> = new Set(['web_search', 'fetch_url'])
 
-export function ChatMessageBubble({ role, content, riskLevel, trace, harnessSkipped, sources, toolSteps, planStatus, answerClaim, proposerKind, onRetry }: Props): React.JSX.Element {
+export function ChatMessageBubble({ role, content, riskLevel, trace, harnessSkipped, sources, toolSteps, planStatus, answerClaim, memoryInjection, proposerKind, onRetry }: Props): React.JSX.Element {
   const [showWhy, setShowWhy] = useState(false)
   const [showSources, setShowSources] = useState(false)
   const [showSteps, setShowSteps] = useState(false)
@@ -193,6 +197,7 @@ export function ChatMessageBubble({ role, content, riskLevel, trace, harnessSkip
           </button>
           {showWhy && (
             <div className="bubble__why-detail">
+              {memoryInjection && <pre className="bubble__why-memory" data-testid="why-memory">{formatMemoryInjection(memoryInjection)}</pre>}
               {harnessSkipped ? (
                 <div className="bubble__why-confidence">
                   This looked like a simple, self-contained question, so it was answered directly

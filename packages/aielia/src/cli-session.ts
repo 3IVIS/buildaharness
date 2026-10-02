@@ -3,6 +3,7 @@ import type { ChatMessage, TokenUsage } from '@buildaharness/runtime'
 import type { AssistantConfig } from './config.js'
 import { formatConfigListing } from './cli-config.js'
 import type { MemorySummary, MemoryExport, TranscriptSearchHit, PendingFact, FactCategory, MemoryPendingOutcome } from './assistant.js'
+import type { AuditEntry, MemoryStatus, MemoryInjection } from './memory-service.js'
 import type { GoalGraphState, GoalThreadView, GoalThreadVisibility } from './goal-graph-service.js'
 import type { UndoLogEntry } from './action-snapshot.js'
 import { certaintyLabel, type UserFact } from './fact-extraction.js'
@@ -40,6 +41,13 @@ export const CLI_COMMANDS_HELP: CliCommandHelp[] = [
   { command: '/memory confirm <n|category>', description: 'Promote a pending-confirmation guess (or a whole category of them) to durable memory' },
   { command: '/memory reject <n|category>', description: 'Discard a pending-confirmation guess (or a whole category of them)' },
   { command: '/memory forget <n>', description: 'Remove an already-learned fact by its number in the "Facts I know" listing' },
+  { command: '/memory forget digest [id]', description: 'Erase one stored session digest (or, with no id, all of them)' },
+  { command: '/memory history', description: 'Show recent memory changes (needs AUDIT_MEMORY_AUDIT_LOG), with the number /memory undo takes' },
+  { command: '/memory undo <seq>', description: 'Restore the pre-image of one memory change (a whole consolidation at once)' },
+  { command: '/memory status', description: 'Memory store size vs budget, pending count, write mode, last consolidation' },
+  { command: '/memory archive [restore <n> | forget <n>]', description: 'List facts set aside (staged forgetting) or replaced by a newer statement; "restore" brings a set-aside one back, "forget" erases one for good' },
+  { command: '/memory consolidate [accept|dismiss <n>]', description: 'Propose merging/tightening overlapping facts and retiring stale ones (staged: nothing changes until you accept); needs AUDIT_MEMORY_CONSOLIDATION' },
+  { command: '/memory off | on', description: 'Stop (or resume) all memory writes for this install; existing facts stay readable and removable' },
   { command: '/search <query>', description: 'Search past messages by content — ranked, not just exact-match' },
   { command: '/model [name]', description: 'Show or switch the active model' },
   { command: '/project [name]', description: 'Show or switch which project new project-scoped facts are tagged with (/project clear reverts to the workspace default)' },
@@ -135,8 +143,11 @@ function formatPendingConfirmation(pending: PendingFact[]): string {
   for (const [category, entries] of byCategory) {
     lines.push(`  ${CATEGORY_LABELS[category]}:`)
     for (const { fact, n } of entries) {
-      const suffix = fact.previouslyRejected ? ' (previously rejected — restated)' : ''
-      lines.push(`    ${n}. ${fact.text}${suffix}`)
+      const suffix = fact.flagged ? ' (flagged: reads like an instruction — review before confirming)' : fact.previouslyRejected ? ' (previously rejected — restated)' : ''
+      const reviewerNote = fact.stagedBy === 'reviewer' ? ` (proposed by the memory reviewer${fact.verification === 'not_checked' ? ', not independently checked' : ''})` : ''
+      const head = fact.proposedOp === 'retire' ? `Retire: ${fact.text}` : fact.text
+      lines.push(`    ${n}. ${head}${suffix}${reviewerNote}`)
+      if (fact.stagedBy === 'reviewer' && fact.evidence) lines.push(`       you said: "${fact.evidence}"`)
     }
   }
   lines.push('  Use /memory confirm <n|category> or /memory reject <n|category>.')
@@ -199,6 +210,57 @@ export function formatMemorySummary(summary: MemorySummary): string {
   )
 
   return sections.join('\n')
+}
+
+/** `/memory history` — one line per audit entry. */
+export function formatMemoryHistory(entries: AuditEntry[]): string {
+  if (entries.length === 0) return 'No memory changes recorded (the audit log is empty or AUDIT_MEMORY_AUDIT_LOG is off).'
+  return entries
+    .map((e) => `#${e.seq} ${e.at} ${e.op} [${e.store}] ${e.erased ? '(erased by you)' : (e.after ?? e.before)?.text ?? e.factId} (${e.writer})`)
+    .join('\n')
+}
+
+/** `/memory archive` — facts a newer keyed statement replaced. */
+export function formatMemoryArchive(facts: UserFact[], restorableCount = 0): string {
+  if (facts.length === 0) return 'Archive is empty.'
+  return [...facts.map((f, i) => `  ${i + 1}. ${f.text} (${i < restorableCount ? 'set aside' : 'replaced'} ${f.retiredAt?.slice(0, 10) ?? 'earlier'})`), '  Use /memory archive restore <n> to bring a set-aside one back, or /memory archive forget <n> to erase one for good.'].join('\n')
+}
+
+/** The "Why?" / `/why` line: which stored facts the last reply could have known, and how many were left out. Says "in the prompt", not "used". */
+export function formatMemoryInjection(injection: MemoryInjection | undefined): string {
+  if (!injection) return 'No turn has run yet, so no memory has been put in front of the model.'
+  const n = injection.facts.length
+  const head = `Memory in the prompt: ${n} fact${n === 1 ? '' : 's'}${injection.notShown > 0 ? `; ${injection.notShown} not shown this turn` : ''}.`
+  return [head, ...injection.facts.map((f) => `  - ${f.text}${f.unconfirmed ? ' (unconfirmed)' : ''}`)].join('\n')
+}
+
+const MODE_LABEL: Record<MemoryStatus['mode'], string> = {
+  auto: 'auto (cross-turn writers may save directly)',
+  staged: 'staged (cross-turn writers wait for your confirmation)',
+  user_only: 'user_only (the model never saves a fact on its own)',
+}
+
+/** `/memory status` and the memory panel header. */
+export function formatMemoryStatus(status: MemoryStatus): string {
+  const lines = [
+    `Writes: ${status.off ? 'OFF (/memory on to resume)' : 'on'}  ·  mode: ${MODE_LABEL[status.mode]}`,
+    `Store: ${status.liveFacts} fact${status.liveFacts === 1 ? '' : 's'}, ${status.storeChars}/${status.budgetChars} chars${status.budgetedRender ? '' : ' (budget not enforced: AUDIT_MEMORY_BUDGETED_RENDER is off)'}`,
+    `Pending: ${status.pending}${status.flaggedPending > 0 ? ` (${status.flaggedPending} flagged)` : ''}  ·  replaced/archived: ${status.retired}  ·  history: ${status.auditEnabled ? `${status.auditEntries} entries` : 'off'}`,
+    `Last consolidation: ${status.lastConsolidatedSeq !== undefined ? `through #${status.lastConsolidatedSeq}${status.lastConsolidationAt ? ` at ${status.lastConsolidationAt}` : ''}` : 'never'}`,
+  ]
+  if (status.lastInjection && status.lastInjection.notShown > 0) lines.push(`${status.lastInjection.notShown} fact${status.lastInjection.notShown === 1 ? '' : 's'} not shown last turn`)
+  return lines.join('\n')
+}
+
+/** `/doctor` entries for memory (CLI via doctor-checks.ts, chat-ui directly — same pure function on both surfaces). */
+export function memoryStatusChecks(status: MemoryStatus): DoctorCheck[] {
+  const overBudget = status.budgetedRender && status.storeChars > status.budgetChars
+  return [
+    { label: `memory store: ${status.liveFacts} facts, ${status.storeChars}/${status.budgetChars} chars`, ok: !overBudget, detail: overBudget ? 'over budget: some facts are not shown each turn; consolidate or forget some' : undefined },
+    { label: `memory pending: ${status.pending}${status.flaggedPending > 0 ? ` (${status.flaggedPending} flagged)` : ''}`, ok: status.flaggedPending === 0, detail: status.flaggedPending > 0 ? 'review flagged items with /memory' : undefined },
+    { label: `memory last consolidation: ${status.lastConsolidatedSeq !== undefined ? `through audit #${status.lastConsolidatedSeq}` : 'never'}`, ok: true },
+    { label: `memory audit log: ${status.auditEnabled ? `${status.auditEntries} entries` : 'off'}, writes ${status.off ? 'OFF' : 'on'}, mode ${status.mode}`, ok: true },
+  ]
 }
 
 /** Renders `/memory export`'s full, unbounded contents as pretty-printed JSON — a plain formatting function so it's unit-testable the same way as every other cli-session.ts formatter; cli.ts does the actual file write. */

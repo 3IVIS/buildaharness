@@ -7,7 +7,7 @@ import {
 } from '@buildaharness/harness'
 import { ANTHROPIC_DEFAULT_MODEL } from '@buildaharness/runtime'
 import type { MemoryAdapter, ChatMessage, TokenUsage, FsBackend, MemoryResult } from '@buildaharness/runtime'
-import { compactTranscript, compactTranscriptSemantic } from './transcript-compaction.js'
+import { compactTranscript, compactTranscriptSemantic, messagesAboutToBeCompacted } from './transcript-compaction.js'
 import {
   loadPendingAction,
   stagePendingAction,
@@ -338,9 +338,17 @@ export class AssistantSession {
     sessionId: string,
     /** AUDIT_SEMANTIC_COMPACTION: summarizes the older messages instead of truncating them (semantic-compaction.ts). */
     summarize?: (older: ChatMessage[]) => Promise<string | null>,
+    /** AUDIT_EPISODIC_DIGEST: called with exactly the messages about to be dropped, before they are (M3 pre-compaction flush). Fail-open: a throw never blocks compaction. */
+    flush?: (older: ChatMessage[]) => Promise<unknown>,
   ): Promise<ChatMessage[]> {
     const transcriptKey = `transcript:${sessionId}`
     const rawTranscript = ((await this.memory.get(transcriptKey)) as ChatMessage[] | undefined) ?? []
+    if (flush) {
+      const about = messagesAboutToBeCompacted(rawTranscript)
+      if (about) {
+        try { await flush(about) } catch { /* fail-open */ }
+      }
+    }
     const { transcript, compacted } = summarize ? await compactTranscriptSemantic(rawTranscript, summarize) : compactTranscript(rawTranscript)
     if (compacted) await this.memory.set(transcriptKey, transcript)
     return transcript

@@ -60,7 +60,7 @@ export interface ScriptedLLMClientScript {
 /**
  * Known auxiliary semantic-escalation system prompts and their safe, inert default answer — see
  * ScriptedLLMClientScript's doc comment. Kept in sync by hand with each check's own system prompt
- * (review-checker.ts, failure-mode-matcher.ts, trust-tagging.ts, grounding-check.ts, task-completion-check.ts, constraint-check.ts, semantic-compaction.ts, source-reliability.ts, semantic-hypotheses.ts) since there's no shared constant
+ * (review-checker.ts, failure-mode-matcher.ts, trust-tagging.ts, grounding-check.ts, task-completion-check.ts, constraint-check.ts, semantic-compaction.ts, source-reliability.ts, semantic-hypotheses.ts, episodic-digest.ts, memory-consolidation.ts, memory-reviewer.ts) since there's no shared constant
  * to import without a circular dependency back into this package's own public surface.
  */
 export const SIDE_CALL_MARKERS: Array<[string, string]> = [
@@ -74,6 +74,10 @@ export const SIDE_CALL_MARKERS: Array<[string, string]> = [
   ['You weigh the reliability of the sources an assistant read', '{"assessments":[],"weighed":true}'],
   ['You propose competing explanations for an underdetermined request', '{"hypotheses":[]}'],
   ['You decide which explanations a set of new observations rules out', '{"contradicted":[]}'],
+  ['You write a session handoff digest', '{"digest":null}'],
+  ['You consolidate a small store of remembered facts about a user', '{"proposals":[]}'],
+  ['You review what a user said across several turns', '{"ops":[]}'],
+  ['You check proposed memory entries against what a user actually said', '{"verdicts":[]}'],
 ]
 
 /** The phrase that opens `turn-intent-classifier.ts`'s system prompt — stable, and how every scripted client tells that mandatory call apart from a real tool-loop call. */

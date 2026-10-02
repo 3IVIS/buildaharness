@@ -1,0 +1,2909 @@
+{
+ "description": "The structural tier rule over (source, origin, durable, confidence, category) for category-bearing facts, against an independent oracle (ordered first-match rules).",
+ "flags": {
+  "writeGate": false,
+  "auditLog": true
+ },
+ "config": {},
+ "clock": [
+  "2026-03-01T00:00:00.000Z"
+ ],
+ "initial": {},
+ "steps": [
+  {
+   "call": "tier",
+   "args": {
+    "facts": [
+     {
+      "text": "x",
+      "extractedAt": "2026-03-01T00:00:00.000Z",
+      "sourceTurn": "t",
+      "source": "user_asserted",
+      "durable": true,
+      "category": "identity",
+      "confidence": "high"
+     },
+     {
+      "text": "x",
+      "extractedAt": "2026-03-01T00:00:00.000Z",
+      "sourceTurn": "t",
+      "source": "user_asserted",
+      "durable": true,
+      "category": "preference",
+      "confidence": "high"
+     },
+     {
+      "text": "x",
+      "extractedAt": "2026-03-01T00:00:00.000Z",
+      "sourceTurn": "t",
+      "source": "user_asserted",
+      "durable": true,
+      "category": "health",
+      "confidence": "high"
+     },
+     {
+      "text": "x",
+      "extractedAt": "2026-03-01T00:00:00.000Z",
+      "sourceTurn": "t",
+      "source": "user_asserted",
+      "durable": true,
+      "category": "identity",
+      "confidence": "medium"
+     },
+     {
+      "text": "x",
+      "extractedAt": "2026-03-01T00:00:00.000Z",
+      "sourceTurn": "t",
+      "source": "user_asserted",
+      "durable": true,
+      "category": "preference",
+      "confidence": "medium"
+     },
+     {
+      "text": "x",
+      "extractedAt": "2026-03-01T00:00:00.000Z",
+      "sourceTurn": "t",
+      "source": "user_asserted",
+      "durable": true,
+      "category": "health",
+      "confidence": "medium"
+     },
+     {
+      "text": "x",
+      "extractedAt": "2026-03-01T00:00:00.000Z",
+      "sourceTurn": "t",
+      "source": "user_asserted",
+      "durable": true,
+      "category": "identity"
+     },
+     {
+      "text": "x",
+      "extractedAt": "2026-03-01T00:00:00.000Z",
+      "sourceTurn": "t",
+      "source": "user_asserted",
+      "durable": true,
+      "category": "preference"
+     },
+     {
+      "text": "x",
+      "extractedAt": "2026-03-01T00:00:00.000Z",
+      "sourceTurn": "t",
+      "source": "user_asserted",
+      "durable": true,
+      "category": "health"
+     },
+     {
+      "text": "x",
+      "extractedAt": "2026-03-01T00:00:00.000Z",
+      "sourceTurn": "t",
+      "source": "user_asserted",
+      "durable": false,
+      "category": "identity",
+      "confidence": "high"
+     },
+     {
+      "text": "x",
+      "extractedAt": "2026-03-01T00:00:00.000Z",
+      "sourceTurn": "t",
+      "source": "user_asserted",
+      "durable": false,
+      "category": "preference",
+      "confidence": "high"
+     },
+     {
+      "text": "x",
+      "extractedAt": "2026-03-01T00:00:00.000Z",
+      "sourceTurn": "t",
+      "source": "user_asserted",
+      "durable": false,
+      "category": "health",
+      "confidence": "high"
+     },
+     {
+      "text": "x",
+      "extractedAt": "2026-03-01T00:00:00.000Z",
+      "sourceTurn": "t",
+      "source": "user_asserted",
+      "durable": false,
+      "category": "identity",
+      "confidence": "medium"
+     },
+     {
+      "text": "x",
+      "extractedAt": "2026-03-01T00:00:00.000Z",
+      "sourceTurn": "t",
+      "source": "user_asserted",
+      "durable": false,
+      "category": "preference",
+      "confidence": "medium"
+     },
+     {
+      "text": "x",
+      "extractedAt": "2026-03-01T00:00:00.000Z",
+      "sourceTurn": "t",
+      "source": "user_asserted",
+      "durable": false,
+      "category": "health",
+      "confidence": "medium"
+     },
+     {
+      "text": "x",
+      "extractedAt": "2026-03-01T00:00:00.000Z",
+      "sourceTurn": "t",
+      "source": "user_asserted",
+      "durable": false,
+      "category": "identity"
+     },
+     {
+      "text": "x",
+      "extractedAt": "2026-03-01T00:00:00.000Z",
+      "sourceTurn": "t",
+      "source": "user_asserted",
+      "durable": false,
+      "category": "preference"
+     },
+     {
+      "text": "x",
+      "extractedAt": "2026-03-01T00:00:00.000Z",
+      "sourceTurn": "t",
+      "source": "user_asserted",
+      "durable": false,
+      "category": "health"
+     },
+     {
+      "text": "x",
+      "extractedAt": "2026-03-01T00:00:00.000Z",
+      "sourceTurn": "t",
+      "source": "user_asserted",
+      "durable": true,
+      "category": "identity",
+      "origin": "user",
+      "confidence": "high"
+     },
+     {
+      "text": "x",
+      "extractedAt": "2026-03-01T00:00:00.000Z",
+      "sourceTurn": "t",
+      "source": "user_asserted",
+      "durable": true,
+      "category": "preference",
+      "origin": "user",
+      "confidence": "high"
+     },
+     {
+      "text": "x",
+      "extractedAt": "2026-03-01T00:00:00.000Z",
+      "sourceTurn": "t",
+      "source": "user_asserted",
+      "durable": true,
+      "category": "health",
+      "origin": "user",
+      "confidence": "high"
+     },
+     {
+      "text": "x",
+      "extractedAt": "2026-03-01T00:00:00.000Z",
+      "sourceTurn": "t",
+      "source": "user_asserted",
+      "durable": true,
+      "category": "identity",
+      "origin": "user",
+      "confidence": "medium"
+     },
+     {
+      "text": "x",
+      "extractedAt": "2026-03-01T00:00:00.000Z",
+      "sourceTurn": "t",
+      "source": "user_asserted",
+      "durable": true,
+      "category": "preference",
+      "origin": "user",
+      "confidence": "medium"
+     },
+     {
+      "text": "x",
+      "extractedAt": "2026-03-01T00:00:00.000Z",
+      "sourceTurn": "t",
+      "source": "user_asserted",
+      "durable": true,
+      "category": "health",
+      "origin": "user",
+      "confidence": "medium"
+     },
+     {
+      "text": "x",
+      "extractedAt": "2026-03-01T00:00:00.000Z",
+      "sourceTurn": "t",
+      "source": "user_asserted",
+      "durable": true,
+      "category": "identity",
+      "origin": "user"
+     },
+     {
+      "text": "x",
+      "extractedAt": "2026-03-01T00:00:00.000Z",
+      "sourceTurn": "t",
+      "source": "user_asserted",
+      "durable": true,
+      "category": "preference",
+      "origin": "user"
+     },
+     {
+      "text": "x",
+      "extractedAt": "2026-03-01T00:00:00.000Z",
+      "sourceTurn": "t",
+      "source": "user_asserted",
+      "durable": true,
+      "category": "health",
+      "origin": "user"
+     },
+     {
+      "text": "x",
+      "extractedAt": "2026-03-01T00:00:00.000Z",
+      "sourceTurn": "t",
+      "source": "user_asserted",
+      "durable": false,
+      "category": "identity",
+      "origin": "user",
+      "confidence": "high"
+     },
+     {
+      "text": "x",
+      "extractedAt": "2026-03-01T00:00:00.000Z",
+      "sourceTurn": "t",
+      "source": "user_asserted",
+      "durable": false,
+      "category": "preference",
+      "origin": "user",
+      "confidence": "high"
+     },
+     {
+      "text": "x",
+      "extractedAt": "2026-03-01T00:00:00.000Z",
+      "sourceTurn": "t",
+      "source": "user_asserted",
+      "durable": false,
+      "category": "health",
+      "origin": "user",
+      "confidence": "high"
+     },
+     {
+      "text": "x",
+      "extractedAt": "2026-03-01T00:00:00.000Z",
+      "sourceTurn": "t",
+      "source": "user_asserted",
+      "durable": false,
+      "category": "identity",
+      "origin": "user",
+      "confidence": "medium"
+     },
+     {
+      "text": "x",
+      "extractedAt": "2026-03-01T00:00:00.000Z",
+      "sourceTurn": "t",
+      "source": "user_asserted",
+      "durable": false,
+      "category": "preference",
+      "origin": "user",
+      "confidence": "medium"
+     },
+     {
+      "text": "x",
+      "extractedAt": "2026-03-01T00:00:00.000Z",
+      "sourceTurn": "t",
+      "source": "user_asserted",
+      "durable": false,
+      "category": "health",
+      "origin": "user",
+      "confidence": "medium"
+     },
+     {
+      "text": "x",
+      "extractedAt": "2026-03-01T00:00:00.000Z",
+      "sourceTurn": "t",
+      "source": "user_asserted",
+      "durable": false,
+      "category": "identity",
+      "origin": "user"
+     },
+     {
+      "text": "x",
+      "extractedAt": "2026-03-01T00:00:00.000Z",
+      "sourceTurn": "t",
+      "source": "user_asserted",
+      "durable": false,
+      "category": "preference",
+      "origin": "user"
+     },
+     {
+      "text": "x",
+      "extractedAt": "2026-03-01T00:00:00.000Z",
+      "sourceTurn": "t",
+      "source": "user_asserted",
+      "durable": false,
+      "category": "health",
+      "origin": "user"
+     },
+     {
+      "text": "x",
+      "extractedAt": "2026-03-01T00:00:00.000Z",
+      "sourceTurn": "t",
+      "source": "user_asserted",
+      "durable": true,
+      "category": "identity",
+      "origin": "agent",
+      "confidence": "high"
+     },
+     {
+      "text": "x",
+      "extractedAt": "2026-03-01T00:00:00.000Z",
+      "sourceTurn": "t",
+      "source": "user_asserted",
+      "durable": true,
+      "category": "preference",
+      "origin": "agent",
+      "confidence": "high"
+     },
+     {
+      "text": "x",
+      "extractedAt": "2026-03-01T00:00:00.000Z",
+      "sourceTurn": "t",
+      "source": "user_asserted",
+      "durable": true,
+      "category": "health",
+      "origin": "agent",
+      "confidence": "high"
+     },
+     {
+      "text": "x",
+      "extractedAt": "2026-03-01T00:00:00.000Z",
+      "sourceTurn": "t",
+      "source": "user_asserted",
+      "durable": true,
+      "category": "identity",
+      "origin": "agent",
+      "confidence": "medium"
+     },
+     {
+      "text": "x",
+      "extractedAt": "2026-03-01T00:00:00.000Z",
+      "sourceTurn": "t",
+      "source": "user_asserted",
+      "durable": true,
+      "category": "preference",
+      "origin": "agent",
+      "confidence": "medium"
+     },
+     {
+      "text": "x",
+      "extractedAt": "2026-03-01T00:00:00.000Z",
+      "sourceTurn": "t",
+      "source": "user_asserted",
+      "durable": true,
+      "category": "health",
+      "origin": "agent",
+      "confidence": "medium"
+     },
+     {
+      "text": "x",
+      "extractedAt": "2026-03-01T00:00:00.000Z",
+      "sourceTurn": "t",
+      "source": "user_asserted",
+      "durable": true,
+      "category": "identity",
+      "origin": "agent"
+     },
+     {
+      "text": "x",
+      "extractedAt": "2026-03-01T00:00:00.000Z",
+      "sourceTurn": "t",
+      "source": "user_asserted",
+      "durable": true,
+      "category": "preference",
+      "origin": "agent"
+     },
+     {
+      "text": "x",
+      "extractedAt": "2026-03-01T00:00:00.000Z",
+      "sourceTurn": "t",
+      "source": "user_asserted",
+      "durable": true,
+      "category": "health",
+      "origin": "agent"
+     },
+     {
+      "text": "x",
+      "extractedAt": "2026-03-01T00:00:00.000Z",
+      "sourceTurn": "t",
+      "source": "user_asserted",
+      "durable": false,
+      "category": "identity",
+      "origin": "agent",
+      "confidence": "high"
+     },
+     {
+      "text": "x",
+      "extractedAt": "2026-03-01T00:00:00.000Z",
+      "sourceTurn": "t",
+      "source": "user_asserted",
+      "durable": false,
+      "category": "preference",
+      "origin": "agent",
+      "confidence": "high"
+     },
+     {
+      "text": "x",
+      "extractedAt": "2026-03-01T00:00:00.000Z",
+      "sourceTurn": "t",
+      "source": "user_asserted",
+      "durable": false,
+      "category": "health",
+      "origin": "agent",
+      "confidence": "high"
+     },
+     {
+      "text": "x",
+      "extractedAt": "2026-03-01T00:00:00.000Z",
+      "sourceTurn": "t",
+      "source": "user_asserted",
+      "durable": false,
+      "category": "identity",
+      "origin": "agent",
+      "confidence": "medium"
+     },
+     {
+      "text": "x",
+      "extractedAt": "2026-03-01T00:00:00.000Z",
+      "sourceTurn": "t",
+      "source": "user_asserted",
+      "durable": false,
+      "category": "preference",
+      "origin": "agent",
+      "confidence": "medium"
+     },
+     {
+      "text": "x",
+      "extractedAt": "2026-03-01T00:00:00.000Z",
+      "sourceTurn": "t",
+      "source": "user_asserted",
+      "durable": false,
+      "category": "health",
+      "origin": "agent",
+      "confidence": "medium"
+     },
+     {
+      "text": "x",
+      "extractedAt": "2026-03-01T00:00:00.000Z",
+      "sourceTurn": "t",
+      "source": "user_asserted",
+      "durable": false,
+      "category": "identity",
+      "origin": "agent"
+     },
+     {
+      "text": "x",
+      "extractedAt": "2026-03-01T00:00:00.000Z",
+      "sourceTurn": "t",
+      "source": "user_asserted",
+      "durable": false,
+      "category": "preference",
+      "origin": "agent"
+     },
+     {
+      "text": "x",
+      "extractedAt": "2026-03-01T00:00:00.000Z",
+      "sourceTurn": "t",
+      "source": "user_asserted",
+      "durable": false,
+      "category": "health",
+      "origin": "agent"
+     },
+     {
+      "text": "x",
+      "extractedAt": "2026-03-01T00:00:00.000Z",
+      "sourceTurn": "t",
+      "source": "model_inferred",
+      "durable": true,
+      "category": "identity",
+      "confidence": "high"
+     },
+     {
+      "text": "x",
+      "extractedAt": "2026-03-01T00:00:00.000Z",
+      "sourceTurn": "t",
+      "source": "model_inferred",
+      "durable": true,
+      "category": "preference",
+      "confidence": "high"
+     },
+     {
+      "text": "x",
+      "extractedAt": "2026-03-01T00:00:00.000Z",
+      "sourceTurn": "t",
+      "source": "model_inferred",
+      "durable": true,
+      "category": "health",
+      "confidence": "high"
+     },
+     {
+      "text": "x",
+      "extractedAt": "2026-03-01T00:00:00.000Z",
+      "sourceTurn": "t",
+      "source": "model_inferred",
+      "durable": true,
+      "category": "identity",
+      "confidence": "medium"
+     },
+     {
+      "text": "x",
+      "extractedAt": "2026-03-01T00:00:00.000Z",
+      "sourceTurn": "t",
+      "source": "model_inferred",
+      "durable": true,
+      "category": "preference",
+      "confidence": "medium"
+     },
+     {
+      "text": "x",
+      "extractedAt": "2026-03-01T00:00:00.000Z",
+      "sourceTurn": "t",
+      "source": "model_inferred",
+      "durable": true,
+      "category": "health",
+      "confidence": "medium"
+     },
+     {
+      "text": "x",
+      "extractedAt": "2026-03-01T00:00:00.000Z",
+      "sourceTurn": "t",
+      "source": "model_inferred",
+      "durable": true,
+      "category": "identity"
+     },
+     {
+      "text": "x",
+      "extractedAt": "2026-03-01T00:00:00.000Z",
+      "sourceTurn": "t",
+      "source": "model_inferred",
+      "durable": true,
+      "category": "preference"
+     },
+     {
+      "text": "x",
+      "extractedAt": "2026-03-01T00:00:00.000Z",
+      "sourceTurn": "t",
+      "source": "model_inferred",
+      "durable": true,
+      "category": "health"
+     },
+     {
+      "text": "x",
+      "extractedAt": "2026-03-01T00:00:00.000Z",
+      "sourceTurn": "t",
+      "source": "model_inferred",
+      "durable": false,
+      "category": "identity",
+      "confidence": "high"
+     },
+     {
+      "text": "x",
+      "extractedAt": "2026-03-01T00:00:00.000Z",
+      "sourceTurn": "t",
+      "source": "model_inferred",
+      "durable": false,
+      "category": "preference",
+      "confidence": "high"
+     },
+     {
+      "text": "x",
+      "extractedAt": "2026-03-01T00:00:00.000Z",
+      "sourceTurn": "t",
+      "source": "model_inferred",
+      "durable": false,
+      "category": "health",
+      "confidence": "high"
+     },
+     {
+      "text": "x",
+      "extractedAt": "2026-03-01T00:00:00.000Z",
+      "sourceTurn": "t",
+      "source": "model_inferred",
+      "durable": false,
+      "category": "identity",
+      "confidence": "medium"
+     },
+     {
+      "text": "x",
+      "extractedAt": "2026-03-01T00:00:00.000Z",
+      "sourceTurn": "t",
+      "source": "model_inferred",
+      "durable": false,
+      "category": "preference",
+      "confidence": "medium"
+     },
+     {
+      "text": "x",
+      "extractedAt": "2026-03-01T00:00:00.000Z",
+      "sourceTurn": "t",
+      "source": "model_inferred",
+      "durable": false,
+      "category": "health",
+      "confidence": "medium"
+     },
+     {
+      "text": "x",
+      "extractedAt": "2026-03-01T00:00:00.000Z",
+      "sourceTurn": "t",
+      "source": "model_inferred",
+      "durable": false,
+      "category": "identity"
+     },
+     {
+      "text": "x",
+      "extractedAt": "2026-03-01T00:00:00.000Z",
+      "sourceTurn": "t",
+      "source": "model_inferred",
+      "durable": false,
+      "category": "preference"
+     },
+     {
+      "text": "x",
+      "extractedAt": "2026-03-01T00:00:00.000Z",
+      "sourceTurn": "t",
+      "source": "model_inferred",
+      "durable": false,
+      "category": "health"
+     },
+     {
+      "text": "x",
+      "extractedAt": "2026-03-01T00:00:00.000Z",
+      "sourceTurn": "t",
+      "source": "model_inferred",
+      "durable": true,
+      "category": "identity",
+      "origin": "user",
+      "confidence": "high"
+     },
+     {
+      "text": "x",
+      "extractedAt": "2026-03-01T00:00:00.000Z",
+      "sourceTurn": "t",
+      "source": "model_inferred",
+      "durable": true,
+      "category": "preference",
+      "origin": "user",
+      "confidence": "high"
+     },
+     {
+      "text": "x",
+      "extractedAt": "2026-03-01T00:00:00.000Z",
+      "sourceTurn": "t",
+      "source": "model_inferred",
+      "durable": true,
+      "category": "health",
+      "origin": "user",
+      "confidence": "high"
+     },
+     {
+      "text": "x",
+      "extractedAt": "2026-03-01T00:00:00.000Z",
+      "sourceTurn": "t",
+      "source": "model_inferred",
+      "durable": true,
+      "category": "identity",
+      "origin": "user",
+      "confidence": "medium"
+     },
+     {
+      "text": "x",
+      "extractedAt": "2026-03-01T00:00:00.000Z",
+      "sourceTurn": "t",
+      "source": "model_inferred",
+      "durable": true,
+      "category": "preference",
+      "origin": "user",
+      "confidence": "medium"
+     },
+     {
+      "text": "x",
+      "extractedAt": "2026-03-01T00:00:00.000Z",
+      "sourceTurn": "t",
+      "source": "model_inferred",
+      "durable": true,
+      "category": "health",
+      "origin": "user",
+      "confidence": "medium"
+     },
+     {
+      "text": "x",
+      "extractedAt": "2026-03-01T00:00:00.000Z",
+      "sourceTurn": "t",
+      "source": "model_inferred",
+      "durable": true,
+      "category": "identity",
+      "origin": "user"
+     },
+     {
+      "text": "x",
+      "extractedAt": "2026-03-01T00:00:00.000Z",
+      "sourceTurn": "t",
+      "source": "model_inferred",
+      "durable": true,
+      "category": "preference",
+      "origin": "user"
+     },
+     {
+      "text": "x",
+      "extractedAt": "2026-03-01T00:00:00.000Z",
+      "sourceTurn": "t",
+      "source": "model_inferred",
+      "durable": true,
+      "category": "health",
+      "origin": "user"
+     },
+     {
+      "text": "x",
+      "extractedAt": "2026-03-01T00:00:00.000Z",
+      "sourceTurn": "t",
+      "source": "model_inferred",
+      "durable": false,
+      "category": "identity",
+      "origin": "user",
+      "confidence": "high"
+     },
+     {
+      "text": "x",
+      "extractedAt": "2026-03-01T00:00:00.000Z",
+      "sourceTurn": "t",
+      "source": "model_inferred",
+      "durable": false,
+      "category": "preference",
+      "origin": "user",
+      "confidence": "high"
+     },
+     {
+      "text": "x",
+      "extractedAt": "2026-03-01T00:00:00.000Z",
+      "sourceTurn": "t",
+      "source": "model_inferred",
+      "durable": false,
+      "category": "health",
+      "origin": "user",
+      "confidence": "high"
+     },
+     {
+      "text": "x",
+      "extractedAt": "2026-03-01T00:00:00.000Z",
+      "sourceTurn": "t",
+      "source": "model_inferred",
+      "durable": false,
+      "category": "identity",
+      "origin": "user",
+      "confidence": "medium"
+     },
+     {
+      "text": "x",
+      "extractedAt": "2026-03-01T00:00:00.000Z",
+      "sourceTurn": "t",
+      "source": "model_inferred",
+      "durable": false,
+      "category": "preference",
+      "origin": "user",
+      "confidence": "medium"
+     },
+     {
+      "text": "x",
+      "extractedAt": "2026-03-01T00:00:00.000Z",
+      "sourceTurn": "t",
+      "source": "model_inferred",
+      "durable": false,
+      "category": "health",
+      "origin": "user",
+      "confidence": "medium"
+     },
+     {
+      "text": "x",
+      "extractedAt": "2026-03-01T00:00:00.000Z",
+      "sourceTurn": "t",
+      "source": "model_inferred",
+      "durable": false,
+      "category": "identity",
+      "origin": "user"
+     },
+     {
+      "text": "x",
+      "extractedAt": "2026-03-01T00:00:00.000Z",
+      "sourceTurn": "t",
+      "source": "model_inferred",
+      "durable": false,
+      "category": "preference",
+      "origin": "user"
+     },
+     {
+      "text": "x",
+      "extractedAt": "2026-03-01T00:00:00.000Z",
+      "sourceTurn": "t",
+      "source": "model_inferred",
+      "durable": false,
+      "category": "health",
+      "origin": "user"
+     },
+     {
+      "text": "x",
+      "extractedAt": "2026-03-01T00:00:00.000Z",
+      "sourceTurn": "t",
+      "source": "model_inferred",
+      "durable": true,
+      "category": "identity",
+      "origin": "agent",
+      "confidence": "high"
+     },
+     {
+      "text": "x",
+      "extractedAt": "2026-03-01T00:00:00.000Z",
+      "sourceTurn": "t",
+      "source": "model_inferred",
+      "durable": true,
+      "category": "preference",
+      "origin": "agent",
+      "confidence": "high"
+     },
+     {
+      "text": "x",
+      "extractedAt": "2026-03-01T00:00:00.000Z",
+      "sourceTurn": "t",
+      "source": "model_inferred",
+      "durable": true,
+      "category": "health",
+      "origin": "agent",
+      "confidence": "high"
+     },
+     {
+      "text": "x",
+      "extractedAt": "2026-03-01T00:00:00.000Z",
+      "sourceTurn": "t",
+      "source": "model_inferred",
+      "durable": true,
+      "category": "identity",
+      "origin": "agent",
+      "confidence": "medium"
+     },
+     {
+      "text": "x",
+      "extractedAt": "2026-03-01T00:00:00.000Z",
+      "sourceTurn": "t",
+      "source": "model_inferred",
+      "durable": true,
+      "category": "preference",
+      "origin": "agent",
+      "confidence": "medium"
+     },
+     {
+      "text": "x",
+      "extractedAt": "2026-03-01T00:00:00.000Z",
+      "sourceTurn": "t",
+      "source": "model_inferred",
+      "durable": true,
+      "category": "health",
+      "origin": "agent",
+      "confidence": "medium"
+     },
+     {
+      "text": "x",
+      "extractedAt": "2026-03-01T00:00:00.000Z",
+      "sourceTurn": "t",
+      "source": "model_inferred",
+      "durable": true,
+      "category": "identity",
+      "origin": "agent"
+     },
+     {
+      "text": "x",
+      "extractedAt": "2026-03-01T00:00:00.000Z",
+      "sourceTurn": "t",
+      "source": "model_inferred",
+      "durable": true,
+      "category": "preference",
+      "origin": "agent"
+     },
+     {
+      "text": "x",
+      "extractedAt": "2026-03-01T00:00:00.000Z",
+      "sourceTurn": "t",
+      "source": "model_inferred",
+      "durable": true,
+      "category": "health",
+      "origin": "agent"
+     },
+     {
+      "text": "x",
+      "extractedAt": "2026-03-01T00:00:00.000Z",
+      "sourceTurn": "t",
+      "source": "model_inferred",
+      "durable": false,
+      "category": "identity",
+      "origin": "agent",
+      "confidence": "high"
+     },
+     {
+      "text": "x",
+      "extractedAt": "2026-03-01T00:00:00.000Z",
+      "sourceTurn": "t",
+      "source": "model_inferred",
+      "durable": false,
+      "category": "preference",
+      "origin": "agent",
+      "confidence": "high"
+     },
+     {
+      "text": "x",
+      "extractedAt": "2026-03-01T00:00:00.000Z",
+      "sourceTurn": "t",
+      "source": "model_inferred",
+      "durable": false,
+      "category": "health",
+      "origin": "agent",
+      "confidence": "high"
+     },
+     {
+      "text": "x",
+      "extractedAt": "2026-03-01T00:00:00.000Z",
+      "sourceTurn": "t",
+      "source": "model_inferred",
+      "durable": false,
+      "category": "identity",
+      "origin": "agent",
+      "confidence": "medium"
+     },
+     {
+      "text": "x",
+      "extractedAt": "2026-03-01T00:00:00.000Z",
+      "sourceTurn": "t",
+      "source": "model_inferred",
+      "durable": false,
+      "category": "preference",
+      "origin": "agent",
+      "confidence": "medium"
+     },
+     {
+      "text": "x",
+      "extractedAt": "2026-03-01T00:00:00.000Z",
+      "sourceTurn": "t",
+      "source": "model_inferred",
+      "durable": false,
+      "category": "health",
+      "origin": "agent",
+      "confidence": "medium"
+     },
+     {
+      "text": "x",
+      "extractedAt": "2026-03-01T00:00:00.000Z",
+      "sourceTurn": "t",
+      "source": "model_inferred",
+      "durable": false,
+      "category": "identity",
+      "origin": "agent"
+     },
+     {
+      "text": "x",
+      "extractedAt": "2026-03-01T00:00:00.000Z",
+      "sourceTurn": "t",
+      "source": "model_inferred",
+      "durable": false,
+      "category": "preference",
+      "origin": "agent"
+     },
+     {
+      "text": "x",
+      "extractedAt": "2026-03-01T00:00:00.000Z",
+      "sourceTurn": "t",
+      "source": "model_inferred",
+      "durable": false,
+      "category": "health",
+      "origin": "agent"
+     },
+     {
+      "text": "x",
+      "extractedAt": "2026-03-01T00:00:00.000Z",
+      "sourceTurn": "t",
+      "source": "observed",
+      "durable": true,
+      "category": "identity",
+      "confidence": "high"
+     },
+     {
+      "text": "x",
+      "extractedAt": "2026-03-01T00:00:00.000Z",
+      "sourceTurn": "t",
+      "source": "observed",
+      "durable": true,
+      "category": "preference",
+      "confidence": "high"
+     },
+     {
+      "text": "x",
+      "extractedAt": "2026-03-01T00:00:00.000Z",
+      "sourceTurn": "t",
+      "source": "observed",
+      "durable": true,
+      "category": "health",
+      "confidence": "high"
+     },
+     {
+      "text": "x",
+      "extractedAt": "2026-03-01T00:00:00.000Z",
+      "sourceTurn": "t",
+      "source": "observed",
+      "durable": true,
+      "category": "identity",
+      "confidence": "medium"
+     },
+     {
+      "text": "x",
+      "extractedAt": "2026-03-01T00:00:00.000Z",
+      "sourceTurn": "t",
+      "source": "observed",
+      "durable": true,
+      "category": "preference",
+      "confidence": "medium"
+     },
+     {
+      "text": "x",
+      "extractedAt": "2026-03-01T00:00:00.000Z",
+      "sourceTurn": "t",
+      "source": "observed",
+      "durable": true,
+      "category": "health",
+      "confidence": "medium"
+     },
+     {
+      "text": "x",
+      "extractedAt": "2026-03-01T00:00:00.000Z",
+      "sourceTurn": "t",
+      "source": "observed",
+      "durable": true,
+      "category": "identity"
+     },
+     {
+      "text": "x",
+      "extractedAt": "2026-03-01T00:00:00.000Z",
+      "sourceTurn": "t",
+      "source": "observed",
+      "durable": true,
+      "category": "preference"
+     },
+     {
+      "text": "x",
+      "extractedAt": "2026-03-01T00:00:00.000Z",
+      "sourceTurn": "t",
+      "source": "observed",
+      "durable": true,
+      "category": "health"
+     },
+     {
+      "text": "x",
+      "extractedAt": "2026-03-01T00:00:00.000Z",
+      "sourceTurn": "t",
+      "source": "observed",
+      "durable": false,
+      "category": "identity",
+      "confidence": "high"
+     },
+     {
+      "text": "x",
+      "extractedAt": "2026-03-01T00:00:00.000Z",
+      "sourceTurn": "t",
+      "source": "observed",
+      "durable": false,
+      "category": "preference",
+      "confidence": "high"
+     },
+     {
+      "text": "x",
+      "extractedAt": "2026-03-01T00:00:00.000Z",
+      "sourceTurn": "t",
+      "source": "observed",
+      "durable": false,
+      "category": "health",
+      "confidence": "high"
+     },
+     {
+      "text": "x",
+      "extractedAt": "2026-03-01T00:00:00.000Z",
+      "sourceTurn": "t",
+      "source": "observed",
+      "durable": false,
+      "category": "identity",
+      "confidence": "medium"
+     },
+     {
+      "text": "x",
+      "extractedAt": "2026-03-01T00:00:00.000Z",
+      "sourceTurn": "t",
+      "source": "observed",
+      "durable": false,
+      "category": "preference",
+      "confidence": "medium"
+     },
+     {
+      "text": "x",
+      "extractedAt": "2026-03-01T00:00:00.000Z",
+      "sourceTurn": "t",
+      "source": "observed",
+      "durable": false,
+      "category": "health",
+      "confidence": "medium"
+     },
+     {
+      "text": "x",
+      "extractedAt": "2026-03-01T00:00:00.000Z",
+      "sourceTurn": "t",
+      "source": "observed",
+      "durable": false,
+      "category": "identity"
+     },
+     {
+      "text": "x",
+      "extractedAt": "2026-03-01T00:00:00.000Z",
+      "sourceTurn": "t",
+      "source": "observed",
+      "durable": false,
+      "category": "preference"
+     },
+     {
+      "text": "x",
+      "extractedAt": "2026-03-01T00:00:00.000Z",
+      "sourceTurn": "t",
+      "source": "observed",
+      "durable": false,
+      "category": "health"
+     },
+     {
+      "text": "x",
+      "extractedAt": "2026-03-01T00:00:00.000Z",
+      "sourceTurn": "t",
+      "source": "observed",
+      "durable": true,
+      "category": "identity",
+      "origin": "user",
+      "confidence": "high"
+     },
+     {
+      "text": "x",
+      "extractedAt": "2026-03-01T00:00:00.000Z",
+      "sourceTurn": "t",
+      "source": "observed",
+      "durable": true,
+      "category": "preference",
+      "origin": "user",
+      "confidence": "high"
+     },
+     {
+      "text": "x",
+      "extractedAt": "2026-03-01T00:00:00.000Z",
+      "sourceTurn": "t",
+      "source": "observed",
+      "durable": true,
+      "category": "health",
+      "origin": "user",
+      "confidence": "high"
+     },
+     {
+      "text": "x",
+      "extractedAt": "2026-03-01T00:00:00.000Z",
+      "sourceTurn": "t",
+      "source": "observed",
+      "durable": true,
+      "category": "identity",
+      "origin": "user",
+      "confidence": "medium"
+     },
+     {
+      "text": "x",
+      "extractedAt": "2026-03-01T00:00:00.000Z",
+      "sourceTurn": "t",
+      "source": "observed",
+      "durable": true,
+      "category": "preference",
+      "origin": "user",
+      "confidence": "medium"
+     },
+     {
+      "text": "x",
+      "extractedAt": "2026-03-01T00:00:00.000Z",
+      "sourceTurn": "t",
+      "source": "observed",
+      "durable": true,
+      "category": "health",
+      "origin": "user",
+      "confidence": "medium"
+     },
+     {
+      "text": "x",
+      "extractedAt": "2026-03-01T00:00:00.000Z",
+      "sourceTurn": "t",
+      "source": "observed",
+      "durable": true,
+      "category": "identity",
+      "origin": "user"
+     },
+     {
+      "text": "x",
+      "extractedAt": "2026-03-01T00:00:00.000Z",
+      "sourceTurn": "t",
+      "source": "observed",
+      "durable": true,
+      "category": "preference",
+      "origin": "user"
+     },
+     {
+      "text": "x",
+      "extractedAt": "2026-03-01T00:00:00.000Z",
+      "sourceTurn": "t",
+      "source": "observed",
+      "durable": true,
+      "category": "health",
+      "origin": "user"
+     },
+     {
+      "text": "x",
+      "extractedAt": "2026-03-01T00:00:00.000Z",
+      "sourceTurn": "t",
+      "source": "observed",
+      "durable": false,
+      "category": "identity",
+      "origin": "user",
+      "confidence": "high"
+     },
+     {
+      "text": "x",
+      "extractedAt": "2026-03-01T00:00:00.000Z",
+      "sourceTurn": "t",
+      "source": "observed",
+      "durable": false,
+      "category": "preference",
+      "origin": "user",
+      "confidence": "high"
+     },
+     {
+      "text": "x",
+      "extractedAt": "2026-03-01T00:00:00.000Z",
+      "sourceTurn": "t",
+      "source": "observed",
+      "durable": false,
+      "category": "health",
+      "origin": "user",
+      "confidence": "high"
+     },
+     {
+      "text": "x",
+      "extractedAt": "2026-03-01T00:00:00.000Z",
+      "sourceTurn": "t",
+      "source": "observed",
+      "durable": false,
+      "category": "identity",
+      "origin": "user",
+      "confidence": "medium"
+     },
+     {
+      "text": "x",
+      "extractedAt": "2026-03-01T00:00:00.000Z",
+      "sourceTurn": "t",
+      "source": "observed",
+      "durable": false,
+      "category": "preference",
+      "origin": "user",
+      "confidence": "medium"
+     },
+     {
+      "text": "x",
+      "extractedAt": "2026-03-01T00:00:00.000Z",
+      "sourceTurn": "t",
+      "source": "observed",
+      "durable": false,
+      "category": "health",
+      "origin": "user",
+      "confidence": "medium"
+     },
+     {
+      "text": "x",
+      "extractedAt": "2026-03-01T00:00:00.000Z",
+      "sourceTurn": "t",
+      "source": "observed",
+      "durable": false,
+      "category": "identity",
+      "origin": "user"
+     },
+     {
+      "text": "x",
+      "extractedAt": "2026-03-01T00:00:00.000Z",
+      "sourceTurn": "t",
+      "source": "observed",
+      "durable": false,
+      "category": "preference",
+      "origin": "user"
+     },
+     {
+      "text": "x",
+      "extractedAt": "2026-03-01T00:00:00.000Z",
+      "sourceTurn": "t",
+      "source": "observed",
+      "durable": false,
+      "category": "health",
+      "origin": "user"
+     },
+     {
+      "text": "x",
+      "extractedAt": "2026-03-01T00:00:00.000Z",
+      "sourceTurn": "t",
+      "source": "observed",
+      "durable": true,
+      "category": "identity",
+      "origin": "agent",
+      "confidence": "high"
+     },
+     {
+      "text": "x",
+      "extractedAt": "2026-03-01T00:00:00.000Z",
+      "sourceTurn": "t",
+      "source": "observed",
+      "durable": true,
+      "category": "preference",
+      "origin": "agent",
+      "confidence": "high"
+     },
+     {
+      "text": "x",
+      "extractedAt": "2026-03-01T00:00:00.000Z",
+      "sourceTurn": "t",
+      "source": "observed",
+      "durable": true,
+      "category": "health",
+      "origin": "agent",
+      "confidence": "high"
+     },
+     {
+      "text": "x",
+      "extractedAt": "2026-03-01T00:00:00.000Z",
+      "sourceTurn": "t",
+      "source": "observed",
+      "durable": true,
+      "category": "identity",
+      "origin": "agent",
+      "confidence": "medium"
+     },
+     {
+      "text": "x",
+      "extractedAt": "2026-03-01T00:00:00.000Z",
+      "sourceTurn": "t",
+      "source": "observed",
+      "durable": true,
+      "category": "preference",
+      "origin": "agent",
+      "confidence": "medium"
+     },
+     {
+      "text": "x",
+      "extractedAt": "2026-03-01T00:00:00.000Z",
+      "sourceTurn": "t",
+      "source": "observed",
+      "durable": true,
+      "category": "health",
+      "origin": "agent",
+      "confidence": "medium"
+     },
+     {
+      "text": "x",
+      "extractedAt": "2026-03-01T00:00:00.000Z",
+      "sourceTurn": "t",
+      "source": "observed",
+      "durable": true,
+      "category": "identity",
+      "origin": "agent"
+     },
+     {
+      "text": "x",
+      "extractedAt": "2026-03-01T00:00:00.000Z",
+      "sourceTurn": "t",
+      "source": "observed",
+      "durable": true,
+      "category": "preference",
+      "origin": "agent"
+     },
+     {
+      "text": "x",
+      "extractedAt": "2026-03-01T00:00:00.000Z",
+      "sourceTurn": "t",
+      "source": "observed",
+      "durable": true,
+      "category": "health",
+      "origin": "agent"
+     },
+     {
+      "text": "x",
+      "extractedAt": "2026-03-01T00:00:00.000Z",
+      "sourceTurn": "t",
+      "source": "observed",
+      "durable": false,
+      "category": "identity",
+      "origin": "agent",
+      "confidence": "high"
+     },
+     {
+      "text": "x",
+      "extractedAt": "2026-03-01T00:00:00.000Z",
+      "sourceTurn": "t",
+      "source": "observed",
+      "durable": false,
+      "category": "preference",
+      "origin": "agent",
+      "confidence": "high"
+     },
+     {
+      "text": "x",
+      "extractedAt": "2026-03-01T00:00:00.000Z",
+      "sourceTurn": "t",
+      "source": "observed",
+      "durable": false,
+      "category": "health",
+      "origin": "agent",
+      "confidence": "high"
+     },
+     {
+      "text": "x",
+      "extractedAt": "2026-03-01T00:00:00.000Z",
+      "sourceTurn": "t",
+      "source": "observed",
+      "durable": false,
+      "category": "identity",
+      "origin": "agent",
+      "confidence": "medium"
+     },
+     {
+      "text": "x",
+      "extractedAt": "2026-03-01T00:00:00.000Z",
+      "sourceTurn": "t",
+      "source": "observed",
+      "durable": false,
+      "category": "preference",
+      "origin": "agent",
+      "confidence": "medium"
+     },
+     {
+      "text": "x",
+      "extractedAt": "2026-03-01T00:00:00.000Z",
+      "sourceTurn": "t",
+      "source": "observed",
+      "durable": false,
+      "category": "health",
+      "origin": "agent",
+      "confidence": "medium"
+     },
+     {
+      "text": "x",
+      "extractedAt": "2026-03-01T00:00:00.000Z",
+      "sourceTurn": "t",
+      "source": "observed",
+      "durable": false,
+      "category": "identity",
+      "origin": "agent"
+     },
+     {
+      "text": "x",
+      "extractedAt": "2026-03-01T00:00:00.000Z",
+      "sourceTurn": "t",
+      "source": "observed",
+      "durable": false,
+      "category": "preference",
+      "origin": "agent"
+     },
+     {
+      "text": "x",
+      "extractedAt": "2026-03-01T00:00:00.000Z",
+      "sourceTurn": "t",
+      "source": "observed",
+      "durable": false,
+      "category": "health",
+      "origin": "agent"
+     },
+     {
+      "text": "x",
+      "extractedAt": "2026-03-01T00:00:00.000Z",
+      "sourceTurn": "t",
+      "source": "externally_verified",
+      "durable": true,
+      "category": "identity",
+      "confidence": "high"
+     },
+     {
+      "text": "x",
+      "extractedAt": "2026-03-01T00:00:00.000Z",
+      "sourceTurn": "t",
+      "source": "externally_verified",
+      "durable": true,
+      "category": "preference",
+      "confidence": "high"
+     },
+     {
+      "text": "x",
+      "extractedAt": "2026-03-01T00:00:00.000Z",
+      "sourceTurn": "t",
+      "source": "externally_verified",
+      "durable": true,
+      "category": "health",
+      "confidence": "high"
+     },
+     {
+      "text": "x",
+      "extractedAt": "2026-03-01T00:00:00.000Z",
+      "sourceTurn": "t",
+      "source": "externally_verified",
+      "durable": true,
+      "category": "identity",
+      "confidence": "medium"
+     },
+     {
+      "text": "x",
+      "extractedAt": "2026-03-01T00:00:00.000Z",
+      "sourceTurn": "t",
+      "source": "externally_verified",
+      "durable": true,
+      "category": "preference",
+      "confidence": "medium"
+     },
+     {
+      "text": "x",
+      "extractedAt": "2026-03-01T00:00:00.000Z",
+      "sourceTurn": "t",
+      "source": "externally_verified",
+      "durable": true,
+      "category": "health",
+      "confidence": "medium"
+     },
+     {
+      "text": "x",
+      "extractedAt": "2026-03-01T00:00:00.000Z",
+      "sourceTurn": "t",
+      "source": "externally_verified",
+      "durable": true,
+      "category": "identity"
+     },
+     {
+      "text": "x",
+      "extractedAt": "2026-03-01T00:00:00.000Z",
+      "sourceTurn": "t",
+      "source": "externally_verified",
+      "durable": true,
+      "category": "preference"
+     },
+     {
+      "text": "x",
+      "extractedAt": "2026-03-01T00:00:00.000Z",
+      "sourceTurn": "t",
+      "source": "externally_verified",
+      "durable": true,
+      "category": "health"
+     },
+     {
+      "text": "x",
+      "extractedAt": "2026-03-01T00:00:00.000Z",
+      "sourceTurn": "t",
+      "source": "externally_verified",
+      "durable": false,
+      "category": "identity",
+      "confidence": "high"
+     },
+     {
+      "text": "x",
+      "extractedAt": "2026-03-01T00:00:00.000Z",
+      "sourceTurn": "t",
+      "source": "externally_verified",
+      "durable": false,
+      "category": "preference",
+      "confidence": "high"
+     },
+     {
+      "text": "x",
+      "extractedAt": "2026-03-01T00:00:00.000Z",
+      "sourceTurn": "t",
+      "source": "externally_verified",
+      "durable": false,
+      "category": "health",
+      "confidence": "high"
+     },
+     {
+      "text": "x",
+      "extractedAt": "2026-03-01T00:00:00.000Z",
+      "sourceTurn": "t",
+      "source": "externally_verified",
+      "durable": false,
+      "category": "identity",
+      "confidence": "medium"
+     },
+     {
+      "text": "x",
+      "extractedAt": "2026-03-01T00:00:00.000Z",
+      "sourceTurn": "t",
+      "source": "externally_verified",
+      "durable": false,
+      "category": "preference",
+      "confidence": "medium"
+     },
+     {
+      "text": "x",
+      "extractedAt": "2026-03-01T00:00:00.000Z",
+      "sourceTurn": "t",
+      "source": "externally_verified",
+      "durable": false,
+      "category": "health",
+      "confidence": "medium"
+     },
+     {
+      "text": "x",
+      "extractedAt": "2026-03-01T00:00:00.000Z",
+      "sourceTurn": "t",
+      "source": "externally_verified",
+      "durable": false,
+      "category": "identity"
+     },
+     {
+      "text": "x",
+      "extractedAt": "2026-03-01T00:00:00.000Z",
+      "sourceTurn": "t",
+      "source": "externally_verified",
+      "durable": false,
+      "category": "preference"
+     },
+     {
+      "text": "x",
+      "extractedAt": "2026-03-01T00:00:00.000Z",
+      "sourceTurn": "t",
+      "source": "externally_verified",
+      "durable": false,
+      "category": "health"
+     },
+     {
+      "text": "x",
+      "extractedAt": "2026-03-01T00:00:00.000Z",
+      "sourceTurn": "t",
+      "source": "externally_verified",
+      "durable": true,
+      "category": "identity",
+      "origin": "user",
+      "confidence": "high"
+     },
+     {
+      "text": "x",
+      "extractedAt": "2026-03-01T00:00:00.000Z",
+      "sourceTurn": "t",
+      "source": "externally_verified",
+      "durable": true,
+      "category": "preference",
+      "origin": "user",
+      "confidence": "high"
+     },
+     {
+      "text": "x",
+      "extractedAt": "2026-03-01T00:00:00.000Z",
+      "sourceTurn": "t",
+      "source": "externally_verified",
+      "durable": true,
+      "category": "health",
+      "origin": "user",
+      "confidence": "high"
+     },
+     {
+      "text": "x",
+      "extractedAt": "2026-03-01T00:00:00.000Z",
+      "sourceTurn": "t",
+      "source": "externally_verified",
+      "durable": true,
+      "category": "identity",
+      "origin": "user",
+      "confidence": "medium"
+     },
+     {
+      "text": "x",
+      "extractedAt": "2026-03-01T00:00:00.000Z",
+      "sourceTurn": "t",
+      "source": "externally_verified",
+      "durable": true,
+      "category": "preference",
+      "origin": "user",
+      "confidence": "medium"
+     },
+     {
+      "text": "x",
+      "extractedAt": "2026-03-01T00:00:00.000Z",
+      "sourceTurn": "t",
+      "source": "externally_verified",
+      "durable": true,
+      "category": "health",
+      "origin": "user",
+      "confidence": "medium"
+     },
+     {
+      "text": "x",
+      "extractedAt": "2026-03-01T00:00:00.000Z",
+      "sourceTurn": "t",
+      "source": "externally_verified",
+      "durable": true,
+      "category": "identity",
+      "origin": "user"
+     },
+     {
+      "text": "x",
+      "extractedAt": "2026-03-01T00:00:00.000Z",
+      "sourceTurn": "t",
+      "source": "externally_verified",
+      "durable": true,
+      "category": "preference",
+      "origin": "user"
+     },
+     {
+      "text": "x",
+      "extractedAt": "2026-03-01T00:00:00.000Z",
+      "sourceTurn": "t",
+      "source": "externally_verified",
+      "durable": true,
+      "category": "health",
+      "origin": "user"
+     },
+     {
+      "text": "x",
+      "extractedAt": "2026-03-01T00:00:00.000Z",
+      "sourceTurn": "t",
+      "source": "externally_verified",
+      "durable": false,
+      "category": "identity",
+      "origin": "user",
+      "confidence": "high"
+     },
+     {
+      "text": "x",
+      "extractedAt": "2026-03-01T00:00:00.000Z",
+      "sourceTurn": "t",
+      "source": "externally_verified",
+      "durable": false,
+      "category": "preference",
+      "origin": "user",
+      "confidence": "high"
+     },
+     {
+      "text": "x",
+      "extractedAt": "2026-03-01T00:00:00.000Z",
+      "sourceTurn": "t",
+      "source": "externally_verified",
+      "durable": false,
+      "category": "health",
+      "origin": "user",
+      "confidence": "high"
+     },
+     {
+      "text": "x",
+      "extractedAt": "2026-03-01T00:00:00.000Z",
+      "sourceTurn": "t",
+      "source": "externally_verified",
+      "durable": false,
+      "category": "identity",
+      "origin": "user",
+      "confidence": "medium"
+     },
+     {
+      "text": "x",
+      "extractedAt": "2026-03-01T00:00:00.000Z",
+      "sourceTurn": "t",
+      "source": "externally_verified",
+      "durable": false,
+      "category": "preference",
+      "origin": "user",
+      "confidence": "medium"
+     },
+     {
+      "text": "x",
+      "extractedAt": "2026-03-01T00:00:00.000Z",
+      "sourceTurn": "t",
+      "source": "externally_verified",
+      "durable": false,
+      "category": "health",
+      "origin": "user",
+      "confidence": "medium"
+     },
+     {
+      "text": "x",
+      "extractedAt": "2026-03-01T00:00:00.000Z",
+      "sourceTurn": "t",
+      "source": "externally_verified",
+      "durable": false,
+      "category": "identity",
+      "origin": "user"
+     },
+     {
+      "text": "x",
+      "extractedAt": "2026-03-01T00:00:00.000Z",
+      "sourceTurn": "t",
+      "source": "externally_verified",
+      "durable": false,
+      "category": "preference",
+      "origin": "user"
+     },
+     {
+      "text": "x",
+      "extractedAt": "2026-03-01T00:00:00.000Z",
+      "sourceTurn": "t",
+      "source": "externally_verified",
+      "durable": false,
+      "category": "health",
+      "origin": "user"
+     },
+     {
+      "text": "x",
+      "extractedAt": "2026-03-01T00:00:00.000Z",
+      "sourceTurn": "t",
+      "source": "externally_verified",
+      "durable": true,
+      "category": "identity",
+      "origin": "agent",
+      "confidence": "high"
+     },
+     {
+      "text": "x",
+      "extractedAt": "2026-03-01T00:00:00.000Z",
+      "sourceTurn": "t",
+      "source": "externally_verified",
+      "durable": true,
+      "category": "preference",
+      "origin": "agent",
+      "confidence": "high"
+     },
+     {
+      "text": "x",
+      "extractedAt": "2026-03-01T00:00:00.000Z",
+      "sourceTurn": "t",
+      "source": "externally_verified",
+      "durable": true,
+      "category": "health",
+      "origin": "agent",
+      "confidence": "high"
+     },
+     {
+      "text": "x",
+      "extractedAt": "2026-03-01T00:00:00.000Z",
+      "sourceTurn": "t",
+      "source": "externally_verified",
+      "durable": true,
+      "category": "identity",
+      "origin": "agent",
+      "confidence": "medium"
+     },
+     {
+      "text": "x",
+      "extractedAt": "2026-03-01T00:00:00.000Z",
+      "sourceTurn": "t",
+      "source": "externally_verified",
+      "durable": true,
+      "category": "preference",
+      "origin": "agent",
+      "confidence": "medium"
+     },
+     {
+      "text": "x",
+      "extractedAt": "2026-03-01T00:00:00.000Z",
+      "sourceTurn": "t",
+      "source": "externally_verified",
+      "durable": true,
+      "category": "health",
+      "origin": "agent",
+      "confidence": "medium"
+     },
+     {
+      "text": "x",
+      "extractedAt": "2026-03-01T00:00:00.000Z",
+      "sourceTurn": "t",
+      "source": "externally_verified",
+      "durable": true,
+      "category": "identity",
+      "origin": "agent"
+     },
+     {
+      "text": "x",
+      "extractedAt": "2026-03-01T00:00:00.000Z",
+      "sourceTurn": "t",
+      "source": "externally_verified",
+      "durable": true,
+      "category": "preference",
+      "origin": "agent"
+     },
+     {
+      "text": "x",
+      "extractedAt": "2026-03-01T00:00:00.000Z",
+      "sourceTurn": "t",
+      "source": "externally_verified",
+      "durable": true,
+      "category": "health",
+      "origin": "agent"
+     },
+     {
+      "text": "x",
+      "extractedAt": "2026-03-01T00:00:00.000Z",
+      "sourceTurn": "t",
+      "source": "externally_verified",
+      "durable": false,
+      "category": "identity",
+      "origin": "agent",
+      "confidence": "high"
+     },
+     {
+      "text": "x",
+      "extractedAt": "2026-03-01T00:00:00.000Z",
+      "sourceTurn": "t",
+      "source": "externally_verified",
+      "durable": false,
+      "category": "preference",
+      "origin": "agent",
+      "confidence": "high"
+     },
+     {
+      "text": "x",
+      "extractedAt": "2026-03-01T00:00:00.000Z",
+      "sourceTurn": "t",
+      "source": "externally_verified",
+      "durable": false,
+      "category": "health",
+      "origin": "agent",
+      "confidence": "high"
+     },
+     {
+      "text": "x",
+      "extractedAt": "2026-03-01T00:00:00.000Z",
+      "sourceTurn": "t",
+      "source": "externally_verified",
+      "durable": false,
+      "category": "identity",
+      "origin": "agent",
+      "confidence": "medium"
+     },
+     {
+      "text": "x",
+      "extractedAt": "2026-03-01T00:00:00.000Z",
+      "sourceTurn": "t",
+      "source": "externally_verified",
+      "durable": false,
+      "category": "preference",
+      "origin": "agent",
+      "confidence": "medium"
+     },
+     {
+      "text": "x",
+      "extractedAt": "2026-03-01T00:00:00.000Z",
+      "sourceTurn": "t",
+      "source": "externally_verified",
+      "durable": false,
+      "category": "health",
+      "origin": "agent",
+      "confidence": "medium"
+     },
+     {
+      "text": "x",
+      "extractedAt": "2026-03-01T00:00:00.000Z",
+      "sourceTurn": "t",
+      "source": "externally_verified",
+      "durable": false,
+      "category": "identity",
+      "origin": "agent"
+     },
+     {
+      "text": "x",
+      "extractedAt": "2026-03-01T00:00:00.000Z",
+      "sourceTurn": "t",
+      "source": "externally_verified",
+      "durable": false,
+      "category": "preference",
+      "origin": "agent"
+     },
+     {
+      "text": "x",
+      "extractedAt": "2026-03-01T00:00:00.000Z",
+      "sourceTurn": "t",
+      "source": "externally_verified",
+      "durable": false,
+      "category": "health",
+      "origin": "agent"
+     }
+    ]
+   }
+  }
+ ],
+ "expected": {
+  "steps": [
+   {
+    "tiers": [
+     {
+      "tier": "identity",
+      "knowledge": true
+     },
+     {
+      "tier": "preference",
+      "knowledge": true
+     },
+     {
+      "tier": "semantic",
+      "knowledge": true
+     },
+     {
+      "tier": "identity",
+      "knowledge": true
+     },
+     {
+      "tier": "preference",
+      "knowledge": true
+     },
+     {
+      "tier": "semantic",
+      "knowledge": true
+     },
+     {
+      "tier": "identity",
+      "knowledge": true
+     },
+     {
+      "tier": "preference",
+      "knowledge": true
+     },
+     {
+      "tier": "semantic",
+      "knowledge": true
+     },
+     {
+      "tier": "semantic",
+      "knowledge": true
+     },
+     {
+      "tier": "semantic",
+      "knowledge": true
+     },
+     {
+      "tier": "semantic",
+      "knowledge": true
+     },
+     {
+      "tier": "semantic",
+      "knowledge": true
+     },
+     {
+      "tier": "semantic",
+      "knowledge": true
+     },
+     {
+      "tier": "semantic",
+      "knowledge": true
+     },
+     {
+      "tier": "semantic",
+      "knowledge": true
+     },
+     {
+      "tier": "semantic",
+      "knowledge": true
+     },
+     {
+      "tier": "semantic",
+      "knowledge": true
+     },
+     {
+      "tier": "identity",
+      "knowledge": true
+     },
+     {
+      "tier": "preference",
+      "knowledge": true
+     },
+     {
+      "tier": "semantic",
+      "knowledge": true
+     },
+     {
+      "tier": "identity",
+      "knowledge": true
+     },
+     {
+      "tier": "preference",
+      "knowledge": true
+     },
+     {
+      "tier": "semantic",
+      "knowledge": true
+     },
+     {
+      "tier": "identity",
+      "knowledge": true
+     },
+     {
+      "tier": "preference",
+      "knowledge": true
+     },
+     {
+      "tier": "semantic",
+      "knowledge": true
+     },
+     {
+      "tier": "semantic",
+      "knowledge": true
+     },
+     {
+      "tier": "semantic",
+      "knowledge": true
+     },
+     {
+      "tier": "semantic",
+      "knowledge": true
+     },
+     {
+      "tier": "semantic",
+      "knowledge": true
+     },
+     {
+      "tier": "semantic",
+      "knowledge": true
+     },
+     {
+      "tier": "semantic",
+      "knowledge": true
+     },
+     {
+      "tier": "semantic",
+      "knowledge": true
+     },
+     {
+      "tier": "semantic",
+      "knowledge": true
+     },
+     {
+      "tier": "semantic",
+      "knowledge": true
+     },
+     {
+      "tier": "episodic",
+      "knowledge": false
+     },
+     {
+      "tier": "episodic",
+      "knowledge": false
+     },
+     {
+      "tier": "episodic",
+      "knowledge": false
+     },
+     {
+      "tier": "episodic",
+      "knowledge": false
+     },
+     {
+      "tier": "episodic",
+      "knowledge": false
+     },
+     {
+      "tier": "episodic",
+      "knowledge": false
+     },
+     {
+      "tier": "episodic",
+      "knowledge": false
+     },
+     {
+      "tier": "episodic",
+      "knowledge": false
+     },
+     {
+      "tier": "episodic",
+      "knowledge": false
+     },
+     {
+      "tier": "episodic",
+      "knowledge": false
+     },
+     {
+      "tier": "episodic",
+      "knowledge": false
+     },
+     {
+      "tier": "episodic",
+      "knowledge": false
+     },
+     {
+      "tier": "episodic",
+      "knowledge": false
+     },
+     {
+      "tier": "episodic",
+      "knowledge": false
+     },
+     {
+      "tier": "episodic",
+      "knowledge": false
+     },
+     {
+      "tier": "episodic",
+      "knowledge": false
+     },
+     {
+      "tier": "episodic",
+      "knowledge": false
+     },
+     {
+      "tier": "episodic",
+      "knowledge": false
+     },
+     {
+      "tier": "identity",
+      "knowledge": true
+     },
+     {
+      "tier": "preference",
+      "knowledge": true
+     },
+     {
+      "tier": "semantic",
+      "knowledge": true
+     },
+     {
+      "tier": "episodic",
+      "knowledge": false
+     },
+     {
+      "tier": "episodic",
+      "knowledge": false
+     },
+     {
+      "tier": "episodic",
+      "knowledge": false
+     },
+     {
+      "tier": "episodic",
+      "knowledge": false
+     },
+     {
+      "tier": "episodic",
+      "knowledge": false
+     },
+     {
+      "tier": "episodic",
+      "knowledge": false
+     },
+     {
+      "tier": "episodic",
+      "knowledge": false
+     },
+     {
+      "tier": "episodic",
+      "knowledge": false
+     },
+     {
+      "tier": "episodic",
+      "knowledge": false
+     },
+     {
+      "tier": "episodic",
+      "knowledge": false
+     },
+     {
+      "tier": "episodic",
+      "knowledge": false
+     },
+     {
+      "tier": "episodic",
+      "knowledge": false
+     },
+     {
+      "tier": "episodic",
+      "knowledge": false
+     },
+     {
+      "tier": "episodic",
+      "knowledge": false
+     },
+     {
+      "tier": "episodic",
+      "knowledge": false
+     },
+     {
+      "tier": "identity",
+      "knowledge": true
+     },
+     {
+      "tier": "preference",
+      "knowledge": true
+     },
+     {
+      "tier": "semantic",
+      "knowledge": true
+     },
+     {
+      "tier": "episodic",
+      "knowledge": false
+     },
+     {
+      "tier": "episodic",
+      "knowledge": false
+     },
+     {
+      "tier": "episodic",
+      "knowledge": false
+     },
+     {
+      "tier": "episodic",
+      "knowledge": false
+     },
+     {
+      "tier": "episodic",
+      "knowledge": false
+     },
+     {
+      "tier": "episodic",
+      "knowledge": false
+     },
+     {
+      "tier": "episodic",
+      "knowledge": false
+     },
+     {
+      "tier": "episodic",
+      "knowledge": false
+     },
+     {
+      "tier": "episodic",
+      "knowledge": false
+     },
+     {
+      "tier": "episodic",
+      "knowledge": false
+     },
+     {
+      "tier": "episodic",
+      "knowledge": false
+     },
+     {
+      "tier": "episodic",
+      "knowledge": false
+     },
+     {
+      "tier": "episodic",
+      "knowledge": false
+     },
+     {
+      "tier": "episodic",
+      "knowledge": false
+     },
+     {
+      "tier": "episodic",
+      "knowledge": false
+     },
+     {
+      "tier": "episodic",
+      "knowledge": false
+     },
+     {
+      "tier": "episodic",
+      "knowledge": false
+     },
+     {
+      "tier": "episodic",
+      "knowledge": false
+     },
+     {
+      "tier": "episodic",
+      "knowledge": false
+     },
+     {
+      "tier": "episodic",
+      "knowledge": false
+     },
+     {
+      "tier": "episodic",
+      "knowledge": false
+     },
+     {
+      "tier": "episodic",
+      "knowledge": false
+     },
+     {
+      "tier": "episodic",
+      "knowledge": false
+     },
+     {
+      "tier": "episodic",
+      "knowledge": false
+     },
+     {
+      "tier": "episodic",
+      "knowledge": false
+     },
+     {
+      "tier": "episodic",
+      "knowledge": false
+     },
+     {
+      "tier": "episodic",
+      "knowledge": false
+     },
+     {
+      "tier": "episodic",
+      "knowledge": false
+     },
+     {
+      "tier": "episodic",
+      "knowledge": false
+     },
+     {
+      "tier": "episodic",
+      "knowledge": false
+     },
+     {
+      "tier": "episodic",
+      "knowledge": false
+     },
+     {
+      "tier": "episodic",
+      "knowledge": false
+     },
+     {
+      "tier": "episodic",
+      "knowledge": false
+     },
+     {
+      "tier": "episodic",
+      "knowledge": false
+     },
+     {
+      "tier": "episodic",
+      "knowledge": false
+     },
+     {
+      "tier": "episodic",
+      "knowledge": false
+     },
+     {
+      "tier": "episodic",
+      "knowledge": false
+     },
+     {
+      "tier": "episodic",
+      "knowledge": false
+     },
+     {
+      "tier": "episodic",
+      "knowledge": false
+     },
+     {
+      "tier": "episodic",
+      "knowledge": false
+     },
+     {
+      "tier": "episodic",
+      "knowledge": false
+     },
+     {
+      "tier": "episodic",
+      "knowledge": false
+     },
+     {
+      "tier": "episodic",
+      "knowledge": false
+     },
+     {
+      "tier": "episodic",
+      "knowledge": false
+     },
+     {
+      "tier": "episodic",
+      "knowledge": false
+     },
+     {
+      "tier": "episodic",
+      "knowledge": false
+     },
+     {
+      "tier": "episodic",
+      "knowledge": false
+     },
+     {
+      "tier": "episodic",
+      "knowledge": false
+     },
+     {
+      "tier": "episodic",
+      "knowledge": false
+     },
+     {
+      "tier": "episodic",
+      "knowledge": false
+     },
+     {
+      "tier": "episodic",
+      "knowledge": false
+     },
+     {
+      "tier": "episodic",
+      "knowledge": false
+     },
+     {
+      "tier": "episodic",
+      "knowledge": false
+     },
+     {
+      "tier": "episodic",
+      "knowledge": false
+     },
+     {
+      "tier": "episodic",
+      "knowledge": false
+     },
+     {
+      "tier": "episodic",
+      "knowledge": false
+     },
+     {
+      "tier": "episodic",
+      "knowledge": false
+     },
+     {
+      "tier": "episodic",
+      "knowledge": false
+     },
+     {
+      "tier": "episodic",
+      "knowledge": false
+     },
+     {
+      "tier": "episodic",
+      "knowledge": false
+     },
+     {
+      "tier": "episodic",
+      "knowledge": false
+     },
+     {
+      "tier": "episodic",
+      "knowledge": false
+     },
+     {
+      "tier": "episodic",
+      "knowledge": false
+     },
+     {
+      "tier": "episodic",
+      "knowledge": false
+     },
+     {
+      "tier": "episodic",
+      "knowledge": false
+     },
+     {
+      "tier": "episodic",
+      "knowledge": false
+     },
+     {
+      "tier": "episodic",
+      "knowledge": false
+     },
+     {
+      "tier": "episodic",
+      "knowledge": false
+     },
+     {
+      "tier": "episodic",
+      "knowledge": false
+     },
+     {
+      "tier": "episodic",
+      "knowledge": false
+     },
+     {
+      "tier": "episodic",
+      "knowledge": false
+     },
+     {
+      "tier": "episodic",
+      "knowledge": false
+     },
+     {
+      "tier": "episodic",
+      "knowledge": false
+     },
+     {
+      "tier": "episodic",
+      "knowledge": false
+     },
+     {
+      "tier": "episodic",
+      "knowledge": false
+     },
+     {
+      "tier": "episodic",
+      "knowledge": false
+     },
+     {
+      "tier": "episodic",
+      "knowledge": false
+     },
+     {
+      "tier": "episodic",
+      "knowledge": false
+     },
+     {
+      "tier": "episodic",
+      "knowledge": false
+     },
+     {
+      "tier": "episodic",
+      "knowledge": false
+     },
+     {
+      "tier": "episodic",
+      "knowledge": false
+     },
+     {
+      "tier": "episodic",
+      "knowledge": false
+     },
+     {
+      "tier": "episodic",
+      "knowledge": false
+     },
+     {
+      "tier": "episodic",
+      "knowledge": false
+     },
+     {
+      "tier": "episodic",
+      "knowledge": false
+     },
+     {
+      "tier": "episodic",
+      "knowledge": false
+     },
+     {
+      "tier": "episodic",
+      "knowledge": false
+     },
+     {
+      "tier": "identity",
+      "knowledge": true
+     },
+     {
+      "tier": "preference",
+      "knowledge": true
+     },
+     {
+      "tier": "semantic",
+      "knowledge": true
+     },
+     {
+      "tier": "identity",
+      "knowledge": true
+     },
+     {
+      "tier": "preference",
+      "knowledge": true
+     },
+     {
+      "tier": "semantic",
+      "knowledge": true
+     },
+     {
+      "tier": "identity",
+      "knowledge": true
+     },
+     {
+      "tier": "preference",
+      "knowledge": true
+     },
+     {
+      "tier": "semantic",
+      "knowledge": true
+     },
+     {
+      "tier": "semantic",
+      "knowledge": true
+     },
+     {
+      "tier": "semantic",
+      "knowledge": true
+     },
+     {
+      "tier": "semantic",
+      "knowledge": true
+     },
+     {
+      "tier": "semantic",
+      "knowledge": true
+     },
+     {
+      "tier": "semantic",
+      "knowledge": true
+     },
+     {
+      "tier": "semantic",
+      "knowledge": true
+     },
+     {
+      "tier": "semantic",
+      "knowledge": true
+     },
+     {
+      "tier": "semantic",
+      "knowledge": true
+     },
+     {
+      "tier": "semantic",
+      "knowledge": true
+     },
+     {
+      "tier": "identity",
+      "knowledge": true
+     },
+     {
+      "tier": "preference",
+      "knowledge": true
+     },
+     {
+      "tier": "semantic",
+      "knowledge": true
+     },
+     {
+      "tier": "identity",
+      "knowledge": true
+     },
+     {
+      "tier": "preference",
+      "knowledge": true
+     },
+     {
+      "tier": "semantic",
+      "knowledge": true
+     },
+     {
+      "tier": "identity",
+      "knowledge": true
+     },
+     {
+      "tier": "preference",
+      "knowledge": true
+     },
+     {
+      "tier": "semantic",
+      "knowledge": true
+     },
+     {
+      "tier": "semantic",
+      "knowledge": true
+     },
+     {
+      "tier": "semantic",
+      "knowledge": true
+     },
+     {
+      "tier": "semantic",
+      "knowledge": true
+     },
+     {
+      "tier": "semantic",
+      "knowledge": true
+     },
+     {
+      "tier": "semantic",
+      "knowledge": true
+     },
+     {
+      "tier": "semantic",
+      "knowledge": true
+     },
+     {
+      "tier": "semantic",
+      "knowledge": true
+     },
+     {
+      "tier": "semantic",
+      "knowledge": true
+     },
+     {
+      "tier": "semantic",
+      "knowledge": true
+     },
+     {
+      "tier": "episodic",
+      "knowledge": false
+     },
+     {
+      "tier": "episodic",
+      "knowledge": false
+     },
+     {
+      "tier": "episodic",
+      "knowledge": false
+     },
+     {
+      "tier": "episodic",
+      "knowledge": false
+     },
+     {
+      "tier": "episodic",
+      "knowledge": false
+     },
+     {
+      "tier": "episodic",
+      "knowledge": false
+     },
+     {
+      "tier": "episodic",
+      "knowledge": false
+     },
+     {
+      "tier": "episodic",
+      "knowledge": false
+     },
+     {
+      "tier": "episodic",
+      "knowledge": false
+     },
+     {
+      "tier": "episodic",
+      "knowledge": false
+     },
+     {
+      "tier": "episodic",
+      "knowledge": false
+     },
+     {
+      "tier": "episodic",
+      "knowledge": false
+     },
+     {
+      "tier": "episodic",
+      "knowledge": false
+     },
+     {
+      "tier": "episodic",
+      "knowledge": false
+     },
+     {
+      "tier": "episodic",
+      "knowledge": false
+     },
+     {
+      "tier": "episodic",
+      "knowledge": false
+     },
+     {
+      "tier": "episodic",
+      "knowledge": false
+     },
+     {
+      "tier": "episodic",
+      "knowledge": false
+     }
+    ]
+   }
+  ]
+ }
+}

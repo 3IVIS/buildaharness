@@ -145,6 +145,7 @@ from maf_adapter import compile_maf  # noqa: E402
 from marketplace_api import router as marketplace_router  # noqa: E402
 from marketplace_api import seed_marketplace  # noqa: E402
 from mastra_adapter import compile_mastra  # noqa: E402
+from memory_api import router as memory_router  # noqa: E402
 from org_context import Org  # noqa: E402
 from org_context import current_org as _current_org_dep  # noqa: E402
 from orgs_api import router as orgs_router  # noqa: E402
@@ -238,6 +239,7 @@ app.include_router(run_router)
 app.include_router(teams_router)
 app.include_router(eval_router)
 app.include_router(prompts_router)
+app.include_router(memory_router)
 app.include_router(a2a_wk_router)
 app.include_router(a2a_tasks_router)
 # A2A-only deploy must be mounted before the unified deploy router so

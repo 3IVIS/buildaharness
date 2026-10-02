@@ -1,0 +1,49 @@
+{
+ "description": "Unkeyed facts accumulate (a restated unkeyed fact is a second entry).",
+ "flags": {
+  "writeGate": false,
+  "auditLog": true
+ },
+ "config": {},
+ "clock": [
+  "2026-03-01T00:00:00.000Z"
+ ],
+ "initial": {},
+ "steps": [
+  {
+   "call": "record_facts",
+   "args": {
+    "sessionId": "s1",
+    "candidates": [
+     {
+      "text": "The user owns a dog",
+      "durable": true,
+      "confidence": "high",
+      "category": "other"
+     },
+     {
+      "text": "The user owns a dog",
+      "durable": true,
+      "confidence": "high",
+      "category": "other"
+     }
+    ]
+   }
+  }
+ ],
+ "expected": {
+  "final": {
+   "facts:durable": [
+    {
+     "text": "The user owns a dog"
+    },
+    {
+     "text": "The user owns a dog"
+    }
+   ],
+   "facts:retired": {
+    "$absent": true
+   }
+  }
+ }
+}

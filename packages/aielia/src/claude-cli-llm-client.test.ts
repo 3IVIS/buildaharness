@@ -143,6 +143,22 @@ describe('ClaudeCliLLMClient', () => {
     expect(spawnMock).not.toHaveBeenCalled()
   })
 
+  it('callChatStructured with only recall_memory on offered (AUDIT_RECALL_TOOL) does not throw the missing-tool-family error', async () => {
+    const prior = process.env.AUDIT_RECALL_TOOL
+    process.env.AUDIT_RECALL_TOOL = '1'
+    try {
+      spawnMock.mockImplementation(() => fakeClaudeProcess(JSON.stringify({ result: 'ok' })))
+      const client = new ClaudeCliLLMClient()
+      await expect(
+        client.callChatStructured([{ role: 'user', content: 'hi' }], [{ name: 'recall_memory', input_schema: {} }]),
+      ).resolves.toBeDefined()
+      expect(spawnMock).toHaveBeenCalled()
+    } finally {
+      if (prior === undefined) delete process.env.AUDIT_RECALL_TOOL
+      else process.env.AUDIT_RECALL_TOOL = prior
+    }
+  })
+
   it('callChatStructured with fileTools configured passes --mcp-config, --strict-mcp-config, --dangerously-skip-permissions, and still --tools ""', async () => {
     const workspaceRoot = await mkdtemp(join(tmpdir(), 'cli-llm-test-'))
     try {

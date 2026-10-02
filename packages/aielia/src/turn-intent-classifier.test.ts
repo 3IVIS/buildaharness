@@ -15,8 +15,10 @@ class StructuredOnlyLLMClient implements ILLMClient {
     return ''
   }
 
+  receivedOptions: (ChatOptions | undefined)[] = []
   async callChatStructured(messages: ChatMessage[], _tools?: ToolDefinition[], _options?: ChatOptions): Promise<LLMStructuredResponse> {
     this.calls++
+    this.receivedOptions.push(_options)
     this.receivedMessages.push(messages)
     return { content: this.content }
   }
@@ -642,5 +644,49 @@ describe('continuesPlan', () => {
     expect(await run({ continuesPlan: false, isAbandonRequest: true }, true)).toBeUndefined()
     expect(await run({}, true)).toBeUndefined()
     expect(await run({ continuesPlan: 'no' }, true)).toBeUndefined()
+  })
+})
+
+describe('classifyTurnIntent: write-gate judgements are required', () => {
+  it('requires containsSecret and looksLikeInstruction on every stated fact so the M2 gate never fails closed on an omission', async () => {
+    const llm = new StructuredOnlyLLMClient('{}')
+    await classifyTurnIntent('msg', llm, NO_PLAN)
+    const schema = llm.receivedOptions[0]?.structuredOutput?.schema as { properties: { statesDurableFacts: { items: { required: string[] } } } }
+    expect(schema.properties.statesDurableFacts.items.required).toEqual(expect.arrayContaining(['containsSecret', 'looksLikeInstruction']))
+    expect(JSON.stringify(llm.receivedMessages[0])).toContain('ALWAYS include it')
+  })
+})
+
+describe('classifyTurnIntent — changing attributes under AUDIT_MEMORY_BUDGETED_RENDER (M1)', () => {
+  const systemFor = async (flag: string | undefined): Promise<string> => {
+    const prev = process.env.AUDIT_MEMORY_BUDGETED_RENDER
+    if (flag === undefined) delete process.env.AUDIT_MEMORY_BUDGETED_RENDER
+    else process.env.AUDIT_MEMORY_BUDGETED_RENDER = flag
+    try {
+      const llm = new StructuredOnlyLLMClient(response({ isTrivial: false }))
+      await classifyTurnIntent('Hi.', llm, NO_PLAN)
+      return llm.receivedMessages[0].find((m) => m.role === 'system')?.content ?? ''
+    } finally {
+      if (prev === undefined) delete process.env.AUDIT_MEMORY_BUDGETED_RENDER
+      else process.env.AUDIT_MEMORY_BUDGETED_RENDER = prev
+    }
+  }
+
+  it('flag =0 (legacy): the base wording is unchanged (a changing attribute is not durable)', async () => {
+    const system = await systemFor('0')
+    expect(system).toContain('false for something expected to change (current location, current job')
+    expect(system).not.toContain('team size) that you give a `key` is also `durable: true`')
+  })
+
+  it('default (env unset) is ON: the keyed wording is used', async () => {
+    const system = await systemFor(undefined)
+    expect(system).not.toContain('false for something expected to change')
+    expect(system).toContain('team size) that you give a `key` is also `durable: true`')
+  })
+
+  it('flag on: a keyed changing attribute (location, job, team size) is durable so supersession can replace it', async () => {
+    const system = await systemFor('1')
+    expect(system).not.toContain('false for something expected to change')
+    expect(system).toContain('team size) that you give a `key` is also `durable: true`')
   })
 })

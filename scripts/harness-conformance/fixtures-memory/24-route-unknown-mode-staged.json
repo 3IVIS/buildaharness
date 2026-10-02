@@ -1,0 +1,92 @@
+{
+ "description": "An unknown, absent, wrongly-cased or non-string write mode resolves to staged (never widens authority).",
+ "flags": {
+  "writeGate": false,
+  "auditLog": true
+ },
+ "config": {},
+ "clock": [
+  "2026-03-01T00:00:00.000Z"
+ ],
+ "initial": {},
+ "steps": [
+  {
+   "call": "route",
+   "args": {
+    "rows": [
+     {
+      "writer": "digest",
+      "source": "model_inferred",
+      "durable": true,
+      "confidence": "high",
+      "mode": "banana"
+     },
+     {
+      "writer": "digest",
+      "source": "model_inferred",
+      "durable": true,
+      "confidence": "high",
+      "mode": "AUTO"
+     },
+     {
+      "writer": "digest",
+      "source": "model_inferred",
+      "durable": true,
+      "confidence": "high",
+      "mode": ""
+     },
+     {
+      "writer": "digest",
+      "source": "model_inferred",
+      "durable": true,
+      "confidence": "high"
+     },
+     {
+      "writer": "digest",
+      "source": "model_inferred",
+      "durable": true,
+      "confidence": "high",
+      "mode": 7
+     },
+     {
+      "writer": "digest",
+      "source": "model_inferred",
+      "durable": true,
+      "confidence": "high",
+      "mode": "auto"
+     },
+     {
+      "writer": "digest",
+      "source": "model_inferred",
+      "durable": true,
+      "confidence": "high",
+      "mode": "staged"
+     },
+     {
+      "writer": "digest",
+      "source": "model_inferred",
+      "durable": true,
+      "confidence": "high",
+      "mode": "user_only"
+     }
+    ]
+   }
+  }
+ ],
+ "expected": {
+  "steps": [
+   {
+    "routes": [
+     "pending",
+     "pending",
+     "pending",
+     "pending",
+     "pending",
+     "durable",
+     "pending",
+     "pending"
+    ]
+   }
+  ]
+ }
+}

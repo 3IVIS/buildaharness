@@ -786,3 +786,100 @@ def test_inv_25_investigation_budget_bounded_and_never_hangs():
     assert outcome.exhausted is True  # budget 2 < 3 suggested tools
     assert outcome.calls_made == 2
     assert [f.tool for f in outcome.findings] == ["retrieve"]  # web_search timed out, read_file not reached
+
+
+# ══════════════════════════════════════════════════════════════════════════════
+# INV-16 — Agent memory: a non-user origin never reaches a Knowledge tier or durable
+# (extended INV-16, shared contract spec/memory-core.json; M8 WP-B)
+# ══════════════════════════════════════════════════════════════════════════════
+
+
+def _inv16_candidates():
+    from itertools import product
+
+    from harness.agent_memory import _core_generated as core
+    from harness.agent_memory.model import CandidateJudgement, Fact
+
+    judgements = [
+        None,
+        CandidateJudgement(),
+        CandidateJudgement(contains_secret=False, looks_like_instruction=False),
+        CandidateJudgement(contains_secret=False, looks_like_instruction=True),
+        CandidateJudgement(contains_secret=True, redacted_text="clean", looks_like_instruction=False),
+        CandidateJudgement(contains_secret=True, redacted_text="", looks_like_instruction=False),
+    ]
+    for origin, source, durable, conf, cat, j in product(
+        core.INV16["never_promotable"],
+        core.FACT_SOURCES,
+        [True, False],
+        [None, *core.FACT_CONFIDENCES],
+        [None, *core.FACT_CATEGORIES],
+        judgements,
+    ):
+        yield Fact(
+            "t",
+            "2026-01-01T00:00:00.000Z",
+            "s",
+            durable,
+            source,
+            confidence=conf,
+            category=cat,
+            origin=origin,
+            judgement=j,
+        )
+
+
+def test_inv_16_non_user_origin_never_knowledge_tier_or_admitted():
+    """INV-16 (extended): for every non-user origin the gate never admits and the tier is episodic."""
+    from harness.agent_memory import _core_generated as core
+    from harness.agent_memory.gate import admit_candidate
+    from harness.agent_memory.tiers import is_knowledge_tier, tier_for_fact
+
+    n = 0
+    for cand in _inv16_candidates():
+        for gate_on in (True,):
+            d = admit_candidate(cand, gate_on)
+            assert d.action != "admit", f"INV-16 violated: non-user origin admitted: {cand}"
+            if d.action == "session":
+                assert d.fact.durable is False, f"INV-16 violated: session fact kept durable: {cand}"
+            assert tier_for_fact(d.fact) == core.INV16["non_user_origin_tier"]
+            assert not is_knowledge_tier(tier_for_fact(d.fact))
+        # the tier rule alone (gate off) also keeps a non-user origin out of Knowledge
+        assert not is_knowledge_tier(tier_for_fact(cand)), f"INV-16 violated by tier rule: {cand}"
+        n += 1
+    assert n > 1000
+
+
+def test_inv_16_tier_function_never_returns_procedural_or_commitment():
+    from harness.agent_memory import _core_generated as core
+    from harness.agent_memory.model import Fact
+    from harness.agent_memory.tiers import tier_for_fact
+
+    for origin in (None, "user", "agent", "tool", "web"):
+        for source in core.FACT_SOURCES:
+            for durable in (True, False):
+                for cat in (None, *core.FACT_CATEGORIES):
+                    f = Fact("t", "x", "s", durable, source, confidence="high", category=cat, origin=origin)
+                    assert tier_for_fact(f) not in core.INV16["never_returned_tiers"]
+
+
+def test_inv_16_negative_control_user_origin_can_reach_knowledge_tier():
+    """Control: the check above is not vacuous; a user-origin high-confidence fact does reach Knowledge."""
+    from harness.agent_memory.model import Fact
+    from harness.agent_memory.tiers import is_knowledge_tier, tier_for_fact
+
+    f = Fact("t", "x", "s", True, "user_asserted", category="identity", origin="user")
+    assert is_knowledge_tier(tier_for_fact(f))
+
+
+def test_inv_16_a_gate_that_admits_everything_would_be_caught():
+    """Break-it: swapping in an admit-everything gate makes the INV-16 check fail."""
+    from dataclasses import replace
+
+    from harness.agent_memory.gate import AdmitDecision
+
+    def admit_all(c, _on):
+        return AdmitDecision("admit", replace(c, judgement=None))
+
+    cand = next(iter(_inv16_candidates()))
+    assert admit_all(cand, True).action == "admit"  # the mutant violates INV-16

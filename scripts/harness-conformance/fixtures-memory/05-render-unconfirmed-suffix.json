@@ -1,0 +1,70 @@
+{
+ "description": "(unconfirmed) is appended for medium/low model_inferred only: not high, not absent, not user_asserted.",
+ "flags": {
+  "writeGate": false,
+  "auditLog": true
+ },
+ "config": {},
+ "clock": [
+  "2026-03-01T00:00:00.000Z"
+ ],
+ "initial": {
+  "facts:s1": [
+   {
+    "text": "model medium",
+    "extractedAt": "2026-01-05T00:00:00.000Z",
+    "sourceTurn": "turn:s0",
+    "source": "model_inferred",
+    "durable": false,
+    "confidence": "medium"
+   },
+   {
+    "text": "model low",
+    "extractedAt": "2026-01-04T00:00:00.000Z",
+    "sourceTurn": "turn:s0",
+    "source": "model_inferred",
+    "durable": false,
+    "confidence": "low"
+   },
+   {
+    "text": "model high",
+    "extractedAt": "2026-01-03T00:00:00.000Z",
+    "sourceTurn": "turn:s0",
+    "source": "model_inferred",
+    "durable": false,
+    "confidence": "high"
+   },
+   {
+    "text": "model none",
+    "extractedAt": "2026-01-02T00:00:00.000Z",
+    "sourceTurn": "turn:s0",
+    "source": "model_inferred",
+    "durable": false
+   },
+   {
+    "text": "user low",
+    "extractedAt": "2026-01-01T00:00:00.000Z",
+    "sourceTurn": "turn:s0",
+    "source": "user_asserted",
+    "durable": false,
+    "confidence": "low"
+   }
+  ]
+ },
+ "steps": [
+  {
+   "call": "load_facts",
+   "args": {
+    "sessionId": "s1"
+   }
+  }
+ ],
+ "expected": {
+  "steps": [
+   {
+    "factsBlock": "\nKnown facts about the user:\n- model medium (unconfirmed)\n- model low (unconfirmed)\n- model high\n- model none\n- user low",
+    "droppedCount": 0
+   }
+  ]
+ }
+}

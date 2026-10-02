@@ -47,7 +47,9 @@ function createDeferredAssistant() {
         pending: [],
         experience: { strategyWeights: {}, decompositions: [], recoverySequences: [] },
       })),
-      searchTranscript: vi.fn(async () => []),
+      getLastMemoryInjection: vi.fn(() => undefined),
+          getMemoryStatus: vi.fn(async () => ({ mode: 'staged', off: false, budgetedRender: false, budgetChars: 4000, storeChars: 0, liveFacts: 0, pending: 0, flaggedPending: 0, retired: 0, auditEnabled: false, auditEntries: 0 })),
+          searchTranscript: vi.fn(async () => []),
     },
   }
 }
