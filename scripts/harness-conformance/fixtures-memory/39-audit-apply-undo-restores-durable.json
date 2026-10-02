@@ -1,0 +1,130 @@
+{
+ "description": "apply-then-undo is the identity on the durable store: a digest-writer add in auto mode followed by its undo leaves facts:durable exactly as it was (the audit log grows).",
+ "flags": {
+  "writeGate": false,
+  "auditLog": true
+ },
+ "config": {
+  "writeMode": "auto"
+ },
+ "clock": [
+  "2026-05-01T00:00:00.000Z",
+  "2026-05-01T00:00:01.000Z",
+  "2026-05-01T00:00:02.000Z",
+  "2026-05-01T00:00:03.000Z",
+  "2026-05-01T00:00:04.000Z",
+  "2026-05-01T00:00:05.000Z",
+  "2026-05-01T00:00:06.000Z",
+  "2026-05-01T00:00:07.000Z",
+  "2026-05-01T00:00:08.000Z",
+  "2026-05-01T00:00:09.000Z",
+  "2026-05-01T00:00:10.000Z",
+  "2026-05-01T00:00:11.000Z",
+  "2026-05-01T00:00:12.000Z",
+  "2026-05-01T00:00:13.000Z",
+  "2026-05-01T00:00:14.000Z",
+  "2026-05-01T00:00:15.000Z",
+  "2026-05-01T00:00:16.000Z",
+  "2026-05-01T00:00:17.000Z",
+  "2026-05-01T00:00:18.000Z",
+  "2026-05-01T00:00:19.000Z",
+  "2026-05-01T00:00:20.000Z",
+  "2026-05-01T00:00:21.000Z",
+  "2026-05-01T00:00:22.000Z",
+  "2026-05-01T00:00:23.000Z",
+  "2026-05-01T00:00:24.000Z",
+  "2026-05-01T00:00:25.000Z",
+  "2026-05-01T00:00:26.000Z",
+  "2026-05-01T00:00:27.000Z",
+  "2026-05-01T00:00:28.000Z",
+  "2026-05-01T00:00:29.000Z"
+ ],
+ "initial": {
+  "facts:durable": [
+   {
+    "text": "First",
+    "extractedAt": "2025-12-01T00:00:00.000Z",
+    "sourceTurn": "turn:s0",
+    "source": "user_asserted",
+    "durable": true
+   },
+   {
+    "text": "Second",
+    "extractedAt": "2025-12-02T00:00:00.000Z",
+    "sourceTurn": "turn:s0",
+    "source": "user_asserted",
+    "durable": true
+   }
+  ]
+ },
+ "steps": [
+  {
+   "call": "record_facts",
+   "args": {
+    "sessionId": "s1",
+    "candidates": [
+     {
+      "text": "Digest durable fact",
+      "durable": true,
+      "confidence": "high",
+      "category": "other",
+      "source": "model_inferred",
+      "origin": "user",
+      "extractedAt": "2026-02-02T00:00:00.000Z",
+      "sourceTurn": "turn:s1"
+     }
+    ],
+    "writer": "digest"
+   }
+  },
+  {
+   "call": "undo",
+   "args": {
+    "seq": 1,
+    "sessionId": "s1"
+   }
+  }
+ ],
+ "expected": {
+  "steps": [
+   {
+    "routes": [
+     {
+      "route": "durable"
+     }
+    ]
+   },
+   {
+    "ok": true
+   }
+  ],
+  "final": {
+   "facts:durable": [
+    {
+     "text": "First",
+     "extractedAt": "2025-12-01T00:00:00.000Z",
+     "sourceTurn": "turn:s0",
+     "source": "user_asserted",
+     "durable": true
+    },
+    {
+     "text": "Second",
+     "extractedAt": "2025-12-02T00:00:00.000Z",
+     "sourceTurn": "turn:s0",
+     "source": "user_asserted",
+     "durable": true
+    }
+   ],
+   "memory:audit": [
+    {
+     "seq": 1,
+     "op": "add"
+    },
+    {
+     "seq": 2,
+     "op": "undo"
+    }
+   ]
+  }
+ }
+}

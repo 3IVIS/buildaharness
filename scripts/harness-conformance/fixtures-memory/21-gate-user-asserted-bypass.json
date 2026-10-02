@@ -1,0 +1,61 @@
+{
+ "description": "A user_asserted candidate bypasses judgement entirely (no judgement needed, a stray judgement is ignored); the transient judgement is stripped.",
+ "flags": {
+  "writeGate": true,
+  "auditLog": true
+ },
+ "config": {},
+ "clock": [
+  "2026-03-01T00:00:00.000Z"
+ ],
+ "initial": {},
+ "steps": [
+  {
+   "call": "admit",
+   "args": {
+    "candidate": {
+     "text": "User said it",
+     "source": "user_asserted",
+     "durable": true,
+     "extractedAt": "2026-01-01T00:00:00.000Z",
+     "sourceTurn": "turn:s1"
+    }
+   }
+  },
+  {
+   "call": "admit",
+   "args": {
+    "candidate": {
+     "text": "User said it",
+     "source": "user_asserted",
+     "durable": true,
+     "extractedAt": "2026-01-01T00:00:00.000Z",
+     "sourceTurn": "turn:s1",
+     "judgement": {
+      "containsSecret": true,
+      "looksLikeInstruction": true,
+      "redactedText": "x"
+     }
+    }
+   }
+  }
+ ],
+ "expected": {
+  "steps": [
+   {
+    "action": "admit",
+    "fact": {
+     "text": "User said it",
+     "origin": "user"
+    }
+   },
+   {
+    "action": "admit",
+    "fact": {
+     "text": "User said it",
+     "origin": "user"
+    }
+   }
+  ]
+ }
+}

@@ -54,6 +54,8 @@ export function summarizeToolStep(tool: string, input: Record<string, unknown>):
       return 'Creating a reminder'
     case 'list_reminders':
       return 'Listing reminders'
+    case 'recall_memory':
+      return input.id ? `Recalling session ${input.id}` : 'Recalling past sessions'
     default:
       return `Calling ${tool}`
   }

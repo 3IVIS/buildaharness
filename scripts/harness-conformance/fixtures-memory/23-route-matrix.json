@@ -1,0 +1,3005 @@
+{
+ "description": "Every (writer, source, durable, confidence, mode) combination of the write-route decision table, checked against an independent oracle.",
+ "flags": {
+  "writeGate": false,
+  "auditLog": true
+ },
+ "config": {},
+ "clock": [
+  "2026-03-01T00:00:00.000Z"
+ ],
+ "initial": {},
+ "steps": [
+  {
+   "call": "route",
+   "args": {
+    "rows": [
+     {
+      "writer": "in_turn",
+      "source": "user_asserted",
+      "durable": true,
+      "mode": "auto",
+      "confidence": "high"
+     },
+     {
+      "writer": "in_turn",
+      "source": "user_asserted",
+      "durable": true,
+      "mode": "staged",
+      "confidence": "high"
+     },
+     {
+      "writer": "in_turn",
+      "source": "user_asserted",
+      "durable": true,
+      "mode": "user_only",
+      "confidence": "high"
+     },
+     {
+      "writer": "in_turn",
+      "source": "user_asserted",
+      "durable": true,
+      "mode": "auto",
+      "confidence": "medium"
+     },
+     {
+      "writer": "in_turn",
+      "source": "user_asserted",
+      "durable": true,
+      "mode": "staged",
+      "confidence": "medium"
+     },
+     {
+      "writer": "in_turn",
+      "source": "user_asserted",
+      "durable": true,
+      "mode": "user_only",
+      "confidence": "medium"
+     },
+     {
+      "writer": "in_turn",
+      "source": "user_asserted",
+      "durable": true,
+      "mode": "auto",
+      "confidence": "low"
+     },
+     {
+      "writer": "in_turn",
+      "source": "user_asserted",
+      "durable": true,
+      "mode": "staged",
+      "confidence": "low"
+     },
+     {
+      "writer": "in_turn",
+      "source": "user_asserted",
+      "durable": true,
+      "mode": "user_only",
+      "confidence": "low"
+     },
+     {
+      "writer": "in_turn",
+      "source": "user_asserted",
+      "durable": true,
+      "mode": "auto"
+     },
+     {
+      "writer": "in_turn",
+      "source": "user_asserted",
+      "durable": true,
+      "mode": "staged"
+     },
+     {
+      "writer": "in_turn",
+      "source": "user_asserted",
+      "durable": true,
+      "mode": "user_only"
+     },
+     {
+      "writer": "in_turn",
+      "source": "user_asserted",
+      "durable": false,
+      "mode": "auto",
+      "confidence": "high"
+     },
+     {
+      "writer": "in_turn",
+      "source": "user_asserted",
+      "durable": false,
+      "mode": "staged",
+      "confidence": "high"
+     },
+     {
+      "writer": "in_turn",
+      "source": "user_asserted",
+      "durable": false,
+      "mode": "user_only",
+      "confidence": "high"
+     },
+     {
+      "writer": "in_turn",
+      "source": "user_asserted",
+      "durable": false,
+      "mode": "auto",
+      "confidence": "medium"
+     },
+     {
+      "writer": "in_turn",
+      "source": "user_asserted",
+      "durable": false,
+      "mode": "staged",
+      "confidence": "medium"
+     },
+     {
+      "writer": "in_turn",
+      "source": "user_asserted",
+      "durable": false,
+      "mode": "user_only",
+      "confidence": "medium"
+     },
+     {
+      "writer": "in_turn",
+      "source": "user_asserted",
+      "durable": false,
+      "mode": "auto",
+      "confidence": "low"
+     },
+     {
+      "writer": "in_turn",
+      "source": "user_asserted",
+      "durable": false,
+      "mode": "staged",
+      "confidence": "low"
+     },
+     {
+      "writer": "in_turn",
+      "source": "user_asserted",
+      "durable": false,
+      "mode": "user_only",
+      "confidence": "low"
+     },
+     {
+      "writer": "in_turn",
+      "source": "user_asserted",
+      "durable": false,
+      "mode": "auto"
+     },
+     {
+      "writer": "in_turn",
+      "source": "user_asserted",
+      "durable": false,
+      "mode": "staged"
+     },
+     {
+      "writer": "in_turn",
+      "source": "user_asserted",
+      "durable": false,
+      "mode": "user_only"
+     },
+     {
+      "writer": "in_turn",
+      "source": "model_inferred",
+      "durable": true,
+      "mode": "auto",
+      "confidence": "high"
+     },
+     {
+      "writer": "in_turn",
+      "source": "model_inferred",
+      "durable": true,
+      "mode": "staged",
+      "confidence": "high"
+     },
+     {
+      "writer": "in_turn",
+      "source": "model_inferred",
+      "durable": true,
+      "mode": "user_only",
+      "confidence": "high"
+     },
+     {
+      "writer": "in_turn",
+      "source": "model_inferred",
+      "durable": true,
+      "mode": "auto",
+      "confidence": "medium"
+     },
+     {
+      "writer": "in_turn",
+      "source": "model_inferred",
+      "durable": true,
+      "mode": "staged",
+      "confidence": "medium"
+     },
+     {
+      "writer": "in_turn",
+      "source": "model_inferred",
+      "durable": true,
+      "mode": "user_only",
+      "confidence": "medium"
+     },
+     {
+      "writer": "in_turn",
+      "source": "model_inferred",
+      "durable": true,
+      "mode": "auto",
+      "confidence": "low"
+     },
+     {
+      "writer": "in_turn",
+      "source": "model_inferred",
+      "durable": true,
+      "mode": "staged",
+      "confidence": "low"
+     },
+     {
+      "writer": "in_turn",
+      "source": "model_inferred",
+      "durable": true,
+      "mode": "user_only",
+      "confidence": "low"
+     },
+     {
+      "writer": "in_turn",
+      "source": "model_inferred",
+      "durable": true,
+      "mode": "auto"
+     },
+     {
+      "writer": "in_turn",
+      "source": "model_inferred",
+      "durable": true,
+      "mode": "staged"
+     },
+     {
+      "writer": "in_turn",
+      "source": "model_inferred",
+      "durable": true,
+      "mode": "user_only"
+     },
+     {
+      "writer": "in_turn",
+      "source": "model_inferred",
+      "durable": false,
+      "mode": "auto",
+      "confidence": "high"
+     },
+     {
+      "writer": "in_turn",
+      "source": "model_inferred",
+      "durable": false,
+      "mode": "staged",
+      "confidence": "high"
+     },
+     {
+      "writer": "in_turn",
+      "source": "model_inferred",
+      "durable": false,
+      "mode": "user_only",
+      "confidence": "high"
+     },
+     {
+      "writer": "in_turn",
+      "source": "model_inferred",
+      "durable": false,
+      "mode": "auto",
+      "confidence": "medium"
+     },
+     {
+      "writer": "in_turn",
+      "source": "model_inferred",
+      "durable": false,
+      "mode": "staged",
+      "confidence": "medium"
+     },
+     {
+      "writer": "in_turn",
+      "source": "model_inferred",
+      "durable": false,
+      "mode": "user_only",
+      "confidence": "medium"
+     },
+     {
+      "writer": "in_turn",
+      "source": "model_inferred",
+      "durable": false,
+      "mode": "auto",
+      "confidence": "low"
+     },
+     {
+      "writer": "in_turn",
+      "source": "model_inferred",
+      "durable": false,
+      "mode": "staged",
+      "confidence": "low"
+     },
+     {
+      "writer": "in_turn",
+      "source": "model_inferred",
+      "durable": false,
+      "mode": "user_only",
+      "confidence": "low"
+     },
+     {
+      "writer": "in_turn",
+      "source": "model_inferred",
+      "durable": false,
+      "mode": "auto"
+     },
+     {
+      "writer": "in_turn",
+      "source": "model_inferred",
+      "durable": false,
+      "mode": "staged"
+     },
+     {
+      "writer": "in_turn",
+      "source": "model_inferred",
+      "durable": false,
+      "mode": "user_only"
+     },
+     {
+      "writer": "in_turn",
+      "source": "observed",
+      "durable": true,
+      "mode": "auto",
+      "confidence": "high"
+     },
+     {
+      "writer": "in_turn",
+      "source": "observed",
+      "durable": true,
+      "mode": "staged",
+      "confidence": "high"
+     },
+     {
+      "writer": "in_turn",
+      "source": "observed",
+      "durable": true,
+      "mode": "user_only",
+      "confidence": "high"
+     },
+     {
+      "writer": "in_turn",
+      "source": "observed",
+      "durable": true,
+      "mode": "auto",
+      "confidence": "medium"
+     },
+     {
+      "writer": "in_turn",
+      "source": "observed",
+      "durable": true,
+      "mode": "staged",
+      "confidence": "medium"
+     },
+     {
+      "writer": "in_turn",
+      "source": "observed",
+      "durable": true,
+      "mode": "user_only",
+      "confidence": "medium"
+     },
+     {
+      "writer": "in_turn",
+      "source": "observed",
+      "durable": true,
+      "mode": "auto",
+      "confidence": "low"
+     },
+     {
+      "writer": "in_turn",
+      "source": "observed",
+      "durable": true,
+      "mode": "staged",
+      "confidence": "low"
+     },
+     {
+      "writer": "in_turn",
+      "source": "observed",
+      "durable": true,
+      "mode": "user_only",
+      "confidence": "low"
+     },
+     {
+      "writer": "in_turn",
+      "source": "observed",
+      "durable": true,
+      "mode": "auto"
+     },
+     {
+      "writer": "in_turn",
+      "source": "observed",
+      "durable": true,
+      "mode": "staged"
+     },
+     {
+      "writer": "in_turn",
+      "source": "observed",
+      "durable": true,
+      "mode": "user_only"
+     },
+     {
+      "writer": "in_turn",
+      "source": "observed",
+      "durable": false,
+      "mode": "auto",
+      "confidence": "high"
+     },
+     {
+      "writer": "in_turn",
+      "source": "observed",
+      "durable": false,
+      "mode": "staged",
+      "confidence": "high"
+     },
+     {
+      "writer": "in_turn",
+      "source": "observed",
+      "durable": false,
+      "mode": "user_only",
+      "confidence": "high"
+     },
+     {
+      "writer": "in_turn",
+      "source": "observed",
+      "durable": false,
+      "mode": "auto",
+      "confidence": "medium"
+     },
+     {
+      "writer": "in_turn",
+      "source": "observed",
+      "durable": false,
+      "mode": "staged",
+      "confidence": "medium"
+     },
+     {
+      "writer": "in_turn",
+      "source": "observed",
+      "durable": false,
+      "mode": "user_only",
+      "confidence": "medium"
+     },
+     {
+      "writer": "in_turn",
+      "source": "observed",
+      "durable": false,
+      "mode": "auto",
+      "confidence": "low"
+     },
+     {
+      "writer": "in_turn",
+      "source": "observed",
+      "durable": false,
+      "mode": "staged",
+      "confidence": "low"
+     },
+     {
+      "writer": "in_turn",
+      "source": "observed",
+      "durable": false,
+      "mode": "user_only",
+      "confidence": "low"
+     },
+     {
+      "writer": "in_turn",
+      "source": "observed",
+      "durable": false,
+      "mode": "auto"
+     },
+     {
+      "writer": "in_turn",
+      "source": "observed",
+      "durable": false,
+      "mode": "staged"
+     },
+     {
+      "writer": "in_turn",
+      "source": "observed",
+      "durable": false,
+      "mode": "user_only"
+     },
+     {
+      "writer": "in_turn",
+      "source": "externally_verified",
+      "durable": true,
+      "mode": "auto",
+      "confidence": "high"
+     },
+     {
+      "writer": "in_turn",
+      "source": "externally_verified",
+      "durable": true,
+      "mode": "staged",
+      "confidence": "high"
+     },
+     {
+      "writer": "in_turn",
+      "source": "externally_verified",
+      "durable": true,
+      "mode": "user_only",
+      "confidence": "high"
+     },
+     {
+      "writer": "in_turn",
+      "source": "externally_verified",
+      "durable": true,
+      "mode": "auto",
+      "confidence": "medium"
+     },
+     {
+      "writer": "in_turn",
+      "source": "externally_verified",
+      "durable": true,
+      "mode": "staged",
+      "confidence": "medium"
+     },
+     {
+      "writer": "in_turn",
+      "source": "externally_verified",
+      "durable": true,
+      "mode": "user_only",
+      "confidence": "medium"
+     },
+     {
+      "writer": "in_turn",
+      "source": "externally_verified",
+      "durable": true,
+      "mode": "auto",
+      "confidence": "low"
+     },
+     {
+      "writer": "in_turn",
+      "source": "externally_verified",
+      "durable": true,
+      "mode": "staged",
+      "confidence": "low"
+     },
+     {
+      "writer": "in_turn",
+      "source": "externally_verified",
+      "durable": true,
+      "mode": "user_only",
+      "confidence": "low"
+     },
+     {
+      "writer": "in_turn",
+      "source": "externally_verified",
+      "durable": true,
+      "mode": "auto"
+     },
+     {
+      "writer": "in_turn",
+      "source": "externally_verified",
+      "durable": true,
+      "mode": "staged"
+     },
+     {
+      "writer": "in_turn",
+      "source": "externally_verified",
+      "durable": true,
+      "mode": "user_only"
+     },
+     {
+      "writer": "in_turn",
+      "source": "externally_verified",
+      "durable": false,
+      "mode": "auto",
+      "confidence": "high"
+     },
+     {
+      "writer": "in_turn",
+      "source": "externally_verified",
+      "durable": false,
+      "mode": "staged",
+      "confidence": "high"
+     },
+     {
+      "writer": "in_turn",
+      "source": "externally_verified",
+      "durable": false,
+      "mode": "user_only",
+      "confidence": "high"
+     },
+     {
+      "writer": "in_turn",
+      "source": "externally_verified",
+      "durable": false,
+      "mode": "auto",
+      "confidence": "medium"
+     },
+     {
+      "writer": "in_turn",
+      "source": "externally_verified",
+      "durable": false,
+      "mode": "staged",
+      "confidence": "medium"
+     },
+     {
+      "writer": "in_turn",
+      "source": "externally_verified",
+      "durable": false,
+      "mode": "user_only",
+      "confidence": "medium"
+     },
+     {
+      "writer": "in_turn",
+      "source": "externally_verified",
+      "durable": false,
+      "mode": "auto",
+      "confidence": "low"
+     },
+     {
+      "writer": "in_turn",
+      "source": "externally_verified",
+      "durable": false,
+      "mode": "staged",
+      "confidence": "low"
+     },
+     {
+      "writer": "in_turn",
+      "source": "externally_verified",
+      "durable": false,
+      "mode": "user_only",
+      "confidence": "low"
+     },
+     {
+      "writer": "in_turn",
+      "source": "externally_verified",
+      "durable": false,
+      "mode": "auto"
+     },
+     {
+      "writer": "in_turn",
+      "source": "externally_verified",
+      "durable": false,
+      "mode": "staged"
+     },
+     {
+      "writer": "in_turn",
+      "source": "externally_verified",
+      "durable": false,
+      "mode": "user_only"
+     },
+     {
+      "writer": "digest",
+      "source": "user_asserted",
+      "durable": true,
+      "mode": "auto",
+      "confidence": "high"
+     },
+     {
+      "writer": "digest",
+      "source": "user_asserted",
+      "durable": true,
+      "mode": "staged",
+      "confidence": "high"
+     },
+     {
+      "writer": "digest",
+      "source": "user_asserted",
+      "durable": true,
+      "mode": "user_only",
+      "confidence": "high"
+     },
+     {
+      "writer": "digest",
+      "source": "user_asserted",
+      "durable": true,
+      "mode": "auto",
+      "confidence": "medium"
+     },
+     {
+      "writer": "digest",
+      "source": "user_asserted",
+      "durable": true,
+      "mode": "staged",
+      "confidence": "medium"
+     },
+     {
+      "writer": "digest",
+      "source": "user_asserted",
+      "durable": true,
+      "mode": "user_only",
+      "confidence": "medium"
+     },
+     {
+      "writer": "digest",
+      "source": "user_asserted",
+      "durable": true,
+      "mode": "auto",
+      "confidence": "low"
+     },
+     {
+      "writer": "digest",
+      "source": "user_asserted",
+      "durable": true,
+      "mode": "staged",
+      "confidence": "low"
+     },
+     {
+      "writer": "digest",
+      "source": "user_asserted",
+      "durable": true,
+      "mode": "user_only",
+      "confidence": "low"
+     },
+     {
+      "writer": "digest",
+      "source": "user_asserted",
+      "durable": true,
+      "mode": "auto"
+     },
+     {
+      "writer": "digest",
+      "source": "user_asserted",
+      "durable": true,
+      "mode": "staged"
+     },
+     {
+      "writer": "digest",
+      "source": "user_asserted",
+      "durable": true,
+      "mode": "user_only"
+     },
+     {
+      "writer": "digest",
+      "source": "user_asserted",
+      "durable": false,
+      "mode": "auto",
+      "confidence": "high"
+     },
+     {
+      "writer": "digest",
+      "source": "user_asserted",
+      "durable": false,
+      "mode": "staged",
+      "confidence": "high"
+     },
+     {
+      "writer": "digest",
+      "source": "user_asserted",
+      "durable": false,
+      "mode": "user_only",
+      "confidence": "high"
+     },
+     {
+      "writer": "digest",
+      "source": "user_asserted",
+      "durable": false,
+      "mode": "auto",
+      "confidence": "medium"
+     },
+     {
+      "writer": "digest",
+      "source": "user_asserted",
+      "durable": false,
+      "mode": "staged",
+      "confidence": "medium"
+     },
+     {
+      "writer": "digest",
+      "source": "user_asserted",
+      "durable": false,
+      "mode": "user_only",
+      "confidence": "medium"
+     },
+     {
+      "writer": "digest",
+      "source": "user_asserted",
+      "durable": false,
+      "mode": "auto",
+      "confidence": "low"
+     },
+     {
+      "writer": "digest",
+      "source": "user_asserted",
+      "durable": false,
+      "mode": "staged",
+      "confidence": "low"
+     },
+     {
+      "writer": "digest",
+      "source": "user_asserted",
+      "durable": false,
+      "mode": "user_only",
+      "confidence": "low"
+     },
+     {
+      "writer": "digest",
+      "source": "user_asserted",
+      "durable": false,
+      "mode": "auto"
+     },
+     {
+      "writer": "digest",
+      "source": "user_asserted",
+      "durable": false,
+      "mode": "staged"
+     },
+     {
+      "writer": "digest",
+      "source": "user_asserted",
+      "durable": false,
+      "mode": "user_only"
+     },
+     {
+      "writer": "digest",
+      "source": "model_inferred",
+      "durable": true,
+      "mode": "auto",
+      "confidence": "high"
+     },
+     {
+      "writer": "digest",
+      "source": "model_inferred",
+      "durable": true,
+      "mode": "staged",
+      "confidence": "high"
+     },
+     {
+      "writer": "digest",
+      "source": "model_inferred",
+      "durable": true,
+      "mode": "user_only",
+      "confidence": "high"
+     },
+     {
+      "writer": "digest",
+      "source": "model_inferred",
+      "durable": true,
+      "mode": "auto",
+      "confidence": "medium"
+     },
+     {
+      "writer": "digest",
+      "source": "model_inferred",
+      "durable": true,
+      "mode": "staged",
+      "confidence": "medium"
+     },
+     {
+      "writer": "digest",
+      "source": "model_inferred",
+      "durable": true,
+      "mode": "user_only",
+      "confidence": "medium"
+     },
+     {
+      "writer": "digest",
+      "source": "model_inferred",
+      "durable": true,
+      "mode": "auto",
+      "confidence": "low"
+     },
+     {
+      "writer": "digest",
+      "source": "model_inferred",
+      "durable": true,
+      "mode": "staged",
+      "confidence": "low"
+     },
+     {
+      "writer": "digest",
+      "source": "model_inferred",
+      "durable": true,
+      "mode": "user_only",
+      "confidence": "low"
+     },
+     {
+      "writer": "digest",
+      "source": "model_inferred",
+      "durable": true,
+      "mode": "auto"
+     },
+     {
+      "writer": "digest",
+      "source": "model_inferred",
+      "durable": true,
+      "mode": "staged"
+     },
+     {
+      "writer": "digest",
+      "source": "model_inferred",
+      "durable": true,
+      "mode": "user_only"
+     },
+     {
+      "writer": "digest",
+      "source": "model_inferred",
+      "durable": false,
+      "mode": "auto",
+      "confidence": "high"
+     },
+     {
+      "writer": "digest",
+      "source": "model_inferred",
+      "durable": false,
+      "mode": "staged",
+      "confidence": "high"
+     },
+     {
+      "writer": "digest",
+      "source": "model_inferred",
+      "durable": false,
+      "mode": "user_only",
+      "confidence": "high"
+     },
+     {
+      "writer": "digest",
+      "source": "model_inferred",
+      "durable": false,
+      "mode": "auto",
+      "confidence": "medium"
+     },
+     {
+      "writer": "digest",
+      "source": "model_inferred",
+      "durable": false,
+      "mode": "staged",
+      "confidence": "medium"
+     },
+     {
+      "writer": "digest",
+      "source": "model_inferred",
+      "durable": false,
+      "mode": "user_only",
+      "confidence": "medium"
+     },
+     {
+      "writer": "digest",
+      "source": "model_inferred",
+      "durable": false,
+      "mode": "auto",
+      "confidence": "low"
+     },
+     {
+      "writer": "digest",
+      "source": "model_inferred",
+      "durable": false,
+      "mode": "staged",
+      "confidence": "low"
+     },
+     {
+      "writer": "digest",
+      "source": "model_inferred",
+      "durable": false,
+      "mode": "user_only",
+      "confidence": "low"
+     },
+     {
+      "writer": "digest",
+      "source": "model_inferred",
+      "durable": false,
+      "mode": "auto"
+     },
+     {
+      "writer": "digest",
+      "source": "model_inferred",
+      "durable": false,
+      "mode": "staged"
+     },
+     {
+      "writer": "digest",
+      "source": "model_inferred",
+      "durable": false,
+      "mode": "user_only"
+     },
+     {
+      "writer": "digest",
+      "source": "observed",
+      "durable": true,
+      "mode": "auto",
+      "confidence": "high"
+     },
+     {
+      "writer": "digest",
+      "source": "observed",
+      "durable": true,
+      "mode": "staged",
+      "confidence": "high"
+     },
+     {
+      "writer": "digest",
+      "source": "observed",
+      "durable": true,
+      "mode": "user_only",
+      "confidence": "high"
+     },
+     {
+      "writer": "digest",
+      "source": "observed",
+      "durable": true,
+      "mode": "auto",
+      "confidence": "medium"
+     },
+     {
+      "writer": "digest",
+      "source": "observed",
+      "durable": true,
+      "mode": "staged",
+      "confidence": "medium"
+     },
+     {
+      "writer": "digest",
+      "source": "observed",
+      "durable": true,
+      "mode": "user_only",
+      "confidence": "medium"
+     },
+     {
+      "writer": "digest",
+      "source": "observed",
+      "durable": true,
+      "mode": "auto",
+      "confidence": "low"
+     },
+     {
+      "writer": "digest",
+      "source": "observed",
+      "durable": true,
+      "mode": "staged",
+      "confidence": "low"
+     },
+     {
+      "writer": "digest",
+      "source": "observed",
+      "durable": true,
+      "mode": "user_only",
+      "confidence": "low"
+     },
+     {
+      "writer": "digest",
+      "source": "observed",
+      "durable": true,
+      "mode": "auto"
+     },
+     {
+      "writer": "digest",
+      "source": "observed",
+      "durable": true,
+      "mode": "staged"
+     },
+     {
+      "writer": "digest",
+      "source": "observed",
+      "durable": true,
+      "mode": "user_only"
+     },
+     {
+      "writer": "digest",
+      "source": "observed",
+      "durable": false,
+      "mode": "auto",
+      "confidence": "high"
+     },
+     {
+      "writer": "digest",
+      "source": "observed",
+      "durable": false,
+      "mode": "staged",
+      "confidence": "high"
+     },
+     {
+      "writer": "digest",
+      "source": "observed",
+      "durable": false,
+      "mode": "user_only",
+      "confidence": "high"
+     },
+     {
+      "writer": "digest",
+      "source": "observed",
+      "durable": false,
+      "mode": "auto",
+      "confidence": "medium"
+     },
+     {
+      "writer": "digest",
+      "source": "observed",
+      "durable": false,
+      "mode": "staged",
+      "confidence": "medium"
+     },
+     {
+      "writer": "digest",
+      "source": "observed",
+      "durable": false,
+      "mode": "user_only",
+      "confidence": "medium"
+     },
+     {
+      "writer": "digest",
+      "source": "observed",
+      "durable": false,
+      "mode": "auto",
+      "confidence": "low"
+     },
+     {
+      "writer": "digest",
+      "source": "observed",
+      "durable": false,
+      "mode": "staged",
+      "confidence": "low"
+     },
+     {
+      "writer": "digest",
+      "source": "observed",
+      "durable": false,
+      "mode": "user_only",
+      "confidence": "low"
+     },
+     {
+      "writer": "digest",
+      "source": "observed",
+      "durable": false,
+      "mode": "auto"
+     },
+     {
+      "writer": "digest",
+      "source": "observed",
+      "durable": false,
+      "mode": "staged"
+     },
+     {
+      "writer": "digest",
+      "source": "observed",
+      "durable": false,
+      "mode": "user_only"
+     },
+     {
+      "writer": "digest",
+      "source": "externally_verified",
+      "durable": true,
+      "mode": "auto",
+      "confidence": "high"
+     },
+     {
+      "writer": "digest",
+      "source": "externally_verified",
+      "durable": true,
+      "mode": "staged",
+      "confidence": "high"
+     },
+     {
+      "writer": "digest",
+      "source": "externally_verified",
+      "durable": true,
+      "mode": "user_only",
+      "confidence": "high"
+     },
+     {
+      "writer": "digest",
+      "source": "externally_verified",
+      "durable": true,
+      "mode": "auto",
+      "confidence": "medium"
+     },
+     {
+      "writer": "digest",
+      "source": "externally_verified",
+      "durable": true,
+      "mode": "staged",
+      "confidence": "medium"
+     },
+     {
+      "writer": "digest",
+      "source": "externally_verified",
+      "durable": true,
+      "mode": "user_only",
+      "confidence": "medium"
+     },
+     {
+      "writer": "digest",
+      "source": "externally_verified",
+      "durable": true,
+      "mode": "auto",
+      "confidence": "low"
+     },
+     {
+      "writer": "digest",
+      "source": "externally_verified",
+      "durable": true,
+      "mode": "staged",
+      "confidence": "low"
+     },
+     {
+      "writer": "digest",
+      "source": "externally_verified",
+      "durable": true,
+      "mode": "user_only",
+      "confidence": "low"
+     },
+     {
+      "writer": "digest",
+      "source": "externally_verified",
+      "durable": true,
+      "mode": "auto"
+     },
+     {
+      "writer": "digest",
+      "source": "externally_verified",
+      "durable": true,
+      "mode": "staged"
+     },
+     {
+      "writer": "digest",
+      "source": "externally_verified",
+      "durable": true,
+      "mode": "user_only"
+     },
+     {
+      "writer": "digest",
+      "source": "externally_verified",
+      "durable": false,
+      "mode": "auto",
+      "confidence": "high"
+     },
+     {
+      "writer": "digest",
+      "source": "externally_verified",
+      "durable": false,
+      "mode": "staged",
+      "confidence": "high"
+     },
+     {
+      "writer": "digest",
+      "source": "externally_verified",
+      "durable": false,
+      "mode": "user_only",
+      "confidence": "high"
+     },
+     {
+      "writer": "digest",
+      "source": "externally_verified",
+      "durable": false,
+      "mode": "auto",
+      "confidence": "medium"
+     },
+     {
+      "writer": "digest",
+      "source": "externally_verified",
+      "durable": false,
+      "mode": "staged",
+      "confidence": "medium"
+     },
+     {
+      "writer": "digest",
+      "source": "externally_verified",
+      "durable": false,
+      "mode": "user_only",
+      "confidence": "medium"
+     },
+     {
+      "writer": "digest",
+      "source": "externally_verified",
+      "durable": false,
+      "mode": "auto",
+      "confidence": "low"
+     },
+     {
+      "writer": "digest",
+      "source": "externally_verified",
+      "durable": false,
+      "mode": "staged",
+      "confidence": "low"
+     },
+     {
+      "writer": "digest",
+      "source": "externally_verified",
+      "durable": false,
+      "mode": "user_only",
+      "confidence": "low"
+     },
+     {
+      "writer": "digest",
+      "source": "externally_verified",
+      "durable": false,
+      "mode": "auto"
+     },
+     {
+      "writer": "digest",
+      "source": "externally_verified",
+      "durable": false,
+      "mode": "staged"
+     },
+     {
+      "writer": "digest",
+      "source": "externally_verified",
+      "durable": false,
+      "mode": "user_only"
+     },
+     {
+      "writer": "reviewer",
+      "source": "user_asserted",
+      "durable": true,
+      "mode": "auto",
+      "confidence": "high"
+     },
+     {
+      "writer": "reviewer",
+      "source": "user_asserted",
+      "durable": true,
+      "mode": "staged",
+      "confidence": "high"
+     },
+     {
+      "writer": "reviewer",
+      "source": "user_asserted",
+      "durable": true,
+      "mode": "user_only",
+      "confidence": "high"
+     },
+     {
+      "writer": "reviewer",
+      "source": "user_asserted",
+      "durable": true,
+      "mode": "auto",
+      "confidence": "medium"
+     },
+     {
+      "writer": "reviewer",
+      "source": "user_asserted",
+      "durable": true,
+      "mode": "staged",
+      "confidence": "medium"
+     },
+     {
+      "writer": "reviewer",
+      "source": "user_asserted",
+      "durable": true,
+      "mode": "user_only",
+      "confidence": "medium"
+     },
+     {
+      "writer": "reviewer",
+      "source": "user_asserted",
+      "durable": true,
+      "mode": "auto",
+      "confidence": "low"
+     },
+     {
+      "writer": "reviewer",
+      "source": "user_asserted",
+      "durable": true,
+      "mode": "staged",
+      "confidence": "low"
+     },
+     {
+      "writer": "reviewer",
+      "source": "user_asserted",
+      "durable": true,
+      "mode": "user_only",
+      "confidence": "low"
+     },
+     {
+      "writer": "reviewer",
+      "source": "user_asserted",
+      "durable": true,
+      "mode": "auto"
+     },
+     {
+      "writer": "reviewer",
+      "source": "user_asserted",
+      "durable": true,
+      "mode": "staged"
+     },
+     {
+      "writer": "reviewer",
+      "source": "user_asserted",
+      "durable": true,
+      "mode": "user_only"
+     },
+     {
+      "writer": "reviewer",
+      "source": "user_asserted",
+      "durable": false,
+      "mode": "auto",
+      "confidence": "high"
+     },
+     {
+      "writer": "reviewer",
+      "source": "user_asserted",
+      "durable": false,
+      "mode": "staged",
+      "confidence": "high"
+     },
+     {
+      "writer": "reviewer",
+      "source": "user_asserted",
+      "durable": false,
+      "mode": "user_only",
+      "confidence": "high"
+     },
+     {
+      "writer": "reviewer",
+      "source": "user_asserted",
+      "durable": false,
+      "mode": "auto",
+      "confidence": "medium"
+     },
+     {
+      "writer": "reviewer",
+      "source": "user_asserted",
+      "durable": false,
+      "mode": "staged",
+      "confidence": "medium"
+     },
+     {
+      "writer": "reviewer",
+      "source": "user_asserted",
+      "durable": false,
+      "mode": "user_only",
+      "confidence": "medium"
+     },
+     {
+      "writer": "reviewer",
+      "source": "user_asserted",
+      "durable": false,
+      "mode": "auto",
+      "confidence": "low"
+     },
+     {
+      "writer": "reviewer",
+      "source": "user_asserted",
+      "durable": false,
+      "mode": "staged",
+      "confidence": "low"
+     },
+     {
+      "writer": "reviewer",
+      "source": "user_asserted",
+      "durable": false,
+      "mode": "user_only",
+      "confidence": "low"
+     },
+     {
+      "writer": "reviewer",
+      "source": "user_asserted",
+      "durable": false,
+      "mode": "auto"
+     },
+     {
+      "writer": "reviewer",
+      "source": "user_asserted",
+      "durable": false,
+      "mode": "staged"
+     },
+     {
+      "writer": "reviewer",
+      "source": "user_asserted",
+      "durable": false,
+      "mode": "user_only"
+     },
+     {
+      "writer": "reviewer",
+      "source": "model_inferred",
+      "durable": true,
+      "mode": "auto",
+      "confidence": "high"
+     },
+     {
+      "writer": "reviewer",
+      "source": "model_inferred",
+      "durable": true,
+      "mode": "staged",
+      "confidence": "high"
+     },
+     {
+      "writer": "reviewer",
+      "source": "model_inferred",
+      "durable": true,
+      "mode": "user_only",
+      "confidence": "high"
+     },
+     {
+      "writer": "reviewer",
+      "source": "model_inferred",
+      "durable": true,
+      "mode": "auto",
+      "confidence": "medium"
+     },
+     {
+      "writer": "reviewer",
+      "source": "model_inferred",
+      "durable": true,
+      "mode": "staged",
+      "confidence": "medium"
+     },
+     {
+      "writer": "reviewer",
+      "source": "model_inferred",
+      "durable": true,
+      "mode": "user_only",
+      "confidence": "medium"
+     },
+     {
+      "writer": "reviewer",
+      "source": "model_inferred",
+      "durable": true,
+      "mode": "auto",
+      "confidence": "low"
+     },
+     {
+      "writer": "reviewer",
+      "source": "model_inferred",
+      "durable": true,
+      "mode": "staged",
+      "confidence": "low"
+     },
+     {
+      "writer": "reviewer",
+      "source": "model_inferred",
+      "durable": true,
+      "mode": "user_only",
+      "confidence": "low"
+     },
+     {
+      "writer": "reviewer",
+      "source": "model_inferred",
+      "durable": true,
+      "mode": "auto"
+     },
+     {
+      "writer": "reviewer",
+      "source": "model_inferred",
+      "durable": true,
+      "mode": "staged"
+     },
+     {
+      "writer": "reviewer",
+      "source": "model_inferred",
+      "durable": true,
+      "mode": "user_only"
+     },
+     {
+      "writer": "reviewer",
+      "source": "model_inferred",
+      "durable": false,
+      "mode": "auto",
+      "confidence": "high"
+     },
+     {
+      "writer": "reviewer",
+      "source": "model_inferred",
+      "durable": false,
+      "mode": "staged",
+      "confidence": "high"
+     },
+     {
+      "writer": "reviewer",
+      "source": "model_inferred",
+      "durable": false,
+      "mode": "user_only",
+      "confidence": "high"
+     },
+     {
+      "writer": "reviewer",
+      "source": "model_inferred",
+      "durable": false,
+      "mode": "auto",
+      "confidence": "medium"
+     },
+     {
+      "writer": "reviewer",
+      "source": "model_inferred",
+      "durable": false,
+      "mode": "staged",
+      "confidence": "medium"
+     },
+     {
+      "writer": "reviewer",
+      "source": "model_inferred",
+      "durable": false,
+      "mode": "user_only",
+      "confidence": "medium"
+     },
+     {
+      "writer": "reviewer",
+      "source": "model_inferred",
+      "durable": false,
+      "mode": "auto",
+      "confidence": "low"
+     },
+     {
+      "writer": "reviewer",
+      "source": "model_inferred",
+      "durable": false,
+      "mode": "staged",
+      "confidence": "low"
+     },
+     {
+      "writer": "reviewer",
+      "source": "model_inferred",
+      "durable": false,
+      "mode": "user_only",
+      "confidence": "low"
+     },
+     {
+      "writer": "reviewer",
+      "source": "model_inferred",
+      "durable": false,
+      "mode": "auto"
+     },
+     {
+      "writer": "reviewer",
+      "source": "model_inferred",
+      "durable": false,
+      "mode": "staged"
+     },
+     {
+      "writer": "reviewer",
+      "source": "model_inferred",
+      "durable": false,
+      "mode": "user_only"
+     },
+     {
+      "writer": "reviewer",
+      "source": "observed",
+      "durable": true,
+      "mode": "auto",
+      "confidence": "high"
+     },
+     {
+      "writer": "reviewer",
+      "source": "observed",
+      "durable": true,
+      "mode": "staged",
+      "confidence": "high"
+     },
+     {
+      "writer": "reviewer",
+      "source": "observed",
+      "durable": true,
+      "mode": "user_only",
+      "confidence": "high"
+     },
+     {
+      "writer": "reviewer",
+      "source": "observed",
+      "durable": true,
+      "mode": "auto",
+      "confidence": "medium"
+     },
+     {
+      "writer": "reviewer",
+      "source": "observed",
+      "durable": true,
+      "mode": "staged",
+      "confidence": "medium"
+     },
+     {
+      "writer": "reviewer",
+      "source": "observed",
+      "durable": true,
+      "mode": "user_only",
+      "confidence": "medium"
+     },
+     {
+      "writer": "reviewer",
+      "source": "observed",
+      "durable": true,
+      "mode": "auto",
+      "confidence": "low"
+     },
+     {
+      "writer": "reviewer",
+      "source": "observed",
+      "durable": true,
+      "mode": "staged",
+      "confidence": "low"
+     },
+     {
+      "writer": "reviewer",
+      "source": "observed",
+      "durable": true,
+      "mode": "user_only",
+      "confidence": "low"
+     },
+     {
+      "writer": "reviewer",
+      "source": "observed",
+      "durable": true,
+      "mode": "auto"
+     },
+     {
+      "writer": "reviewer",
+      "source": "observed",
+      "durable": true,
+      "mode": "staged"
+     },
+     {
+      "writer": "reviewer",
+      "source": "observed",
+      "durable": true,
+      "mode": "user_only"
+     },
+     {
+      "writer": "reviewer",
+      "source": "observed",
+      "durable": false,
+      "mode": "auto",
+      "confidence": "high"
+     },
+     {
+      "writer": "reviewer",
+      "source": "observed",
+      "durable": false,
+      "mode": "staged",
+      "confidence": "high"
+     },
+     {
+      "writer": "reviewer",
+      "source": "observed",
+      "durable": false,
+      "mode": "user_only",
+      "confidence": "high"
+     },
+     {
+      "writer": "reviewer",
+      "source": "observed",
+      "durable": false,
+      "mode": "auto",
+      "confidence": "medium"
+     },
+     {
+      "writer": "reviewer",
+      "source": "observed",
+      "durable": false,
+      "mode": "staged",
+      "confidence": "medium"
+     },
+     {
+      "writer": "reviewer",
+      "source": "observed",
+      "durable": false,
+      "mode": "user_only",
+      "confidence": "medium"
+     },
+     {
+      "writer": "reviewer",
+      "source": "observed",
+      "durable": false,
+      "mode": "auto",
+      "confidence": "low"
+     },
+     {
+      "writer": "reviewer",
+      "source": "observed",
+      "durable": false,
+      "mode": "staged",
+      "confidence": "low"
+     },
+     {
+      "writer": "reviewer",
+      "source": "observed",
+      "durable": false,
+      "mode": "user_only",
+      "confidence": "low"
+     },
+     {
+      "writer": "reviewer",
+      "source": "observed",
+      "durable": false,
+      "mode": "auto"
+     },
+     {
+      "writer": "reviewer",
+      "source": "observed",
+      "durable": false,
+      "mode": "staged"
+     },
+     {
+      "writer": "reviewer",
+      "source": "observed",
+      "durable": false,
+      "mode": "user_only"
+     },
+     {
+      "writer": "reviewer",
+      "source": "externally_verified",
+      "durable": true,
+      "mode": "auto",
+      "confidence": "high"
+     },
+     {
+      "writer": "reviewer",
+      "source": "externally_verified",
+      "durable": true,
+      "mode": "staged",
+      "confidence": "high"
+     },
+     {
+      "writer": "reviewer",
+      "source": "externally_verified",
+      "durable": true,
+      "mode": "user_only",
+      "confidence": "high"
+     },
+     {
+      "writer": "reviewer",
+      "source": "externally_verified",
+      "durable": true,
+      "mode": "auto",
+      "confidence": "medium"
+     },
+     {
+      "writer": "reviewer",
+      "source": "externally_verified",
+      "durable": true,
+      "mode": "staged",
+      "confidence": "medium"
+     },
+     {
+      "writer": "reviewer",
+      "source": "externally_verified",
+      "durable": true,
+      "mode": "user_only",
+      "confidence": "medium"
+     },
+     {
+      "writer": "reviewer",
+      "source": "externally_verified",
+      "durable": true,
+      "mode": "auto",
+      "confidence": "low"
+     },
+     {
+      "writer": "reviewer",
+      "source": "externally_verified",
+      "durable": true,
+      "mode": "staged",
+      "confidence": "low"
+     },
+     {
+      "writer": "reviewer",
+      "source": "externally_verified",
+      "durable": true,
+      "mode": "user_only",
+      "confidence": "low"
+     },
+     {
+      "writer": "reviewer",
+      "source": "externally_verified",
+      "durable": true,
+      "mode": "auto"
+     },
+     {
+      "writer": "reviewer",
+      "source": "externally_verified",
+      "durable": true,
+      "mode": "staged"
+     },
+     {
+      "writer": "reviewer",
+      "source": "externally_verified",
+      "durable": true,
+      "mode": "user_only"
+     },
+     {
+      "writer": "reviewer",
+      "source": "externally_verified",
+      "durable": false,
+      "mode": "auto",
+      "confidence": "high"
+     },
+     {
+      "writer": "reviewer",
+      "source": "externally_verified",
+      "durable": false,
+      "mode": "staged",
+      "confidence": "high"
+     },
+     {
+      "writer": "reviewer",
+      "source": "externally_verified",
+      "durable": false,
+      "mode": "user_only",
+      "confidence": "high"
+     },
+     {
+      "writer": "reviewer",
+      "source": "externally_verified",
+      "durable": false,
+      "mode": "auto",
+      "confidence": "medium"
+     },
+     {
+      "writer": "reviewer",
+      "source": "externally_verified",
+      "durable": false,
+      "mode": "staged",
+      "confidence": "medium"
+     },
+     {
+      "writer": "reviewer",
+      "source": "externally_verified",
+      "durable": false,
+      "mode": "user_only",
+      "confidence": "medium"
+     },
+     {
+      "writer": "reviewer",
+      "source": "externally_verified",
+      "durable": false,
+      "mode": "auto",
+      "confidence": "low"
+     },
+     {
+      "writer": "reviewer",
+      "source": "externally_verified",
+      "durable": false,
+      "mode": "staged",
+      "confidence": "low"
+     },
+     {
+      "writer": "reviewer",
+      "source": "externally_verified",
+      "durable": false,
+      "mode": "user_only",
+      "confidence": "low"
+     },
+     {
+      "writer": "reviewer",
+      "source": "externally_verified",
+      "durable": false,
+      "mode": "auto"
+     },
+     {
+      "writer": "reviewer",
+      "source": "externally_verified",
+      "durable": false,
+      "mode": "staged"
+     },
+     {
+      "writer": "reviewer",
+      "source": "externally_verified",
+      "durable": false,
+      "mode": "user_only"
+     },
+     {
+      "writer": "consolidation",
+      "source": "user_asserted",
+      "durable": true,
+      "mode": "auto",
+      "confidence": "high"
+     },
+     {
+      "writer": "consolidation",
+      "source": "user_asserted",
+      "durable": true,
+      "mode": "staged",
+      "confidence": "high"
+     },
+     {
+      "writer": "consolidation",
+      "source": "user_asserted",
+      "durable": true,
+      "mode": "user_only",
+      "confidence": "high"
+     },
+     {
+      "writer": "consolidation",
+      "source": "user_asserted",
+      "durable": true,
+      "mode": "auto",
+      "confidence": "medium"
+     },
+     {
+      "writer": "consolidation",
+      "source": "user_asserted",
+      "durable": true,
+      "mode": "staged",
+      "confidence": "medium"
+     },
+     {
+      "writer": "consolidation",
+      "source": "user_asserted",
+      "durable": true,
+      "mode": "user_only",
+      "confidence": "medium"
+     },
+     {
+      "writer": "consolidation",
+      "source": "user_asserted",
+      "durable": true,
+      "mode": "auto",
+      "confidence": "low"
+     },
+     {
+      "writer": "consolidation",
+      "source": "user_asserted",
+      "durable": true,
+      "mode": "staged",
+      "confidence": "low"
+     },
+     {
+      "writer": "consolidation",
+      "source": "user_asserted",
+      "durable": true,
+      "mode": "user_only",
+      "confidence": "low"
+     },
+     {
+      "writer": "consolidation",
+      "source": "user_asserted",
+      "durable": true,
+      "mode": "auto"
+     },
+     {
+      "writer": "consolidation",
+      "source": "user_asserted",
+      "durable": true,
+      "mode": "staged"
+     },
+     {
+      "writer": "consolidation",
+      "source": "user_asserted",
+      "durable": true,
+      "mode": "user_only"
+     },
+     {
+      "writer": "consolidation",
+      "source": "user_asserted",
+      "durable": false,
+      "mode": "auto",
+      "confidence": "high"
+     },
+     {
+      "writer": "consolidation",
+      "source": "user_asserted",
+      "durable": false,
+      "mode": "staged",
+      "confidence": "high"
+     },
+     {
+      "writer": "consolidation",
+      "source": "user_asserted",
+      "durable": false,
+      "mode": "user_only",
+      "confidence": "high"
+     },
+     {
+      "writer": "consolidation",
+      "source": "user_asserted",
+      "durable": false,
+      "mode": "auto",
+      "confidence": "medium"
+     },
+     {
+      "writer": "consolidation",
+      "source": "user_asserted",
+      "durable": false,
+      "mode": "staged",
+      "confidence": "medium"
+     },
+     {
+      "writer": "consolidation",
+      "source": "user_asserted",
+      "durable": false,
+      "mode": "user_only",
+      "confidence": "medium"
+     },
+     {
+      "writer": "consolidation",
+      "source": "user_asserted",
+      "durable": false,
+      "mode": "auto",
+      "confidence": "low"
+     },
+     {
+      "writer": "consolidation",
+      "source": "user_asserted",
+      "durable": false,
+      "mode": "staged",
+      "confidence": "low"
+     },
+     {
+      "writer": "consolidation",
+      "source": "user_asserted",
+      "durable": false,
+      "mode": "user_only",
+      "confidence": "low"
+     },
+     {
+      "writer": "consolidation",
+      "source": "user_asserted",
+      "durable": false,
+      "mode": "auto"
+     },
+     {
+      "writer": "consolidation",
+      "source": "user_asserted",
+      "durable": false,
+      "mode": "staged"
+     },
+     {
+      "writer": "consolidation",
+      "source": "user_asserted",
+      "durable": false,
+      "mode": "user_only"
+     },
+     {
+      "writer": "consolidation",
+      "source": "model_inferred",
+      "durable": true,
+      "mode": "auto",
+      "confidence": "high"
+     },
+     {
+      "writer": "consolidation",
+      "source": "model_inferred",
+      "durable": true,
+      "mode": "staged",
+      "confidence": "high"
+     },
+     {
+      "writer": "consolidation",
+      "source": "model_inferred",
+      "durable": true,
+      "mode": "user_only",
+      "confidence": "high"
+     },
+     {
+      "writer": "consolidation",
+      "source": "model_inferred",
+      "durable": true,
+      "mode": "auto",
+      "confidence": "medium"
+     },
+     {
+      "writer": "consolidation",
+      "source": "model_inferred",
+      "durable": true,
+      "mode": "staged",
+      "confidence": "medium"
+     },
+     {
+      "writer": "consolidation",
+      "source": "model_inferred",
+      "durable": true,
+      "mode": "user_only",
+      "confidence": "medium"
+     },
+     {
+      "writer": "consolidation",
+      "source": "model_inferred",
+      "durable": true,
+      "mode": "auto",
+      "confidence": "low"
+     },
+     {
+      "writer": "consolidation",
+      "source": "model_inferred",
+      "durable": true,
+      "mode": "staged",
+      "confidence": "low"
+     },
+     {
+      "writer": "consolidation",
+      "source": "model_inferred",
+      "durable": true,
+      "mode": "user_only",
+      "confidence": "low"
+     },
+     {
+      "writer": "consolidation",
+      "source": "model_inferred",
+      "durable": true,
+      "mode": "auto"
+     },
+     {
+      "writer": "consolidation",
+      "source": "model_inferred",
+      "durable": true,
+      "mode": "staged"
+     },
+     {
+      "writer": "consolidation",
+      "source": "model_inferred",
+      "durable": true,
+      "mode": "user_only"
+     },
+     {
+      "writer": "consolidation",
+      "source": "model_inferred",
+      "durable": false,
+      "mode": "auto",
+      "confidence": "high"
+     },
+     {
+      "writer": "consolidation",
+      "source": "model_inferred",
+      "durable": false,
+      "mode": "staged",
+      "confidence": "high"
+     },
+     {
+      "writer": "consolidation",
+      "source": "model_inferred",
+      "durable": false,
+      "mode": "user_only",
+      "confidence": "high"
+     },
+     {
+      "writer": "consolidation",
+      "source": "model_inferred",
+      "durable": false,
+      "mode": "auto",
+      "confidence": "medium"
+     },
+     {
+      "writer": "consolidation",
+      "source": "model_inferred",
+      "durable": false,
+      "mode": "staged",
+      "confidence": "medium"
+     },
+     {
+      "writer": "consolidation",
+      "source": "model_inferred",
+      "durable": false,
+      "mode": "user_only",
+      "confidence": "medium"
+     },
+     {
+      "writer": "consolidation",
+      "source": "model_inferred",
+      "durable": false,
+      "mode": "auto",
+      "confidence": "low"
+     },
+     {
+      "writer": "consolidation",
+      "source": "model_inferred",
+      "durable": false,
+      "mode": "staged",
+      "confidence": "low"
+     },
+     {
+      "writer": "consolidation",
+      "source": "model_inferred",
+      "durable": false,
+      "mode": "user_only",
+      "confidence": "low"
+     },
+     {
+      "writer": "consolidation",
+      "source": "model_inferred",
+      "durable": false,
+      "mode": "auto"
+     },
+     {
+      "writer": "consolidation",
+      "source": "model_inferred",
+      "durable": false,
+      "mode": "staged"
+     },
+     {
+      "writer": "consolidation",
+      "source": "model_inferred",
+      "durable": false,
+      "mode": "user_only"
+     },
+     {
+      "writer": "consolidation",
+      "source": "observed",
+      "durable": true,
+      "mode": "auto",
+      "confidence": "high"
+     },
+     {
+      "writer": "consolidation",
+      "source": "observed",
+      "durable": true,
+      "mode": "staged",
+      "confidence": "high"
+     },
+     {
+      "writer": "consolidation",
+      "source": "observed",
+      "durable": true,
+      "mode": "user_only",
+      "confidence": "high"
+     },
+     {
+      "writer": "consolidation",
+      "source": "observed",
+      "durable": true,
+      "mode": "auto",
+      "confidence": "medium"
+     },
+     {
+      "writer": "consolidation",
+      "source": "observed",
+      "durable": true,
+      "mode": "staged",
+      "confidence": "medium"
+     },
+     {
+      "writer": "consolidation",
+      "source": "observed",
+      "durable": true,
+      "mode": "user_only",
+      "confidence": "medium"
+     },
+     {
+      "writer": "consolidation",
+      "source": "observed",
+      "durable": true,
+      "mode": "auto",
+      "confidence": "low"
+     },
+     {
+      "writer": "consolidation",
+      "source": "observed",
+      "durable": true,
+      "mode": "staged",
+      "confidence": "low"
+     },
+     {
+      "writer": "consolidation",
+      "source": "observed",
+      "durable": true,
+      "mode": "user_only",
+      "confidence": "low"
+     },
+     {
+      "writer": "consolidation",
+      "source": "observed",
+      "durable": true,
+      "mode": "auto"
+     },
+     {
+      "writer": "consolidation",
+      "source": "observed",
+      "durable": true,
+      "mode": "staged"
+     },
+     {
+      "writer": "consolidation",
+      "source": "observed",
+      "durable": true,
+      "mode": "user_only"
+     },
+     {
+      "writer": "consolidation",
+      "source": "observed",
+      "durable": false,
+      "mode": "auto",
+      "confidence": "high"
+     },
+     {
+      "writer": "consolidation",
+      "source": "observed",
+      "durable": false,
+      "mode": "staged",
+      "confidence": "high"
+     },
+     {
+      "writer": "consolidation",
+      "source": "observed",
+      "durable": false,
+      "mode": "user_only",
+      "confidence": "high"
+     },
+     {
+      "writer": "consolidation",
+      "source": "observed",
+      "durable": false,
+      "mode": "auto",
+      "confidence": "medium"
+     },
+     {
+      "writer": "consolidation",
+      "source": "observed",
+      "durable": false,
+      "mode": "staged",
+      "confidence": "medium"
+     },
+     {
+      "writer": "consolidation",
+      "source": "observed",
+      "durable": false,
+      "mode": "user_only",
+      "confidence": "medium"
+     },
+     {
+      "writer": "consolidation",
+      "source": "observed",
+      "durable": false,
+      "mode": "auto",
+      "confidence": "low"
+     },
+     {
+      "writer": "consolidation",
+      "source": "observed",
+      "durable": false,
+      "mode": "staged",
+      "confidence": "low"
+     },
+     {
+      "writer": "consolidation",
+      "source": "observed",
+      "durable": false,
+      "mode": "user_only",
+      "confidence": "low"
+     },
+     {
+      "writer": "consolidation",
+      "source": "observed",
+      "durable": false,
+      "mode": "auto"
+     },
+     {
+      "writer": "consolidation",
+      "source": "observed",
+      "durable": false,
+      "mode": "staged"
+     },
+     {
+      "writer": "consolidation",
+      "source": "observed",
+      "durable": false,
+      "mode": "user_only"
+     },
+     {
+      "writer": "consolidation",
+      "source": "externally_verified",
+      "durable": true,
+      "mode": "auto",
+      "confidence": "high"
+     },
+     {
+      "writer": "consolidation",
+      "source": "externally_verified",
+      "durable": true,
+      "mode": "staged",
+      "confidence": "high"
+     },
+     {
+      "writer": "consolidation",
+      "source": "externally_verified",
+      "durable": true,
+      "mode": "user_only",
+      "confidence": "high"
+     },
+     {
+      "writer": "consolidation",
+      "source": "externally_verified",
+      "durable": true,
+      "mode": "auto",
+      "confidence": "medium"
+     },
+     {
+      "writer": "consolidation",
+      "source": "externally_verified",
+      "durable": true,
+      "mode": "staged",
+      "confidence": "medium"
+     },
+     {
+      "writer": "consolidation",
+      "source": "externally_verified",
+      "durable": true,
+      "mode": "user_only",
+      "confidence": "medium"
+     },
+     {
+      "writer": "consolidation",
+      "source": "externally_verified",
+      "durable": true,
+      "mode": "auto",
+      "confidence": "low"
+     },
+     {
+      "writer": "consolidation",
+      "source": "externally_verified",
+      "durable": true,
+      "mode": "staged",
+      "confidence": "low"
+     },
+     {
+      "writer": "consolidation",
+      "source": "externally_verified",
+      "durable": true,
+      "mode": "user_only",
+      "confidence": "low"
+     },
+     {
+      "writer": "consolidation",
+      "source": "externally_verified",
+      "durable": true,
+      "mode": "auto"
+     },
+     {
+      "writer": "consolidation",
+      "source": "externally_verified",
+      "durable": true,
+      "mode": "staged"
+     },
+     {
+      "writer": "consolidation",
+      "source": "externally_verified",
+      "durable": true,
+      "mode": "user_only"
+     },
+     {
+      "writer": "consolidation",
+      "source": "externally_verified",
+      "durable": false,
+      "mode": "auto",
+      "confidence": "high"
+     },
+     {
+      "writer": "consolidation",
+      "source": "externally_verified",
+      "durable": false,
+      "mode": "staged",
+      "confidence": "high"
+     },
+     {
+      "writer": "consolidation",
+      "source": "externally_verified",
+      "durable": false,
+      "mode": "user_only",
+      "confidence": "high"
+     },
+     {
+      "writer": "consolidation",
+      "source": "externally_verified",
+      "durable": false,
+      "mode": "auto",
+      "confidence": "medium"
+     },
+     {
+      "writer": "consolidation",
+      "source": "externally_verified",
+      "durable": false,
+      "mode": "staged",
+      "confidence": "medium"
+     },
+     {
+      "writer": "consolidation",
+      "source": "externally_verified",
+      "durable": false,
+      "mode": "user_only",
+      "confidence": "medium"
+     },
+     {
+      "writer": "consolidation",
+      "source": "externally_verified",
+      "durable": false,
+      "mode": "auto",
+      "confidence": "low"
+     },
+     {
+      "writer": "consolidation",
+      "source": "externally_verified",
+      "durable": false,
+      "mode": "staged",
+      "confidence": "low"
+     },
+     {
+      "writer": "consolidation",
+      "source": "externally_verified",
+      "durable": false,
+      "mode": "user_only",
+      "confidence": "low"
+     },
+     {
+      "writer": "consolidation",
+      "source": "externally_verified",
+      "durable": false,
+      "mode": "auto"
+     },
+     {
+      "writer": "consolidation",
+      "source": "externally_verified",
+      "durable": false,
+      "mode": "staged"
+     },
+     {
+      "writer": "consolidation",
+      "source": "externally_verified",
+      "durable": false,
+      "mode": "user_only"
+     }
+    ]
+   }
+  }
+ ],
+ "expected": {
+  "steps": [
+   {
+    "routes": [
+     "durable",
+     "durable",
+     "durable",
+     "durable",
+     "durable",
+     "durable",
+     "durable",
+     "durable",
+     "durable",
+     "durable",
+     "durable",
+     "durable",
+     "session",
+     "session",
+     "session",
+     "session",
+     "session",
+     "session",
+     "session",
+     "session",
+     "session",
+     "session",
+     "session",
+     "session",
+     "durable",
+     "durable",
+     "pending",
+     "pending",
+     "pending",
+     "pending",
+     "session",
+     "session",
+     "session",
+     "session",
+     "session",
+     "session",
+     "session",
+     "session",
+     "session",
+     "session",
+     "session",
+     "session",
+     "session",
+     "session",
+     "session",
+     "session",
+     "session",
+     "session",
+     "durable",
+     "durable",
+     "durable",
+     "durable",
+     "durable",
+     "durable",
+     "durable",
+     "durable",
+     "durable",
+     "durable",
+     "durable",
+     "durable",
+     "session",
+     "session",
+     "session",
+     "session",
+     "session",
+     "session",
+     "session",
+     "session",
+     "session",
+     "session",
+     "session",
+     "session",
+     "durable",
+     "durable",
+     "durable",
+     "durable",
+     "durable",
+     "durable",
+     "durable",
+     "durable",
+     "durable",
+     "durable",
+     "durable",
+     "durable",
+     "session",
+     "session",
+     "session",
+     "session",
+     "session",
+     "session",
+     "session",
+     "session",
+     "session",
+     "session",
+     "session",
+     "session",
+     "durable",
+     "pending",
+     "pending",
+     "durable",
+     "pending",
+     "pending",
+     "session",
+     "session",
+     "session",
+     "durable",
+     "pending",
+     "pending",
+     "session",
+     "session",
+     "session",
+     "session",
+     "session",
+     "session",
+     "session",
+     "session",
+     "session",
+     "session",
+     "session",
+     "session",
+     "durable",
+     "pending",
+     "pending",
+     "durable",
+     "pending",
+     "pending",
+     "session",
+     "session",
+     "session",
+     "durable",
+     "pending",
+     "pending",
+     "session",
+     "session",
+     "session",
+     "session",
+     "session",
+     "session",
+     "session",
+     "session",
+     "session",
+     "session",
+     "session",
+     "session",
+     "durable",
+     "pending",
+     "pending",
+     "durable",
+     "pending",
+     "pending",
+     "session",
+     "session",
+     "session",
+     "durable",
+     "pending",
+     "pending",
+     "session",
+     "session",
+     "session",
+     "session",
+     "session",
+     "session",
+     "session",
+     "session",
+     "session",
+     "session",
+     "session",
+     "session",
+     "durable",
+     "pending",
+     "pending",
+     "durable",
+     "pending",
+     "pending",
+     "session",
+     "session",
+     "session",
+     "durable",
+     "pending",
+     "pending",
+     "session",
+     "session",
+     "session",
+     "session",
+     "session",
+     "session",
+     "session",
+     "session",
+     "session",
+     "session",
+     "session",
+     "session",
+     "durable",
+     "pending",
+     "pending",
+     "durable",
+     "pending",
+     "pending",
+     "session",
+     "session",
+     "session",
+     "durable",
+     "pending",
+     "pending",
+     "session",
+     "session",
+     "session",
+     "session",
+     "session",
+     "session",
+     "session",
+     "session",
+     "session",
+     "session",
+     "session",
+     "session",
+     "durable",
+     "pending",
+     "pending",
+     "durable",
+     "pending",
+     "pending",
+     "session",
+     "session",
+     "session",
+     "durable",
+     "pending",
+     "pending",
+     "session",
+     "session",
+     "session",
+     "session",
+     "session",
+     "session",
+     "session",
+     "session",
+     "session",
+     "session",
+     "session",
+     "session",
+     "durable",
+     "pending",
+     "pending",
+     "durable",
+     "pending",
+     "pending",
+     "session",
+     "session",
+     "session",
+     "durable",
+     "pending",
+     "pending",
+     "session",
+     "session",
+     "session",
+     "session",
+     "session",
+     "session",
+     "session",
+     "session",
+     "session",
+     "session",
+     "session",
+     "session",
+     "durable",
+     "pending",
+     "pending",
+     "durable",
+     "pending",
+     "pending",
+     "session",
+     "session",
+     "session",
+     "durable",
+     "pending",
+     "pending",
+     "session",
+     "session",
+     "session",
+     "session",
+     "session",
+     "session",
+     "session",
+     "session",
+     "session",
+     "session",
+     "session",
+     "session",
+     "durable",
+     "pending",
+     "pending",
+     "durable",
+     "pending",
+     "pending",
+     "session",
+     "session",
+     "session",
+     "durable",
+     "pending",
+     "pending",
+     "session",
+     "session",
+     "session",
+     "session",
+     "session",
+     "session",
+     "session",
+     "session",
+     "session",
+     "session",
+     "session",
+     "session",
+     "durable",
+     "pending",
+     "pending",
+     "durable",
+     "pending",
+     "pending",
+     "session",
+     "session",
+     "session",
+     "durable",
+     "pending",
+     "pending",
+     "session",
+     "session",
+     "session",
+     "session",
+     "session",
+     "session",
+     "session",
+     "session",
+     "session",
+     "session",
+     "session",
+     "session",
+     "durable",
+     "pending",
+     "pending",
+     "durable",
+     "pending",
+     "pending",
+     "session",
+     "session",
+     "session",
+     "durable",
+     "pending",
+     "pending",
+     "session",
+     "session",
+     "session",
+     "session",
+     "session",
+     "session",
+     "session",
+     "session",
+     "session",
+     "session",
+     "session",
+     "session",
+     "durable",
+     "pending",
+     "pending",
+     "durable",
+     "pending",
+     "pending",
+     "session",
+     "session",
+     "session",
+     "durable",
+     "pending",
+     "pending",
+     "session",
+     "session",
+     "session",
+     "session",
+     "session",
+     "session",
+     "session",
+     "session",
+     "session",
+     "session",
+     "session",
+     "session"
+    ]
+   }
+  ]
+ }
+}

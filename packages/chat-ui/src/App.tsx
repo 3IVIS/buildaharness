@@ -26,6 +26,8 @@ import {
   type PlanDecision,
   type PlanApprovalEdits,
   type GoalGraphState,
+  type MemoryWriteMode,
+  memoryStatusChecks,
   isGoalGraphEnabled,
   isGoalGraphSuggestEnabled,
 } from '@buildaharness/aielia'
@@ -56,6 +58,7 @@ import { SettingsScreen } from './components/SettingsScreen'
 import { SetupWizard } from './components/SetupWizard'
 import { SearchPanel } from './components/SearchPanel'
 import { GoalsPanel } from './components/GoalsPanel'
+import { MemoryPanel, type MemoryPanelData } from './components/MemoryPanel'
 import { NextStepChips } from './components/NextStepChips'
 import { BrowserConfigStore } from './browser-config-store'
 import { TauriConfigStore } from './tauri-config-store'
@@ -312,6 +315,9 @@ async function createTauriBackedAssistant(config: AssistantConfig): Promise<Pers
   return PersonalAssistant.create({
     llmClient: createLlmClient(config, { isDesktop: true, workspaceRoot }),
     model: config.model,
+    // M6 — same AssistantConfig seam as the CLI's buildAssistant (it already passed memoryBudgetChars; the browser build did not).
+    memoryBudgetChars: config.memoryBudgetChars,
+    memoryWriteMode: config.memoryWriteMode,
     memory: new FileSystemAdapter({ backend, baseDir, namespace: 'transcripts' }),
     experienceStore: await FileSystemExperienceStore.create({ backend, baseDir, namespace: 'experience' }),
     checkpointStore: new FileSystemAdapter({ backend, baseDir, namespace: 'checkpoints' }),
@@ -344,6 +350,8 @@ async function buildAssistant(config: AssistantConfig): Promise<PersonalAssistan
   return PersonalAssistant.create({
     llmClient: createLlmClient(config, { isDesktop: false, workspaceRoot: '' }),
     model: config.model,
+    memoryBudgetChars: config.memoryBudgetChars,
+    memoryWriteMode: config.memoryWriteMode,
     // No fileTools/shellTools in a plain browser build (no filesystem/process access at all) —
     // still worth honoring dangerouslySkipPermissions for consistency with the desktop build,
     // since it also affects the message-level risk gate, independent of file/shell tools.
@@ -376,7 +384,7 @@ export function App(): React.JSX.Element {
   const [progress, setProgress] = useState<AssistantProgress | null>(null)
   const [streamingText, setStreamingText] = useState<string | null>(null)
   const [liveToolSteps, setLiveToolSteps] = useState<AssistantToolStep[]>([])
-  const [view, setView] = useState<'chat' | 'settings' | 'search' | 'goals'>('chat')
+  const [view, setView] = useState<'chat' | 'settings' | 'search' | 'goals' | 'memory'>('chat')
   // First-launch setup wizard: true once the config load finds nothing configured (no persisted
   // backend/key and nothing pinned by a build-time var, so hosted/self-hosted builds skip it).
   const [needsSetup, setNeedsSetup] = useState(false)
@@ -406,6 +414,10 @@ export function App(): React.JSX.Element {
   const [sessionUsage, setSessionUsage] = useState<TokenUsage | undefined>(undefined)
   const [memorySummary, setMemorySummary] = useState<MemorySummary | null>(null)
   const [healthChecks, setHealthChecks] = useState<DoctorCheck[] | null>(null)
+  // M6 — the Memory panel's data (GUI counterpart of the CLI's /memory family); null = still loading. Reloaded after every action so it never shows a stale queue.
+  const [memoryPanelData, setMemoryPanelData] = useState<MemoryPanelData | null>(null)
+  const [memoryPanelMessage, setMemoryPanelMessage] = useState<string | null>(null)
+  const [memoryPanelBusy, setMemoryPanelBusy] = useState(false)
   const [transcriptLength, setTranscriptLength] = useState(0)
   // Phase 3.2 of the harness layer activation plan: a persistent strip above the composer,
   // visible only while a durable plan is actually driving the session — set from each turn's
@@ -448,10 +460,12 @@ export function App(): React.JSX.Element {
 
   /** Runs the platform-appropriate health checks — proxy reachability in a plain browser, claude/workspace/data-dir on desktop (see gui-doctor-checks.ts). */
   async function runHealthChecks(): Promise<DoctorCheck[]> {
+    // M6: the same pure memory checks the CLI's /doctor shows (store vs budget, pending, last consolidation, audit log).
+    const memoryChecks = assistantRef.current ? memoryStatusChecks(await assistantRef.current.getMemoryStatus(sessionIdRef.current)) : []
     if (!isTauri()) {
       const checks = [await checkProxyReachable(config.proxyUrl)]
       if (config.enableWeb && config.webBackend === 'proxy') checks.push(await checkWebSearchReachable(config.proxyUrl, config.authToken))
-      return checks
+      return [...checks, ...memoryChecks]
     }
 
     const [{ appLocalDataDir }, { createTauriFsBackend }] = await Promise.all([
@@ -460,11 +474,12 @@ export function App(): React.JSX.Element {
     ])
     const baseDir = await appLocalDataDir()
     const backend = createTauriFsBackend()
-    return Promise.all([
+    const desktopChecks = await Promise.all([
       checkClaudeAvailable(),
       Promise.resolve(checkWorkspaceConfigured(config.workspaceRoot)),
       checkDataDirWritable(backend, baseDir),
     ])
+    return [...desktopChecks, ...memoryChecks]
   }
 
   /** Populates the Diagnostics section's data — called when Settings opens, not kept live, since Settings and the chat view are mutually exclusive (no risk of it going stale while both are visible). */
@@ -479,6 +494,74 @@ export function App(): React.JSX.Element {
     setMemorySummary(summary)
     setTranscriptLength(transcript.length)
     setHealthChecks(checks)
+  }
+
+  async function loadMemoryPanel(): Promise<void> {
+    const assistant = assistantRef.current
+    if (!assistant) return
+    const sessionId = sessionIdRef.current
+    const [status, summary, history, archive, restorableCount, proposals, digests] = await Promise.all([
+      assistant.getMemoryStatus(sessionId),
+      assistant.getMemorySummary(sessionId),
+      assistant.memoryHistory(50),
+      assistant.listArchivedFacts(),
+      assistant.restorableArchiveCount(),
+      assistant.memoryProposals(),
+      assistant.listSessionDigests(),
+    ])
+    setMemoryPanelData({ status, summary, history, archive, restorableCount, proposals, digests, writers: assistant.memoryWriterFlags() })
+  }
+
+  async function handleOpenMemory(): Promise<void> {
+    setView('memory')
+    setMemoryPanelData(null)
+    setMemoryPanelMessage(null)
+    await loadMemoryPanel()
+  }
+
+  /** Runs one Memory-panel action against the shared PersonalAssistant method (no logic of its own), shows its result line, then reloads the lists. */
+  async function runMemoryAction(action: (assistant: PersonalAssistant) => Promise<string>): Promise<void> {
+    const assistant = assistantRef.current
+    if (!assistant) return
+    setMemoryPanelBusy(true)
+    try {
+      setMemoryPanelMessage(await action(assistant))
+      await loadMemoryPanel()
+    } finally {
+      setMemoryPanelBusy(false)
+    }
+  }
+
+  function outcomeMessage(verb: string, outcome: Awaited<ReturnType<PersonalAssistant['confirmPendingFact']>>): string {
+    if (!outcome.ok) return `✗ ${outcome.error}`
+    return [...outcome.facts.map((f) => `✓ ${verb}: ${f.text}`), ...outcome.conflictNotices.map((n) => `⚠ ${n}`)].join('\n')
+  }
+
+  const memoryPanelHandlers = {
+    onConfirm: (selector: string) => void runMemoryAction(async (a) => outcomeMessage('confirmed', await a.confirmPendingFact(selector))),
+    onReject: (selector: string) => void runMemoryAction(async (a) => outcomeMessage('rejected', await a.rejectPendingFact(selector))),
+    onForget: (selector: string) => void runMemoryAction(async (a) => outcomeMessage('forgotten', await a.forgetFact(selector, sessionIdRef.current))),
+    onUndo: (seq: number) => void runMemoryAction(async (a) => (await a.undoMemoryChange(String(seq), sessionIdRef.current)).message),
+    onForgetArchived: (selector: string) => void runMemoryAction(async (a) => outcomeMessage('erased', await a.forgetArchivedFact(selector))),
+    onAcceptProposal: (selector: string) => void runMemoryAction(async (a) => (await a.acceptMemoryProposal(selector, sessionIdRef.current)).message),
+    onDismissProposal: (selector: string) => void runMemoryAction(async (a) => (await a.dismissMemoryProposal(selector)).message),
+    onRestoreArchived: (selector: string) => void runMemoryAction(async (a) => (await a.restoreArchivedMemory(selector, sessionIdRef.current)).message),
+    onForgetDigests: (id?: string) => void runMemoryAction(async (a) => {
+      const removed = await a.forgetDigests(id)
+      return `Forgot ${removed} session digest${removed === 1 ? '' : 's'}.`
+    }),
+    onConsolidate: () => void runMemoryAction(async (a) => (await a.consolidateMemory(sessionIdRef.current)).message),
+    onSetEnabled: (enabled: boolean) => void runMemoryAction(async (a) => {
+      await a.setMemoryEnabled(enabled)
+      return enabled ? 'Memory writes are on.' : 'Memory writes are OFF: nothing new will be saved. What is already stored stays readable and removable.'
+    }),
+    onSetMode: (mode: MemoryWriteMode) => void runMemoryAction(async (a) => {
+      // Live on the shared assistant AND persisted, so the next rebuild/reload keeps it (the CLI's /config set does both too).
+      a.setMemoryWriteMode(mode)
+      await configStoreRef.current?.save({ memoryWriteMode: mode })
+      setConfig((prev) => ({ ...prev, memoryWriteMode: mode }))
+      return `Memory write mode: ${mode}.`
+    }),
   }
 
   async function handleOpenSettings(): Promise<void> {
@@ -675,6 +758,7 @@ export function App(): React.JSX.Element {
             planStatus: result.planStatus,
             nextSteps: result.nextSteps,
             answerClaim: result.answerClaim,
+            memoryInjection: assistant.getLastMemoryInjection(),
             proposerKind: result.proposerKind,
             contradictionNotice: result.contradictionNotice,
             reviewNotice: result.reviewNotice,
@@ -925,6 +1009,10 @@ export function App(): React.JSX.Element {
     return <GoalsPanel state={goalGraphState} onCancel={() => setView('chat')} />
   }
 
+  if (view === 'memory') {
+    return <MemoryPanel data={memoryPanelData} message={memoryPanelMessage} busy={memoryPanelBusy} onClose={() => setView('chat')} {...memoryPanelHandlers} />
+  }
+
   if (view === 'settings') {
     return (
       <SettingsScreen
@@ -958,6 +1046,7 @@ export function App(): React.JSX.Element {
           <button type="button" aria-label="Undo last exchange" title="Undo last exchange" disabled={busy || entries.length === 0} onClick={() => void handleUndoLastTurn()}>Undo</button>
           <button type="button" aria-label="Search" title="Search past messages" onClick={() => setView('search')}>Search</button>
           <button type="button" aria-label="Goals" title="Review goal threads for this session" onClick={() => void handleOpenGoals()}>Goals</button>
+          <button type="button" aria-label="Memory" title="Review, confirm, undo or switch off what Aielia remembers" onClick={() => void handleOpenMemory()}>Memory</button>
           <button
             type="button"
             aria-label="Sketch a plan"
@@ -1002,6 +1091,7 @@ export function App(): React.JSX.Element {
                   toolSteps={entry.toolSteps}
                   planStatus={entry.planStatus}
                   answerClaim={entry.answerClaim}
+                  memoryInjection={entry.memoryInjection}
                   proposerKind={entry.proposerKind}
                 />
                 {entry.contradictionNotice && <p className="turn-notice" role="note">{entry.contradictionNotice}</p>}

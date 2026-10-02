@@ -1,0 +1,46 @@
+{
+ "description": "A retired fact (retiredAt set) is excluded before ranking and is not counted as dropped.",
+ "flags": {
+  "writeGate": false,
+  "auditLog": true
+ },
+ "config": {},
+ "clock": [
+  "2026-03-01T00:00:00.000Z"
+ ],
+ "initial": {
+  "facts:durable": [
+   {
+    "text": "Retired fact",
+    "extractedAt": "2026-01-03T00:00:00.000Z",
+    "sourceTurn": "turn:s0",
+    "source": "user_asserted",
+    "durable": true,
+    "retiredAt": "2026-02-01T00:00:00.000Z"
+   },
+   {
+    "text": "Live fact",
+    "extractedAt": "2026-01-02T00:00:00.000Z",
+    "sourceTurn": "turn:s0",
+    "source": "user_asserted",
+    "durable": true
+   }
+  ]
+ },
+ "steps": [
+  {
+   "call": "load_facts",
+   "args": {
+    "sessionId": "s1"
+   }
+  }
+ ],
+ "expected": {
+  "steps": [
+   {
+    "factsBlock": "\nKnown facts about the user:\n- Live fact",
+    "droppedCount": 0
+   }
+  ]
+ }
+}

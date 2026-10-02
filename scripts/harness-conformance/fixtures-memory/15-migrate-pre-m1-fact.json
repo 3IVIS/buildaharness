@@ -1,0 +1,69 @@
+{
+ "description": "migrate_fact: a pre-M1 durable fact with no source stays durable and becomes user_asserted, on read and when the list is next written.",
+ "flags": {
+  "writeGate": false,
+  "auditLog": true
+ },
+ "config": {},
+ "clock": [
+  "2026-03-01T00:00:00.000Z"
+ ],
+ "initial": {
+  "facts:durable": [
+   {
+    "text": "My name is Jordan.",
+    "extractedAt": "2026-01-01T00:00:00.000Z",
+    "sourceTurn": "turn:1",
+    "durable": true
+   }
+  ]
+ },
+ "steps": [
+  {
+   "call": "load_facts",
+   "args": {
+    "sessionId": "s1"
+   }
+  },
+  {
+   "call": "record_facts",
+   "args": {
+    "sessionId": "s1",
+    "candidates": [
+     {
+      "text": "The user owns a cat",
+      "durable": true,
+      "confidence": "high",
+      "category": "other"
+     }
+    ]
+   }
+  }
+ ],
+ "expected": {
+  "steps": [
+   {
+    "facts": [
+     {
+      "text": "My name is Jordan.",
+      "source": "user_asserted",
+      "durable": true
+     }
+    ]
+   },
+   {}
+  ],
+  "final": {
+   "facts:durable": [
+    {
+     "text": "My name is Jordan.",
+     "source": "user_asserted",
+     "durable": true
+    },
+    {
+     "text": "The user owns a cat"
+    }
+   ]
+  }
+ }
+}

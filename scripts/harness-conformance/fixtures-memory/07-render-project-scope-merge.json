@@ -1,0 +1,74 @@
+{
+ "description": "Project scoping (global or current project only) and the durable-first merge: a session fact whose text is already durable is suppressed; the inventory is unfiltered by project.",
+ "flags": {
+  "writeGate": false,
+  "auditLog": true
+ },
+ "config": {
+  "project": "projA"
+ },
+ "clock": [
+  "2026-03-01T00:00:00.000Z"
+ ],
+ "initial": {
+  "facts:durable": [
+   {
+    "text": "Global durable",
+    "extractedAt": "2026-01-01T00:00:00.000Z",
+    "sourceTurn": "turn:s0",
+    "source": "user_asserted",
+    "durable": true
+   },
+   {
+    "text": "Project A durable",
+    "extractedAt": "2026-01-02T00:00:00.000Z",
+    "sourceTurn": "turn:s0",
+    "source": "user_asserted",
+    "durable": true,
+    "project": "projA",
+    "category": "project"
+   },
+   {
+    "text": "Project B durable",
+    "extractedAt": "2026-01-03T00:00:00.000Z",
+    "sourceTurn": "turn:s0",
+    "source": "user_asserted",
+    "durable": true,
+    "project": "projB",
+    "category": "project"
+   }
+  ],
+  "facts:s1": [
+   {
+    "text": "Global durable",
+    "extractedAt": "2026-02-01T00:00:00.000Z",
+    "sourceTurn": "turn:s0",
+    "source": "user_asserted",
+    "durable": false
+   },
+   {
+    "text": "Only in session",
+    "extractedAt": "2026-02-02T00:00:00.000Z",
+    "sourceTurn": "turn:s0",
+    "source": "user_asserted",
+    "durable": false
+   }
+  ]
+ },
+ "steps": [
+  {
+   "call": "load_facts",
+   "args": {
+    "sessionId": "s1"
+   }
+  }
+ ],
+ "expected": {
+  "steps": [
+   {
+    "factsBlock": "\nKnown facts about the user:\n- Project A durable\n- Global durable\n- Only in session",
+    "droppedCount": 0
+   }
+  ]
+ }
+}

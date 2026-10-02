@@ -9,6 +9,7 @@ import { resolveUpdateCheckMode } from './update-check-flag.js'
 import { resolveGoalGraphMode } from './goal-graph-flag.js'
 import { resolveLayerPolicyMode, isLayerPolicyMode } from './layer-policy-flag.js'
 import { resolveGoalGraphSuggestMode } from './goal-graph-suggest-flag.js'
+import { resolveMemoryWriteMode, MEMORY_WRITE_MODES } from './memory-governance.js'
 
 /**
  * Pure logic backing cli.ts's /config command family — split out so it's unit-testable in
@@ -47,6 +48,7 @@ export const ENV_VAR_FOR_CONFIG_KEY: Partial<Record<keyof AssistantConfig, strin
   sessionCostLimitUsd: 'ASSISTANT_SESSION_COST_LIMIT_USD',
   sessionCallLimit: 'ASSISTANT_SESSION_CALL_LIMIT',
   memoryBudgetChars: 'ASSISTANT_MEMORY_BUDGET_CHARS',
+  memoryWriteMode: 'ASSISTANT_MEMORY_WRITE_MODE',
   oneLoopMode: 'ASSISTANT_ONE_LOOP',
   askMode: 'ASSISTANT_ASK_MODE',
   planMode: 'ASSISTANT_PLAN_MODE',
@@ -116,6 +118,12 @@ export function envOverridesFromProcessEnv(env: NodeJS.ProcessEnv): Partial<Assi
   if (env.ASSISTANT_SESSION_COST_LIMIT_USD !== undefined) overrides.sessionCostLimitUsd = Number(env.ASSISTANT_SESSION_COST_LIMIT_USD)
   if (env.ASSISTANT_SESSION_CALL_LIMIT !== undefined) overrides.sessionCallLimit = Number(env.ASSISTANT_SESSION_CALL_LIMIT)
   if (env.ASSISTANT_MEMORY_BUDGET_CHARS !== undefined) overrides.memoryBudgetChars = Number(env.ASSISTANT_MEMORY_BUDGET_CHARS)
+  if (env.ASSISTANT_MEMORY_WRITE_MODE !== undefined) {
+    const resolved = resolveMemoryWriteMode(env.ASSISTANT_MEMORY_WRITE_MODE)
+    // Warn-and-default like every other mode flag: an unrecognised value must be visible, not silently a different mode.
+    if (!(MEMORY_WRITE_MODES as readonly string[]).includes(env.ASSISTANT_MEMORY_WRITE_MODE)) console.warn(`ASSISTANT_MEMORY_WRITE_MODE="${env.ASSISTANT_MEMORY_WRITE_MODE}" is not one of ${MEMORY_WRITE_MODES.join('/')}; using "${resolved}".`)
+    overrides.memoryWriteMode = resolved
+  }
   // resolveOneLoopMode already warns-and-defaults on an unrecognized value, so an explicit
   // ASSISTANT_ONE_LOOP always resolves to a concrete 'enabled'/'disabled' override here.
   if (env.ASSISTANT_ONE_LOOP !== undefined) overrides.oneLoopMode = resolveOneLoopMode(env)
@@ -179,6 +187,9 @@ export function parseConfigValue(key: keyof AssistantConfig, raw: string): unkno
       if (!Number.isFinite(n) || n <= 0 || !Number.isInteger(n)) throw new ConfigValueParseError('memoryBudgetChars must be a positive integer')
       return n
     }
+    case 'memoryWriteMode':
+      if (raw !== 'auto' && raw !== 'staged' && raw !== 'user_only') throw new ConfigValueParseError('memoryWriteMode must be "auto", "staged" or "user_only"')
+      return raw
     case 'sessionCallLimit': {
       const n = Number(raw)
       if (!Number.isFinite(n) || n <= 0 || !Number.isInteger(n)) throw new ConfigValueParseError('sessionCallLimit must be a positive integer')

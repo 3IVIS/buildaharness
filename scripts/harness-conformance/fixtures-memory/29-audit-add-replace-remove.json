@@ -1,0 +1,134 @@
+{
+ "description": "add, retire (a keyed update of a fact held in both stores) and remove produce entries with the contract fields: seq 1..n, injected clock for at, store/writer/turn.",
+ "flags": {
+  "writeGate": false,
+  "auditLog": true
+ },
+ "config": {},
+ "clock": [
+  "2026-05-01T00:00:00.000Z",
+  "2026-05-01T00:00:01.000Z",
+  "2026-05-01T00:00:02.000Z",
+  "2026-05-01T00:00:03.000Z",
+  "2026-05-01T00:00:04.000Z",
+  "2026-05-01T00:00:05.000Z",
+  "2026-05-01T00:00:06.000Z",
+  "2026-05-01T00:00:07.000Z",
+  "2026-05-01T00:00:08.000Z",
+  "2026-05-01T00:00:09.000Z",
+  "2026-05-01T00:00:10.000Z",
+  "2026-05-01T00:00:11.000Z",
+  "2026-05-01T00:00:12.000Z",
+  "2026-05-01T00:00:13.000Z",
+  "2026-05-01T00:00:14.000Z",
+  "2026-05-01T00:00:15.000Z",
+  "2026-05-01T00:00:16.000Z",
+  "2026-05-01T00:00:17.000Z",
+  "2026-05-01T00:00:18.000Z",
+  "2026-05-01T00:00:19.000Z",
+  "2026-05-01T00:00:20.000Z",
+  "2026-05-01T00:00:21.000Z",
+  "2026-05-01T00:00:22.000Z",
+  "2026-05-01T00:00:23.000Z",
+  "2026-05-01T00:00:24.000Z",
+  "2026-05-01T00:00:25.000Z",
+  "2026-05-01T00:00:26.000Z",
+  "2026-05-01T00:00:27.000Z",
+  "2026-05-01T00:00:28.000Z",
+  "2026-05-01T00:00:29.000Z"
+ ],
+ "initial": {},
+ "steps": [
+  {
+   "call": "record_facts",
+   "args": {
+    "sessionId": "s1",
+    "candidates": [
+     {
+      "text": "The user lives in Paris",
+      "durable": true,
+      "confidence": "high",
+      "category": "other",
+      "key": "city"
+     }
+    ]
+   }
+  },
+  {
+   "call": "record_facts",
+   "args": {
+    "sessionId": "s1",
+    "candidates": [
+     {
+      "text": "The user lives in Berlin",
+      "durable": true,
+      "confidence": "high",
+      "category": "other",
+      "key": "city"
+     }
+    ]
+   }
+  },
+  {
+   "call": "forget",
+   "args": {
+    "index": 0,
+    "sessionId": "s1"
+   }
+  },
+  {
+   "call": "history",
+   "args": {
+    "limit": 10
+   }
+  }
+ ],
+ "expected": {
+  "steps": [
+   {},
+   {},
+   {
+    "fact": {
+     "text": "The user lives in Berlin"
+    }
+   },
+   {
+    "entries": [
+     {
+      "seq": 1,
+      "op": "add",
+      "store": "durable",
+      "writer": "recordFacts",
+      "turn": "s1",
+      "factId": "The user lives in Paris|2026-05-01T00:00:00.000Z",
+      "at": "2026-05-01T00:00:01.000Z"
+     },
+     {
+      "seq": 2,
+      "op": "retire",
+      "store": "durable",
+      "writer": "recordFacts:supersede",
+      "turn": "s1"
+     },
+     {
+      "seq": 3,
+      "op": "add",
+      "store": "durable",
+      "writer": "recordFacts",
+      "turn": "s1"
+     },
+     {
+      "seq": 4,
+      "op": "remove",
+      "store": "durable",
+      "writer": "forget",
+      "turn": "s1",
+      "before": {
+       "text": "The user lives in Berlin"
+      }
+     }
+    ]
+   }
+  ]
+ }
+}

@@ -1,0 +1,137 @@
+{
+ "description": "Undo restores the pre-image at the recorded index (exact order), and removes it from facts:retired.",
+ "flags": {
+  "writeGate": false,
+  "auditLog": true
+ },
+ "config": {},
+ "clock": [
+  "2026-05-01T00:00:00.000Z",
+  "2026-05-01T00:00:01.000Z",
+  "2026-05-01T00:00:02.000Z",
+  "2026-05-01T00:00:03.000Z",
+  "2026-05-01T00:00:04.000Z",
+  "2026-05-01T00:00:05.000Z",
+  "2026-05-01T00:00:06.000Z",
+  "2026-05-01T00:00:07.000Z",
+  "2026-05-01T00:00:08.000Z",
+  "2026-05-01T00:00:09.000Z",
+  "2026-05-01T00:00:10.000Z",
+  "2026-05-01T00:00:11.000Z",
+  "2026-05-01T00:00:12.000Z",
+  "2026-05-01T00:00:13.000Z",
+  "2026-05-01T00:00:14.000Z",
+  "2026-05-01T00:00:15.000Z",
+  "2026-05-01T00:00:16.000Z",
+  "2026-05-01T00:00:17.000Z",
+  "2026-05-01T00:00:18.000Z",
+  "2026-05-01T00:00:19.000Z",
+  "2026-05-01T00:00:20.000Z",
+  "2026-05-01T00:00:21.000Z",
+  "2026-05-01T00:00:22.000Z",
+  "2026-05-01T00:00:23.000Z",
+  "2026-05-01T00:00:24.000Z",
+  "2026-05-01T00:00:25.000Z",
+  "2026-05-01T00:00:26.000Z",
+  "2026-05-01T00:00:27.000Z",
+  "2026-05-01T00:00:28.000Z",
+  "2026-05-01T00:00:29.000Z"
+ ],
+ "initial": {
+  "facts:durable": [
+   {
+    "text": "First",
+    "extractedAt": "2025-12-01T00:00:00.000Z",
+    "sourceTurn": "turn:s0",
+    "source": "user_asserted",
+    "durable": true
+   },
+   {
+    "text": "Second",
+    "extractedAt": "2025-12-02T00:00:00.000Z",
+    "sourceTurn": "turn:s0",
+    "source": "user_asserted",
+    "durable": true
+   },
+   {
+    "text": "Replacement",
+    "extractedAt": "2025-12-02T00:00:00.000Z",
+    "sourceTurn": "turn:s0",
+    "source": "user_asserted",
+    "durable": true,
+    "supersedes": "Replaced one"
+   }
+  ],
+  "facts:retired": [
+   {
+    "text": "Replaced one",
+    "extractedAt": "2025-12-03T00:00:00.000Z",
+    "sourceTurn": "turn:s0",
+    "source": "user_asserted",
+    "durable": true,
+    "key": "k",
+    "retiredAt": "2026-01-01T00:00:00.000Z"
+   }
+  ],
+  "memory:audit": [
+   {
+    "seq": 7,
+    "at": "2026-01-01T00:00:00.000Z",
+    "op": "replace",
+    "factId": "Replaced one|2025-12-03T00:00:00.000Z",
+    "before": {
+     "text": "Replaced one",
+     "extractedAt": "2025-12-03T00:00:00.000Z",
+     "sourceTurn": "turn:s0",
+     "source": "user_asserted",
+     "durable": true,
+     "key": "k"
+    },
+    "after": {
+     "text": "Replacement",
+     "extractedAt": "2025-12-02T00:00:00.000Z",
+     "sourceTurn": "turn:s0",
+     "source": "user_asserted",
+     "durable": true,
+     "supersedes": "Replaced one"
+    },
+    "store": "durable",
+    "writer": "consolidation:merge",
+    "turn": "s1",
+    "index": 1
+   }
+  ]
+ },
+ "steps": [
+  {
+   "call": "undo",
+   "args": {
+    "seq": 7,
+    "sessionId": "s1"
+   }
+  }
+ ],
+ "expected": {
+  "steps": [
+   {
+    "ok": true
+   }
+  ],
+  "final": {
+   "facts:durable": [
+    {
+     "text": "First"
+    },
+    {
+     "text": "Replaced one"
+    },
+    {
+     "text": "Second"
+    }
+   ],
+   "facts:retired": {
+    "$absent": true
+   }
+  }
+ }
+}

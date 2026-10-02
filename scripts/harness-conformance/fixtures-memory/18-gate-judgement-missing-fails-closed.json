@@ -1,0 +1,74 @@
+{
+ "description": "Missing judgement (absent object, absent boolean, explicit null) gives session scope with durable false: never durable, pending, or audited.",
+ "flags": {
+  "writeGate": true,
+  "auditLog": true
+ },
+ "config": {},
+ "clock": [
+  "2026-03-01T00:00:00.000Z"
+ ],
+ "initial": {},
+ "steps": [
+  {
+   "call": "record_facts",
+   "args": {
+    "sessionId": "s1",
+    "candidates": [
+     {
+      "text": "No judgement at all",
+      "durable": true,
+      "confidence": "high",
+      "category": "other"
+     },
+     {
+      "text": "Half judged",
+      "durable": true,
+      "confidence": "high",
+      "category": "other",
+      "judgement": {
+       "containsSecret": false
+      }
+     },
+     {
+      "text": "Null judged",
+      "durable": true,
+      "confidence": "high",
+      "category": "other",
+      "judgement": {
+       "containsSecret": null,
+       "looksLikeInstruction": false
+      }
+     }
+    ]
+   }
+  }
+ ],
+ "expected": {
+  "final": {
+   "facts:s1": [
+    {
+     "text": "No judgement at all",
+     "durable": false
+    },
+    {
+     "text": "Half judged",
+     "durable": false
+    },
+    {
+     "text": "Null judged",
+     "durable": false
+    }
+   ],
+   "facts:durable": {
+    "$absent": true
+   },
+   "facts:pending-confirmation": {
+    "$absent": true
+   },
+   "memory:audit": {
+    "$absent": true
+   }
+  }
+ }
+}

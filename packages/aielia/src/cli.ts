@@ -36,10 +36,10 @@ import { braveSearch } from './web-search-provider.js'
 import { resolveConfig, validateConfig, ConfigValidationError, type AssistantConfig, type ConfigStore } from './config.js'
 import { NodeConfigStore } from './node-config-store.js'
 import { isConfigKey, envOverridesFromProcessEnv, parseConfigValue, ConfigValueParseError, formatConfigListing, ENV_VAR_FOR_CONFIG_KEY, CONFIG_KEYS } from './cli-config.js'
-import { formatHelp, isQuitCommand, formatStatus, formatTranscriptMarkdown, defaultExportFilename, formatMemorySummary, formatMemoryExport, defaultMemoryExportFilename, formatSearchResults, formatGoalGraphState, formatNextSteps, formatCostSummary, formatDoctorReport, formatUndoLogListing, formatMemoryPendingOutcome } from './cli-session.js'
+import { formatHelp, isQuitCommand, formatStatus, formatTranscriptMarkdown, defaultExportFilename, formatMemorySummary, formatMemoryExport, defaultMemoryExportFilename, formatSearchResults, formatGoalGraphState, formatNextSteps, formatCostSummary, formatDoctorReport, formatUndoLogListing, formatMemoryPendingOutcome, formatMemoryHistory, formatMemoryArchive, formatMemoryInjection, formatMemoryStatus } from './cli-session.js'
 import { estimateCostUsd } from './model-pricing.js'
 import { formatSpendCapStatus } from './spend-cap.js'
-import { checkProxyHealth, checkClaudeCli, checkWorkspaceRoot, checkDataDirWritable } from './doctor-checks.js'
+import { checkProxyHealth, checkClaudeCli, checkWorkspaceRoot, checkDataDirWritable, checkMemoryHealth } from './doctor-checks.js'
 import { resolveNonInteractiveApprovalMode, type NonInteractiveApprovalMode } from './non-interactive-mode.js'
 import { LiveSteeringChannel } from './live-steering-channel.js'
 import { isGoalGraphEnabled } from './goal-graph-flag.js'
@@ -169,6 +169,9 @@ async function buildAssistant(config: AssistantConfig, { backend, dataDir, remin
     // I'm running in" — see PersonalAssistantOptions.activeProject's doc comment.
     activeProject: config.activeProject || workspaceRoot,
     memoryBudgetChars: config.memoryBudgetChars,
+    memoryWriteMode: config.memoryWriteMode,
+    // M5: consolidation proposals are staged for /memory consolidate; the CLI has the controls, so it may raise them on /new.
+    consolidateOnNewSession: true,
     memory: new FileSystemAdapter({ backend, baseDir: dataDir, namespace: 'transcripts' }),
     experienceStore: await FileSystemExperienceStore.create({ backend, baseDir: dataDir, namespace: 'experience' }),
     checkpointStore: new FileSystemAdapter({ backend, baseDir: dataDir, namespace: 'checkpoints' }),
@@ -415,6 +418,8 @@ export async function runCli(options: RunCliOptions = {}): Promise<CliInstance> 
 
   console.log(`Aielia — your personal assistant on the 11-layer harness, one turn at a time. Ctrl+C to exit.${capabilitySuffix}\n${dangerBanner}${nonInteractiveBanner}${undoBanner}`)
   console.log('Type /help to see all commands, /config to view settings.\n')
+  // M5: session start consolidates what earlier sessions left. Background, fail-open, a no-op unless AUDIT_MEMORY_CONSOLIDATION is on.
+  void assistant.proposeMemoryConsolidation('cli').catch(() => undefined)
   rl.prompt()
 
   let lastTrace: AssistantTrace | undefined
@@ -547,8 +552,10 @@ export async function runCli(options: RunCliOptions = {}): Promise<CliInstance> 
   }
 
   function printWhy(): void {
+    // What the reply could have known (M6): printed with or without a harness trace, since a fast-path turn still saw memory.
+    const memoryLine = formatMemoryInjection(assistant.getLastMemoryInjection())
     if (!lastTrace) {
-      console.log(`\n${lastNoTraceReason ?? 'No harness trace for the last turn (nothing to explain yet, or it took the fast path).'}\n`)
+      console.log(`\n${lastNoTraceReason ?? 'No harness trace for the last turn (nothing to explain yet, or it took the fast path).'}\n${memoryLine}\n`)
       return
     }
     console.log(`\n${verificationHealthLabel(lastTrace.verificationHealth)}`)
@@ -565,6 +572,7 @@ export async function runCli(options: RunCliOptions = {}): Promise<CliInstance> 
     if (lastTrace.batchBudget) {
       console.log('  ' + batchBudgetSummaryLine(lastTrace.batchBudget))
     }
+    console.log(memoryLine)
     console.log('')
   }
 
@@ -772,7 +780,9 @@ export async function runCli(options: RunCliOptions = {}): Promise<CliInstance> 
 
   async function printMemory(): Promise<void> {
     const summary = await assistant.getMemorySummary('cli')
-    console.log(`\n${formatMemorySummary(summary)}\n`)
+    const digests = await assistant.listSessionDigests()
+    const digestLine = digests.length > 0 ? `\nSession digests stored: ${digests.length} (/memory forget digest [id] erases them; /memory export includes them).\n` : ''
+    console.log(`\n${formatMemoryStatus(await assistant.getMemoryStatus('cli'))}\n\n${formatMemorySummary(summary)}\n${digestLine}`)
   }
 
   /**
@@ -827,15 +837,44 @@ export async function runCli(options: RunCliOptions = {}): Promise<CliInstance> 
       await handleMemoryPending(args[0], args.slice(1))
       return
     }
+    if (args[0] === 'forget' && (args[1] === 'digest' || args[1] === 'digests')) {
+      // D4: episodic digests are covered by /memory forget — one by id, or all of them.
+      const removed = await assistant.forgetDigests(args[2])
+      console.log(`\nForgot ${removed} session digest${removed === 1 ? '' : 's'}.\n`)
+      return
+    }
     if (args[0] === 'forget') {
       await handleMemoryForget(args.slice(1))
       return
     }
     if (args[0] === 'history') {
-      const entries = await assistant.memoryHistory()
-      console.log(entries.length === 0
-        ? '\nNo memory changes recorded (the audit log is empty or AUDIT_MEMORY_AUDIT_LOG is off).\n'
-        : `\n${entries.map((e) => `#${e.seq} ${e.at} ${e.op} [${e.store}] ${(e.after ?? e.before)?.text ?? e.factId} (${e.writer})`).join('\n')}\n`)
+      console.log(`\n${formatMemoryHistory(await assistant.memoryHistory())}\n`)
+      return
+    }
+    if (args[0] === 'status') {
+      console.log(`\n${formatMemoryStatus(await assistant.getMemoryStatus('cli'))}\n`)
+      return
+    }
+    if (args[0] === 'archive') {
+      // One numbered listing (set-aside + replaced entries); `restore` and `forget` index the same list.
+      if (args[1] === 'forget') {
+        const outcome = await assistant.forgetArchivedFact(args[2] ?? '')
+        console.log(`\n${formatMemoryPendingOutcome('forgotten', outcome)}\n`)
+        return
+      }
+      if (args[1] === 'restore') {
+        const outcome = await assistant.restoreArchivedMemory(args[2] ?? '', 'cli')
+        console.log(`\n${outcome.message}\n`)
+        return
+      }
+      console.log(`\n${formatMemoryArchive(await assistant.listArchivedFacts(), await assistant.restorableArchiveCount())}\n`)
+      return
+    }
+    if (args[0] === 'off' || args[0] === 'on') {
+      await assistant.setMemoryEnabled(args[0] === 'on')
+      console.log(args[0] === 'off'
+        ? '\nMemory writes are OFF for this install: nothing new will be saved (facts, pending guesses, digests). What is already stored stays readable; /memory forget and /memory reject still work. /memory on resumes.\n'
+        : '\nMemory writes are on.\n')
       return
     }
     if (args[0] === 'undo') {
@@ -843,7 +882,25 @@ export async function runCli(options: RunCliOptions = {}): Promise<CliInstance> 
       console.log(`\n${outcome.message}\n`)
       return
     }
+    if (args[0] === 'consolidate') {
+      await handleMemoryConsolidate(args.slice(1))
+      return
+    }
     await printMemory()
+  }
+
+  /** `/memory consolidate [accept <n>|dismiss <n>]` — M5. Bare form runs the proposal pass now (forcing the model pass) and lists what is staged; nothing is applied until `accept`. */
+  async function handleMemoryConsolidate(args: string[]): Promise<void> {
+    if (args[0] === 'accept' || args[0] === 'dismiss') {
+      const outcome = args[0] === 'accept' ? await assistant.acceptMemoryProposal(args[1] ?? '', 'cli') : await assistant.dismissMemoryProposal(args[1] ?? '')
+      console.log(`\n${outcome.message}\n`)
+      return
+    }
+    // Runs whichever consolidator is registered (PersonalAssistant registers M5's), then lists what is staged.
+    const outcome = await assistant.consolidateMemory('cli')
+    const proposals = await assistant.memoryProposals()
+    if (proposals.length === 0) { console.log(`\n${outcome.message}\n`); return }
+    console.log(`\n${outcome.status === 'done' ? '' : `${outcome.message}\n`}Proposed changes (nothing applied yet):\n${proposals.map((p, i) => `  ${i + 1}. [${p.kind}]${p.touchesUserAsserted ? ' (touches something you said yourself)' : ''} ${p.text ? `-> "${p.text}" ` : ''}${p.reason}`).join('\n')}\n  Use /memory consolidate accept <n> or dismiss <n>.\n`)
   }
 
   /** `/search <query>` — ranked search over past messages (see PersonalAssistant.searchTranscript), never an LLM call or network request. A query with no terms is treated the same as no results, not an error. */
@@ -886,6 +943,7 @@ export async function runCli(options: RunCliOptions = {}): Promise<CliInstance> 
       ...(config.llmBackend === 'claude-cli' ? [checkClaudeCli(process.env.CLAUDE_PATH ?? 'claude')] : []),
       checkWorkspaceRoot(workspaceRoot),
       checkDataDirWritable(backend, dataDir),
+      ...checkMemoryHealth(await assistant.getMemoryStatus('cli')),
       // Informational only (always ok:true) — surfaces the active backend/flags so a user has
       // one command to confirm config, rather than none (see file's own config summary gap).
       { label: `llmBackend: ${config.llmBackend}`, ok: true },
@@ -1582,6 +1640,8 @@ export async function runCli(options: RunCliOptions = {}): Promise<CliInstance> 
     // bare word counts — "exit strategy for my startup" is still a message.
     if (isQuitCommand(message)) {
       quitting = true
+      // M3: refresh the conversation's handoff digest at the session edge (no-op unless AUDIT_EPISODIC_DIGEST is on; fail-open).
+      try { await assistant.endSession('cli') } catch { /* a digest failure must never block exit */ }
       console.log('Exiting.')
       rl.close()
       return

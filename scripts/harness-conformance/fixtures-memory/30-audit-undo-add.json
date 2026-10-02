@@ -1,0 +1,112 @@
+{
+ "description": "Undo of an add removes the entry and appends an undo entry (writer undo, undoes, before/after swapped).",
+ "flags": {
+  "writeGate": false,
+  "auditLog": true
+ },
+ "config": {},
+ "clock": [
+  "2026-05-01T00:00:00.000Z",
+  "2026-05-01T00:00:01.000Z",
+  "2026-05-01T00:00:02.000Z",
+  "2026-05-01T00:00:03.000Z",
+  "2026-05-01T00:00:04.000Z",
+  "2026-05-01T00:00:05.000Z",
+  "2026-05-01T00:00:06.000Z",
+  "2026-05-01T00:00:07.000Z",
+  "2026-05-01T00:00:08.000Z",
+  "2026-05-01T00:00:09.000Z",
+  "2026-05-01T00:00:10.000Z",
+  "2026-05-01T00:00:11.000Z",
+  "2026-05-01T00:00:12.000Z",
+  "2026-05-01T00:00:13.000Z",
+  "2026-05-01T00:00:14.000Z",
+  "2026-05-01T00:00:15.000Z",
+  "2026-05-01T00:00:16.000Z",
+  "2026-05-01T00:00:17.000Z",
+  "2026-05-01T00:00:18.000Z",
+  "2026-05-01T00:00:19.000Z",
+  "2026-05-01T00:00:20.000Z",
+  "2026-05-01T00:00:21.000Z",
+  "2026-05-01T00:00:22.000Z",
+  "2026-05-01T00:00:23.000Z",
+  "2026-05-01T00:00:24.000Z",
+  "2026-05-01T00:00:25.000Z",
+  "2026-05-01T00:00:26.000Z",
+  "2026-05-01T00:00:27.000Z",
+  "2026-05-01T00:00:28.000Z",
+  "2026-05-01T00:00:29.000Z"
+ ],
+ "initial": {
+  "facts:durable": [
+   {
+    "text": "Other fact",
+    "extractedAt": "2025-12-01T00:00:00.000Z",
+    "sourceTurn": "turn:s0",
+    "source": "user_asserted",
+    "durable": true
+   }
+  ]
+ },
+ "steps": [
+  {
+   "call": "record_facts",
+   "args": {
+    "sessionId": "s1",
+    "candidates": [
+     {
+      "text": "The user owns a dog",
+      "durable": true,
+      "confidence": "high",
+      "category": "other"
+     }
+    ]
+   }
+  },
+  {
+   "call": "undo",
+   "args": {
+    "seq": 1,
+    "sessionId": "s1"
+   }
+  },
+  {
+   "call": "history",
+   "args": {}
+  }
+ ],
+ "expected": {
+  "steps": [
+   {},
+   {
+    "ok": true,
+    "message": "Undid #1 (add): The user owns a dog"
+   },
+   {
+    "entries": [
+     {
+      "seq": 1
+     },
+     {
+      "seq": 2,
+      "op": "undo",
+      "undoes": 1,
+      "writer": "undo",
+      "turn": "s1",
+      "before": {
+       "text": "The user owns a dog"
+      },
+      "store": "durable"
+     }
+    ]
+   }
+  ],
+  "final": {
+   "facts:durable": [
+    {
+     "text": "Other fact"
+    }
+   ]
+  }
+ }
+}

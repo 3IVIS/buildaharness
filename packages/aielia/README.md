@@ -142,7 +142,7 @@ contradiction detection considers it:
 
 | Tier | Answers | Allowed `FactSource` | Retention | Contradiction-checked | Where it lives |
 |---|---|---|---|---|---|
-| **Episodic** | "What was said or mused, unconfirmed?" | any | session | no | `facts:<sessionId>` — also every `model_inferred`/`observed` `UserFact` lands here regardless of its `durable` bit; an unconfirmed model guess is never Knowledge |
+| **Episodic** | "What was said or mused, unconfirmed?" | any | session | no | `facts:<sessionId>`, plus `episodic:<sessionId>` session digests when `AUDIT_EPISODIC_DIGEST` is on (see below) — also every `model_inferred`/`observed` `UserFact` lands here regardless of its `durable` bit; an unconfirmed model guess is never Knowledge |
 | **Semantic** | "What's currently stated as true?" | `user_asserted`, `externally_verified` | durable (by tier policy) | yes | `facts:<sessionId>` or `facts:durable`, depending on the existing promotion policy (`durable` bit) — the tier a fact belongs to and whether it's actually promoted are tracked separately today |
 | **Identity** | "Who is this?" (name, "call me X") | `user_asserted` | durable | yes | `facts:durable` |
 | **Preference** | "What does the user want?" (stated preference) | `user_asserted` | durable | yes | `facts:durable`; a *configured* preference (backend, model, `enableShell`) is separately `AssistantConfig` (`config.ts`), not a `UserFact` at all |
@@ -157,6 +157,40 @@ Commitment stores through `tierForFact()`. That's the enforced half of
 the other half is that `isKnowledgeTier()` only returns true for `semantic`,
 `identity`, and `preference` — episodic entries, procedural weights, and
 commitments never enter contradiction detection as if they were beliefs.
+
+**Episodic memory now has a store and a writer, behind a flag.** With
+`AUDIT_EPISODIC_DIGEST` on (off by default; the cross-session scenario improved on 2 of 2 seeds, one scenario only), the assistant
+writes one short handoff digest per session (objective, what was done,
+decisions, open items, next step) at the session edge (`/new`, exit), never
+inside a turn, to `episodic:<sessionId>`. A second use of the same writer runs
+just before transcript compaction drops old messages, so facts in those
+messages are queued for confirmation instead of being lost. Digests are kept
+apart from durable facts and are never injected into the prompt: they reach the
+model only through the read-only `recall_memory` tool (`AUDIT_RECALL_TOOL`, off
+by default), which returns an index of recent digests and then one digest by id,
+wrapped as untrusted context. The model picks which digest to open; there is no
+keyword search. Digest text passes the same secret judgement as any other
+memory write, and a digest can never populate a Knowledge tier (the extended
+INV-16: a non-user origin is episodic only). Digests are kept for a retention
+window (default 90 days, `AUDIT_EPISODIC_RETENTION_DAYS`) and are covered by
+`/memory forget` and `/memory export`. This changes what `/new` keeps: durable
+facts as before, plus digests when the flag is on. Evidence is one scenario and two seeds; it also adds one model call per session edge.
+
+Related write-path controls: `AUDIT_MEMORY_BUDGETED_RENDER` is **on by default**
+(character-budgeted, priority-ordered facts block with keyed supersession, so a
+corrected fact replaces the old one; `=0` restores the old 20-fact slice; budget
+`memoryBudgetChars`, default 4000). In a six-week corrections scenario it fixed a
+stale-fact failure on 3 of 3 seeds. Off by default: `AUDIT_MEMORY_WRITE_GATE`
+(semantic secret redaction and instruction-shaped-text flagging before a fact is
+promoted; a missing judgement means the fact is not promoted; no outcome
+difference was seen because the base model already resisted the planted secret),
+`AUDIT_MEMORY_AUDIT_LOG` (`/memory history`, `/memory undo <seq>`),
+`AUDIT_MEMORY_REVIEWER` (post-turn reviewer; its writes are staged for
+`/memory confirm` unless `memoryWriteMode` is `auto`) and
+`AUDIT_MEMORY_CONSOLIDATION` (staged merge and archive proposals; not measured as
+an outcome). Known gaps: the model sometimes keys the same attribute two ways, so
+a correction can miss the old fact, and a natural-language "forget that" request
+is staged for approval rather than applied.
 
 The conversation transcript itself (`transcript:<sessionId>`, "what was
 said" verbatim) and a single turn's `AnswerClaim` (evidence vs. claim for one

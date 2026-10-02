@@ -45,10 +45,20 @@ describe('M1 budgeted render', () => {
   beforeEach(() => { process.env.AUDIT_MEMORY_BUDGETED_RENDER = '1' })
   afterEach(() => { delete process.env.AUDIT_MEMORY_BUDGETED_RENDER })
 
-  it('gate is OFF unless explicitly enabled', () => {
-    expect(memoryBudgetedRenderEnabled({})).toBe(false)
-    expect(memoryBudgetedRenderEnabled({ AUDIT_MEMORY_BUDGETED_RENDER: '0' })).toBe(false)
+  it('gate is ON by default; 0/false/off/no/disabled restore the legacy path', () => {
+    expect(memoryBudgetedRenderEnabled({})).toBe(true)
     expect(memoryBudgetedRenderEnabled({ AUDIT_MEMORY_BUDGETED_RENDER: '1' })).toBe(true)
+    for (const v of ['0', 'false', 'off', 'no', 'disabled', ' OFF ']) expect(memoryBudgetedRenderEnabled({ AUDIT_MEMORY_BUDGETED_RENDER: v })).toBe(false)
+  })
+
+  it('default ON with the env var unset: the budgeted render keeps all 25 facts and a keyed fact supersedes', async () => {
+    delete process.env.AUDIT_MEMORY_BUDGETED_RENDER
+    const { service, memory } = makeService()
+    await memory.set(DURABLE_FACTS_KEY, Array.from({ length: 25 }, (_, i) => fact(i)))
+    expect((await service.loadFacts('s')).factsBlock).toContain('fact number 0')
+    await service.recordFacts('s', 'hi', [stated('the user lives in Austin', 'home_city')])
+    await service.recordFacts('s', 'hi', [stated('the user lives in Berlin', 'home_city')])
+    expect(((await memory.get(RETIRED_FACTS_KEY)) as unknown[]).length).toBe(1)
   })
 
   it('25 durable facts all fit a generous budget, including the first (G1)', async () => {
@@ -59,8 +69,8 @@ describe('M1 budgeted render', () => {
     expect(factsBlock).toContain('fact number 24')
   })
 
-  it('negative control: =0 restores slice(-20), dropping the oldest', async () => {
-    delete process.env.AUDIT_MEMORY_BUDGETED_RENDER
+  it('legacy path: =0 restores slice(-20), dropping the oldest', async () => {
+    process.env.AUDIT_MEMORY_BUDGETED_RENDER = '0'
     const { service, memory } = makeService()
     await memory.set(DURABLE_FACTS_KEY, Array.from({ length: 25 }, (_, i) => fact(i)))
     const { factsBlock } = await service.loadFacts('s')
@@ -117,8 +127,8 @@ describe('M1 budgeted render', () => {
     expect(factsBlock).not.toContain('Austin')
   })
 
-  it('negative control: with the flag off a keyed fact does not supersede', async () => {
-    delete process.env.AUDIT_MEMORY_BUDGETED_RENDER
+  it('legacy path: with the flag =0 a keyed fact does not supersede', async () => {
+    process.env.AUDIT_MEMORY_BUDGETED_RENDER = '0'
     const { service, memory } = makeService()
     await service.recordFacts('s', 'hi', [stated('the user lives in Austin', 'home_city')])
     await service.recordFacts('s', 'hi', [stated('the user lives in Berlin', 'home_city')])

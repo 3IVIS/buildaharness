@@ -1,0 +1,54 @@
+{
+ "description": "Budget 100: newest line fits, the next is exactly 1 char over (skipped), a shorter later line fits exactly. A line that does not fit never blocks a later one.",
+ "flags": {
+  "writeGate": false,
+  "auditLog": true
+ },
+ "config": {
+  "budgetChars": 100
+ },
+ "clock": [
+  "2026-03-01T00:00:00.000Z"
+ ],
+ "initial": {
+  "facts:durable": [
+   {
+    "text": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+    "extractedAt": "2026-01-03T00:00:00.000Z",
+    "sourceTurn": "turn:s0",
+    "source": "user_asserted",
+    "durable": true
+   },
+   {
+    "text": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+    "extractedAt": "2026-01-02T00:00:00.000Z",
+    "sourceTurn": "turn:s0",
+    "source": "user_asserted",
+    "durable": true
+   },
+   {
+    "text": "cccccccccccccccccccccccccccc",
+    "extractedAt": "2026-01-01T00:00:00.000Z",
+    "sourceTurn": "turn:s0",
+    "source": "user_asserted",
+    "durable": true
+   }
+  ]
+ },
+ "steps": [
+  {
+   "call": "load_facts",
+   "args": {
+    "sessionId": "s1"
+   }
+  }
+ ],
+ "expected": {
+  "steps": [
+   {
+    "factsBlock": "\nKnown facts about the user:\n- aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\n- cccccccccccccccccccccccccccc",
+    "droppedCount": 1
+   }
+  ]
+ }
+}

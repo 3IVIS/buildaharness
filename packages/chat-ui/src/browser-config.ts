@@ -1,5 +1,5 @@
 import type { AssistantConfig } from '@buildaharness/aielia'
-import { normalizeOneLoopMode, normalizeAskMode, normalizePlanMode, normalizeGoalGraphMode, normalizeGoalGraphSuggestMode, normalizeLayerPolicyMode } from '@buildaharness/aielia'
+import { resolveMemoryWriteMode, MEMORY_WRITE_MODES, normalizeOneLoopMode, normalizeAskMode, normalizePlanMode, normalizeGoalGraphMode, normalizeGoalGraphSuggestMode, normalizeLayerPolicyMode } from '@buildaharness/aielia'
 
 /**
  * Browser-side companion to aielia's cli-config.ts — same idea (env-var-name map
@@ -21,6 +21,7 @@ export const ENV_VAR_FOR_CONFIG_KEY: Partial<Record<keyof AssistantConfig, strin
   goalGraphMode: 'VITE_ASSISTANT_GOAL_GRAPH',
   layerPolicyMode: 'VITE_ASSISTANT_LAYER_POLICY',
   goalGraphSuggestMode: 'VITE_ASSISTANT_GOAL_GRAPH_SUGGEST',
+  memoryWriteMode: 'VITE_ASSISTANT_MEMORY_WRITE_MODE',
 }
 
 /**
@@ -65,5 +66,11 @@ export function envOverridesFromImportMetaEnv(env: ImportMetaEnv): Partial<Assis
   }
   // AL7b — normalizeLayerPolicyMode warns-and-defaults on a typo, so a build that sets it always resolves to a concrete mode.
   if (env.VITE_ASSISTANT_LAYER_POLICY) overrides.layerPolicyMode = normalizeLayerPolicyMode(env.VITE_ASSISTANT_LAYER_POLICY, 'VITE_ASSISTANT_LAYER_POLICY')
+  // M6 — the browser/desktop counterpart of the CLI's ASSISTANT_MEMORY_WRITE_MODE. Warn-and-default on a typo.
+  if (env.VITE_ASSISTANT_MEMORY_WRITE_MODE) {
+    const resolved = resolveMemoryWriteMode(env.VITE_ASSISTANT_MEMORY_WRITE_MODE)
+    if (!(MEMORY_WRITE_MODES as readonly string[]).includes(env.VITE_ASSISTANT_MEMORY_WRITE_MODE)) console.warn(`Unrecognized VITE_ASSISTANT_MEMORY_WRITE_MODE "${env.VITE_ASSISTANT_MEMORY_WRITE_MODE}" — using "${resolved}".`)
+    overrides.memoryWriteMode = resolved
+  }
   return overrides
 }

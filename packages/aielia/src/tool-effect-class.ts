@@ -11,6 +11,7 @@ export const TOOL_EFFECT_CLASS: Record<string, ToolEffectClass> = {
   read_file: 'read',
   list_directory: 'read',
   list_reminders: 'read',
+  recall_memory: 'read',
   web_search: 'network',
   fetch_url: 'network',
   write_file: 'write',

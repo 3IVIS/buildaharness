@@ -32,7 +32,7 @@ export const ESCALATION_LAYERS = [
  * never switch one on — it can only degrade an enabled one (no `cheap` form, so to `off`) when the
  * per-turn call budget cannot pay for it. The host says which are enabled (`enabledOptIn`).
  */
-export const OPT_IN_LAYERS = ['source_reliability', 'semantic_hypotheses', 'reviewer_revision', 'experience_learning', 'semantic_compaction'] as const
+export const OPT_IN_LAYERS = ['source_reliability', 'semantic_hypotheses', 'reviewer_revision', 'experience_learning', 'semantic_compaction', 'memory_reviewer'] as const
 export const EVENT_LAYERS = ['supervisor'] as const
 export const PRESENTATION_LAYERS = ['next_step_options', 'goal_graph', 'steering'] as const
 
@@ -65,6 +65,7 @@ export const LAYER_CLASS: Readonly<Record<Layer, LayerClass>> = {
   reviewer_revision: 'opt_in',
   experience_learning: 'opt_in',
   semantic_compaction: 'opt_in',
+  memory_reviewer: 'opt_in',
   supervisor: 'event',
   next_step_options: 'presentation',
   goal_graph: 'presentation',
@@ -95,6 +96,7 @@ export const OPT_IN_EVIDENCE: Readonly<Record<OptInLayer, OptInEvidence>> = {
   reviewer_revision: 'untested_with_real_model',
   experience_learning: 'untested_with_real_model',
   semantic_compaction: 'mechanism_verified',
+  memory_reviewer: 'untested_with_real_model',
 }
 
 /** The operator flag that turns each opt-in layer on (read once, in the host). */
@@ -104,6 +106,7 @@ export const OPT_IN_FLAG: Readonly<Record<OptInLayer, string>> = {
   reviewer_revision: 'AUDIT_REVIEWER_REVISION',
   experience_learning: 'AUDIT_EXPERIENCE_LEARNING',
   semantic_compaction: 'AUDIT_SEMANTIC_COMPACTION',
+  memory_reviewer: 'AUDIT_MEMORY_REVIEWER',
 }
 
 /** Worst-case LLM calls an enabled opt-in layer draws in one turn (`experience_learning` makes none). */
@@ -113,6 +116,8 @@ export const OPT_IN_CALL_COST: Readonly<Record<OptInLayer, number>> = {
   reviewer_revision: 1,
   experience_learning: 0,
   semantic_compaction: 1,
+  // The post-turn cross-turn memory reviewer: one reviewer call plus one bounded verifier call (runs off the critical path, only every N turns).
+  memory_reviewer: 2,
 }
 
 export const OPT_IN_DISABLED_TRIGGER = 'opt_in_disabled'

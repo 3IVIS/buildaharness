@@ -1,0 +1,35 @@
+{
+ "description": "TRACKED DISCREPANCY: a category-less durable fact whose text reads as a name statement. TS keeps its regex fallback (identity); Python has only the structural rule (semantic). Identity and preference share render priority 0 but semantic is 1, so this only differs for category-less facts (the lexical pass, which Python never ports).",
+ "flags": {
+  "writeGate": false,
+  "auditLog": true
+ },
+ "config": {},
+ "clock": [
+  "2026-03-01T00:00:00.000Z"
+ ],
+ "initial": {},
+ "steps": [
+  {
+   "call": "tier",
+   "args": {
+    "facts": [
+     {
+      "text": "My name is Priya.",
+      "extractedAt": "2026-03-01T00:00:00.000Z",
+      "sourceTurn": "t",
+      "source": "user_asserted",
+      "durable": true
+     },
+     {
+      "text": "I prefer tea over coffee.",
+      "extractedAt": "2026-03-01T00:00:00.000Z",
+      "sourceTurn": "t",
+      "source": "user_asserted",
+      "durable": true
+     }
+    ]
+   }
+  }
+ ]
+}

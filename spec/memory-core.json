@@ -1,0 +1,2249 @@
+{
+  "_README": "Canonical shared contract for the agent memory framework (M8). Pure data. Generated into adapter/harness/agent_memory/_core_generated.py and packages/aielia/src/_memory-core-generated.ts by spec/gen-memory-core.mjs. Algorithms are hand-mirrored in each runtime and pinned by conformance fixtures; TS source of truth: packages/aielia/src/{memory-service,memory-governance,fact-extraction}.ts. Wire format is the TS camelCase JSON; the Python generated file snake_cases object KEYS only (never values).",
+  "version": "1.0.0",
+  "fact_fields": {
+    "_README": "One entry per UserFact field. port: yes = ported to Python, deferred = reserved. judgement is transient: never persisted, stripped by the gate.",
+    "fields": [
+      {
+        "name": "text",
+        "type": "string",
+        "required": true,
+        "phase": "M0",
+        "port": "yes"
+      },
+      {
+        "name": "extractedAt",
+        "type": "string",
+        "required": true,
+        "phase": "M0",
+        "port": "yes"
+      },
+      {
+        "name": "sourceTurn",
+        "type": "string",
+        "required": true,
+        "phase": "M0",
+        "port": "yes"
+      },
+      {
+        "name": "durable",
+        "type": "boolean",
+        "required": true,
+        "phase": "M0",
+        "port": "yes"
+      },
+      {
+        "name": "source",
+        "type": "FactSource",
+        "required": true,
+        "phase": "M0",
+        "port": "yes"
+      },
+      {
+        "name": "confidence",
+        "type": "FactConfidence",
+        "required": false,
+        "phase": "M0",
+        "port": "yes"
+      },
+      {
+        "name": "category",
+        "type": "FactCategory",
+        "required": false,
+        "phase": "M0",
+        "port": "yes"
+      },
+      {
+        "name": "project",
+        "type": "string",
+        "required": false,
+        "phase": "M0",
+        "port": "yes"
+      },
+      {
+        "name": "key",
+        "type": "string",
+        "required": false,
+        "phase": "M1",
+        "port": "yes"
+      },
+      {
+        "name": "supersedes",
+        "type": "string",
+        "required": false,
+        "phase": "M1",
+        "port": "yes"
+      },
+      {
+        "name": "retiredAt",
+        "type": "string",
+        "required": false,
+        "phase": "M1",
+        "port": "yes"
+      },
+      {
+        "name": "injectedCount",
+        "type": "number",
+        "required": false,
+        "phase": "M1",
+        "port": "yes"
+      },
+      {
+        "name": "lastInjectedAt",
+        "type": "string",
+        "required": false,
+        "phase": "M1",
+        "port": "yes"
+      },
+      {
+        "name": "origin",
+        "type": "FactOrigin",
+        "required": false,
+        "phase": "M2",
+        "port": "yes"
+      },
+      {
+        "name": "evidence",
+        "type": "string",
+        "required": false,
+        "phase": "M2",
+        "port": "yes"
+      },
+      {
+        "name": "flagged",
+        "type": "boolean",
+        "required": false,
+        "phase": "M2",
+        "port": "yes"
+      }
+    ],
+    "transient_fields": [
+      "judgement"
+    ],
+    "pending_fact_extra_fields": [
+      {
+        "name": "previouslyRejected",
+        "type": "boolean",
+        "required": false,
+        "port": "deferred"
+      },
+      {
+        "name": "proposedOp",
+        "type": "'retire'",
+        "required": false,
+        "port": "deferred"
+      },
+      {
+        "name": "retireTargetId",
+        "type": "string",
+        "required": false,
+        "port": "deferred"
+      }
+    ],
+    "pending_fact_category_default": "other",
+    "rejected_fact_fields": "same shape as fact_fields (a rejected fact is a UserFact)"
+  },
+  "enums": {
+    "fact_source": [
+      "user_asserted",
+      "model_inferred",
+      "observed",
+      "externally_verified"
+    ],
+    "fact_origin": [
+      "user",
+      "agent",
+      "tool",
+      "web"
+    ],
+    "fact_origin_default": "user",
+    "fact_confidence": [
+      "high",
+      "medium",
+      "low"
+    ],
+    "fact_confidence_absent_displays_as": "high",
+    "fact_category": [
+      "identity",
+      "health",
+      "preference",
+      "location",
+      "occupation",
+      "relationships",
+      "project",
+      "other"
+    ],
+    "memory_tier": [
+      "episodic",
+      "semantic",
+      "procedural",
+      "preference",
+      "commitment",
+      "identity"
+    ],
+    "write_mode": [
+      "auto",
+      "staged",
+      "user_only"
+    ],
+    "write_mode_default": "staged",
+    "writer": [
+      "in_turn",
+      "digest",
+      "reviewer",
+      "consolidation"
+    ],
+    "write_route": [
+      "durable",
+      "pending",
+      "session"
+    ],
+    "audit_op": [
+      "add",
+      "replace",
+      "retire",
+      "remove",
+      "confirm",
+      "reject",
+      "undo",
+      "archive",
+      "restore"
+    ],
+    "audit_op_deferred": [
+      "archive",
+      "restore"
+    ],
+    "audit_store": [
+      "durable",
+      "pending",
+      "rejected"
+    ],
+    "admit_action": [
+      "admit",
+      "session",
+      "flag",
+      "drop"
+    ]
+  },
+  "store_keys": {
+    "_README": "Wire key names, verbatim. scope: global survives /new, session is cleared by it. port: yes/deferred.",
+    "durable": {
+      "key": "facts:durable",
+      "scope": "global",
+      "port": "yes"
+    },
+    "pending": {
+      "key": "facts:pending-confirmation",
+      "scope": "global",
+      "port": "yes"
+    },
+    "rejected": {
+      "key": "facts:rejected",
+      "scope": "global",
+      "port": "yes"
+    },
+    "retired": {
+      "key": "facts:retired",
+      "scope": "global",
+      "port": "yes"
+    },
+    "audit": {
+      "key": "memory:audit",
+      "scope": "global",
+      "port": "yes"
+    },
+    "consolidationState": {
+      "key": "memory:consolidation-state",
+      "scope": "global",
+      "port": "yes"
+    },
+    "off": {
+      "key": "memory:off",
+      "scope": "global",
+      "port": "yes"
+    },
+    "SESSION_FACTS_PREFIX": {
+      "key": "facts:",
+      "scope": "session",
+      "port": "yes"
+    },
+    "archive": {
+      "key": "facts:archive",
+      "scope": "global",
+      "port": "deferred"
+    },
+    "proposals": {
+      "key": "memory:proposals",
+      "scope": "global",
+      "port": "deferred"
+    },
+    "EPISODIC_PREFIX": {
+      "key": "episodic:",
+      "scope": "session",
+      "port": "deferred"
+    }
+  },
+  "fact_identity": {
+    "fact_id_format": "{text}|{extractedAt}",
+    "same_fact": "equal text and equal extractedAt",
+    "supersession_key_scope": "same key and same project (absent project = empty string)"
+  },
+  "budget": {
+    "_README": "renderFactsBlock. header counts toward the budget. A line that does not fit is skipped; a later shorter one may still fit.",
+    "default_chars": 4000,
+    "header": "\nKnown facts about the user:\n",
+    "line_format": "- {text}{suffix}",
+    "unconfirmed_suffix": " (unconfirmed)",
+    "unconfirmed_when": "source = model_inferred and confidence in (medium, low)",
+    "separator_cost": 1,
+    "priority": {
+      "identity": 0,
+      "preference": 0,
+      "semantic": 1,
+      "episodic": 2
+    },
+    "session_priority": 2,
+    "sort": [
+      {
+        "key": "priority",
+        "dir": "asc"
+      },
+      {
+        "key": "extractedAt",
+        "dir": "desc"
+      },
+      {
+        "key": "lastInjectedAt",
+        "dir": "desc",
+        "absent": ""
+      },
+      {
+        "key": "index",
+        "dir": "desc"
+      }
+    ],
+    "fit_rule": "skip a line that does not fit; a later, shorter line may still fit",
+    "dropped_count": "live in-scope facts not shown",
+    "excluded_before_ranking": "facts with retiredAt set",
+    "scope_filter": "fact with no project, or project equal to the current one",
+    "merge_rule": "durable first, then session facts whose text is not already among durable",
+    "legacy_fact_cap": {
+      "value": 20,
+      "ported": false
+    }
+  },
+  "tier_rules": {
+    "_README": "TIER_RULES as in fact-extraction.ts; rule_order is first-match structural tier selection (no text inspection). Condition nodes: {field, eq} | {field, neq} | {field, present} | {not: node} | {all: [nodes]} | {always: true}. neq on an absent field is false (origin absent = user).",
+    "rules": {
+      "episodic": {
+        "allowedSources": [
+          "user_asserted",
+          "model_inferred",
+          "observed",
+          "externally_verified"
+        ],
+        "retention": "session",
+        "contradictionChecked": false
+      },
+      "semantic": {
+        "allowedSources": [
+          "user_asserted",
+          "model_inferred",
+          "externally_verified"
+        ],
+        "retention": "durable",
+        "contradictionChecked": true
+      },
+      "identity": {
+        "allowedSources": [
+          "user_asserted",
+          "model_inferred"
+        ],
+        "retention": "durable",
+        "contradictionChecked": true
+      },
+      "preference": {
+        "allowedSources": [
+          "user_asserted",
+          "model_inferred"
+        ],
+        "retention": "durable",
+        "contradictionChecked": true
+      },
+      "procedural": {
+        "allowedSources": [],
+        "retention": "durable",
+        "contradictionChecked": false
+      },
+      "commitment": {
+        "allowedSources": [],
+        "retention": "durable",
+        "contradictionChecked": false
+      }
+    },
+    "rule_order": [
+      {
+        "id": "non_user_origin",
+        "tier": "episodic",
+        "when": {
+          "all": [
+            {
+              "field": "origin",
+              "present": true
+            },
+            {
+              "field": "origin",
+              "neq": "user"
+            }
+          ]
+        }
+      },
+      {
+        "id": "observed",
+        "tier": "episodic",
+        "when": {
+          "field": "source",
+          "eq": "observed"
+        }
+      },
+      {
+        "id": "model_inferred_unconfirmed",
+        "tier": "episodic",
+        "when": {
+          "all": [
+            {
+              "field": "source",
+              "eq": "model_inferred"
+            },
+            {
+              "not": {
+                "all": [
+                  {
+                    "field": "durable",
+                    "eq": true
+                  },
+                  {
+                    "field": "confidence",
+                    "eq": "high"
+                  }
+                ]
+              }
+            }
+          ]
+        }
+      },
+      {
+        "id": "durable_identity",
+        "tier": "identity",
+        "when": {
+          "all": [
+            {
+              "field": "durable",
+              "eq": true
+            },
+            {
+              "field": "category",
+              "eq": "identity"
+            }
+          ]
+        }
+      },
+      {
+        "id": "durable_preference",
+        "tier": "preference",
+        "when": {
+          "all": [
+            {
+              "field": "durable",
+              "eq": true
+            },
+            {
+              "field": "category",
+              "eq": "preference"
+            }
+          ]
+        }
+      },
+      {
+        "id": "default",
+        "tier": "semantic",
+        "when": {
+          "always": true
+        }
+      }
+    ]
+  },
+  "write_route": {
+    "_README": "resolveWriteRoute decision table, every combination. writerClass in_turn = writer in_turn; cross_turn = digest/reviewer/consolidation. confidence null = absent. In-turn non-model facts follow their own durable bit; in-turn model facts: not durable gives session, high gives pending only under user_only else durable, medium gives pending, low or absent gives session; cross-turn: not durable or low gives session, else durable only in auto else pending. This table is also the fixture oracle.",
+    "rows": [
+      {
+        "writerClass": "in_turn",
+        "source": "user_asserted",
+        "durable": true,
+        "confidence": "high",
+        "mode": "auto",
+        "route": "durable"
+      },
+      {
+        "writerClass": "in_turn",
+        "source": "user_asserted",
+        "durable": true,
+        "confidence": "high",
+        "mode": "staged",
+        "route": "durable"
+      },
+      {
+        "writerClass": "in_turn",
+        "source": "user_asserted",
+        "durable": true,
+        "confidence": "high",
+        "mode": "user_only",
+        "route": "durable"
+      },
+      {
+        "writerClass": "in_turn",
+        "source": "user_asserted",
+        "durable": true,
+        "confidence": "medium",
+        "mode": "auto",
+        "route": "durable"
+      },
+      {
+        "writerClass": "in_turn",
+        "source": "user_asserted",
+        "durable": true,
+        "confidence": "medium",
+        "mode": "staged",
+        "route": "durable"
+      },
+      {
+        "writerClass": "in_turn",
+        "source": "user_asserted",
+        "durable": true,
+        "confidence": "medium",
+        "mode": "user_only",
+        "route": "durable"
+      },
+      {
+        "writerClass": "in_turn",
+        "source": "user_asserted",
+        "durable": true,
+        "confidence": "low",
+        "mode": "auto",
+        "route": "durable"
+      },
+      {
+        "writerClass": "in_turn",
+        "source": "user_asserted",
+        "durable": true,
+        "confidence": "low",
+        "mode": "staged",
+        "route": "durable"
+      },
+      {
+        "writerClass": "in_turn",
+        "source": "user_asserted",
+        "durable": true,
+        "confidence": "low",
+        "mode": "user_only",
+        "route": "durable"
+      },
+      {
+        "writerClass": "in_turn",
+        "source": "user_asserted",
+        "durable": true,
+        "confidence": null,
+        "mode": "auto",
+        "route": "durable"
+      },
+      {
+        "writerClass": "in_turn",
+        "source": "user_asserted",
+        "durable": true,
+        "confidence": null,
+        "mode": "staged",
+        "route": "durable"
+      },
+      {
+        "writerClass": "in_turn",
+        "source": "user_asserted",
+        "durable": true,
+        "confidence": null,
+        "mode": "user_only",
+        "route": "durable"
+      },
+      {
+        "writerClass": "in_turn",
+        "source": "user_asserted",
+        "durable": false,
+        "confidence": "high",
+        "mode": "auto",
+        "route": "session"
+      },
+      {
+        "writerClass": "in_turn",
+        "source": "user_asserted",
+        "durable": false,
+        "confidence": "high",
+        "mode": "staged",
+        "route": "session"
+      },
+      {
+        "writerClass": "in_turn",
+        "source": "user_asserted",
+        "durable": false,
+        "confidence": "high",
+        "mode": "user_only",
+        "route": "session"
+      },
+      {
+        "writerClass": "in_turn",
+        "source": "user_asserted",
+        "durable": false,
+        "confidence": "medium",
+        "mode": "auto",
+        "route": "session"
+      },
+      {
+        "writerClass": "in_turn",
+        "source": "user_asserted",
+        "durable": false,
+        "confidence": "medium",
+        "mode": "staged",
+        "route": "session"
+      },
+      {
+        "writerClass": "in_turn",
+        "source": "user_asserted",
+        "durable": false,
+        "confidence": "medium",
+        "mode": "user_only",
+        "route": "session"
+      },
+      {
+        "writerClass": "in_turn",
+        "source": "user_asserted",
+        "durable": false,
+        "confidence": "low",
+        "mode": "auto",
+        "route": "session"
+      },
+      {
+        "writerClass": "in_turn",
+        "source": "user_asserted",
+        "durable": false,
+        "confidence": "low",
+        "mode": "staged",
+        "route": "session"
+      },
+      {
+        "writerClass": "in_turn",
+        "source": "user_asserted",
+        "durable": false,
+        "confidence": "low",
+        "mode": "user_only",
+        "route": "session"
+      },
+      {
+        "writerClass": "in_turn",
+        "source": "user_asserted",
+        "durable": false,
+        "confidence": null,
+        "mode": "auto",
+        "route": "session"
+      },
+      {
+        "writerClass": "in_turn",
+        "source": "user_asserted",
+        "durable": false,
+        "confidence": null,
+        "mode": "staged",
+        "route": "session"
+      },
+      {
+        "writerClass": "in_turn",
+        "source": "user_asserted",
+        "durable": false,
+        "confidence": null,
+        "mode": "user_only",
+        "route": "session"
+      },
+      {
+        "writerClass": "in_turn",
+        "source": "model_inferred",
+        "durable": true,
+        "confidence": "high",
+        "mode": "auto",
+        "route": "durable"
+      },
+      {
+        "writerClass": "in_turn",
+        "source": "model_inferred",
+        "durable": true,
+        "confidence": "high",
+        "mode": "staged",
+        "route": "durable"
+      },
+      {
+        "writerClass": "in_turn",
+        "source": "model_inferred",
+        "durable": true,
+        "confidence": "high",
+        "mode": "user_only",
+        "route": "pending"
+      },
+      {
+        "writerClass": "in_turn",
+        "source": "model_inferred",
+        "durable": true,
+        "confidence": "medium",
+        "mode": "auto",
+        "route": "pending"
+      },
+      {
+        "writerClass": "in_turn",
+        "source": "model_inferred",
+        "durable": true,
+        "confidence": "medium",
+        "mode": "staged",
+        "route": "pending"
+      },
+      {
+        "writerClass": "in_turn",
+        "source": "model_inferred",
+        "durable": true,
+        "confidence": "medium",
+        "mode": "user_only",
+        "route": "pending"
+      },
+      {
+        "writerClass": "in_turn",
+        "source": "model_inferred",
+        "durable": true,
+        "confidence": "low",
+        "mode": "auto",
+        "route": "session"
+      },
+      {
+        "writerClass": "in_turn",
+        "source": "model_inferred",
+        "durable": true,
+        "confidence": "low",
+        "mode": "staged",
+        "route": "session"
+      },
+      {
+        "writerClass": "in_turn",
+        "source": "model_inferred",
+        "durable": true,
+        "confidence": "low",
+        "mode": "user_only",
+        "route": "session"
+      },
+      {
+        "writerClass": "in_turn",
+        "source": "model_inferred",
+        "durable": true,
+        "confidence": null,
+        "mode": "auto",
+        "route": "session"
+      },
+      {
+        "writerClass": "in_turn",
+        "source": "model_inferred",
+        "durable": true,
+        "confidence": null,
+        "mode": "staged",
+        "route": "session"
+      },
+      {
+        "writerClass": "in_turn",
+        "source": "model_inferred",
+        "durable": true,
+        "confidence": null,
+        "mode": "user_only",
+        "route": "session"
+      },
+      {
+        "writerClass": "in_turn",
+        "source": "model_inferred",
+        "durable": false,
+        "confidence": "high",
+        "mode": "auto",
+        "route": "session"
+      },
+      {
+        "writerClass": "in_turn",
+        "source": "model_inferred",
+        "durable": false,
+        "confidence": "high",
+        "mode": "staged",
+        "route": "session"
+      },
+      {
+        "writerClass": "in_turn",
+        "source": "model_inferred",
+        "durable": false,
+        "confidence": "high",
+        "mode": "user_only",
+        "route": "session"
+      },
+      {
+        "writerClass": "in_turn",
+        "source": "model_inferred",
+        "durable": false,
+        "confidence": "medium",
+        "mode": "auto",
+        "route": "session"
+      },
+      {
+        "writerClass": "in_turn",
+        "source": "model_inferred",
+        "durable": false,
+        "confidence": "medium",
+        "mode": "staged",
+        "route": "session"
+      },
+      {
+        "writerClass": "in_turn",
+        "source": "model_inferred",
+        "durable": false,
+        "confidence": "medium",
+        "mode": "user_only",
+        "route": "session"
+      },
+      {
+        "writerClass": "in_turn",
+        "source": "model_inferred",
+        "durable": false,
+        "confidence": "low",
+        "mode": "auto",
+        "route": "session"
+      },
+      {
+        "writerClass": "in_turn",
+        "source": "model_inferred",
+        "durable": false,
+        "confidence": "low",
+        "mode": "staged",
+        "route": "session"
+      },
+      {
+        "writerClass": "in_turn",
+        "source": "model_inferred",
+        "durable": false,
+        "confidence": "low",
+        "mode": "user_only",
+        "route": "session"
+      },
+      {
+        "writerClass": "in_turn",
+        "source": "model_inferred",
+        "durable": false,
+        "confidence": null,
+        "mode": "auto",
+        "route": "session"
+      },
+      {
+        "writerClass": "in_turn",
+        "source": "model_inferred",
+        "durable": false,
+        "confidence": null,
+        "mode": "staged",
+        "route": "session"
+      },
+      {
+        "writerClass": "in_turn",
+        "source": "model_inferred",
+        "durable": false,
+        "confidence": null,
+        "mode": "user_only",
+        "route": "session"
+      },
+      {
+        "writerClass": "in_turn",
+        "source": "observed",
+        "durable": true,
+        "confidence": "high",
+        "mode": "auto",
+        "route": "durable"
+      },
+      {
+        "writerClass": "in_turn",
+        "source": "observed",
+        "durable": true,
+        "confidence": "high",
+        "mode": "staged",
+        "route": "durable"
+      },
+      {
+        "writerClass": "in_turn",
+        "source": "observed",
+        "durable": true,
+        "confidence": "high",
+        "mode": "user_only",
+        "route": "durable"
+      },
+      {
+        "writerClass": "in_turn",
+        "source": "observed",
+        "durable": true,
+        "confidence": "medium",
+        "mode": "auto",
+        "route": "durable"
+      },
+      {
+        "writerClass": "in_turn",
+        "source": "observed",
+        "durable": true,
+        "confidence": "medium",
+        "mode": "staged",
+        "route": "durable"
+      },
+      {
+        "writerClass": "in_turn",
+        "source": "observed",
+        "durable": true,
+        "confidence": "medium",
+        "mode": "user_only",
+        "route": "durable"
+      },
+      {
+        "writerClass": "in_turn",
+        "source": "observed",
+        "durable": true,
+        "confidence": "low",
+        "mode": "auto",
+        "route": "durable"
+      },
+      {
+        "writerClass": "in_turn",
+        "source": "observed",
+        "durable": true,
+        "confidence": "low",
+        "mode": "staged",
+        "route": "durable"
+      },
+      {
+        "writerClass": "in_turn",
+        "source": "observed",
+        "durable": true,
+        "confidence": "low",
+        "mode": "user_only",
+        "route": "durable"
+      },
+      {
+        "writerClass": "in_turn",
+        "source": "observed",
+        "durable": true,
+        "confidence": null,
+        "mode": "auto",
+        "route": "durable"
+      },
+      {
+        "writerClass": "in_turn",
+        "source": "observed",
+        "durable": true,
+        "confidence": null,
+        "mode": "staged",
+        "route": "durable"
+      },
+      {
+        "writerClass": "in_turn",
+        "source": "observed",
+        "durable": true,
+        "confidence": null,
+        "mode": "user_only",
+        "route": "durable"
+      },
+      {
+        "writerClass": "in_turn",
+        "source": "observed",
+        "durable": false,
+        "confidence": "high",
+        "mode": "auto",
+        "route": "session"
+      },
+      {
+        "writerClass": "in_turn",
+        "source": "observed",
+        "durable": false,
+        "confidence": "high",
+        "mode": "staged",
+        "route": "session"
+      },
+      {
+        "writerClass": "in_turn",
+        "source": "observed",
+        "durable": false,
+        "confidence": "high",
+        "mode": "user_only",
+        "route": "session"
+      },
+      {
+        "writerClass": "in_turn",
+        "source": "observed",
+        "durable": false,
+        "confidence": "medium",
+        "mode": "auto",
+        "route": "session"
+      },
+      {
+        "writerClass": "in_turn",
+        "source": "observed",
+        "durable": false,
+        "confidence": "medium",
+        "mode": "staged",
+        "route": "session"
+      },
+      {
+        "writerClass": "in_turn",
+        "source": "observed",
+        "durable": false,
+        "confidence": "medium",
+        "mode": "user_only",
+        "route": "session"
+      },
+      {
+        "writerClass": "in_turn",
+        "source": "observed",
+        "durable": false,
+        "confidence": "low",
+        "mode": "auto",
+        "route": "session"
+      },
+      {
+        "writerClass": "in_turn",
+        "source": "observed",
+        "durable": false,
+        "confidence": "low",
+        "mode": "staged",
+        "route": "session"
+      },
+      {
+        "writerClass": "in_turn",
+        "source": "observed",
+        "durable": false,
+        "confidence": "low",
+        "mode": "user_only",
+        "route": "session"
+      },
+      {
+        "writerClass": "in_turn",
+        "source": "observed",
+        "durable": false,
+        "confidence": null,
+        "mode": "auto",
+        "route": "session"
+      },
+      {
+        "writerClass": "in_turn",
+        "source": "observed",
+        "durable": false,
+        "confidence": null,
+        "mode": "staged",
+        "route": "session"
+      },
+      {
+        "writerClass": "in_turn",
+        "source": "observed",
+        "durable": false,
+        "confidence": null,
+        "mode": "user_only",
+        "route": "session"
+      },
+      {
+        "writerClass": "in_turn",
+        "source": "externally_verified",
+        "durable": true,
+        "confidence": "high",
+        "mode": "auto",
+        "route": "durable"
+      },
+      {
+        "writerClass": "in_turn",
+        "source": "externally_verified",
+        "durable": true,
+        "confidence": "high",
+        "mode": "staged",
+        "route": "durable"
+      },
+      {
+        "writerClass": "in_turn",
+        "source": "externally_verified",
+        "durable": true,
+        "confidence": "high",
+        "mode": "user_only",
+        "route": "durable"
+      },
+      {
+        "writerClass": "in_turn",
+        "source": "externally_verified",
+        "durable": true,
+        "confidence": "medium",
+        "mode": "auto",
+        "route": "durable"
+      },
+      {
+        "writerClass": "in_turn",
+        "source": "externally_verified",
+        "durable": true,
+        "confidence": "medium",
+        "mode": "staged",
+        "route": "durable"
+      },
+      {
+        "writerClass": "in_turn",
+        "source": "externally_verified",
+        "durable": true,
+        "confidence": "medium",
+        "mode": "user_only",
+        "route": "durable"
+      },
+      {
+        "writerClass": "in_turn",
+        "source": "externally_verified",
+        "durable": true,
+        "confidence": "low",
+        "mode": "auto",
+        "route": "durable"
+      },
+      {
+        "writerClass": "in_turn",
+        "source": "externally_verified",
+        "durable": true,
+        "confidence": "low",
+        "mode": "staged",
+        "route": "durable"
+      },
+      {
+        "writerClass": "in_turn",
+        "source": "externally_verified",
+        "durable": true,
+        "confidence": "low",
+        "mode": "user_only",
+        "route": "durable"
+      },
+      {
+        "writerClass": "in_turn",
+        "source": "externally_verified",
+        "durable": true,
+        "confidence": null,
+        "mode": "auto",
+        "route": "durable"
+      },
+      {
+        "writerClass": "in_turn",
+        "source": "externally_verified",
+        "durable": true,
+        "confidence": null,
+        "mode": "staged",
+        "route": "durable"
+      },
+      {
+        "writerClass": "in_turn",
+        "source": "externally_verified",
+        "durable": true,
+        "confidence": null,
+        "mode": "user_only",
+        "route": "durable"
+      },
+      {
+        "writerClass": "in_turn",
+        "source": "externally_verified",
+        "durable": false,
+        "confidence": "high",
+        "mode": "auto",
+        "route": "session"
+      },
+      {
+        "writerClass": "in_turn",
+        "source": "externally_verified",
+        "durable": false,
+        "confidence": "high",
+        "mode": "staged",
+        "route": "session"
+      },
+      {
+        "writerClass": "in_turn",
+        "source": "externally_verified",
+        "durable": false,
+        "confidence": "high",
+        "mode": "user_only",
+        "route": "session"
+      },
+      {
+        "writerClass": "in_turn",
+        "source": "externally_verified",
+        "durable": false,
+        "confidence": "medium",
+        "mode": "auto",
+        "route": "session"
+      },
+      {
+        "writerClass": "in_turn",
+        "source": "externally_verified",
+        "durable": false,
+        "confidence": "medium",
+        "mode": "staged",
+        "route": "session"
+      },
+      {
+        "writerClass": "in_turn",
+        "source": "externally_verified",
+        "durable": false,
+        "confidence": "medium",
+        "mode": "user_only",
+        "route": "session"
+      },
+      {
+        "writerClass": "in_turn",
+        "source": "externally_verified",
+        "durable": false,
+        "confidence": "low",
+        "mode": "auto",
+        "route": "session"
+      },
+      {
+        "writerClass": "in_turn",
+        "source": "externally_verified",
+        "durable": false,
+        "confidence": "low",
+        "mode": "staged",
+        "route": "session"
+      },
+      {
+        "writerClass": "in_turn",
+        "source": "externally_verified",
+        "durable": false,
+        "confidence": "low",
+        "mode": "user_only",
+        "route": "session"
+      },
+      {
+        "writerClass": "in_turn",
+        "source": "externally_verified",
+        "durable": false,
+        "confidence": null,
+        "mode": "auto",
+        "route": "session"
+      },
+      {
+        "writerClass": "in_turn",
+        "source": "externally_verified",
+        "durable": false,
+        "confidence": null,
+        "mode": "staged",
+        "route": "session"
+      },
+      {
+        "writerClass": "in_turn",
+        "source": "externally_verified",
+        "durable": false,
+        "confidence": null,
+        "mode": "user_only",
+        "route": "session"
+      },
+      {
+        "writerClass": "cross_turn",
+        "source": "user_asserted",
+        "durable": true,
+        "confidence": "high",
+        "mode": "auto",
+        "route": "durable"
+      },
+      {
+        "writerClass": "cross_turn",
+        "source": "user_asserted",
+        "durable": true,
+        "confidence": "high",
+        "mode": "staged",
+        "route": "pending"
+      },
+      {
+        "writerClass": "cross_turn",
+        "source": "user_asserted",
+        "durable": true,
+        "confidence": "high",
+        "mode": "user_only",
+        "route": "pending"
+      },
+      {
+        "writerClass": "cross_turn",
+        "source": "user_asserted",
+        "durable": true,
+        "confidence": "medium",
+        "mode": "auto",
+        "route": "durable"
+      },
+      {
+        "writerClass": "cross_turn",
+        "source": "user_asserted",
+        "durable": true,
+        "confidence": "medium",
+        "mode": "staged",
+        "route": "pending"
+      },
+      {
+        "writerClass": "cross_turn",
+        "source": "user_asserted",
+        "durable": true,
+        "confidence": "medium",
+        "mode": "user_only",
+        "route": "pending"
+      },
+      {
+        "writerClass": "cross_turn",
+        "source": "user_asserted",
+        "durable": true,
+        "confidence": "low",
+        "mode": "auto",
+        "route": "session"
+      },
+      {
+        "writerClass": "cross_turn",
+        "source": "user_asserted",
+        "durable": true,
+        "confidence": "low",
+        "mode": "staged",
+        "route": "session"
+      },
+      {
+        "writerClass": "cross_turn",
+        "source": "user_asserted",
+        "durable": true,
+        "confidence": "low",
+        "mode": "user_only",
+        "route": "session"
+      },
+      {
+        "writerClass": "cross_turn",
+        "source": "user_asserted",
+        "durable": true,
+        "confidence": null,
+        "mode": "auto",
+        "route": "durable"
+      },
+      {
+        "writerClass": "cross_turn",
+        "source": "user_asserted",
+        "durable": true,
+        "confidence": null,
+        "mode": "staged",
+        "route": "pending"
+      },
+      {
+        "writerClass": "cross_turn",
+        "source": "user_asserted",
+        "durable": true,
+        "confidence": null,
+        "mode": "user_only",
+        "route": "pending"
+      },
+      {
+        "writerClass": "cross_turn",
+        "source": "user_asserted",
+        "durable": false,
+        "confidence": "high",
+        "mode": "auto",
+        "route": "session"
+      },
+      {
+        "writerClass": "cross_turn",
+        "source": "user_asserted",
+        "durable": false,
+        "confidence": "high",
+        "mode": "staged",
+        "route": "session"
+      },
+      {
+        "writerClass": "cross_turn",
+        "source": "user_asserted",
+        "durable": false,
+        "confidence": "high",
+        "mode": "user_only",
+        "route": "session"
+      },
+      {
+        "writerClass": "cross_turn",
+        "source": "user_asserted",
+        "durable": false,
+        "confidence": "medium",
+        "mode": "auto",
+        "route": "session"
+      },
+      {
+        "writerClass": "cross_turn",
+        "source": "user_asserted",
+        "durable": false,
+        "confidence": "medium",
+        "mode": "staged",
+        "route": "session"
+      },
+      {
+        "writerClass": "cross_turn",
+        "source": "user_asserted",
+        "durable": false,
+        "confidence": "medium",
+        "mode": "user_only",
+        "route": "session"
+      },
+      {
+        "writerClass": "cross_turn",
+        "source": "user_asserted",
+        "durable": false,
+        "confidence": "low",
+        "mode": "auto",
+        "route": "session"
+      },
+      {
+        "writerClass": "cross_turn",
+        "source": "user_asserted",
+        "durable": false,
+        "confidence": "low",
+        "mode": "staged",
+        "route": "session"
+      },
+      {
+        "writerClass": "cross_turn",
+        "source": "user_asserted",
+        "durable": false,
+        "confidence": "low",
+        "mode": "user_only",
+        "route": "session"
+      },
+      {
+        "writerClass": "cross_turn",
+        "source": "user_asserted",
+        "durable": false,
+        "confidence": null,
+        "mode": "auto",
+        "route": "session"
+      },
+      {
+        "writerClass": "cross_turn",
+        "source": "user_asserted",
+        "durable": false,
+        "confidence": null,
+        "mode": "staged",
+        "route": "session"
+      },
+      {
+        "writerClass": "cross_turn",
+        "source": "user_asserted",
+        "durable": false,
+        "confidence": null,
+        "mode": "user_only",
+        "route": "session"
+      },
+      {
+        "writerClass": "cross_turn",
+        "source": "model_inferred",
+        "durable": true,
+        "confidence": "high",
+        "mode": "auto",
+        "route": "durable"
+      },
+      {
+        "writerClass": "cross_turn",
+        "source": "model_inferred",
+        "durable": true,
+        "confidence": "high",
+        "mode": "staged",
+        "route": "pending"
+      },
+      {
+        "writerClass": "cross_turn",
+        "source": "model_inferred",
+        "durable": true,
+        "confidence": "high",
+        "mode": "user_only",
+        "route": "pending"
+      },
+      {
+        "writerClass": "cross_turn",
+        "source": "model_inferred",
+        "durable": true,
+        "confidence": "medium",
+        "mode": "auto",
+        "route": "durable"
+      },
+      {
+        "writerClass": "cross_turn",
+        "source": "model_inferred",
+        "durable": true,
+        "confidence": "medium",
+        "mode": "staged",
+        "route": "pending"
+      },
+      {
+        "writerClass": "cross_turn",
+        "source": "model_inferred",
+        "durable": true,
+        "confidence": "medium",
+        "mode": "user_only",
+        "route": "pending"
+      },
+      {
+        "writerClass": "cross_turn",
+        "source": "model_inferred",
+        "durable": true,
+        "confidence": "low",
+        "mode": "auto",
+        "route": "session"
+      },
+      {
+        "writerClass": "cross_turn",
+        "source": "model_inferred",
+        "durable": true,
+        "confidence": "low",
+        "mode": "staged",
+        "route": "session"
+      },
+      {
+        "writerClass": "cross_turn",
+        "source": "model_inferred",
+        "durable": true,
+        "confidence": "low",
+        "mode": "user_only",
+        "route": "session"
+      },
+      {
+        "writerClass": "cross_turn",
+        "source": "model_inferred",
+        "durable": true,
+        "confidence": null,
+        "mode": "auto",
+        "route": "durable"
+      },
+      {
+        "writerClass": "cross_turn",
+        "source": "model_inferred",
+        "durable": true,
+        "confidence": null,
+        "mode": "staged",
+        "route": "pending"
+      },
+      {
+        "writerClass": "cross_turn",
+        "source": "model_inferred",
+        "durable": true,
+        "confidence": null,
+        "mode": "user_only",
+        "route": "pending"
+      },
+      {
+        "writerClass": "cross_turn",
+        "source": "model_inferred",
+        "durable": false,
+        "confidence": "high",
+        "mode": "auto",
+        "route": "session"
+      },
+      {
+        "writerClass": "cross_turn",
+        "source": "model_inferred",
+        "durable": false,
+        "confidence": "high",
+        "mode": "staged",
+        "route": "session"
+      },
+      {
+        "writerClass": "cross_turn",
+        "source": "model_inferred",
+        "durable": false,
+        "confidence": "high",
+        "mode": "user_only",
+        "route": "session"
+      },
+      {
+        "writerClass": "cross_turn",
+        "source": "model_inferred",
+        "durable": false,
+        "confidence": "medium",
+        "mode": "auto",
+        "route": "session"
+      },
+      {
+        "writerClass": "cross_turn",
+        "source": "model_inferred",
+        "durable": false,
+        "confidence": "medium",
+        "mode": "staged",
+        "route": "session"
+      },
+      {
+        "writerClass": "cross_turn",
+        "source": "model_inferred",
+        "durable": false,
+        "confidence": "medium",
+        "mode": "user_only",
+        "route": "session"
+      },
+      {
+        "writerClass": "cross_turn",
+        "source": "model_inferred",
+        "durable": false,
+        "confidence": "low",
+        "mode": "auto",
+        "route": "session"
+      },
+      {
+        "writerClass": "cross_turn",
+        "source": "model_inferred",
+        "durable": false,
+        "confidence": "low",
+        "mode": "staged",
+        "route": "session"
+      },
+      {
+        "writerClass": "cross_turn",
+        "source": "model_inferred",
+        "durable": false,
+        "confidence": "low",
+        "mode": "user_only",
+        "route": "session"
+      },
+      {
+        "writerClass": "cross_turn",
+        "source": "model_inferred",
+        "durable": false,
+        "confidence": null,
+        "mode": "auto",
+        "route": "session"
+      },
+      {
+        "writerClass": "cross_turn",
+        "source": "model_inferred",
+        "durable": false,
+        "confidence": null,
+        "mode": "staged",
+        "route": "session"
+      },
+      {
+        "writerClass": "cross_turn",
+        "source": "model_inferred",
+        "durable": false,
+        "confidence": null,
+        "mode": "user_only",
+        "route": "session"
+      },
+      {
+        "writerClass": "cross_turn",
+        "source": "observed",
+        "durable": true,
+        "confidence": "high",
+        "mode": "auto",
+        "route": "durable"
+      },
+      {
+        "writerClass": "cross_turn",
+        "source": "observed",
+        "durable": true,
+        "confidence": "high",
+        "mode": "staged",
+        "route": "pending"
+      },
+      {
+        "writerClass": "cross_turn",
+        "source": "observed",
+        "durable": true,
+        "confidence": "high",
+        "mode": "user_only",
+        "route": "pending"
+      },
+      {
+        "writerClass": "cross_turn",
+        "source": "observed",
+        "durable": true,
+        "confidence": "medium",
+        "mode": "auto",
+        "route": "durable"
+      },
+      {
+        "writerClass": "cross_turn",
+        "source": "observed",
+        "durable": true,
+        "confidence": "medium",
+        "mode": "staged",
+        "route": "pending"
+      },
+      {
+        "writerClass": "cross_turn",
+        "source": "observed",
+        "durable": true,
+        "confidence": "medium",
+        "mode": "user_only",
+        "route": "pending"
+      },
+      {
+        "writerClass": "cross_turn",
+        "source": "observed",
+        "durable": true,
+        "confidence": "low",
+        "mode": "auto",
+        "route": "session"
+      },
+      {
+        "writerClass": "cross_turn",
+        "source": "observed",
+        "durable": true,
+        "confidence": "low",
+        "mode": "staged",
+        "route": "session"
+      },
+      {
+        "writerClass": "cross_turn",
+        "source": "observed",
+        "durable": true,
+        "confidence": "low",
+        "mode": "user_only",
+        "route": "session"
+      },
+      {
+        "writerClass": "cross_turn",
+        "source": "observed",
+        "durable": true,
+        "confidence": null,
+        "mode": "auto",
+        "route": "durable"
+      },
+      {
+        "writerClass": "cross_turn",
+        "source": "observed",
+        "durable": true,
+        "confidence": null,
+        "mode": "staged",
+        "route": "pending"
+      },
+      {
+        "writerClass": "cross_turn",
+        "source": "observed",
+        "durable": true,
+        "confidence": null,
+        "mode": "user_only",
+        "route": "pending"
+      },
+      {
+        "writerClass": "cross_turn",
+        "source": "observed",
+        "durable": false,
+        "confidence": "high",
+        "mode": "auto",
+        "route": "session"
+      },
+      {
+        "writerClass": "cross_turn",
+        "source": "observed",
+        "durable": false,
+        "confidence": "high",
+        "mode": "staged",
+        "route": "session"
+      },
+      {
+        "writerClass": "cross_turn",
+        "source": "observed",
+        "durable": false,
+        "confidence": "high",
+        "mode": "user_only",
+        "route": "session"
+      },
+      {
+        "writerClass": "cross_turn",
+        "source": "observed",
+        "durable": false,
+        "confidence": "medium",
+        "mode": "auto",
+        "route": "session"
+      },
+      {
+        "writerClass": "cross_turn",
+        "source": "observed",
+        "durable": false,
+        "confidence": "medium",
+        "mode": "staged",
+        "route": "session"
+      },
+      {
+        "writerClass": "cross_turn",
+        "source": "observed",
+        "durable": false,
+        "confidence": "medium",
+        "mode": "user_only",
+        "route": "session"
+      },
+      {
+        "writerClass": "cross_turn",
+        "source": "observed",
+        "durable": false,
+        "confidence": "low",
+        "mode": "auto",
+        "route": "session"
+      },
+      {
+        "writerClass": "cross_turn",
+        "source": "observed",
+        "durable": false,
+        "confidence": "low",
+        "mode": "staged",
+        "route": "session"
+      },
+      {
+        "writerClass": "cross_turn",
+        "source": "observed",
+        "durable": false,
+        "confidence": "low",
+        "mode": "user_only",
+        "route": "session"
+      },
+      {
+        "writerClass": "cross_turn",
+        "source": "observed",
+        "durable": false,
+        "confidence": null,
+        "mode": "auto",
+        "route": "session"
+      },
+      {
+        "writerClass": "cross_turn",
+        "source": "observed",
+        "durable": false,
+        "confidence": null,
+        "mode": "staged",
+        "route": "session"
+      },
+      {
+        "writerClass": "cross_turn",
+        "source": "observed",
+        "durable": false,
+        "confidence": null,
+        "mode": "user_only",
+        "route": "session"
+      },
+      {
+        "writerClass": "cross_turn",
+        "source": "externally_verified",
+        "durable": true,
+        "confidence": "high",
+        "mode": "auto",
+        "route": "durable"
+      },
+      {
+        "writerClass": "cross_turn",
+        "source": "externally_verified",
+        "durable": true,
+        "confidence": "high",
+        "mode": "staged",
+        "route": "pending"
+      },
+      {
+        "writerClass": "cross_turn",
+        "source": "externally_verified",
+        "durable": true,
+        "confidence": "high",
+        "mode": "user_only",
+        "route": "pending"
+      },
+      {
+        "writerClass": "cross_turn",
+        "source": "externally_verified",
+        "durable": true,
+        "confidence": "medium",
+        "mode": "auto",
+        "route": "durable"
+      },
+      {
+        "writerClass": "cross_turn",
+        "source": "externally_verified",
+        "durable": true,
+        "confidence": "medium",
+        "mode": "staged",
+        "route": "pending"
+      },
+      {
+        "writerClass": "cross_turn",
+        "source": "externally_verified",
+        "durable": true,
+        "confidence": "medium",
+        "mode": "user_only",
+        "route": "pending"
+      },
+      {
+        "writerClass": "cross_turn",
+        "source": "externally_verified",
+        "durable": true,
+        "confidence": "low",
+        "mode": "auto",
+        "route": "session"
+      },
+      {
+        "writerClass": "cross_turn",
+        "source": "externally_verified",
+        "durable": true,
+        "confidence": "low",
+        "mode": "staged",
+        "route": "session"
+      },
+      {
+        "writerClass": "cross_turn",
+        "source": "externally_verified",
+        "durable": true,
+        "confidence": "low",
+        "mode": "user_only",
+        "route": "session"
+      },
+      {
+        "writerClass": "cross_turn",
+        "source": "externally_verified",
+        "durable": true,
+        "confidence": null,
+        "mode": "auto",
+        "route": "durable"
+      },
+      {
+        "writerClass": "cross_turn",
+        "source": "externally_verified",
+        "durable": true,
+        "confidence": null,
+        "mode": "staged",
+        "route": "pending"
+      },
+      {
+        "writerClass": "cross_turn",
+        "source": "externally_verified",
+        "durable": true,
+        "confidence": null,
+        "mode": "user_only",
+        "route": "pending"
+      },
+      {
+        "writerClass": "cross_turn",
+        "source": "externally_verified",
+        "durable": false,
+        "confidence": "high",
+        "mode": "auto",
+        "route": "session"
+      },
+      {
+        "writerClass": "cross_turn",
+        "source": "externally_verified",
+        "durable": false,
+        "confidence": "high",
+        "mode": "staged",
+        "route": "session"
+      },
+      {
+        "writerClass": "cross_turn",
+        "source": "externally_verified",
+        "durable": false,
+        "confidence": "high",
+        "mode": "user_only",
+        "route": "session"
+      },
+      {
+        "writerClass": "cross_turn",
+        "source": "externally_verified",
+        "durable": false,
+        "confidence": "medium",
+        "mode": "auto",
+        "route": "session"
+      },
+      {
+        "writerClass": "cross_turn",
+        "source": "externally_verified",
+        "durable": false,
+        "confidence": "medium",
+        "mode": "staged",
+        "route": "session"
+      },
+      {
+        "writerClass": "cross_turn",
+        "source": "externally_verified",
+        "durable": false,
+        "confidence": "medium",
+        "mode": "user_only",
+        "route": "session"
+      },
+      {
+        "writerClass": "cross_turn",
+        "source": "externally_verified",
+        "durable": false,
+        "confidence": "low",
+        "mode": "auto",
+        "route": "session"
+      },
+      {
+        "writerClass": "cross_turn",
+        "source": "externally_verified",
+        "durable": false,
+        "confidence": "low",
+        "mode": "staged",
+        "route": "session"
+      },
+      {
+        "writerClass": "cross_turn",
+        "source": "externally_verified",
+        "durable": false,
+        "confidence": "low",
+        "mode": "user_only",
+        "route": "session"
+      },
+      {
+        "writerClass": "cross_turn",
+        "source": "externally_verified",
+        "durable": false,
+        "confidence": null,
+        "mode": "auto",
+        "route": "session"
+      },
+      {
+        "writerClass": "cross_turn",
+        "source": "externally_verified",
+        "durable": false,
+        "confidence": null,
+        "mode": "staged",
+        "route": "session"
+      },
+      {
+        "writerClass": "cross_turn",
+        "source": "externally_verified",
+        "durable": false,
+        "confidence": null,
+        "mode": "user_only",
+        "route": "session"
+      }
+    ]
+  },
+  "gate": {
+    "_README": "admit_candidate as an ordered pipeline over a derived context: gateOn, judged (non-user origin OR source = model_inferred), judgementComplete (both containsSecret and looksLikeInstruction are booleans), containsSecret, redactedNonEmpty (trimmed redactedText non-empty), looksLikeInstruction, nonUser (origin != user). A rule matches when every key in \"when\" equals the context value ({} always matches). Rules run in order; effects apply; a terminal rule stops. The transient judgement is always stripped. Default origin user is applied except on the gate-off path, which returns the candidate unchanged minus judgement.",
+    "default_origin": "user",
+    "judgement_shape": [
+      "containsSecret",
+      "redactedText",
+      "looksLikeInstruction"
+    ],
+    "rules": [
+      {
+        "id": "gate_off",
+        "when": {
+          "gateOn": false
+        },
+        "action": "admit",
+        "terminal": true,
+        "effects": {
+          "applyDefaultOrigin": false
+        }
+      },
+      {
+        "id": "not_judged",
+        "when": {
+          "judged": false
+        },
+        "action": "admit",
+        "terminal": true,
+        "effects": {}
+      },
+      {
+        "id": "missing_judgement",
+        "when": {
+          "judgementComplete": false
+        },
+        "action": "session",
+        "terminal": true,
+        "effects": {
+          "durable": false
+        }
+      },
+      {
+        "id": "secret_whole_claim",
+        "when": {
+          "containsSecret": true,
+          "redactedNonEmpty": false
+        },
+        "action": "drop",
+        "terminal": true,
+        "effects": {}
+      },
+      {
+        "id": "secret_redacted",
+        "when": {
+          "containsSecret": true,
+          "redactedNonEmpty": true
+        },
+        "action": null,
+        "terminal": false,
+        "effects": {
+          "replaceTextWithRedacted": true,
+          "clearEvidence": true
+        }
+      },
+      {
+        "id": "instruction_shaped",
+        "when": {
+          "looksLikeInstruction": true
+        },
+        "action": "flag",
+        "terminal": true,
+        "effects": {
+          "flagged": true
+        }
+      },
+      {
+        "id": "clean_non_user",
+        "when": {
+          "nonUser": true
+        },
+        "action": "session",
+        "terminal": true,
+        "effects": {
+          "durable": false
+        }
+      },
+      {
+        "id": "clean_user",
+        "when": {},
+        "action": "admit",
+        "terminal": true,
+        "effects": {}
+      }
+    ]
+  },
+  "audit": {
+    "entry_fields": [
+      {
+        "name": "seq",
+        "type": "int",
+        "required": true,
+        "port": "yes"
+      },
+      {
+        "name": "at",
+        "type": "string",
+        "required": true,
+        "port": "yes"
+      },
+      {
+        "name": "op",
+        "type": "AuditOp",
+        "required": true,
+        "port": "yes"
+      },
+      {
+        "name": "factId",
+        "type": "string",
+        "required": true,
+        "port": "yes"
+      },
+      {
+        "name": "before",
+        "type": "UserFact",
+        "required": false,
+        "port": "yes"
+      },
+      {
+        "name": "after",
+        "type": "UserFact",
+        "required": false,
+        "port": "yes"
+      },
+      {
+        "name": "store",
+        "type": "AuditStore",
+        "required": true,
+        "port": "yes"
+      },
+      {
+        "name": "writer",
+        "type": "string",
+        "required": true,
+        "port": "yes"
+      },
+      {
+        "name": "turn",
+        "type": "string",
+        "required": true,
+        "port": "yes"
+      },
+      {
+        "name": "undoes",
+        "type": "int",
+        "required": false,
+        "port": "yes"
+      },
+      {
+        "name": "erased",
+        "type": "boolean",
+        "required": false,
+        "port": "deferred"
+      },
+      {
+        "name": "group",
+        "type": "string",
+        "required": false,
+        "port": "deferred"
+      },
+      {
+        "name": "index",
+        "type": "int",
+        "required": false,
+        "port": "yes"
+      }
+    ],
+    "seq_rule": "per owner, strictly increasing from 1 (continues from the last entry)",
+    "keep": 500,
+    "rotation_rule": "keep the last `keep` entries plus any entry whose seq is above the consolidation watermark (memory:consolidation-state.lastSeq, default 0)",
+    "redaction_invariant": "entries only ever hold post-gate text",
+    "undo_rules": [
+      {
+        "id": "unknown_seq",
+        "message": "No audit entry #{seq}."
+      },
+      {
+        "id": "is_undo",
+        "message": "Entry #{seq} is itself an undo."
+      },
+      {
+        "id": "already_undone",
+        "message": "Entry #{seq} was already undone."
+      },
+      {
+        "id": "erased",
+        "message": "Entry #{seq} was erased from history and cannot be restored."
+      },
+      {
+        "id": "grouped",
+        "message": "Entry #{seq} belongs to a group; undoing grouped entries is not supported in this runtime.",
+        "python_only": true
+      },
+      {
+        "id": "success",
+        "message": "Undid #{seq} ({op}): {text}",
+        "text_fallback": "factId; text = (before ?? after).text"
+      }
+    ],
+    "undo_entry": {
+      "op": "undo",
+      "writer": "undo",
+      "turn": "session id",
+      "undoes": "seq",
+      "swap": "before and after of the undone entry are swapped"
+    }
+  },
+  "inv16": {
+    "knowledge_tiers": [
+      "semantic",
+      "identity",
+      "preference"
+    ],
+    "non_user_origin_tier": "episodic",
+    "never_promotable": [
+      "agent",
+      "tool",
+      "web"
+    ],
+    "never_returned_tiers": [
+      "procedural",
+      "commitment"
+    ]
+  }
+}

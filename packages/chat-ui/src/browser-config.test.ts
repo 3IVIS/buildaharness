@@ -110,4 +110,14 @@ describe('envOverridesFromImportMetaEnv', () => {
     warn.mockRestore()
     expect(ENV_VAR_FOR_CONFIG_KEY.layerPolicyMode).toBe('VITE_ASSISTANT_LAYER_POLICY')
   })
+
+  it('resolves VITE_ASSISTANT_MEMORY_WRITE_MODE into memoryWriteMode (M6); a typo warns and falls back to staged; unset leaves it absent', () => {
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {})
+    expect(envOverridesFromImportMetaEnv(env({ VITE_ASSISTANT_MEMORY_WRITE_MODE: 'user_only' }))).toEqual({ memoryWriteMode: 'user_only' })
+    expect(envOverridesFromImportMetaEnv(env({}))).not.toHaveProperty('memoryWriteMode')
+    expect(envOverridesFromImportMetaEnv(env({ VITE_ASSISTANT_MEMORY_WRITE_MODE: 'yolo' }))).toEqual({ memoryWriteMode: 'staged' })
+    expect(warn.mock.calls[0][0]).toContain('VITE_ASSISTANT_MEMORY_WRITE_MODE')
+    warn.mockRestore()
+    expect(ENV_VAR_FOR_CONFIG_KEY.memoryWriteMode).toBe('VITE_ASSISTANT_MEMORY_WRITE_MODE')
+  })
 })

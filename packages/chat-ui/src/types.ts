@@ -1,4 +1,4 @@
-import type { RiskLevel, AssistantTrace, AssistantSource, AssistantToolStep, AssistantTurnResult, AnswerClaim, AskQuestion, AskResponse } from '@buildaharness/aielia'
+import type { RiskLevel, AssistantTrace, AssistantSource, AssistantToolStep, AssistantTurnResult, AnswerClaim, AskQuestion, AskResponse, MemoryInjection } from '@buildaharness/aielia'
 
 export type ChatEntry =
   | { id: string; kind: 'user'; content: string }
@@ -16,6 +16,8 @@ export type ChatEntry =
       planStatus?: AssistantTurnResult['planStatus']
       /** Epistemic-honesty signal — see AssistantTurnResult.answerClaim's doc comment. Absent on the triviality fast path, same convention as trace/sources. */
       answerClaim?: AnswerClaim
+      /** What this turn's prompt contained from memory (and how many facts were left out) — snapshotted from assistant.getLastMemoryInjection() when the turn completed, shown in the "Why?" panel (M6). */
+      memoryInjection?: MemoryInjection
       /** Which proposer drove this turn — see AssistantTurnResult.proposerKind. A dev/E2E-only test affordance (the internal plan phase B1), rendered as a hidden data-testid element. */
       proposerKind?: AssistantTurnResult['proposerKind']
       /** Turn-end next-step options — see AssistantTurnResult.nextSteps. Shown as chips under the latest reply only; picking one fills the composer as an editable draft, it never sends. */

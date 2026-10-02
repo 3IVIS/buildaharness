@@ -1,0 +1,89 @@
+{
+ "description": "A keyed update retires the old entry into facts:retired with retiredAt and sets supersedes on the new one. The old fact lives in BOTH the durable and the session store (the normal state of an in-turn durable fact), so the audit log shows retire + add, not replace: the isLast test compares object identity against the session copy (see the 12-supersede-two-priors fixture for the durable-only case, which does show replace).",
+ "flags": {
+  "writeGate": false,
+  "auditLog": true
+ },
+ "config": {},
+ "clock": [
+  "2026-03-01T00:00:00.000Z"
+ ],
+ "initial": {
+  "facts:durable": [
+   {
+    "text": "The user lives in Paris",
+    "extractedAt": "2026-01-01T00:00:00.000Z",
+    "sourceTurn": "turn:s0",
+    "source": "model_inferred",
+    "durable": true,
+    "key": "city",
+    "confidence": "high",
+    "category": "other"
+   }
+  ],
+  "facts:s1": [
+   {
+    "text": "The user lives in Paris",
+    "extractedAt": "2026-01-01T00:00:00.000Z",
+    "sourceTurn": "turn:s0",
+    "source": "model_inferred",
+    "durable": true,
+    "key": "city",
+    "confidence": "high",
+    "category": "other"
+   }
+  ]
+ },
+ "steps": [
+  {
+   "call": "record_facts",
+   "args": {
+    "sessionId": "s1",
+    "candidates": [
+     {
+      "text": "The user lives in Berlin",
+      "durable": true,
+      "confidence": "high",
+      "category": "other",
+      "key": "city"
+     }
+    ]
+   }
+  }
+ ],
+ "expected": {
+  "final": {
+   "facts:durable": [
+    {
+     "text": "The user lives in Berlin",
+     "supersedes": "The user lives in Paris",
+     "key": "city"
+    }
+   ],
+   "facts:retired": [
+    {
+     "text": "The user lives in Paris",
+     "retiredAt": "2026-03-01T00:00:01.000Z"
+    }
+   ],
+   "memory:audit": [
+    {
+     "seq": 1,
+     "op": "retire",
+     "store": "durable",
+     "before": {
+      "text": "The user lives in Paris"
+     }
+    },
+    {
+     "seq": 2,
+     "op": "add",
+     "after": {
+      "text": "The user lives in Berlin",
+      "supersedes": "The user lives in Paris"
+     }
+    }
+   ]
+  }
+ }
+}

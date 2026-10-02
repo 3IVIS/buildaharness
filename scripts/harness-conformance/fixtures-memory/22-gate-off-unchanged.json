@@ -1,0 +1,72 @@
+{
+ "description": "With the gate off the candidate comes back unchanged minus the transient judgement (admit), even with secret and instruction judgements, and gains no origin.",
+ "flags": {
+  "writeGate": false,
+  "auditLog": true
+ },
+ "config": {},
+ "clock": [
+  "2026-03-01T00:00:00.000Z"
+ ],
+ "initial": {},
+ "steps": [
+  {
+   "call": "admit",
+   "args": {
+    "candidate": {
+     "text": "Has secret CANARY-9f3",
+     "source": "model_inferred",
+     "durable": true,
+     "confidence": "high",
+     "extractedAt": "2026-01-01T00:00:00.000Z",
+     "sourceTurn": "turn:s1",
+     "evidence": "e",
+     "judgement": {
+      "containsSecret": true,
+      "looksLikeInstruction": true,
+      "redactedText": "x"
+     }
+    },
+    "gateOn": false
+   }
+  },
+  {
+   "call": "admit",
+   "args": {
+    "candidate": {
+     "text": "Has secret CANARY-9f3",
+     "source": "model_inferred",
+     "durable": true,
+     "confidence": "high",
+     "extractedAt": "2026-01-01T00:00:00.000Z",
+     "sourceTurn": "turn:s1",
+     "evidence": "e",
+     "judgement": {
+      "containsSecret": true,
+      "looksLikeInstruction": true,
+      "redactedText": "x"
+     },
+     "origin": "agent"
+    },
+    "gateOn": false
+   }
+  }
+ ],
+ "expected": {
+  "steps": [
+   {
+    "action": "admit",
+    "fact": {
+     "text": "Has secret CANARY-9f3",
+     "evidence": "e"
+    }
+   },
+   {
+    "action": "admit",
+    "fact": {
+     "origin": "agent"
+    }
+   }
+  ]
+ }
+}

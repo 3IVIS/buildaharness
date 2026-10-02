@@ -1210,3 +1210,110 @@ describe('/plan sketch', () => {
     expect(lines.join('\n')).toContain('Aielia> ## Checklist\n- [ ] Book venue')
   })
 })
+
+describe('/memory governance surfaces (M6)', () => {
+  const FACT = { text: 'the user likes tea', extractedAt: '2026-01-01T00:00:00.000Z', sourceTurn: 't', source: 'user_asserted', durable: true }
+  const OLD = { text: 'the user lives in Oslo', extractedAt: '2025-01-01T00:00:00.000Z', sourceTurn: 't', source: 'user_asserted', durable: true, retiredAt: '2026-02-01T00:00:00.000Z' }
+
+  async function memoryCli(): Promise<{ cli: CliInstance; memory: InMemoryAdapter; assistant: PersonalAssistant }> {
+    const memory = new InMemoryAdapter()
+    const assistant = new PersonalAssistant({ llmClient: new FakeLLMClient(), memory })
+    const { cli } = await setupCli({ assistant })
+    return { cli, memory, assistant }
+  }
+
+  it('/memory off stops writes and says what stays; /memory on resumes; the state is the shared service state', async () => {
+    const { cli, assistant } = await memoryCli()
+    const lines = captureOutput()
+    await cli.dispatchLine('/memory off')
+    expect(lines.join('\n')).toContain('Memory writes are OFF')
+    expect(await assistant.isMemoryEnabled()).toBe(false)
+    await cli.dispatchLine('/memory status')
+    expect(lines.join('\n')).toContain('Writes: OFF')
+    await cli.dispatchLine('/memory on')
+    expect(await assistant.isMemoryEnabled()).toBe(true)
+  })
+
+  it('/memory status shows the write mode and store-vs-budget line', async () => {
+    const { cli, memory } = await memoryCli()
+    await memory.set('facts:durable', [FACT])
+    const lines = captureOutput()
+    await cli.dispatchLine('/memory status')
+    const out = lines.join('\n')
+    expect(out).toContain('mode: staged')
+    expect(out).toMatch(/Store: 1 fact, \d+\/4000 chars/)
+  })
+
+  it('/memory archive lists replaced facts; /memory archive forget <n> erases one; a bad index is reported', async () => {
+    const { cli, memory } = await memoryCli()
+    await memory.set('facts:retired', [OLD])
+    const lines = captureOutput()
+    await cli.dispatchLine('/memory archive')
+    expect(lines.join('\n')).toContain('1. the user lives in Oslo')
+    lines.length = 0
+    await cli.dispatchLine('/memory archive forget 9')
+    expect(lines.join('\n')).toContain('No archived fact #9')
+    lines.length = 0
+    await cli.dispatchLine('/memory archive forget 1')
+    expect(lines.join('\n')).toContain('forgotten: the user lives in Oslo')
+    expect(await memory.get('facts:retired')).toEqual([])
+  })
+
+  it('/memory history reads the audit log through the shared service (empty message when the log is empty)', async () => {
+    const { cli, memory } = await memoryCli()
+    const lines = captureOutput()
+    await cli.dispatchLine('/memory history')
+    expect(lines.join('\n')).toMatch(/No memory changes recorded/)
+    await memory.set('memory:audit', [{ seq: 1, at: '2026-01-01T00:00:00.000Z', op: 'add', factId: 'x|y', after: FACT, store: 'durable', writer: 'recordFacts', turn: 's' }])
+    lines.length = 0
+    await cli.dispatchLine('/memory history')
+    expect(lines.join('\n')).toContain('#1 2026-01-01T00:00:00.000Z add [durable] the user likes tea (recordFacts)')
+  })
+
+  it('/memory consolidate runs the consolidator PersonalAssistant registers itself (flag off: says so), and a host-registered one replaces it', async () => {
+    const { cli, assistant } = await memoryCli()
+    const lines = captureOutput()
+    await cli.dispatchLine('/memory consolidate')
+    expect(lines.join('\n')).toContain('Memory consolidation is off')
+    assistant.registerMemoryConsolidator(async () => ({ status: 'nothing_to_do', message: 'Nothing to consolidate.' }))
+    lines.length = 0
+    await cli.dispatchLine('/memory consolidate')
+    expect(lines.join('\n')).toContain('Nothing to consolidate.')
+  })
+
+  it('/why shows what memory the last reply could have known: before any turn, then after one', async () => {
+    const { cli, memory } = await memoryCli()
+    await memory.set('facts:durable', [FACT])
+    const lines = captureOutput()
+    await cli.dispatchLine('/why')
+    expect(lines.join('\n')).toContain('No turn has run yet')
+    await cli.dispatchLine('What is the capital of France?')
+    lines.length = 0
+    await cli.dispatchLine('/why')
+    expect(lines.join('\n')).toContain('Memory in the prompt: 1 fact')
+    expect(lines.join('\n')).toContain('- the user likes tea')
+  })
+
+  it('/doctor includes the memory checks (size vs budget, pending, last consolidation, audit log)', async () => {
+    const { cli } = await memoryCli()
+    const lines = captureOutput()
+    await cli.dispatchLine('/doctor')
+    const out = lines.join('\n')
+    expect(out).toContain('memory store:')
+    expect(out).toContain('memory pending:')
+    expect(out).toContain('memory last consolidation: never')
+    expect(out).toContain('memory audit log:')
+  })
+
+  it('/config set memoryWriteMode persists a valid mode and rejects an invalid one, leaving config unchanged', async () => {
+    const configStore = makeConfigStore()
+    const { cli } = await setupCli({ configStore, assistant: new PersonalAssistant({ llmClient: new FakeLLMClient() }) })
+    const lines = captureOutput()
+    await cli.dispatchLine('/config set memoryWriteMode user_only')
+    expect(await configStore.load()).toMatchObject({ memoryWriteMode: 'user_only' })
+    lines.length = 0
+    await cli.dispatchLine('/config set memoryWriteMode yolo')
+    expect(lines.join('\n')).toContain('memoryWriteMode must be')
+    expect(await configStore.load()).toMatchObject({ memoryWriteMode: 'user_only' })
+  })
+})

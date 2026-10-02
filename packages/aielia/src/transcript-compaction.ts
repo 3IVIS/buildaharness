@@ -40,6 +40,11 @@ function truncatedSummary(older: ChatMessage[]): ChatMessage {
   return { role: 'assistant', content: `${SUMMARY_HEADER}\n${summaryLines.join('\n')}` }
 }
 
+/** The messages compaction would drop for `transcript` right now (the older part), or null when it would not compact. M3's pre-compaction flush reads exactly these. Same threshold, no new trigger. */
+export function messagesAboutToBeCompacted(transcript: ChatMessage[]): ChatMessage[] | null {
+  return splitForCompaction(transcript)?.older ?? null
+}
+
 export function compactTranscript(transcript: ChatMessage[]): CompactionResult {
   const split = splitForCompaction(transcript)
   if (!split) return { transcript, compacted: false }

@@ -1,0 +1,69 @@
+{
+ "description": "Equal tier: newest extractedAt first; equal extractedAt: most recent lastInjectedAt first (absent last); then later list index first.",
+ "flags": {
+  "writeGate": false,
+  "auditLog": true
+ },
+ "config": {},
+ "clock": [
+  "2026-03-01T00:00:00.000Z"
+ ],
+ "initial": {
+  "facts:durable": [
+   {
+    "text": "X old-injected",
+    "extractedAt": "2026-03-01T00:00:00.000Z",
+    "sourceTurn": "turn:s0",
+    "source": "user_asserted",
+    "durable": true,
+    "lastInjectedAt": "2026-02-01T00:00:00.000Z"
+   },
+   {
+    "text": "Y new-injected",
+    "extractedAt": "2026-03-01T00:00:00.000Z",
+    "sourceTurn": "turn:s0",
+    "source": "user_asserted",
+    "durable": true,
+    "lastInjectedAt": "2026-03-01T00:00:00.000Z"
+   },
+   {
+    "text": "Z never",
+    "extractedAt": "2026-03-01T00:00:00.000Z",
+    "sourceTurn": "turn:s0",
+    "source": "user_asserted",
+    "durable": true
+   },
+   {
+    "text": "W never",
+    "extractedAt": "2026-03-01T00:00:00.000Z",
+    "sourceTurn": "turn:s0",
+    "source": "user_asserted",
+    "durable": true
+   },
+   {
+    "text": "N newer",
+    "extractedAt": "2026-03-02T00:00:00.000Z",
+    "sourceTurn": "turn:s0",
+    "source": "user_asserted",
+    "durable": true
+   }
+  ]
+ },
+ "steps": [
+  {
+   "call": "load_facts",
+   "args": {
+    "sessionId": "s1",
+    "record": false
+   }
+  }
+ ],
+ "expected": {
+  "steps": [
+   {
+    "factsBlock": "\nKnown facts about the user:\n- N newer\n- Y new-injected\n- X old-injected\n- W never\n- Z never",
+    "droppedCount": null
+   }
+  ]
+ }
+}

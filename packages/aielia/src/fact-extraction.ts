@@ -2,6 +2,7 @@ import { looksLikeCodingFact } from './contradiction-checker.js'
 import { getFactMarkerPatterns, testAny, splitOnAny } from './lexical/patterns.js'
 import { lexicalActive } from './lexical/lexical-mode.js'
 import type { FactConfidence, FactCategory } from './turn-intent-classifier.js'
+import { TIER_RULES as CONTRACT_TIER_RULES } from './_memory-core-generated.js'
 
 const factPatterns = getFactMarkerPatterns()
 
@@ -159,18 +160,10 @@ export interface TierRule {
  * Commitment stores through this path — that's the structural half of INV-16, not just a runtime
  * check.
  */
-export const TIER_RULES: Record<MemoryTier, TierRule> = {
-  episodic: { allowedSources: ['user_asserted', 'model_inferred', 'observed', 'externally_verified'], retention: 'session', contradictionChecked: false },
-  // model_inferred added to semantic/identity/preference in Phase 4 of
-  // the internal plan: tierForFact() now routes a
-  // model_inferred fact here too, but only once it's durable AND high-confidence — see that
-  // function's doc comment.
-  semantic: { allowedSources: ['user_asserted', 'model_inferred', 'externally_verified'], retention: 'durable', contradictionChecked: true },
-  identity: { allowedSources: ['user_asserted', 'model_inferred'], retention: 'durable', contradictionChecked: true },
-  preference: { allowedSources: ['user_asserted', 'model_inferred'], retention: 'durable', contradictionChecked: true },
-  procedural: { allowedSources: [], retention: 'durable', contradictionChecked: false },
-  commitment: { allowedSources: [], retention: 'durable', contradictionChecked: false },
-}
+// Generated from spec/memory-core.json (tier_rules), shared with the Python twin; do not hand-edit the values here.
+export const TIER_RULES: Record<MemoryTier, TierRule> = Object.fromEntries(
+  Object.entries(CONTRACT_TIER_RULES).map(([tier, rule]) => [tier, { ...rule, allowedSources: [...rule.allowedSources] }]),
+) as Record<MemoryTier, TierRule>
 
 // Tier-classification only — deliberately separate from DURABLE_NAME_OR_PREFERENCE_MARKERS above
 // (which gates *admission/durability*, not tier). Splitting FACT_MARKERS' hand-tuned admission
@@ -209,6 +202,14 @@ export function tierForFact(fact: UserFact): MemoryTier {
   if (fact.source === 'observed') return 'episodic'
   if (fact.source === 'model_inferred' && !(fact.durable && fact.confidence === 'high')) return 'episodic'
   if (fact.durable) {
+    // M8: the structural rule (shared with the Python twin, see spec/memory-core.json tier_rules)
+    // decides on the classifier's `category`. The two regexes below are only a fallback for a fact
+    // that carries no category (the lexical pass), so their behaviour is unchanged there.
+    if (fact.category !== undefined) {
+      if (fact.category === 'identity') return 'identity'
+      if (fact.category === 'preference') return 'preference'
+      return 'semantic'
+    }
     if (IDENTITY_TIER_PATTERN.test(fact.text)) return 'identity'
     if (PREFERENCE_TIER_PATTERN.test(fact.text)) return 'preference'
   }

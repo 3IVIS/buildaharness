@@ -1,28 +1,52 @@
 import type { ExperienceStore, StrategyWeightKey, DecompositionEntry, RecoverySequenceEntry, ExperienceStoreData, ExternalContradictionInput } from '@buildaharness/harness'
-import type { MemoryAdapter, ReminderStore, ReminderRecord, ILLMClient, TokenUsage } from '@buildaharness/runtime'
+import type { MemoryAdapter, ReminderStore, ReminderRecord, ILLMClient, TokenUsage, ChatMessage } from '@buildaharness/runtime'
 import { explicitEnvOverride } from './layer-policy-wiring.js'
 import { extractFactsFromTurn, migrateFact, tierForFact, isKnowledgeTier, type UserFact, type CandidateJudgement } from './fact-extraction.js'
 import { checkForContradictions, semanticContradictionEnabled, type BeliefCandidate, type Corroboration } from './contradiction-checker.js'
+import { DigestStore, writeDigest, endConversation, type SessionDigest } from './episodic-digest.js'
+import { SUMMARY_HEADER } from './transcript-compaction.js'
 import type { StatedFact, FactCategory, FactConfidence } from './turn-intent-classifier.js'
+import { DEFAULT_MEMORY_WRITE_MODE, resolveWriteRoute, type MemoryWriteMode, type CrossTurnWriter } from './memory-governance.js'
+import {
+  memoryConsolidationEnabled, memoryRetentionDays, proposeConsolidationOps, findArchiveCandidates,
+  type ConsolidationProposal, type ConsolidationState, type ConsolidationInput,
+} from './memory-consolidation.js'
+import type { VerifiedReviewOp } from './memory-reviewer.js'
+import {
+  DEFAULT_MEMORY_BUDGET_CHARS as CONTRACT_BUDGET_CHARS, AUDIT_LOG_KEEP as CONTRACT_AUDIT_LOG_KEEP, STORE_KEYS,
+  TIER_PRIORITY as CONTRACT_TIER_PRIORITY,
+} from './_memory-core-generated.js'
 
 // Most-recent facts (and, separately, active reminders) injected into the system prompt each
 // turn — a hard cap, not a summary, so this stays cheap even as the fact/reminder store grows.
 export const FACT_CAP = 20
 
 /** Default character budget for the rendered facts block under `AUDIT_MEMORY_BUDGETED_RENDER` (M0 measured ~195 tokens ≈ 800 chars for 20 facts; this leaves room for roughly 5x that). */
-export const DEFAULT_MEMORY_BUDGET_CHARS = 4000
+export const DEFAULT_MEMORY_BUDGET_CHARS: number = CONTRACT_BUDGET_CHARS
 
 /** Append-only store of entries a keyed fact replaced (M1); the M2 audit log will subsume it. */
-export const RETIRED_FACTS_KEY = 'facts:retired'
+export const RETIRED_FACTS_KEY: string = STORE_KEYS.retired
 
 /** M2: append-only change log with pre-images. Global, never cleared by `/new` (same convention as DURABLE_FACTS_KEY). */
-export const AUDIT_LOG_KEY = 'memory:audit'
+export const AUDIT_LOG_KEY: string = STORE_KEYS.audit
 /** M2/M5: highest audit `seq` already consolidated; the audit log never rotates away an entry newer than this. Absent until M5 writes it. */
-export const CONSOLIDATION_STATE_KEY = 'memory:consolidation-state'
+export const CONSOLIDATION_STATE_KEY: string = STORE_KEYS.consolidationState
 /** M2: how many audit entries rotation keeps (plus any newer than the consolidation watermark). */
-export const AUDIT_LOG_KEEP = 500
+export const AUDIT_LOG_KEEP: number = CONTRACT_AUDIT_LOG_KEEP
+/**
+ * M6: `/memory off` — when `{ off: true }`, nothing writes memory for this install (facts, pending
+ * queue, and every later writer: M3 digests, M4 reviewer, M5 consolidation must check
+ * `MemoryService.isMemoryOff()` first). Reads, forget, reject and undo still work: switching writes
+ * off never traps the user's existing data. Global, never cleared by `/new`.
+ */
+export const MEMORY_OFF_KEY: string = STORE_KEYS.off
 
-export type AuditOp = 'add' | 'replace' | 'retire' | 'remove' | 'confirm' | 'reject' | 'undo'
+/** M5: staged proposals awaiting the user (`/memory consolidate`). Global, never cleared by `/new`. */
+export const CONSOLIDATION_PROPOSALS_KEY: string = STORE_KEYS.proposals
+/** M5: entries the user accepted an archive proposal for. Recoverable (`/memory archive restore`), never deleted by this phase. */
+export const ARCHIVED_FACTS_KEY: string = STORE_KEYS.archive
+
+export type AuditOp = 'add' | 'replace' | 'retire' | 'remove' | 'confirm' | 'reject' | 'undo' | 'archive' | 'restore'
 
 export interface AuditEntry {
   seq: number
@@ -39,6 +63,12 @@ export interface AuditEntry {
   turn: string
   /** Set on an `undo` entry: the seq it reverted. */
   undoes?: number
+  /** M6: the user erased this fact from history (`/memory archive forget`); before/after were removed and the entry can no longer be undone. */
+  erased?: boolean
+  /** M5: entries applied together (one consolidation proposal) share a group; undoing one undoes the group. */
+  group?: string
+  /** M5: position the pre-image held in the durable list, so undo restores order exactly. */
+  index?: number
 }
 
 type AuditDraft = Omit<AuditEntry, 'seq' | 'at'>
@@ -49,7 +79,7 @@ type AuditDraft = Omit<AuditEntry, 'seq' | 'at'>
 // untouched). This personal-assistant is single-user/single-install, so one global durable-fact
 // list (not per-session) is the right shape — matching reminderStore/experienceStore's own
 // precedent.
-export const DURABLE_FACTS_KEY = 'facts:durable'
+export const DURABLE_FACTS_KEY: string = STORE_KEYS.durable
 
 /**
  * Global, never cleared by `/new` — same retention shape as DURABLE_FACTS_KEY (a pending fact
@@ -59,7 +89,7 @@ export const DURABLE_FACTS_KEY = 'facts:durable'
  * promoted or silently dropped — see `recordFacts()`'s promotion policy and
  * `confirmPendingFact()`/`rejectPendingFact()` below.
  */
-export const PENDING_CONFIRMATION_KEY = 'facts:pending-confirmation'
+export const PENDING_CONFIRMATION_KEY: string = STORE_KEYS.pending
 
 /**
  * Global, never cleared by `/new`. Holds facts removed from `facts:${sessionId}`/
@@ -69,7 +99,7 @@ export const PENDING_CONFIRMATION_KEY = 'facts:pending-confirmation'
  * too, so a matching restatement can re-enter PENDING_CONFIRMATION_KEY tagged
  * `previouslyRejected` instead of being silently re-asked forever or silently refused forever.
  */
-export const REJECTED_FACTS_KEY = 'facts:rejected'
+export const REJECTED_FACTS_KEY: string = STORE_KEYS.rejected
 
 /** Bound on how many learned decompositions/recovery sequences `getMemorySummary()` includes — see MemorySummary's doc comment. */
 export const MEMORY_SUMMARY_PREVIEW_LIMIT = 20
@@ -79,6 +109,23 @@ export interface PendingFact extends UserFact {
   category: FactCategory
   /** True when this exact fact previously lived in REJECTED_FACTS_KEY and was corroborated back in by a later, differently-phrased restatement — see `recordFacts()`'s corroboration handling. `/memory` surfaces this so the user sees the prior rejection instead of the fact looking brand new. */
   previouslyRejected?: boolean
+  /** M4: `retire` marks a reviewer proposal to retire an existing durable fact (`retireTargetId` = its `text|extractedAt`) rather than add one; confirming it retires, never adds. */
+  proposedOp?: 'retire'
+  retireTargetId?: string
+  /** M4: who staged this entry and what the semantic verifier said, shown in `/memory`. */
+  stagedBy?: 'reviewer'
+  verification?: 'supported' | 'unsupported' | 'not_checked'
+}
+
+/** What `stageReviewerOps()` did with a batch, for tests and `/memory` diagnostics. */
+export interface StageReviewerResult {
+  staged: number
+  /** Unsupported by the verifier, kept session-scoped only. */
+  sessionScoped: number
+  /** Refused by a plain-code gate (retire of a user_asserted fact, unknown target) or dropped by the write gate. */
+  refused: number
+  /** The signal fired before the write: nothing was written. */
+  aborted: boolean
 }
 
 /** An entry in REJECTED_FACTS_KEY — see that constant's doc comment. */
@@ -115,7 +162,48 @@ export interface MemoryExport {
   reminders: ReminderRecord[]
   pending: PendingFact[]
   experience: ExperienceStoreData
+  /** M3: every stored episodic digest, unbounded and regardless of retention. */
+  digests?: SessionDigest[]
+  /** M6: facts a keyed update replaced (and, after M5, archived) — covered by export so nothing the assistant holds about the user is missing from it. */
+  retired?: UserFact[]
+  /** M6: the audit log (redacted text only, by the M2 gate). Empty when the audit-log flag is off. */
+  audit?: AuditEntry[]
+  /** M6: governance state at export time. */
+  governance?: { mode: MemoryWriteMode; off: boolean }
 }
+
+/** M6: what the facts block of the most recent turn actually contained ("Why?" panel, `/why`). */
+export interface MemoryInjection {
+  /** Facts placed in the prompt, in render order. */
+  facts: { text: string; unconfirmed: boolean }[]
+  /** In-scope live facts that did NOT make it into the prompt (budget or the legacy 20-fact cap). */
+  notShown: number
+}
+
+/** M6: store-health snapshot for `/doctor` and the memory panel. Read-only; never touches usage counters. */
+export interface MemoryStatus {
+  mode: MemoryWriteMode
+  off: boolean
+  budgetedRender: boolean
+  budgetChars: number
+  /** Characters the in-scope live facts would need if all were rendered. */
+  storeChars: number
+  liveFacts: number
+  pending: number
+  flaggedPending: number
+  retired: number
+  auditEnabled: boolean
+  auditEntries: number
+  /** Highest audit seq already consolidated (M5 writes `memory:consolidation-state`); undefined until then. */
+  lastConsolidatedSeq?: number
+  lastConsolidationAt?: string
+  lastInjection?: MemoryInjection
+}
+
+/** M6 extension point for M5: what a consolidation run reports back to `/memory consolidate`. */
+export type ConsolidationOutcome = { status: 'done'; message: string } | { status: 'nothing_to_do'; message: string }
+/** M5 registers one of these via `MemoryService.registerConsolidator()`; it proposes through `submit` so governance, the gate and the audit log apply. */
+export type MemoryConsolidator = (ctx: { submit: MemoryService['submitCandidate']; sessionId: string }) => Promise<ConsolidationOutcome>
 
 /** Result of a single fact's promotion-time (`/memory confirm`) or corroboration-driven (medium→high) admission into DURABLE_FACTS_KEY — see `confirmPendingFact()`. */
 export interface PendingConfirmationOutcome {
@@ -133,13 +221,13 @@ export interface RecordFactsResult {
 /**
  * `AUDIT_MEMORY_BUDGETED_RENDER` gate (M1 of the agent memory framework plan). Gates budgeted/
  * priority rendering, keyed supersession and usage fields. `=0`/`off` restores `slice(-FACT_CAP)`
- * and append-only writes. Shipped default **OFF**: the M1 real-model pilot has not run (see the plan's
- * defaults rule), so only `1`/`true`/`on`/`yes`/`enabled` turns it on. Read fresh each call.
+ * and append-only writes. Default **ON** (M7 corrections scenario, 2 of 2 seeds: lexicalOff FAIL, memoryM12On PASS);
+ * `0`/`false`/`off`/`no`/`disabled` restores the legacy path. Read fresh each call; this is the one read point.
  */
 export function memoryBudgetedRenderEnabled(env?: Record<string, string | undefined>): boolean {
   const source = env ?? (typeof process !== 'undefined' ? process.env : {})
   const raw = String(source.AUDIT_MEMORY_BUDGETED_RENDER ?? '').trim().toLowerCase()
-  return ['1', 'true', 'on', 'yes', 'enabled'].includes(raw)
+  return !['0', 'false', 'off', 'no', 'disabled'].includes(raw)
 }
 
 /** `AUDIT_MEMORY_WRITE_GATE`: semantic secret redaction + injection judgement before promotion, failing closed. Default OFF until the real-model pilot (plan defaults rule); `1/true/on/yes/enabled` enables. */
@@ -172,8 +260,10 @@ export function admitCandidate(candidate: UserFact, gateOn: boolean): AdmitDecis
   const { judgement, ...bare } = candidate
   let fact: UserFact = { origin: 'user', ...bare }
   if (!gateOn) return { action: 'admit', fact: bare }
-  if (fact.origin !== 'user') return { action: 'session', fact: { ...fact, durable: false } }
-  if (fact.source !== 'model_inferred') return { action: 'admit', fact }
+  // M3: a non-user origin (the session digest) is judged too, so a secret is redacted before it is
+  // stored, but it can never be promoted: a clean result is `session`, not `admit`.
+  const nonUser = fact.origin !== 'user'
+  if (!nonUser && fact.source !== 'model_inferred') return { action: 'admit', fact }
   const j: CandidateJudgement = judgement ?? {}
   if (typeof j.containsSecret !== 'boolean' || typeof j.looksLikeInstruction !== 'boolean') {
     return { action: 'session', fact: { ...fact, durable: false } }
@@ -184,7 +274,7 @@ export function admitCandidate(candidate: UserFact, gateOn: boolean): AdmitDecis
     fact = { ...fact, text: redacted, evidence: undefined }
   }
   if (j.looksLikeInstruction) return { action: 'flag', fact: { ...fact, flagged: true } }
-  return { action: 'admit', fact }
+  return nonUser ? { action: 'session', fact: { ...fact, durable: false } } : { action: 'admit', fact }
 }
 
 /** Removes verbatim copies of the injected memory block from text bound for candidate extraction (feedback-loop prevention). Structural: it removes the exact block this service rendered, not a pattern. */
@@ -193,7 +283,7 @@ export function excludeInjectedBlock(text: string, injectedBlock: string): strin
   return block ? text.split(block).join('') : text
 }
 
-const TIER_PRIORITY: Record<string, number> = { identity: 0, preference: 0, semantic: 1, episodic: 2 }
+const TIER_PRIORITY: Record<string, number> = CONTRACT_TIER_PRIORITY
 
 export interface RenderedFacts {
   block: string
@@ -292,7 +382,7 @@ function mergeTurnFacts(lexicalFacts: UserFact[], llmFacts: UserFact[]): UserFac
  * it) each stamp their own `extractedAt` — harmless, since neither call's result is compared
  * against the other's by identity.
  */
-export function buildTurnFacts(sessionId: string, userMessage: string, statedFacts: StatedFact[], policyEnabled: boolean = true): UserFact[] {
+export function buildTurnFacts(sessionId: string, userMessage: string, statedFacts: StatedFact[], policyEnabled: boolean = true, now: () => string = () => new Date().toISOString()): UserFact[] {
   const lexicalFacts = extractFactsFromTurn(userMessage, `turn:${sessionId}`)
   // The single AUDIT_MODEL_INFERRED_FACTS read: every path a `model_inferred` fact takes into the
   // session store, durable store, pending-confirmation queue, prompt or the harness's
@@ -303,7 +393,7 @@ export function buildTurnFacts(sessionId: string, userMessage: string, statedFac
   const llmFacts: UserFact[] = (explicitEnvOverride('AUDIT_MODEL_INFERRED_FACTS') ?? policyEnabled) && modelInferredFactsEnabled()
     ? statedFacts.map((fact) => ({
         text: fact.text,
-        extractedAt: new Date().toISOString(),
+        extractedAt: now(),
         sourceTurn: `turn:${sessionId}`,
         source: 'model_inferred',
         durable: fact.durable,
@@ -318,21 +408,13 @@ export function buildTurnFacts(sessionId: string, userMessage: string, statedFac
   return mergeTurnFacts(lexicalFacts, llmFacts)
 }
 
-/**
- * Three-way promotion split (Phase 2's table, extended by Phase 3): a `user_asserted` fact
- * promotes on its own `durable` bit, unchanged since before Phase 2. A `model_inferred` fact only
- * auto-promotes straight to DURABLE_FACTS_KEY at `confidence: 'high'`; `recordFacts()` handles the
- * medium/low split on top of this (queue medium to PENDING_CONFIRMATION_KEY, leave low
- * session-scoped-only) separately, since that's a queuing decision, not a promotion one.
- */
-function shouldAutoPromote(fact: UserFact): boolean {
-  if (fact.source === 'model_inferred') return fact.durable && fact.confidence === 'high'
-  return fact.durable
-}
-
 /** Text-and-timestamp identity match — the same (text, extractedAt) pair a fact was captured with, used to find-and-remove/find-and-update one specific entry in a UserFact[] without a dedicated id field. */
 function sameFact(a: UserFact, b: UserFact): boolean {
   return a.text === b.text && a.extractedAt === b.extractedAt
+}
+
+function proposalSignature(kind: string, ids: string[], text?: string): string {
+  return `${kind}|${[...ids].sort().join('||')}|${text ?? ''}`
 }
 
 function factId(f: UserFact): string {
@@ -352,9 +434,12 @@ function toBeliefCandidates(facts: UserFact[], prefix: string): BeliefCandidate[
  * `promoteConfirmedFact()` re-sources to `externally_verified`, clearing `confidence`) render
  * unqualified.
  */
+function isUnconfirmed(f: UserFact): boolean {
+  return f.source === 'model_inferred' && (f.confidence === 'medium' || f.confidence === 'low')
+}
+
 function factLine(f: UserFact): string {
-  const unconfirmed = f.source === 'model_inferred' && (f.confidence === 'medium' || f.confidence === 'low')
-  return `- ${f.text}${unconfirmed ? ' (unconfirmed)' : ''}`
+  return `- ${f.text}${isUnconfirmed(f) ? ' (unconfirmed)' : ''}`
 }
 
 /**
@@ -377,7 +462,63 @@ export class MemoryService {
     private readonly currentProject: () => string = () => '',
     /** M1: character budget for the facts block under `AUDIT_MEMORY_BUDGETED_RENDER` (config `memoryBudgetChars`). */
     private readonly memoryBudgetChars: () => number = () => DEFAULT_MEMORY_BUDGET_CHARS,
+    /** M6: governance mode (config `memoryWriteMode`), read through a getter like the others so a live change applies on the next write. Resolved here and nowhere else. */
+    private readonly writeMode: () => MemoryWriteMode = () => DEFAULT_MEMORY_WRITE_MODE,
+    /** Time source for every timestamp this service writes (extractedAt of stated facts, audit `at`, retiredAt, usage flush). Injectable so the cross-runtime conformance fixtures are byte-reproducible; default is wall-clock, i.e. no behaviour change. */
+    private readonly clock: () => string = () => new Date().toISOString(),
   ) {}
+
+  private consolidator?: MemoryConsolidator
+  private lastInjection?: MemoryInjection
+
+  /** `/memory off` state — M3/M4/M5 writers must call this before any write or LLM spend. */
+  async isMemoryOff(): Promise<boolean> {
+    return ((await this.memory.get(MEMORY_OFF_KEY)) as { off?: boolean } | undefined)?.off === true
+  }
+
+  async setMemoryOff(off: boolean): Promise<void> {
+    await this.memory.set(MEMORY_OFF_KEY, { off, at: this.clock() })
+  }
+
+  /** M5 extension point (not built here): until a consolidator is registered `/memory consolidate` says so instead of pretending. */
+  registerConsolidator(fn: MemoryConsolidator | undefined): void {
+    this.consolidator = fn
+  }
+
+  async consolidate(sessionId: string): Promise<ConsolidationOutcome | { status: 'unavailable' | 'blocked'; message: string }> {
+    if (await this.isMemoryOff()) return { status: 'blocked', message: 'Memory writes are off (/memory on to resume).' }
+    if (!this.consolidator) return { status: 'unavailable', message: 'Consolidation is not available in this build.' }
+    return this.consolidator({ submit: (w, f, s) => this.submitCandidate(w, f, s), sessionId })
+  }
+
+  /**
+   * M6 extension point for M3 (digest), M4 (reviewer) and M5 (consolidation) writers: the ONE way a
+   * cross-turn candidate enters memory. It applies, in order: `/memory off`, the M2 gate
+   * (`admitCandidate`: redaction, injection flag, fail-closed judgement, non-user origin), then the
+   * governance route for `memoryWriteMode` (`resolveWriteRoute`), and writes through the same
+   * single durable commit point / pending queue / audit log as every other writer. Add-only: removal
+   * and retirement stay with the user or a staged proposal.
+   */
+  async submitCandidate(writer: CrossTurnWriter, candidate: UserFact, sessionId: string, opts: { pendingExtras?: Partial<PendingFact>; forceGate?: boolean } = {}): Promise<{ route: 'durable' | 'pending' | 'session' | 'dropped' | 'blocked'; fact?: UserFact }> {
+    if (await this.isMemoryOff()) return { route: 'blocked' }
+    const decision = admitCandidate(candidate, opts.forceGate === true || memoryWriteGateEnabled())
+    if (decision.action === 'drop') return { route: 'dropped' }
+    const fact = decision.fact
+    const route = decision.action === 'flag' ? 'pending' : decision.action === 'session' ? 'session' : resolveWriteRoute(this.writeMode(), writer, fact)
+    if (route === 'durable') {
+      const durable = (((await this.memory.get(DURABLE_FACTS_KEY)) as UserFact[] | undefined) ?? []).map(migrateFact)
+      await this.commitDurable([...durable, fact], [{ op: 'add', factId: factId(fact), after: fact, store: 'durable', writer, turn: sessionId }])
+    } else if (route === 'pending') {
+      const pending = ((await this.memory.get(PENDING_CONFIRMATION_KEY)) as PendingFact[] | undefined) ?? []
+      const queued: PendingFact = { ...fact, category: fact.category ?? 'other', ...opts.pendingExtras }
+      await this.memory.set(PENDING_CONFIRMATION_KEY, [...pending, queued])
+      await this.appendAudit([{ op: 'add', factId: factId(fact), after: queued, store: 'pending', writer, turn: sessionId }])
+    } else {
+      const session = (((await this.memory.get(`facts:${sessionId}`)) as UserFact[] | undefined) ?? []).map(migrateFact)
+      await this.memory.set(`facts:${sessionId}`, [...session, { ...fact, durable: false }])
+    }
+    return { route, fact }
+  }
 
   /** Facts rendered since the last flush, keyed by `text|extractedAt`; written lazily so loadFacts() stays read-only (M1). */
   private pendingInjections = new Map<string, number>()
@@ -385,6 +526,105 @@ export class MemoryService {
   lastDroppedCount = 0
   /** The facts block most recently rendered into a prompt; excluded verbatim from candidate extraction (M2 feedback-loop prevention). */
   private lastInjectedBlock = ''
+  private digestStoreInstance?: DigestStore
+  /** Incremented whenever recordFacts() or stageReviewerOps() changes any memory store; the M4 trigger compares it before and after a turn. */
+  writeCount = 0
+
+  /** The facts block most recently injected into a prompt (what the M4 reviewer must strip from its input). */
+  getInjectedBlock(): string { return this.lastInjectedBlock }
+
+  /** Durable facts in stored order — the list a reviewer `retire` op's `targetId` indexes into. */
+  async getDurableFacts(): Promise<UserFact[]> {
+    return (((await this.memory.get(DURABLE_FACTS_KEY)) as UserFact[] | undefined) ?? []).map(migrateFact)
+  }
+
+  /**
+   * M4: stages the post-turn reviewer's operations. Per decision D1 nothing here reaches durable memory: surviving ops
+   * wait in the pending queue with their evidence (shown by `/memory`). Plain-code gates, no language judgement:
+   * a `retire` of a `user_asserted` fact (or of an unknown target) is refused; every op passes `admitCandidate()`;
+   * an op the verifier called unsupported is kept session-scoped only. All writes happen after the abort check, in one
+   * batch per store, so an abort leaves no partial write. `durableSnapshot` is the list the reviewer's `targetId`s index.
+   */
+  async stageReviewerOps(sessionId: string, ops: readonly VerifiedReviewOp[], durableSnapshot: readonly UserFact[], signal?: AbortSignal): Promise<StageReviewerResult> {
+    const result: StageReviewerResult = { staged: 0, sessionScoped: 0, refused: 0, aborted: false }
+    // M6: `/memory off` stops every writer, including this one.
+    if (await this.isMemoryOff()) return { ...result, refused: ops.length }
+    const gateOn = memoryWriteGateEnabled()
+    const project = this.currentProject()
+    const turn = `reviewer:${sessionId}`
+    const now = this.clock()
+    const toStage: PendingFact[] = []
+    const toSession: UserFact[] = []
+    // submitCandidate re-runs the (pure) gate itself, so it is handed the raw candidate with its judgement still attached, not the already-admitted fact.
+    const raw = new Map<PendingFact | UserFact, UserFact>()
+    const base = { extractedAt: now, sourceTurn: turn, source: 'model_inferred' as const, origin: 'user' as const }
+    for (const op of ops) {
+      if (op.kind === 'retire') {
+        const target = typeof op.targetId === 'number' ? durableSnapshot[op.targetId] : undefined
+        // Plain structure, not language: the user's own words are never retired by a model's say-so.
+        if (!target || target.source === 'user_asserted') { result.refused++; continue }
+        if (op.verification === 'unsupported') { result.refused++; continue }
+        const proposal: UserFact = { ...base, text: target.text, durable: true, confidence: 'medium', category: target.category ?? 'other', project: target.project, evidence: op.evidence, judgement: { containsSecret: false, looksLikeInstruction: false } }
+        const decision = admitCandidate(proposal, gateOn)
+        if (decision.action !== 'admit') { result.refused++; continue }
+        toStage.push({ ...decision.fact, category: decision.fact.category ?? 'other', proposedOp: 'retire', retireTargetId: factId(target), stagedBy: 'reviewer', verification: op.verification })
+        continue
+      }
+      if (op.kind !== 'upsert' || !op.text) continue
+      const candidate: UserFact = { ...base, text: op.text, durable: true, confidence: 'medium', category: op.category ?? 'other', key: op.key, evidence: op.evidence, judgement: op.judgement }
+      const decision = admitCandidate(candidate, gateOn)
+      if (decision.action === 'drop') { result.refused++; continue }
+      const withProject = (f: UserFact): UserFact => (f.category === 'project' && project ? { ...f, project } : f)
+      const fact: UserFact = withProject(decision.fact)
+      // Unsupported (or flagged-then-unsupported) never enters the queue; a flagged one is queued marked so the user sees it.
+      if (op.verification === 'unsupported' && decision.action !== 'flag') {
+        const lowFact = { ...fact, durable: false, confidence: 'low' as const }
+        toSession.push(lowFact)
+        raw.set(lowFact, withProject({ ...candidate, durable: false, confidence: 'low' }))
+        continue
+      }
+      if (op.verification === 'unsupported') { result.refused++; continue }
+      if (decision.action === 'session') { const sf = { ...fact, durable: false }; toSession.push(sf); raw.set(sf, withProject({ ...candidate, durable: false })); continue }
+      const staged: PendingFact = { ...fact, category: fact.category ?? 'other', stagedBy: 'reviewer', verification: op.verification }
+      toStage.push(staged)
+      raw.set(staged, withProject(candidate))
+    }
+    if (signal?.aborted) return { ...result, aborted: true }
+
+    if (toStage.length > 0) {
+      const pending = ((await this.memory.get(PENDING_CONFIRMATION_KEY)) as PendingFact[] | undefined) ?? []
+      const durable = durableSnapshot
+      const fresh = toStage.filter((f) => !pending.some((p) => p.text === f.text && p.proposedOp === f.proposedOp) && (f.proposedOp === 'retire' || !durable.some((d) => d.text === f.text)))
+      result.refused += toStage.length - fresh.length
+      // A retire proposal is never an add: it is always queued for the user (nothing is auto-deleted), whatever the write mode.
+      const retires = fresh.filter((f) => f.proposedOp === 'retire')
+      if (retires.length > 0 && !signal?.aborted) {
+        await this.memory.set(PENDING_CONFIRMATION_KEY, [...pending, ...retires])
+        await this.appendAudit(retires.map((f) => ({ op: 'add' as const, factId: factId(f), after: f, store: 'pending' as const, writer: 'reviewer', turn })))
+        result.staged += retires.length
+      }
+      // M6: upserts enter through submitCandidate, so `memoryWriteMode` and the gate decide the route (staged/user_only: pending queue).
+      for (const f of fresh.filter((x) => x.proposedOp !== 'retire')) {
+        if (signal?.aborted) return { ...result, aborted: true }
+        const { stagedBy, verification } = f
+        const out = await this.submitCandidate('reviewer', raw.get(f) ?? f, sessionId, { pendingExtras: { stagedBy, verification } })
+        if (out.route === 'pending' || out.route === 'durable') result.staged++
+        else if (out.route === 'session') result.sessionScoped++
+        else result.refused++
+      }
+    }
+    if (toSession.length > 0) {
+      for (const f of toSession) {
+        if (signal?.aborted) break
+        const out = await this.submitCandidate('reviewer', raw.get(f) ?? f, sessionId)
+        if (out.route === 'session') result.sessionScoped++
+        else if (out.route === 'blocked' || out.route === 'dropped') result.refused++
+        else result.staged++
+      }
+    }
+    if (result.staged + result.sessionScoped > 0) this.writeCount++
+    return result
+  }
 
   /**
    * M2: the ONLY place `DURABLE_FACTS_KEY` is written. Every add, replace, retire, remove, confirm
@@ -400,7 +640,7 @@ export class MemoryService {
     if (drafts.length === 0 || !memoryAuditLogEnabled()) return
     const log = ((await this.memory.get(AUDIT_LOG_KEY)) as AuditEntry[] | undefined) ?? []
     let seq = log.length > 0 ? log[log.length - 1].seq : 0
-    const at = new Date().toISOString()
+    const at = this.clock()
     let next = [...log, ...drafts.map((d) => ({ ...d, seq: ++seq, at }))]
     if (next.length > AUDIT_LOG_KEEP) {
       const watermark = ((await this.memory.get(CONSOLIDATION_STATE_KEY)) as { lastSeq?: number } | undefined)?.lastSeq ?? 0
@@ -427,17 +667,49 @@ export class MemoryService {
     if (!entry) return { ok: false, message: `No audit entry #${seq}.` }
     if (entry.op === 'undo') return { ok: false, message: `Entry #${seq} is itself an undo.` }
     if (log.some((e) => e.undoes === seq)) return { ok: false, message: `Entry #${seq} was already undone.` }
+    if (entry.erased) return { ok: false, message: `Entry #${seq} was erased from history and cannot be restored.` }
+    if (!entry.group) {
+      await this.undoEntry(entry, sessionId)
+      return { ok: true, message: `Undid #${seq} (${entry.op}): ${(entry.before ?? entry.after)?.text ?? entry.factId}` }
+    }
+    // M5: a consolidation change is several entries; undo reverts all of them, newest first, so the store comes back exactly.
+    const members = log.filter((e) => e.group === entry.group && e.op !== 'undo' && !log.some((u) => u.undoes === e.seq)).sort((x, y) => y.seq - x.seq)
+    for (const m of members) await this.undoEntry(m, sessionId)
+    return { ok: true, message: `Undid #${seq} and ${members.length - 1} related change(s) (${entry.group}).` }
+  }
+
+  /** Undo of the change that created a side store must leave it absent again, not an empty array (exact restoration). */
+  private async setOrClear(key: string, list: UserFact[]): Promise<void> {
+    if (list.length === 0) await this.memory.delete(key)
+    else await this.memory.set(key, list)
+  }
+
+  private async undoEntry(entry: AuditEntry, sessionId: string): Promise<void> {
     const strip = (f: UserFact): UserFact => { const { retiredAt: _r, ...rest } = f; return rest }
     const withoutFact = <T extends UserFact>(list: T[], f?: UserFact): T[] => (f ? list.filter((x) => !sameFact(x, f)) : list)
+    const insertAt = (list: UserFact[], f: UserFact, index?: number): UserFact[] => {
+      if (index === undefined || index < 0 || index > list.length) return [...list, f]
+      return [...list.slice(0, index), f, ...list.slice(index)]
+    }
     const durable = (((await this.memory.get(DURABLE_FACTS_KEY)) as UserFact[] | undefined) ?? []).map(migrateFact)
     const pending = ((await this.memory.get(PENDING_CONFIRMATION_KEY)) as PendingFact[] | undefined) ?? []
     let nextDurable = durable
     if (entry.store === 'durable') {
       nextDurable = withoutFact(durable, entry.after)
-      if (entry.before && entry.op !== 'confirm') nextDurable = [...withoutFact(nextDurable, entry.before), strip(entry.before)]
+      if (entry.op === 'restore') {
+        // Undoing a restore puts the entry back in the archive.
+        const archive = ((await this.memory.get(ARCHIVED_FACTS_KEY)) as UserFact[] | undefined) ?? []
+        if (entry.before) await this.memory.set(ARCHIVED_FACTS_KEY, [...withoutFact(archive, entry.before), entry.before])
+      } else if (entry.before && entry.op !== 'confirm') {
+        nextDurable = insertAt(withoutFact(nextDurable, entry.before), strip(entry.before), entry.index)
+      }
       if (entry.op === 'replace' || entry.op === 'retire') {
         const retired = ((await this.memory.get(RETIRED_FACTS_KEY)) as UserFact[] | undefined) ?? []
-        await this.memory.set(RETIRED_FACTS_KEY, withoutFact(retired, entry.before))
+        await this.setOrClear(RETIRED_FACTS_KEY, withoutFact(retired, entry.before))
+      }
+      if (entry.op === 'archive') {
+        const archive = ((await this.memory.get(ARCHIVED_FACTS_KEY)) as UserFact[] | undefined) ?? []
+        await this.setOrClear(ARCHIVED_FACTS_KEY, withoutFact(archive, entry.before))
       }
       if (entry.op === 'confirm' && entry.before) await this.memory.set(PENDING_CONFIRMATION_KEY, [...withoutFact(pending, entry.before), entry.before])
     } else if (entry.store === 'pending') {
@@ -448,12 +720,9 @@ export class MemoryService {
         await this.memory.set(REJECTED_FACTS_KEY, rejected.filter((r) => r.text !== entry.before!.text))
       }
     }
-    if (entry.store === 'durable') {
-      await this.commitDurable(nextDurable, [{ op: 'undo', factId: entry.factId, before: entry.after, after: entry.before, store: 'durable', writer: 'undo', turn: sessionId, undoes: seq }])
-    } else {
-      await this.appendAudit([{ op: 'undo', factId: entry.factId, before: entry.after, after: entry.before, store: entry.store, writer: 'undo', turn: sessionId, undoes: seq }])
-    }
-    return { ok: true, message: `Undid #${seq} (${entry.op}): ${(entry.before ?? entry.after)?.text ?? entry.factId}` }
+    const draft: AuditDraft = { op: 'undo', factId: entry.factId, before: entry.after, after: entry.before, store: entry.store, writer: 'undo', turn: sessionId, undoes: entry.seq }
+    if (entry.store === 'durable') await this.commitDurable(nextDurable, [draft])
+    else await this.appendAudit([draft])
   }
 
   /**
@@ -464,7 +733,9 @@ export class MemoryService {
    * global-or-current-project only, so an unrelated project's facts don't leak into context (see
    * UserFact.project's doc comment).
    */
-  async loadFacts(sessionId: string): Promise<{ facts: UserFact[]; factsBlock: string }> {
+  async loadFacts(sessionId: string, opts: { record?: boolean } = {}): Promise<{ facts: UserFact[]; factsBlock: string }> {
+    // `record: false` (M6) is for read-only views (/memory, status): looking at memory must not count as the model having seen it, nor replace what the last turn injected.
+    const record = opts.record !== false
     const sessionFacts = (((await this.memory.get(`facts:${sessionId}`)) as UserFact[] | undefined) ?? []).map(migrateFact)
     const durableFacts = (((await this.memory.get(DURABLE_FACTS_KEY)) as UserFact[] | undefined) ?? []).map(migrateFact)
     const facts = mergeFacts(durableFacts, sessionFacts)
@@ -472,18 +743,24 @@ export class MemoryService {
     const inScope = facts.filter((f) => f.project === undefined || f.project === project)
     if (memoryBudgetedRenderEnabled()) {
       const rendered = renderFactsBlock(inScope, this.memoryBudgetChars())
+      if (!record) return { facts, factsBlock: rendered.block }
       this.lastDroppedCount = rendered.droppedCount
       this.lastInjectedBlock = rendered.block
+      this.lastInjection = { facts: rendered.shown.map((f) => ({ text: f.text, unconfirmed: isUnconfirmed(f) })), notShown: rendered.droppedCount }
       for (const f of rendered.shown) {
         const id = `${f.text}|${f.extractedAt}`
         this.pendingInjections.set(id, (this.pendingInjections.get(id) ?? 0) + 1)
       }
       return { facts, factsBlock: rendered.block }
     }
+    const shown = inScope.slice(-FACT_CAP)
     const factsBlock = inScope.length > 0
-      ? `\nKnown facts about the user:\n${inScope.slice(-FACT_CAP).map(factLine).join('\n')}`
+      ? `\nKnown facts about the user:\n${shown.map(factLine).join('\n')}`
       : ''
-    this.lastInjectedBlock = factsBlock
+    if (record) {
+      this.lastInjectedBlock = factsBlock
+      this.lastInjection = { facts: shown.map((f) => ({ text: f.text, unconfirmed: isUnconfirmed(f) })), notShown: inScope.length - shown.length }
+    }
     return { facts, factsBlock }
   }
 
@@ -506,7 +783,7 @@ export class MemoryService {
     const remainingDurable = durableFacts.filter((f) => !sameFact(f, fact))
     const remainingSession = sessionFacts.filter((f) => !sameFact(f, fact))
     if (remainingDurable.length !== durableFacts.length) {
-      await this.commitDurable(remainingDurable, [{ op: 'remove', factId: factId(fact), before: fact, store: 'durable', writer: 'forget', turn: sessionId }])
+      await this.commitDurable(remainingDurable, [{ op: 'remove', factId: factId(fact), before: fact, index: durableFacts.findIndex((f) => sameFact(f, fact)), store: 'durable', writer: 'forget', turn: sessionId }])
     }
     if (remainingSession.length !== sessionFacts.length) await this.memory.set(`facts:${sessionId}`, remainingSession)
     return fact
@@ -533,7 +810,7 @@ export class MemoryService {
 
   /**
    * Captures this turn's durable/session facts into the session's fact store. A no-op when
-   * neither pass finds anything. Facts that clear `shouldAutoPromote()` (see that function's doc
+   * neither pass finds anything. Facts routed to durable by `resolveWriteRoute()` (memory-governance.ts; see its doc
    * comment for the current three-way policy) are ALSO appended to DURABLE_FACTS_KEY, a store
    * clearSession() never touches, so they survive /new instead of vanishing with the rest of the
    * session's facts. A `model_inferred` fact at `durable: true, confidence: 'medium'` is queued
@@ -576,11 +853,14 @@ export class MemoryService {
     // regardless of which project is active. An empty currentProject() (no workspace/override
     // resolved — see the constructor's default) leaves the fact unscoped rather than tagging it
     // with a meaningless empty string.
+    // M6 `/memory off`: no writes of any kind (not even usage counters) for this install.
+    if (await this.isMemoryOff()) return { contradictions: [], corroborations: [] }
     const project = this.currentProject()
     const gateOn = memoryWriteGateEnabled()
+    const mode = this.writeMode()
     const flaggedForPending: UserFact[] = []
     const newFacts: UserFact[] = []
-    for (const candidate of buildTurnFacts(sessionId, gateOn ? excludeInjectedBlock(userMessage, this.lastInjectedBlock) : userMessage, statedFacts)) {
+    for (const candidate of buildTurnFacts(sessionId, gateOn ? excludeInjectedBlock(userMessage, this.lastInjectedBlock) : userMessage, statedFacts, true, this.clock)) {
       const decision = admitCandidate(candidate, gateOn)
       if (decision.action === 'drop') continue
       const f = decision.fact.category === 'project' && project ? { ...decision.fact, project } : decision.fact
@@ -642,7 +922,7 @@ export class MemoryService {
     for (const fact of retracted) {
       sessionFacts = sessionFacts.filter((f) => !sameFact(f, fact))
       pendingFacts = pendingFacts.filter((f) => !sameFact(f, fact))
-      rejectedFacts = [...rejectedFacts, { text: fact.text, rejectedAt: new Date().toISOString(), rejectionSource: 'auto_retracted' }]
+      rejectedFacts = [...rejectedFacts, { text: fact.text, rejectedAt: this.clock(), rejectionSource: 'auto_retracted' }]
       pendingChanged = true
       rejectedChanged = true
       auditPending.push({ op: 'reject', factId: factId(fact), before: fact, store: 'pending', writer: 'recordFacts:retract', turn })
@@ -657,13 +937,15 @@ export class MemoryService {
         if (retracted.has(target)) continue // same turn can't both retract and corroborate the same fact
         const next: FactConfidence | undefined = target.confidence === 'low' ? 'medium' : target.confidence === 'medium' ? 'high' : undefined
         if (!next) continue
+        // user_only: corroboration never lifts a guess past "waiting for the user" — it stays queued as medium.
+        if (next === 'high' && resolveWriteRoute(mode, 'in_turn', { ...target, confidence: 'high' }) === 'pending') continue
         const upgraded: UserFact = { ...target, confidence: next }
         sessionFacts = sessionFacts.map((f) => (sameFact(f, target) ? upgraded : f))
         pendingFacts = pendingFacts.filter((f) => !sameFact(f, target))
         if (next === 'medium') {
           pendingFacts = [...pendingFacts, { ...upgraded, category: upgraded.category ?? 'other' }]
           pendingChanged = true
-        } else if (next === 'high' && shouldAutoPromote(upgraded)) {
+        } else if (next === 'high' && resolveWriteRoute(mode, 'in_turn', upgraded) === 'durable') {
           durableFacts = [...durableFacts, upgraded]
           durableChanged = true
           pendingChanged = true
@@ -679,7 +961,7 @@ export class MemoryService {
           ...pendingFacts,
           {
             text: restated.text,
-            extractedAt: new Date().toISOString(),
+            extractedAt: this.clock(),
             sourceTurn: `turn:${sessionId}`,
             source: 'model_inferred',
             durable: true,
@@ -694,15 +976,20 @@ export class MemoryService {
     }
 
     const retiredNow: UserFact[] = []
+    // M8: audit entries record the position the pre-image held in the durable list at the start of this call, so undo restores order exactly (same rule as the Python twin).
+    const durableAtStart = [...durableFacts]
+    const indexAtStart = (f: UserFact): number => durableAtStart.findIndex((d) => sameFact(d, f))
     for (let fact of newFacts) {
-      if (memoryBudgetedRenderEnabled() && fact.key) {
+      const route = resolveWriteRoute(mode, 'in_turn', fact)
+      // A candidate that must wait for the user (pending route) never retires what is already stored: the old value stays live until the user confirms the new one.
+      if (memoryBudgetedRenderEnabled() && fact.key && route !== 'pending') {
         const key = fact.key
         const sameKey = (f: UserFact): boolean => f.key === key && (f.project ?? '') === (fact.project ?? '')
         const priorLive = [...durableFacts, ...sessionFacts].filter(sameKey)
         // Restating the same value is a no-op, not a new entry.
         if (priorLive.some((f) => f.text === fact.text)) continue
         if (priorLive.length > 0) {
-          const retiredAt = new Date().toISOString()
+          const retiredAt = this.clock()
           const seen = new Set<string>()
           for (const old of priorLive) {
             const id = factId(old)
@@ -711,7 +998,7 @@ export class MemoryService {
             retiredNow.push({ ...old, retiredAt })
             if (durableFacts.some((d) => sameFact(d, old))) {
               const isLast = old === priorLive[priorLive.length - 1]
-              audits.push({ op: isLast ? 'replace' : 'retire', factId: id, before: old, ...(isLast ? { after: { ...fact, supersedes: old.text } } : {}), store: 'durable', writer: 'recordFacts:supersede', turn })
+              audits.push({ op: isLast ? 'replace' : 'retire', factId: id, before: old, ...(isLast ? { after: { ...fact, supersedes: old.text } } : {}), index: indexAtStart(old), store: 'durable', writer: 'recordFacts:supersede', turn })
             }
           }
           if (durableFacts.some(sameKey)) { durableFacts = durableFacts.filter((f) => !sameKey(f)); durableChanged = true }
@@ -719,15 +1006,16 @@ export class MemoryService {
           fact = { ...fact, supersedes: priorLive[priorLive.length - 1].text }
         }
       }
-      sessionFacts = [...sessionFacts, fact]
-      if (shouldAutoPromote(fact)) {
+      // A high-confidence candidate held back by user_only is shown to the model as unconfirmed, like any other pending guess.
+      sessionFacts = [...sessionFacts, route === 'pending' && fact.confidence === 'high' ? { ...fact, confidence: 'medium' } : fact]
+      if (route === 'durable') {
         durableFacts = [...durableFacts, fact]
         durableChanged = true
         if (!audits.some((a) => a.op === 'replace' && a.after && sameFact(a.after, fact))) {
           audits.push({ op: 'add', factId: factId(fact), after: fact, store: 'durable', writer: 'recordFacts', turn })
         }
-      } else if (fact.source === 'model_inferred' && fact.durable && fact.confidence === 'medium') {
-        const queued = { ...fact, category: fact.category ?? 'other' }
+      } else if (route === 'pending') {
+        const queued = { ...fact, ...(fact.confidence === 'high' ? { confidence: 'medium' as const } : {}), category: fact.category ?? 'other' }
         pendingFacts = [...pendingFacts, queued]
         pendingChanged = true
         auditPending.push({ op: 'add', factId: factId(fact), after: queued, store: 'pending', writer: 'recordFacts', turn })
@@ -751,8 +1039,210 @@ export class MemoryService {
     if (pendingChanged) await this.memory.set(PENDING_CONFIRMATION_KEY, pendingFacts)
     if (rejectedChanged) await this.memory.set(REJECTED_FACTS_KEY, rejectedFacts)
     await this.appendAudit(auditPending)
+    this.writeCount++
 
     return { contradictions, corroborations }
+  }
+
+  private consolidating = false
+
+  /**
+   * M5: proposes consolidation and archive changes; applies NOTHING (D1: staged). Work is for the
+   * stores as the previous session left them: callers run it at session start or `/new`, or on the
+   * manual `/memory consolidate` (`manual` forces the model pass).
+   *
+   * Cost gate, deterministic and before any model call: the model pass runs only when the audit log
+   * has entries newer than `memory:consolidation-state.lastSeq` or the curated (durable) store is
+   * over the character budget, and there are at least two live facts; otherwise zero model calls.
+   * Archive proposals use no model: only M1's usage timestamps and the retention window. A failed
+   * or unusable model call changes nothing (the watermark does not move, so the next run retries).
+   * Requires the audit log: a change that cannot be undone is never proposed.
+   */
+  async runConsolidation(
+    opts: { manual?: boolean; onUsage?: (usage: TokenUsage) => void } = {},
+  ): Promise<{ status: 'disabled' | 'needs_audit_log' | 'busy' | 'skipped' | 'ran' | 'failed'; proposed: number; modelCalls: number; projectedChars?: number; usedChars?: number }> {
+    if (!memoryConsolidationEnabled()) return { status: 'disabled', proposed: 0, modelCalls: 0 }
+    if (!memoryAuditLogEnabled()) return { status: 'needs_audit_log', proposed: 0, modelCalls: 0 }
+    // M6: `/memory off` stops consolidation before any model call or staging write.
+    if (await this.isMemoryOff()) return { status: 'disabled', proposed: 0, modelCalls: 0 }
+    if (this.consolidating) return { status: 'busy', proposed: 0, modelCalls: 0 }
+    this.consolidating = true
+    try {
+      const durable = (((await this.memory.get(DURABLE_FACTS_KEY)) as UserFact[] | undefined) ?? []).map(migrateFact).filter((f) => !f.retiredAt)
+      const state = ((await this.memory.get(CONSOLIDATION_STATE_KEY)) as ConsolidationState | undefined) ?? { lastSeq: 0 }
+      const log = ((await this.memory.get(AUDIT_LOG_KEY)) as AuditEntry[] | undefined) ?? []
+      // Changes made by consolidation itself (and their undos) are not new information to consolidate.
+      const diff = log.filter((e) => e.seq > state.lastSeq && e.op !== 'undo' && !e.writer.startsWith('consolidation'))
+      const budget = this.memoryBudgetChars()
+      const usedChars = renderFactsBlock(durable, Number.MAX_SAFE_INTEGER).block.length
+      const existing = ((await this.memory.get(CONSOLIDATION_PROPOSALS_KEY)) as ConsolidationProposal[] | undefined) ?? []
+      const dismissed = new Set(state.dismissed ?? [])
+      let nextNo = state.nextProposalNo ?? 1
+      const now = this.clock()
+      const staged: ConsolidationProposal[] = []
+      const claimed = new Set(existing.flatMap((p) => p.factIds))
+      const byId = new Map(durable.map((f) => [factId(f), f]))
+      const stage = (kind: ConsolidationProposal['kind'], ids: string[], reason: string, extra: { text?: string; by?: string } = {}): void => {
+        if (ids.some((id) => claimed.has(id))) return
+        if (dismissed.has(proposalSignature(kind, ids, extra.text))) return
+        ids.forEach((id) => claimed.add(id))
+        staged.push({ id: `c${nextNo++}`, kind, factIds: ids, reason, createdAt: now, touchesUserAsserted: ids.some((id) => byId.get(id)?.source === 'user_asserted'), ...extra })
+      }
+
+      let modelCalls = 0
+      let newWatermark = state.lastSeq
+      const gateOpen = (opts.manual === true || diff.length > 0 || usedChars > budget) && durable.length >= 2
+      let failed = false
+      if (gateOpen) {
+        modelCalls = 1
+        const refs = durable.map((f, i) => ({ ref: `f${i + 1}`, f }))
+        const input: ConsolidationInput = {
+          facts: refs.map(({ ref, f }) => ({ ref, text: f.text, source: f.source, ...(f.key ? { key: f.key } : {}), ...(f.injectedCount ? { injectedCount: f.injectedCount } : {}), ...(f.lastInjectedAt ? { lastInjectedAt: f.lastInjectedAt } : {}) })),
+          recentChanges: diff.map((e) => ({ op: e.op, text: (e.after ?? e.before)?.text ?? e.factId })),
+          budget: { usedChars, budgetChars: budget },
+        }
+        const ops = await proposeConsolidationOps(input, this.llmClient, this.model(), opts.onUsage)
+        if (ops === undefined) failed = true
+        else {
+          const refToFact = new Map(refs.map(({ ref, f }) => [ref, f]))
+          for (const op of ops) {
+            const sources = op.refs.map((r) => refToFact.get(r)!)
+            // Plain-code structural check (no language understanding needed): merging across projects would leak scope.
+            if (op.kind === 'merge' && new Set(sources.map((f) => f.project ?? '')).size > 1) continue
+            const extra = op.kind === 'supersede' ? { by: factId(refToFact.get(op.by!)!) } : { text: op.text }
+            stage(op.kind, sources.map(factId), op.reason, extra)
+          }
+          newWatermark = log.length > 0 ? log[log.length - 1].seq : state.lastSeq
+        }
+      }
+
+      // Staged forgetting: zero model calls, and only when usage tracking exists (otherwise "never injected" would be true of everything).
+      if (!failed && memoryBudgetedRenderEnabled()) {
+        const days = memoryRetentionDays()
+        for (const f of findArchiveCandidates(durable, Date.now(), days)) {
+          stage('archive', [factId(f)], `Not placed in a prompt (nor stated) for over ${days} days. "In the prompt" is weaker than "used".`)
+        }
+      }
+      if (failed) return { status: 'failed', proposed: 0, modelCalls }
+      if (staged.length > 0) await this.memory.set(CONSOLIDATION_PROPOSALS_KEY, [...existing, ...staged])
+      if (gateOpen || staged.length > 0) await this.memory.set(CONSOLIDATION_STATE_KEY, { ...state, lastSeq: newWatermark, at: now, nextProposalNo: nextNo })
+      const savedChars = (p: ConsolidationProposal): number => {
+        const src = p.factIds.reduce((n, id) => n + (byId.get(id) ? factLine(byId.get(id)!).length + 1 : 0), 0)
+        return p.kind === 'archive' || p.kind === 'supersede' ? src : src - (p.text ? p.text.length + 3 : 0)
+      }
+      const projectedChars = usedChars - staged.reduce((n, p) => n + savedChars(p), 0)
+      return { status: gateOpen || staged.length > 0 ? 'ran' : 'skipped', proposed: staged.length, modelCalls, projectedChars, usedChars }
+    } finally {
+      this.consolidating = false
+    }
+  }
+
+  async getConsolidationProposals(): Promise<ConsolidationProposal[]> {
+    return ((await this.memory.get(CONSOLIDATION_PROPOSALS_KEY)) as ConsolidationProposal[] | undefined) ?? []
+  }
+
+  /** `/memory archive` — what staged forgetting has set aside. Nothing in it is deleted. */
+  async getArchivedFacts(): Promise<UserFact[]> {
+    return ((await this.memory.get(ARCHIVED_FACTS_KEY)) as UserFact[] | undefined) ?? []
+  }
+
+  /** `/memory consolidate dismiss <n>`: drops the proposal and remembers its signature so it is not raised again. */
+  async dismissProposal(index: number): Promise<ConsolidationProposal | undefined> {
+    const proposals = await this.getConsolidationProposals()
+    if (index < 0 || index >= proposals.length) return undefined
+    const p = proposals[index]
+    await this.memory.set(CONSOLIDATION_PROPOSALS_KEY, proposals.filter((_, i) => i !== index))
+    const state = ((await this.memory.get(CONSOLIDATION_STATE_KEY)) as ConsolidationState | undefined) ?? { lastSeq: 0 }
+    await this.memory.set(CONSOLIDATION_STATE_KEY, { ...state, dismissed: [...(state.dismissed ?? []), proposalSignature(p.kind, p.factIds, p.text)] })
+    return p
+  }
+
+  /**
+   * `/memory consolidate accept <n>`: the user's explicit yes. Applies one staged proposal to the
+   * durable store through `commitDurable` as one audit group (`/memory undo <seq>` reverts all of it,
+   * restoring the store and its order exactly). Merged/superseded originals go to the retired store,
+   * archived ones to the archive store; nothing is deleted. Refuses without the audit log, and treats
+   * a proposal whose facts changed since it was staged as stale.
+   */
+  async acceptProposal(index: number, sessionId = 'memory'): Promise<{ ok: boolean; message: string }> {
+    if (!memoryConsolidationEnabled()) return { ok: false, message: 'Memory consolidation is off (AUDIT_MEMORY_CONSOLIDATION).' }
+    if (await this.isMemoryOff()) return { ok: false, message: 'Memory writes are off (/memory on to resume); nothing was changed.' }
+    if (!memoryAuditLogEnabled()) return { ok: false, message: 'Refusing: consolidation changes must be undoable, and the audit log is off (AUDIT_MEMORY_AUDIT_LOG).' }
+    const proposals = await this.getConsolidationProposals()
+    if (index < 0 || index >= proposals.length) return { ok: false, message: `No proposal #${index + 1}.` }
+    const p = proposals[index]
+    const rest = proposals.filter((_, i) => i !== index)
+    const durable = (((await this.memory.get(DURABLE_FACTS_KEY)) as UserFact[] | undefined) ?? []).map(migrateFact)
+    const sources = p.factIds.map((id) => durable.find((f) => factId(f) === id))
+    if (sources.some((s) => !s)) {
+      await this.memory.set(CONSOLIDATION_PROPOSALS_KEY, rest)
+      return { ok: false, message: `Proposal #${index + 1} is stale (a fact it touches has changed); dropped.` }
+    }
+    const facts = sources as UserFact[]
+    const retiredAt = this.clock()
+    const group = `consolidation:${p.id}`
+    let next = durable
+    const drafts: AuditDraft[] = []
+    const retiredNow: UserFact[] = []
+    const archivedNow: UserFact[] = []
+    const take = (f: UserFact): number => { const i = next.findIndex((x) => sameFact(x, f)); next = next.filter((x) => !sameFact(x, f)); return i }
+    let replacement: UserFact | undefined
+    if (p.kind === 'merge' || p.kind === 'tighten') {
+      const lastSource = facts[facts.length - 1]
+      const sharedKey = facts.every((f) => f.key && f.key === facts[0].key) ? facts[0].key : undefined
+      const injected = facts.reduce((n, f) => n + (f.injectedCount ?? 0), 0)
+      const lastInjectedAt = facts.map((f) => f.lastInjectedAt).filter((x): x is string => !!x).sort().pop()
+      const candidate: UserFact = {
+        text: p.text ?? lastSource.text,
+        extractedAt: facts.map((f) => f.extractedAt).sort().pop()!,
+        sourceTurn: lastSource.sourceTurn,
+        // The user accepting the proposal is the confirmation (same re-sourcing as /memory confirm); a user_asserted source keeps its protection.
+        source: facts.some((f) => f.source === 'user_asserted') ? 'user_asserted' : 'externally_verified',
+        durable: true,
+        ...(facts[0].category ? { category: facts[0].category } : {}),
+        ...(facts[0].project !== undefined ? { project: facts[0].project } : {}),
+        ...(sharedKey ? { key: sharedKey } : {}),
+        ...(injected > 0 ? { injectedCount: injected } : {}),
+        ...(lastInjectedAt ? { lastInjectedAt } : {}),
+        origin: 'user',
+      }
+      const decision = admitCandidate(candidate, memoryWriteGateEnabled())
+      if (decision.action !== 'admit') return { ok: false, message: 'The write gate did not admit the consolidated text; nothing changed.' }
+      replacement = decision.fact
+    }
+    facts.forEach((f, i) => {
+      const idx = take(f)
+      const id = factId(f)
+      if (p.kind === 'archive') {
+        const archived = { ...f, retiredAt }
+        archivedNow.push(archived)
+        drafts.push({ op: 'archive', factId: id, before: f, after: archived, index: idx, store: 'durable', writer: 'consolidation:archive', turn: sessionId, group })
+        return
+      }
+      retiredNow.push({ ...f, retiredAt })
+      const isLast = i === facts.length - 1
+      drafts.push({ op: isLast && replacement ? 'replace' : 'retire', factId: id, before: f, ...(isLast && replacement ? { after: replacement } : {}), index: idx, store: 'durable', writer: `consolidation:${p.kind}`, turn: sessionId, group })
+    })
+    if (replacement) next = [...next, replacement]
+    if (retiredNow.length > 0) await this.memory.set(RETIRED_FACTS_KEY, [...(((await this.memory.get(RETIRED_FACTS_KEY)) as UserFact[] | undefined) ?? []), ...retiredNow])
+    if (archivedNow.length > 0) await this.memory.set(ARCHIVED_FACTS_KEY, [...(await this.getArchivedFacts()), ...archivedNow])
+    await this.commitDurable(next, drafts)
+    await this.memory.set(CONSOLIDATION_PROPOSALS_KEY, rest)
+    return { ok: true, message: `Applied ${p.kind} proposal (${p.factIds.length} fact${p.factIds.length === 1 ? '' : 's'}) as ${group}; /memory history shows its entries and /memory undo <seq> reverts them all.` }
+  }
+
+  /** `/memory archive restore <n>`: puts an archived entry back among the live facts (audited; undoable). */
+  async restoreArchivedFact(listIndex: number, sessionId = 'memory'): Promise<UserFact | undefined> {
+    // `listIndex` is a position in `listArchive()`; only the set-aside head of that list is restorable (a replaced entry's newer value would conflict).
+    const archive = await this.getArchivedFacts()
+    const index = listIndex
+    if (index < 0 || index >= archive.length) return undefined
+    const archived = archive[index]
+    const { retiredAt: _r, ...live } = archived
+    const durable = (((await this.memory.get(DURABLE_FACTS_KEY)) as UserFact[] | undefined) ?? []).map(migrateFact)
+    await this.memory.set(ARCHIVED_FACTS_KEY, archive.filter((_, i) => i !== index))
+    await this.commitDurable([...durable, live], [{ op: 'restore', factId: factId(archived), before: archived, after: live, store: 'durable', writer: 'archive:restore', turn: sessionId }])
+    return live
   }
 
   /** Writes the batched `injectedCount`/`lastInjectedAt` updates collected by budgeted renders, to whichever store(s) hold each fact. A no-op (no writes) when nothing was rendered. */
@@ -760,7 +1250,7 @@ export class MemoryService {
     if (this.pendingInjections.size === 0) return
     const pending = this.pendingInjections
     this.pendingInjections = new Map()
-    const now = new Date().toISOString()
+    const now = this.clock()
     const apply = (facts: UserFact[]): { facts: UserFact[]; changed: boolean } => {
       let changed = false
       const out = facts.map((f) => {
@@ -829,7 +1319,7 @@ export class MemoryService {
   private async rejectFacts(facts: PendingFact[], rejectionSource: RejectedFact['rejectionSource']): Promise<void> {
     if (facts.length === 0) return
     const rejected = ((await this.memory.get(REJECTED_FACTS_KEY)) as RejectedFact[] | undefined) ?? []
-    const rejectedAt = new Date().toISOString()
+    const rejectedAt = this.clock()
     await this.memory.set(REJECTED_FACTS_KEY, [...rejected, ...facts.map((f) => ({ text: f.text, rejectedAt, rejectionSource }))])
     await this.appendAudit(facts.map((f) => ({ op: 'reject' as const, factId: factId(f), before: f, store: 'pending' as const, writer: `reject:${rejectionSource}`, turn: 'memory' })))
   }
@@ -854,9 +1344,34 @@ export class MemoryService {
     // regardless of that bit, with no special case needed in tierForFact() itself. `confidence` is
     // cleared to `undefined` to match that field's own contract (no gradient for
     // `externally_verified`/`user_asserted`/`observed`).
-    const { flagged: _flagged, ...unflagged } = fact
+    const { flagged: _flagged, proposedOp, retireTargetId, stagedBy: _stagedBy, verification: _verification, ...unflagged } = fact
+    if (proposedOp === 'retire') {
+      // A confirmed retire proposal removes the target (into the retired store) and adds nothing.
+      const target = durableFacts.find((f) => factId(f) === retireTargetId)
+      if (target) {
+        const retired = ((await this.memory.get(RETIRED_FACTS_KEY)) as UserFact[] | undefined) ?? []
+        await this.memory.set(RETIRED_FACTS_KEY, [...retired, { ...target, retiredAt: this.clock() }])
+        await this.commitDurable(durableFacts.filter((f) => f !== target), [{ op: 'retire', factId: factId(target), before: target, index: durableFacts.indexOf(target), store: 'durable', writer: 'confirm:reviewer-retire', turn: 'memory' }])
+      }
+      return { fact: { ...unflagged, source: 'externally_verified', confidence: undefined }, conflictNotice: contradictions[0]?.description }
+    }
     const confirmed: UserFact = { ...unflagged, source: 'externally_verified', confidence: undefined }
-    await this.commitDurable([...durableFacts, confirmed], [{ op: 'confirm', factId: factId(fact), before: fact, after: confirmed, store: 'durable', writer: 'confirm', turn: 'memory' }])
+    // M4: a confirmed keyed upsert replaces the live entry with the same key (M1 supersession), keeping the old one in the retired store.
+    let nextDurable = [...durableFacts]
+    const extraAudits: AuditDraft[] = []
+    if (confirmed.key && memoryBudgetedRenderEnabled()) {
+      const sameKey = (f: UserFact): boolean => f.key === confirmed.key && (f.project ?? '') === (confirmed.project ?? '')
+      const priors = durableFacts.filter(sameKey)
+      if (priors.length > 0) {
+        const retiredAt = this.clock()
+        const retired = ((await this.memory.get(RETIRED_FACTS_KEY)) as UserFact[] | undefined) ?? []
+        await this.memory.set(RETIRED_FACTS_KEY, [...retired, ...priors.map((p) => ({ ...p, retiredAt }))])
+        nextDurable = durableFacts.filter((f) => !sameKey(f))
+        for (const p of priors) extraAudits.push({ op: 'retire', factId: factId(p), before: p, index: durableFacts.indexOf(p), store: 'durable', writer: 'confirm:supersede', turn: 'memory' })
+        confirmed.supersedes = priors[priors.length - 1].text
+      }
+    }
+    await this.commitDurable([...nextDurable, confirmed], [...extraAudits, { op: 'confirm', factId: factId(fact), before: fact, after: confirmed, store: 'durable', writer: 'confirm', turn: 'memory' }])
     return { fact: confirmed, conflictNotice: contradictions[0]?.description }
   }
 
@@ -869,7 +1384,7 @@ export class MemoryService {
    * `/memory`.
    */
   async getMemorySummary(sessionId: string): Promise<MemorySummary> {
-    const { facts } = await this.loadFacts(sessionId)
+    const { facts } = await this.loadFacts(sessionId, { record: false })
     const reminders = await this.reminderStore.list()
     const pending = ((await this.memory.get(PENDING_CONFIRMATION_KEY)) as PendingFact[] | undefined) ?? []
     const experienceData = this.experienceStore.toJSON()
@@ -895,11 +1410,175 @@ export class MemoryService {
   async exportMemory(sessionId: string): Promise<MemoryExport> {
     const summary = await this.getMemorySummary(sessionId)
     return {
-      exportedAt: new Date().toISOString(),
+      exportedAt: this.clock(),
       facts: summary.facts,
       reminders: summary.reminders,
       pending: summary.pending,
       experience: this.experienceStore.toJSON(),
+      digests: await this.digests.exportAll(),
+      retired: await this.listArchive(),
+      audit: await this.getAuditLog(Number.MAX_SAFE_INTEGER),
+      governance: { mode: this.writeMode(), off: await this.isMemoryOff() },
     }
+  }
+
+  /** What the most recent turn's facts block contained (undefined before the first turn). Set only by the turn path, never by read-only views. */
+  getLastInjection(): MemoryInjection | undefined {
+    return this.lastInjection
+  }
+
+  /** `/memory archive`: entries a keyed update replaced, newest first. M5 EXTENSION POINT: its archive store joins here (and in `exportMemory`) when it exists. */
+  async listArchive(): Promise<UserFact[]> {
+    const retired = ((await this.memory.get(RETIRED_FACTS_KEY)) as UserFact[] | undefined) ?? []
+    // M5's set-aside store (restorable) comes first, then M6's replaced entries newest first; `restore`/`forget` index this one list.
+    return [...(await this.getArchivedFacts()), ...[...retired].reverse()]
+  }
+
+  /**
+   * `/memory archive forget <n>`: permanently erases one archived entry (index over `listArchive()`),
+   * including its pre-images in the audit log (those entries stay, marked `erased`, and can no longer
+   * be undone). The only path that edits the audit log other than appending, and only on an explicit user request.
+   */
+  async forgetArchived(index: number): Promise<UserFact | undefined> {
+    const archive = await this.listArchive()
+    if (index < 0 || index >= archive.length) return undefined
+    const fact = archive[index]
+    const retired = ((await this.memory.get(RETIRED_FACTS_KEY)) as UserFact[] | undefined) ?? []
+    // `supersedes` on a newer fact quotes the old text; erasing means that reference goes too (durable store, remaining archive, audit images).
+    const unlink = <T extends UserFact>(f: T): T => (f.supersedes === fact.text ? { ...f, supersedes: undefined } : f)
+    await this.memory.set(RETIRED_FACTS_KEY, retired.filter((f) => !sameFact(f, fact)).map(unlink))
+    const setAside = await this.getArchivedFacts()
+    if (setAside.some((f) => sameFact(f, fact))) await this.memory.set(ARCHIVED_FACTS_KEY, setAside.filter((f) => !sameFact(f, fact)))
+    const durable = ((await this.memory.get(DURABLE_FACTS_KEY)) as UserFact[] | undefined) ?? []
+    if (durable.some((f) => f.supersedes === fact.text)) await this.commitDurable(durable.map(unlink))
+    const log = ((await this.memory.get(AUDIT_LOG_KEY)) as AuditEntry[] | undefined) ?? []
+    const touches = (e: AuditEntry): boolean => e.factId === factId(fact) || (e.before !== undefined && sameFact(e.before, fact)) || (e.after !== undefined && sameFact(e.after, fact))
+    if (log.some((e) => touches(e) || e.before?.supersedes === fact.text || e.after?.supersedes === fact.text)) {
+      // Only this fact's own images go; the other side of a replace (the new value) is a different fact and stays.
+      await this.memory.set(AUDIT_LOG_KEY, log.map((e) => {
+        if (!touches(e)) return { ...e, ...(e.before ? { before: unlink(e.before) } : {}), ...(e.after ? { after: unlink(e.after) } : {}) }
+        const { before, after, ...rest } = e
+        return {
+          ...rest,
+          factId: `erased:${e.seq}`,
+          erased: true,
+          ...(before && !sameFact(before, fact) ? { before: unlink(before) } : {}),
+          ...(after && !sameFact(after, fact) ? { after: unlink(after) } : {}),
+        }
+      }))
+    }
+    return fact
+  }
+
+  /** Read-only health snapshot (`/doctor`, memory panel). Never touches usage counters or the last-injection record. */
+  async getMemoryStatus(sessionId: string): Promise<MemoryStatus> {
+    const { facts } = await this.loadFacts(sessionId, { record: false })
+    const project = this.currentProject()
+    const live = facts.filter((f) => !f.retiredAt && (f.project === undefined || f.project === project))
+    const pending = ((await this.memory.get(PENDING_CONFIRMATION_KEY)) as PendingFact[] | undefined) ?? []
+    const audit = ((await this.memory.get(AUDIT_LOG_KEY)) as AuditEntry[] | undefined) ?? []
+    const consolidation = (await this.memory.get(CONSOLIDATION_STATE_KEY)) as { lastSeq?: number; at?: string } | undefined
+    return {
+      mode: this.writeMode(),
+      off: await this.isMemoryOff(),
+      budgetedRender: memoryBudgetedRenderEnabled(),
+      budgetChars: this.memoryBudgetChars(),
+      storeChars: live.reduce((n, f) => n + factLine(f).length + 1, 0),
+      liveFacts: live.length,
+      pending: pending.length,
+      flaggedPending: pending.filter((f) => f.flagged).length,
+      retired: ((await this.memory.get(RETIRED_FACTS_KEY)) as UserFact[] | undefined)?.length ?? 0,
+      auditEnabled: memoryAuditLogEnabled(),
+      auditEntries: audit.length,
+      lastConsolidatedSeq: consolidation?.lastSeq,
+      lastConsolidationAt: consolidation?.at,
+      lastInjection: this.lastInjection,
+    }
+  }
+
+  /** M3 (D4): `/memory forget digest <id>` or, with no id, every digest. Returns how many were removed. */
+  async forgetDigests(id?: string): Promise<number> {
+    return this.digests.forget(id)
+  }
+
+  /** M3: read-only digest reader over the same store the recall tool uses. */
+  get digests(): DigestStore {
+    return (this.digestStoreInstance ??= new DigestStore(this.memory))
+  }
+
+  /** Token usage of the most recent digest/flush calls made by this service (cost per session edge). */
+  digestUsage = { inputTokens: 0, outputTokens: 0, costUsd: 0 }
+
+  private trackDigestUsage = (usage: TokenUsage): void => {
+    this.digestUsage = {
+      inputTokens: this.digestUsage.inputTokens + usage.inputTokens,
+      outputTokens: this.digestUsage.outputTokens + usage.outputTokens,
+      costUsd: this.digestUsage.costUsd + (usage.costUsd ?? 0),
+    }
+  }
+
+  /**
+   * M3 session-edge digest (`/new`, exit). One bounded call, fail-open: any failure leaves the previous digest (if any)
+   * untouched. Skipped when the conversation has no user message. Output is judged and redacted by `admitCandidate`
+   * (see episodic-digest.ts) and stored at `episodic:<id>`; it never touches durable facts. Callers gate on
+   * `episodicDigestEnabled()`; never call from inside a turn.
+   */
+  async writeSessionDigest(sessionId: string, transcript: ChatMessage[], onUsage?: (usage: TokenUsage) => void): Promise<SessionDigest | null> {
+    if (!transcript.some((m) => m.role === 'user')) return null
+    // M6: `/memory off` stops digests too (no LLM spend, no write).
+    if (await this.isMemoryOff()) return null
+    try {
+      const result = await writeDigest(this.memory, this.llmClient, { sessionId, messages: transcript, extractFacts: false }, this.model(), (u) => { this.trackDigestUsage(u); onUsage?.(u) })
+      return result?.digest ?? null
+    } catch {
+      return null
+    }
+  }
+
+  /** M3: ends the conversation's digest identity so the next conversation under the same session id gets a new digest. Call after `writeSessionDigest`. */
+  async endDigestConversation(sessionId: string): Promise<void> {
+    await endConversation(this.memory, sessionId)
+  }
+
+  /**
+   * M3 pre-compaction flush: called with exactly the messages compaction is about to drop. One call extracts candidate
+   * facts and a digest delta (folded into the conversation's digest). Candidates are judged by `admitCandidate` and go
+   * to the pending queue only, never durable. Fail-open: returns 0 on any failure and compaction proceeds regardless.
+   */
+  async flushBeforeCompaction(sessionId: string, older: ChatMessage[], onUsage?: (usage: TokenUsage) => void): Promise<number> {
+    // An earlier compaction's summary message was already flushed when it was made; do not re-read it.
+    const messages = older.filter((m) => !m.content.startsWith(SUMMARY_HEADER))
+    if (!messages.some((m) => m.role === 'user')) return 0
+    if (await this.isMemoryOff()) return 0
+    try {
+      const result = await writeDigest(this.memory, this.llmClient, { sessionId, messages, extractFacts: true }, this.model(), (u) => { this.trackDigestUsage(u); onUsage?.(u) })
+      if (!result) return 0
+      return await this.queueFlushCandidates(sessionId, result.facts)
+    } catch {
+      return 0
+    }
+  }
+
+  /** Judges flush candidates (gate forced on: a missing judgement drops the candidate) and appends the survivors to the pending queue. Exact-text duplicates of anything pending, durable or rejected are skipped. */
+  private async queueFlushCandidates(sessionId: string, candidates: UserFact[]): Promise<number> {
+    if (candidates.length === 0) return 0
+    const pending = ((await this.memory.get(PENDING_CONFIRMATION_KEY)) as PendingFact[] | undefined) ?? []
+    const durable = (((await this.memory.get(DURABLE_FACTS_KEY)) as UserFact[] | undefined) ?? []).map(migrateFact)
+    const rejected = ((await this.memory.get(REJECTED_FACTS_KEY)) as RejectedFact[] | undefined) ?? []
+    const seen = new Set([...pending.map((f) => f.text), ...durable.map((f) => f.text), ...rejected.map((f) => f.text)].map((t) => t.trim().toLowerCase()))
+    let queued = 0
+    for (const candidate of candidates) {
+      const decision = admitCandidate(candidate, true)
+      // `session` here means the judgement was missing: not stored anywhere (the flush has no session-scoped home).
+      if (decision.action === 'drop' || decision.action === 'session') continue
+      const text = decision.fact.text.trim()
+      if (!text || seen.has(text.toLowerCase())) continue
+      seen.add(text.toLowerCase())
+      // M6: through the one cross-turn entry point, so `memoryWriteMode` picks the route (default: the pending queue) and `/memory off` blocks it.
+      // The raw candidate (judgement attached) goes in: submitCandidate re-runs the same pure gate, forced on here as before (fail-closed on a missing judgement).
+      const out = await this.submitCandidate('digest', candidate, sessionId, { forceGate: true })
+      if (out.route === 'pending' || out.route === 'durable') queued++
+    }
+    return queued
   }
 }

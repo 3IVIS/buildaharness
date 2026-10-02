@@ -165,7 +165,7 @@ describe('AL9a: per-turn call budget through resolveEscalationPlan', () => {
 })
 
 describe('enabledOptInLayers / the opt-in category in the recorded plan', () => {
-  const FLAGS = ['AUDIT_SEMANTIC_SOURCE_RELIABILITY', 'AUDIT_SEMANTIC_HYPOTHESES', 'AUDIT_REVIEWER_REVISION', 'AUDIT_EXPERIENCE_LEARNING', 'AUDIT_SEMANTIC_COMPACTION']
+  const FLAGS = ['AUDIT_SEMANTIC_SOURCE_RELIABILITY', 'AUDIT_SEMANTIC_HYPOTHESES', 'AUDIT_REVIEWER_REVISION', 'AUDIT_EXPERIENCE_LEARNING', 'AUDIT_SEMANTIC_COMPACTION', 'AUDIT_MEMORY_REVIEWER']
   it('nothing is enabled by default, and each flag enables exactly its own layer', () => {
     expect(enabledOptInLayers({})).toEqual([])
     const byFlag: Record<string, string> = {
@@ -174,6 +174,7 @@ describe('enabledOptInLayers / the opt-in category in the recorded plan', () => 
       AUDIT_REVIEWER_REVISION: 'reviewer_revision',
       AUDIT_EXPERIENCE_LEARNING: 'experience_learning',
       AUDIT_SEMANTIC_COMPACTION: 'semantic_compaction',
+      AUDIT_MEMORY_REVIEWER: 'memory_reviewer',
     }
     for (const f of FLAGS) expect(enabledOptInLayers({ [f]: '1' })).toEqual([byFlag[f]])
   })
@@ -197,7 +198,7 @@ describe('opt-in layers obey the layer policy', () => {
     riskLevel: 'LOW', needsGrounding: false, ambiguity: 'none', userPosture: 'informational',
     pushbackOnPriorTurn: false, statesConstraint: false, isTrivial: false,
   } as unknown as Parameters<typeof resolveOptInPlan>[1]
-  const allOn = ['AUDIT_SEMANTIC_SOURCE_RELIABILITY', 'AUDIT_SEMANTIC_HYPOTHESES', 'AUDIT_REVIEWER_REVISION', 'AUDIT_EXPERIENCE_LEARNING', 'AUDIT_SEMANTIC_COMPACTION']
+  const allOn = ['AUDIT_SEMANTIC_SOURCE_RELIABILITY', 'AUDIT_SEMANTIC_HYPOTHESES', 'AUDIT_REVIEWER_REVISION', 'AUDIT_EXPERIENCE_LEARNING', 'AUDIT_SEMANTIC_COMPACTION', 'AUDIT_MEMORY_REVIEWER']
 
   const withAllOn = (fn: () => void) => {
     for (const v of allOn) vi.stubEnv(v, '1')

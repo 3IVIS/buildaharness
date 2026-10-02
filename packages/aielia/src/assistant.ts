@@ -35,7 +35,9 @@ import type { TraceEvent } from './trace-events.js'
 import type { AssistantToolStep } from './tool-step.js'
 
 import type { LayerPolicyMode } from '@buildaharness/harness'
-import { MemoryService, DEFAULT_MEMORY_BUDGET_CHARS, buildTurnFacts, type MemorySummary, type MemoryExport, type PendingFact, type AuditEntry } from './memory-service.js'
+import { MemoryService, DEFAULT_MEMORY_BUDGET_CHARS, buildTurnFacts, type MemorySummary, type MemoryExport, type PendingFact, type AuditEntry, type MemoryStatus, type MemoryInjection, type ConsolidationOutcome } from './memory-service.js'
+import { resolveMemoryWriteMode, type MemoryWriteMode } from './memory-governance.js'
+import { memoryConsolidationEnabled, type ConsolidationProposal } from './memory-consolidation.js'
 import type { UserFact } from './fact-extraction.js'
 import { REVIEW_NOTE_PREFIX, reviewNoticeText } from './review-checker.js'
 import { renderHypothesisNote, hypothesisContextMessage, proposeCompetingExplanations, semanticHypothesesEnabled, HYPOTHESIS_NOTE_PREFIX } from './semantic-hypotheses.js'
@@ -43,7 +45,10 @@ import type { SemanticHypothesisProposal } from '@buildaharness/harness'
 import { RECOVERY_NOTE_PREFIX, recoveryNoteText, learnedRecoveryNoteText } from './recovery-note.js'
 import { REVISION_NOTE_PREFIX } from './reviewer-revision.js'
 import { AssistantSession, type IndexedMessage, type TranscriptSearchHit } from './assistant-session.js'
+import { episodicDigestEnabled, type SessionDigest } from './episodic-digest.js'
+import { recallPointerBlock, storeDigestReader } from './recall-tool.js'
 import { semanticCompactionEnabled, summarizeOlderMessages } from './semantic-compaction.js'
+import { MemoryReviewer, memoryReviewerEnabled } from './memory-reviewer.js'
 import { AgentLoop, OneLoopPause, type BatchBudgetState, type BatchBudgetTrace, type ToolLoopResult, trimmedAverage, nextItemBudget } from './agent-loop.js'
 import type { TurnIntentClassification, FactCategory } from './turn-intent-classifier.js'
 import { ActionApprovalService } from './action-approval-service.js'
@@ -120,6 +125,8 @@ function parsePendingIndex(selector: string): number | undefined {
 
 export interface TurnOptions {
   sessionId?: string
+  /** M4: a scripted / piped / batch caller. The post-turn memory reviewer is skipped for it (it only runs for an interactive session). */
+  nonInteractive?: boolean
   approved?: boolean
   pendingActionId?: string
   /**
@@ -213,6 +220,12 @@ export interface PersonalAssistantOptions {
   activeProject?: string
   /** M1: character budget for the facts block under `AUDIT_MEMORY_BUDGETED_RENDER` — see config.ts's `memoryBudgetChars`. */
   memoryBudgetChars?: number
+  /** M6: where model-originated memory writes may land (`auto`/`staged`/`user_only`, default `staged`) — see memory-governance.ts. Changeable live via `setMemoryWriteMode`. */
+  memoryWriteMode?: MemoryWriteMode
+  /**
+   * M5: run memory consolidation in the background on `/new` (`clearSession`). Off unless the host sets it: the CLI does; chat-ui must not until M6's pending-queue controls exist (D1 stages every proposal, and a browser user could not review one). Still gated by `AUDIT_MEMORY_CONSOLIDATION`.
+   */
+  consolidateOnNewSession?: boolean
   /** Conversation transcript storage — defaults to an in-process Map, swap for IndexedDBAdapter in the browser. */
   memory?: MemoryAdapter
   /** Learning-layer store — persist and pass the same instance back in across sessions to retain strategy weights. */
@@ -364,6 +377,8 @@ export class PersonalAssistant {
   private model?: string
   private activeProject?: string
   private memoryBudgetChars?: number
+  private memoryWriteMode: MemoryWriteMode
+  private consolidateOnNewSession = false
   private readonly memory: MemoryAdapter
   private readonly webTools?: WebToolsContext
   private readonly onTrace?: (event: TraceEvent) => void
@@ -390,6 +405,8 @@ export class PersonalAssistant {
   private readonly goalGraphSuggestMode: GoalGraphSuggestMode
 
   private readonly memoryService: MemoryService
+  /** M4 post-turn cross-turn memory reviewer; inert unless `AUDIT_MEMORY_REVIEWER` is on. */
+  private readonly memoryReviewer: MemoryReviewer
   private readonly session: AssistantSession
   private readonly agentLoop: AgentLoop
   private readonly actionApproval: ActionApprovalService
@@ -407,6 +424,8 @@ export class PersonalAssistant {
     this.model = options.model
     this.activeProject = options.activeProject
     this.memoryBudgetChars = options.memoryBudgetChars
+    this.memoryWriteMode = resolveMemoryWriteMode(options.memoryWriteMode)
+    this.consolidateOnNewSession = options.consolidateOnNewSession === true
     this.memory = options.memory ?? new InMemoryAdapter({ scope: 'thread', namespace: 'personal-assistant' })
     const experienceStore = options.experienceStore ?? new InMemoryExperienceStore()
     const checkpointStore = options.checkpointStore ?? new InMemoryAdapter({ scope: 'thread', namespace: 'personal-assistant-checkpoints' })
@@ -433,7 +452,10 @@ export class PersonalAssistant {
     // recordFacts()/loadFacts() call, so setActiveProject() takes effect on the very next turn.
     const currentProject = (): string => this.activeProject ?? ''
 
-    this.memoryService = new MemoryService(this.memory, reminderStore, experienceStore, this.llmClient, model, currentProject, () => this.memoryBudgetChars ?? DEFAULT_MEMORY_BUDGET_CHARS)
+    this.memoryService = new MemoryService(this.memory, reminderStore, experienceStore, this.llmClient, model, currentProject, () => this.memoryBudgetChars ?? DEFAULT_MEMORY_BUDGET_CHARS, () => this.memoryWriteMode)
+    // M5: registered here (not per host) so every host and every /config-set rebuild gets it; the consolidator itself is gated by AUDIT_MEMORY_CONSOLIDATION + /memory off.
+    this.memoryService.registerConsolidator(async ({ sessionId }) => this.runRegisteredConsolidation(sessionId))
+    this.memoryReviewer = new MemoryReviewer(this.memoryService, this.llmClient, () => this.model, (sid) => this.session.getTranscript(sid))
     this.session = new AssistantSession(this.memory, checkpointStore, spendCap, model, fileTools, shellTools, actionTools)
     this.agentLoop = new AgentLoop(
       this.memory,
@@ -448,6 +470,8 @@ export class PersonalAssistant {
       this.onTrace,
       this.onDebugLog,
     )
+    // M3: recall_memory reads episodic digests through the memory service's DigestStore (offered only under AUDIT_RECALL_TOOL).
+    this.agentLoop.digestReader = storeDigestReader(this.memoryService.digests)
     // Plan mode's P5 file-backed persistence reuses AssistantSession's existing
     // write_file/run_shell_command workspace lookup rather than re-deriving fileTools/
     // shellTools/actionTools precedence a second time here — `undefined` on a surface with no
@@ -563,6 +587,9 @@ export class PersonalAssistant {
     // Reset per turn — runTurn flips it to 'flat-oneloop'/'batch-oneloop' only on the flag-ON
     // paths that actually defer the tool loop into a harness-driven proposer.
     this.lastProposerKind = 'posthoc'
+    // M4: a new turn cancels an in-flight memory review (it only ever runs between turns).
+    this.memoryReviewer.abort()
+    const writesBefore = this.memoryService.writeCount
     this.onTrace?.({ kind: 'turn_start', sessionId, message: userMessage })
     this.onDebugLog?.({ kind: 'user_message', sessionId, content: userMessage })
 
@@ -605,6 +632,7 @@ export class PersonalAssistant {
         }
       }
       if (result.status === 'ok') await this.session.recordSpend(sessionId, result.usage)
+      if (result.status === 'ok' && !options.pendingActionId) this.maybeStartMemoryReview(sessionId, result, this.memoryService.writeCount !== writesBefore, options)
       this.onTrace?.({ kind: 'turn_end', sessionId, status: result.status })
       // cachedInputTokens is included here (not just in the usage/cost UI) specifically so it's
       // visible in the same terminal log stream as every other debug-log line — the only way to
@@ -624,6 +652,24 @@ export class PersonalAssistant {
       this.onDebugLog?.({ kind: 'assistant_reply', sessionId, content: `[threw] ${message}` })
       throw err
     }
+  }
+
+  /**
+   * M4: after a delivered, ordinary interactive reply, counts the turn and (every N turns without a memory write) starts the
+   * cross-turn memory review in the background. Not awaited: the reply is already on its way. Skipped for non-interactive and
+   * batch-research turns, and when the layer policy switched the layer off. Its spend is recorded through the same
+   * `recordSpend` path as the turn's own, so `/cost` and the spend cap include it.
+   */
+  private maybeStartMemoryReview(sessionId: string, result: AssistantTurnResult, wroteMemory: boolean, options: TurnOptions): void {
+    if (!optInLayerEnabled('memory_reviewer', memoryReviewerEnabled(), this.agentLoop.optInPlan)) return
+    if (options.nonInteractive || result.trace?.batchBudget !== undefined) return
+    if (!this.memoryReviewer.trigger.noteTurn(sessionId, wroteMemory)) return
+    this.memoryReviewer.start(sessionId, (u) => { void this.session.recordSpend(sessionId, { inputTokens: u.inputTokens, outputTokens: u.outputTokens, costUsd: u.costUsd, cachedInputTokens: u.cachedInputTokens }) })
+  }
+
+  /** Resolves when any in-flight background memory review has finished (a host about to exit, or a test). */
+  async awaitMemoryReview(): Promise<void> {
+    await this.memoryReviewer.settled()
   }
 
   /** Persisted alongside transcript/facts/plan — survives a process restart, same as everything else keyed by sessionId, so the ceiling is genuinely cross-session, not just cross-turn within one process lifetime. */
@@ -647,7 +693,100 @@ export class PersonalAssistant {
 
   /** Ends the current conversation — see AssistantSession.clearSession's doc comment for exactly what is and isn't cleared. */
   async clearSession(sessionId: string): Promise<void> {
-    return this.session.clearSession(sessionId)
+    if (episodicDigestEnabled()) {
+      try {
+        await this.endSession(sessionId)
+      } finally {
+        await this.memoryService.endDigestConversation(sessionId)
+      }
+    }
+    // M4 session edge: review once more before the transcript is deleted. Awaited (the transcript is about to go), best-effort.
+    if (memoryReviewerEnabled() && optInLayerEnabled('memory_reviewer', true, this.agentLoop.optInPlan)) {
+      this.memoryReviewer.abort()
+      await this.memoryReviewer.runNow(sessionId, (u) => { void this.session.recordSpend(sessionId, u) })
+    }
+    this.memoryReviewer.trigger.reset(sessionId)
+    await this.session.clearSession(sessionId)
+    // M5: consolidate what the session that just ended left behind. Never awaited (zero foreground latency) and fail-open.
+    if (this.consolidateOnNewSession && memoryConsolidationEnabled()) void this.proposeMemoryConsolidation(sessionId).catch(() => undefined)
+  }
+
+  /** M5: propose memory consolidation (applies nothing). `manual` forces the model pass past the cost gate. Usage is recorded against the spend state like any other call. */
+  async proposeMemoryConsolidation(sessionId: string, manual = false): Promise<Awaited<ReturnType<MemoryService['runConsolidation']>>> {
+    const usages: TokenUsage[] = []
+    const result = await this.memoryService.runConsolidation({ manual, onUsage: (u) => usages.push(u) })
+    for (const u of usages) await this.session.recordSpend(sessionId, u).catch(() => undefined)
+    return result
+  }
+
+  /** The consolidator MemoryService.consolidate() runs for `/memory consolidate` (chat-ui's button): runs the proposal pass now and reports; applying anything is still the user's accept. */
+  private async runRegisteredConsolidation(sessionId: string): Promise<ConsolidationOutcome> {
+    const run = await this.proposeMemoryConsolidation(sessionId, true)
+    if (run.status === 'disabled') return { status: 'nothing_to_do', message: 'Memory consolidation is off (set AUDIT_MEMORY_CONSOLIDATION=1).' }
+    if (run.status === 'needs_audit_log') return { status: 'nothing_to_do', message: 'Consolidation needs the audit log so every change can be undone (AUDIT_MEMORY_AUDIT_LOG=1).' }
+    if (run.status === 'failed') return { status: 'nothing_to_do', message: 'The consolidation call failed; nothing was changed.' }
+    const staged = (await this.memoryProposals()).length
+    return staged === 0
+      ? { status: 'nothing_to_do', message: 'No consolidation proposals.' }
+      : { status: 'done', message: `${staged} consolidation proposal${staged === 1 ? '' : 's'} staged; review and accept or dismiss them (nothing has changed yet).` }
+  }
+
+  /** M5: staged proposals awaiting the user. */
+  async memoryProposals(): Promise<ConsolidationProposal[]> {
+    return this.memoryService.getConsolidationProposals()
+  }
+
+  /** M5: `/memory consolidate accept <n>` (1-based). */
+  async acceptMemoryProposal(selector: string, sessionId: string): Promise<{ ok: boolean; message: string }> {
+    const n = parsePendingIndex(selector)
+    if (n === undefined) return { ok: false, message: 'Usage: /memory consolidate accept <n>' }
+    return this.memoryService.acceptProposal(n, sessionId)
+  }
+
+  /** M5: `/memory consolidate dismiss <n>` (1-based). */
+  async dismissMemoryProposal(selector: string): Promise<{ ok: boolean; message: string }> {
+    const n = parsePendingIndex(selector)
+    if (n === undefined) return { ok: false, message: 'Usage: /memory consolidate dismiss <n>' }
+    const p = await this.memoryService.dismissProposal(n)
+    return p ? { ok: true, message: `Dismissed proposal #${n + 1}; it will not be raised again.` } : { ok: false, message: `No proposal #${n + 1}.` }
+  }
+
+  /** How many entries at the head of `listArchivedFacts()` were set aside by staged forgetting (M5) and can be restored; the rest were replaced by a newer statement. */
+  async restorableArchiveCount(): Promise<number> {
+    return (await this.memoryService.getArchivedFacts()).length
+  }
+
+  /** `/memory archive restore <n>` (1-based, over the same numbered listing as `/memory archive`). */
+  async restoreArchivedMemory(selector: string, sessionId: string): Promise<{ ok: boolean; message: string }> {
+    const n = parsePendingIndex(selector)
+    if (n === undefined) return { ok: false, message: 'Usage: /memory archive restore <n>' }
+    const fact = await this.memoryService.restoreArchivedFact(n, sessionId)
+    return fact ? { ok: true, message: `Restored: ${fact.text}` } : { ok: false, message: `No archived fact #${n + 1}.` }
+  }
+
+  /**
+   * M3 session edge: with AUDIT_EPISODIC_DIGEST on, writes the conversation's handoff digest (one bounded call, fail-open)
+   * for the current conversation (the rolling digest is refreshed, not duplicated, if the same conversation is digested again). `clearSession` (/new) calls it, then ends the conversation's digest identity; the CLI calls it on exit; never from inside a turn.
+   * With the flag off this does nothing, so the old behaviour is untouched.
+   */
+  async endSession(sessionId: string): Promise<void> {
+    if (!episodicDigestEnabled()) return
+    await this.memoryService.writeSessionDigest(sessionId, await this.session.getTranscript(sessionId))
+  }
+
+  /** Stored episodic digests (newest first), for the memory panel and `/memory`; read-only. */
+  async listSessionDigests(): Promise<SessionDigest[]> {
+    return this.memoryService.digests.listDigests(100)
+  }
+
+  /** Which optional memory writers are switched on for this process (their `AUDIT_*` flags): hosts use it to show or hide the matching controls. A writer that is off makes no model call and no write. */
+  memoryWriterFlags(): { reviewer: boolean; consolidation: boolean; digest: boolean } {
+    return { reviewer: memoryReviewerEnabled(), consolidation: memoryConsolidationEnabled(), digest: episodicDigestEnabled() }
+  }
+
+  /** M3 (D4): `/memory forget digest <id>` or all digests when `id` is omitted; returns how many were removed. */
+  async forgetDigests(id?: string): Promise<number> {
+    return this.memoryService.forgetDigests(id)
   }
 
   /**
@@ -809,6 +948,59 @@ export class PersonalAssistant {
     return this.memoryService.undoAudit(seq, sessionId)
   }
 
+  /** `/memory` governance mode (M6) — takes effect on the next write. */
+  getMemoryWriteMode(): MemoryWriteMode {
+    return this.memoryWriteMode
+  }
+
+  /** Live mode change (CLI `/config set` reloads the assistant; chat-ui calls this directly). Unknown values keep the default rather than widening write authority. */
+  setMemoryWriteMode(mode: MemoryWriteMode | string): void {
+    this.memoryWriteMode = resolveMemoryWriteMode(mode)
+  }
+
+  /** `/memory off` / `/memory on` — stop or resume all memory writes (facts, pending queue, digests, reviewer, consolidation) for this install. Existing data stays readable and removable. */
+  async setMemoryEnabled(enabled: boolean): Promise<void> {
+    await this.memoryService.setMemoryOff(!enabled)
+  }
+
+  async isMemoryEnabled(): Promise<boolean> {
+    return !(await this.memoryService.isMemoryOff())
+  }
+
+  /** Store size vs budget, pending/audit counts, last consolidation, governance state — `/doctor` and the memory panel. Read-only. */
+  async getMemoryStatus(sessionId: string): Promise<MemoryStatus> {
+    return this.memoryService.getMemoryStatus(sessionId)
+  }
+
+  /** The facts the last turn's prompt actually contained, plus how many were left out — the "Why?" panel / `/why` line. Undefined before the first turn. */
+  getLastMemoryInjection(): MemoryInjection | undefined {
+    return this.memoryService.getLastInjection()
+  }
+
+  /** `/memory archive` — entries set aside by staged forgetting (restorable, first) then entries a keyed update replaced (newest first). */
+  async listArchivedFacts(): Promise<UserFact[]> {
+    return this.memoryService.listArchive()
+  }
+
+  /** `/memory archive forget <n>` — permanently erases one archived entry and its history pre-images. */
+  async forgetArchivedFact(selector: string): Promise<MemoryPendingOutcome> {
+    const index = parsePendingIndex(selector)
+    if (index === undefined) return { ok: false, error: 'Usage: /memory archive forget <n>' }
+    const fact = await this.memoryService.forgetArchived(index)
+    if (!fact) return { ok: false, error: `No archived fact #${index + 1}.` }
+    return { ok: true, facts: [fact], conflictNotices: [] }
+  }
+
+  /** `/memory consolidate` — runs the registered consolidator (M5). Until M5 registers one this reports `unavailable`. */
+  async consolidateMemory(sessionId: string): Promise<ConsolidationOutcome | { status: 'unavailable' | 'blocked'; message: string }> {
+    return this.memoryService.consolidate(sessionId)
+  }
+
+  /** M5 hook: lets the consolidation phase plug in without touching the surfaces. */
+  registerMemoryConsolidator(fn: Parameters<MemoryService['registerConsolidator']>[0]): void {
+    this.memoryService.registerConsolidator(fn)
+  }
+
   /** Ranked search over the per-message index — see AssistantSession.searchTranscript's doc comment. Used by `/search`. */
   async searchTranscript(query: string, topK = 10): Promise<TranscriptSearchHit[]> {
     return this.session.searchTranscript(query, topK)
@@ -942,10 +1134,12 @@ export class PersonalAssistant {
     const transcript = await this.session.loadAndCompactTranscript(
       sessionId,
       semanticCompactionEnabled() ? (older) => summarizeOlderMessages(older, this.llmClient, this.model, accumulateUsage) : undefined,
+      episodicDigestEnabled() ? (older) => this.memoryService.flushBeforeCompaction(sessionId, older, accumulateUsage) : undefined,
     )
     const { facts, factsBlock } = await this.memoryService.loadFacts(sessionId)
     const { remindersBlock } = await this.memoryService.loadActiveReminders()
-    let systemPrompt = `${SYSTEM_PROMPT}${factsBlock}${remindersBlock}`
+    const recallBlock = await recallPointerBlock(this.agentLoop.digestReader)
+    let systemPrompt = `${SYSTEM_PROMPT}${factsBlock}${recallBlock}${remindersBlock}`
 
     const interpretation = await this.turnInterpreter.interpretIntent({
       userMessage,
@@ -1133,7 +1327,8 @@ export class PersonalAssistant {
     // (via AgentLoop.createBatchOneLoopProposer) has finished, mirroring `loopResult.batchBudget`
     // on the flag-OFF path.
     let oneLoopBatchBudget: (() => BatchBudgetTrace | undefined) | undefined
-    if (this.toolLoopWillRun) {
+    // M3: with no other tool configured, the read-only recall_memory tool still needs the tool loop to be callable; recallBlock is non-empty only with AUDIT_RECALL_TOOL on and a digest existing.
+    if (this.toolLoopWillRun || recallBlock !== '') {
       // Gated entry point for the batch-research path: only when webTools is configured, the
       // message is an explicit ≥3-item list (batch-list-detector.ts's narrow, syntactic-only
       // shape), and this turn isn't already inside a plan-driven run (planForCancelCheck is the

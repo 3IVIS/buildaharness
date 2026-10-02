@@ -1,0 +1,62 @@
+{
+ "description": "A category-less fact with no name/preference phrasing is semantic on both sides (and a category-less non-durable one too).",
+ "flags": {
+  "writeGate": false,
+  "auditLog": true
+ },
+ "config": {},
+ "clock": [
+  "2026-03-01T00:00:00.000Z"
+ ],
+ "initial": {},
+ "steps": [
+  {
+   "call": "tier",
+   "args": {
+    "facts": [
+     {
+      "text": "I'm allergic to shellfish.",
+      "extractedAt": "2026-03-01T00:00:00.000Z",
+      "sourceTurn": "t",
+      "source": "user_asserted",
+      "durable": true
+     },
+     {
+      "text": "My name is Priya.",
+      "extractedAt": "2026-03-01T00:00:00.000Z",
+      "sourceTurn": "t",
+      "source": "user_asserted",
+      "durable": false
+     },
+     {
+      "text": "The tests passed.",
+      "extractedAt": "2026-03-01T00:00:00.000Z",
+      "sourceTurn": "t",
+      "source": "user_asserted",
+      "durable": false
+     }
+    ]
+   }
+  }
+ ],
+ "expected": {
+  "steps": [
+   {
+    "tiers": [
+     {
+      "tier": "semantic",
+      "knowledge": true
+     },
+     {
+      "tier": "semantic",
+      "knowledge": true
+     },
+     {
+      "tier": "semantic",
+      "knowledge": true
+     }
+    ]
+   }
+  ]
+ }
+}

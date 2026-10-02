@@ -1,0 +1,116 @@
+{
+ "description": "Rotation at 500 entries: with the consolidation watermark at the log head only the last 500 survive (499 + 3 new = 502 -> seq 3..502).",
+ "flags": {
+  "writeGate": false,
+  "auditLog": true
+ },
+ "config": {},
+ "clock": [
+  "2026-05-01T00:00:00.000Z",
+  "2026-05-01T00:00:01.000Z",
+  "2026-05-01T00:00:02.000Z",
+  "2026-05-01T00:00:03.000Z",
+  "2026-05-01T00:00:04.000Z",
+  "2026-05-01T00:00:05.000Z",
+  "2026-05-01T00:00:06.000Z",
+  "2026-05-01T00:00:07.000Z",
+  "2026-05-01T00:00:08.000Z",
+  "2026-05-01T00:00:09.000Z",
+  "2026-05-01T00:00:10.000Z",
+  "2026-05-01T00:00:11.000Z",
+  "2026-05-01T00:00:12.000Z",
+  "2026-05-01T00:00:13.000Z",
+  "2026-05-01T00:00:14.000Z",
+  "2026-05-01T00:00:15.000Z",
+  "2026-05-01T00:00:16.000Z",
+  "2026-05-01T00:00:17.000Z",
+  "2026-05-01T00:00:18.000Z",
+  "2026-05-01T00:00:19.000Z",
+  "2026-05-01T00:00:20.000Z",
+  "2026-05-01T00:00:21.000Z",
+  "2026-05-01T00:00:22.000Z",
+  "2026-05-01T00:00:23.000Z",
+  "2026-05-01T00:00:24.000Z",
+  "2026-05-01T00:00:25.000Z",
+  "2026-05-01T00:00:26.000Z",
+  "2026-05-01T00:00:27.000Z",
+  "2026-05-01T00:00:28.000Z",
+  "2026-05-01T00:00:29.000Z"
+ ],
+ "initial": {
+  "memory:audit": [
+   {
+    "$repeat": 499,
+    "seqFrom": 1,
+    "template": {
+     "at": "2026-01-01T00:00:00.000Z",
+     "op": "add",
+     "factId": "x|t",
+     "store": "durable",
+     "writer": "w",
+     "turn": "t"
+    }
+   }
+  ],
+  "memory:consolidation-state": {
+   "lastSeq": 499
+  }
+ },
+ "steps": [
+  {
+   "call": "record_facts",
+   "args": {
+    "sessionId": "s1",
+    "candidates": [
+     {
+      "text": "Rotation fact 0",
+      "durable": true,
+      "confidence": "high",
+      "category": "other"
+     }
+    ]
+   }
+  },
+  {
+   "call": "record_facts",
+   "args": {
+    "sessionId": "s1",
+    "candidates": [
+     {
+      "text": "Rotation fact 1",
+      "durable": true,
+      "confidence": "high",
+      "category": "other"
+     }
+    ]
+   }
+  },
+  {
+   "call": "record_facts",
+   "args": {
+    "sessionId": "s1",
+    "candidates": [
+     {
+      "text": "Rotation fact 2",
+      "durable": true,
+      "confidence": "high",
+      "category": "other"
+     }
+    ]
+   }
+  }
+ ],
+ "expected": {
+  "final": {
+   "memory:audit": {
+    "$length": 500,
+    "$first": {
+     "seq": 3
+    },
+    "$last": {
+     "seq": 502
+    }
+   }
+  }
+ }
+}

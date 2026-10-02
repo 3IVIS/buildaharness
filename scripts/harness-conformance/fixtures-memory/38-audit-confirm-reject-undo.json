@@ -1,0 +1,155 @@
+{
+ "description": "confirm and reject of pending facts write audit entries (confirm re-sources to externally_verified; reject records into facts:rejected); undoing both restores pending and empties rejected/durable.",
+ "flags": {
+  "writeGate": false,
+  "auditLog": true
+ },
+ "config": {},
+ "clock": [
+  "2026-05-01T00:00:00.000Z",
+  "2026-05-01T00:00:01.000Z",
+  "2026-05-01T00:00:02.000Z",
+  "2026-05-01T00:00:03.000Z",
+  "2026-05-01T00:00:04.000Z",
+  "2026-05-01T00:00:05.000Z",
+  "2026-05-01T00:00:06.000Z",
+  "2026-05-01T00:00:07.000Z",
+  "2026-05-01T00:00:08.000Z",
+  "2026-05-01T00:00:09.000Z",
+  "2026-05-01T00:00:10.000Z",
+  "2026-05-01T00:00:11.000Z",
+  "2026-05-01T00:00:12.000Z",
+  "2026-05-01T00:00:13.000Z",
+  "2026-05-01T00:00:14.000Z",
+  "2026-05-01T00:00:15.000Z",
+  "2026-05-01T00:00:16.000Z",
+  "2026-05-01T00:00:17.000Z",
+  "2026-05-01T00:00:18.000Z",
+  "2026-05-01T00:00:19.000Z",
+  "2026-05-01T00:00:20.000Z",
+  "2026-05-01T00:00:21.000Z",
+  "2026-05-01T00:00:22.000Z",
+  "2026-05-01T00:00:23.000Z",
+  "2026-05-01T00:00:24.000Z",
+  "2026-05-01T00:00:25.000Z",
+  "2026-05-01T00:00:26.000Z",
+  "2026-05-01T00:00:27.000Z",
+  "2026-05-01T00:00:28.000Z",
+  "2026-05-01T00:00:29.000Z"
+ ],
+ "initial": {
+  "facts:pending-confirmation": [
+   {
+    "text": "Maybe vegetarian",
+    "extractedAt": "2026-01-01T00:00:00.000Z",
+    "sourceTurn": "turn:s1",
+    "source": "model_inferred",
+    "durable": true,
+    "confidence": "medium",
+    "category": "health"
+   },
+   {
+    "text": "Maybe likes jazz",
+    "extractedAt": "2026-01-02T00:00:00.000Z",
+    "sourceTurn": "turn:s1",
+    "source": "model_inferred",
+    "durable": true,
+    "confidence": "medium",
+    "category": "preference"
+   }
+  ]
+ },
+ "steps": [
+  {
+   "call": "confirm",
+   "args": {
+    "index": 0
+   }
+  },
+  {
+   "call": "reject",
+   "args": {
+    "index": 0
+   }
+  },
+  {
+   "call": "undo",
+   "args": {
+    "seq": 2,
+    "sessionId": "s1"
+   }
+  },
+  {
+   "call": "undo",
+   "args": {
+    "seq": 1,
+    "sessionId": "s1"
+   }
+  },
+  {
+   "call": "history",
+   "args": {}
+  }
+ ],
+ "expected": {
+  "steps": [
+   {
+    "fact": {
+     "text": "Maybe vegetarian",
+     "source": "externally_verified"
+    }
+   },
+   {
+    "fact": {
+     "text": "Maybe likes jazz"
+    }
+   },
+   {
+    "ok": true
+   },
+   {
+    "ok": true
+   },
+   {
+    "entries": [
+     {
+      "seq": 1,
+      "op": "confirm",
+      "writer": "confirm",
+      "turn": "memory",
+      "store": "durable"
+     },
+     {
+      "seq": 2,
+      "op": "reject",
+      "store": "pending",
+      "writer": "reject:user_explicit",
+      "turn": "memory"
+     },
+     {
+      "seq": 3,
+      "op": "undo",
+      "undoes": 2
+     },
+     {
+      "seq": 4,
+      "op": "undo",
+      "undoes": 1
+     }
+    ]
+   }
+  ],
+  "final": {
+   "facts:pending-confirmation": [
+    {
+     "text": "Maybe likes jazz"
+    },
+    {
+     "text": "Maybe vegetarian"
+    }
+   ],
+   "facts:rejected": [],
+   "facts:durable": []
+  }
+ }
+}

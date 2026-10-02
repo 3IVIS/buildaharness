@@ -55,6 +55,32 @@ describe('tierForFact — routing (Phase E / E3)', () => {
   })
 })
 
+describe('tierForFact — category-first (M8 structural rule shared with the Python twin)', () => {
+  it('a durable fact with a category is tiered by the category, not by its wording', () => {
+    expect(tierForFact(fact({ text: 'Priya', durable: true, category: 'identity' }))).toBe('identity')
+    expect(tierForFact(fact({ text: 'tea', durable: true, category: 'preference' }))).toBe('preference')
+    // Wording that would match the regex fallback does not override a different category.
+    expect(tierForFact(fact({ text: 'My name is Priya.', durable: true, category: 'health' }))).toBe('semantic')
+    expect(tierForFact(fact({ text: 'I prefer tea over coffee.', durable: true, category: 'other' }))).toBe('semantic')
+  })
+
+  it('a non-durable fact is semantic whatever its category', () => {
+    expect(tierForFact(fact({ text: 'Priya', durable: false, category: 'identity' }))).toBe('semantic')
+  })
+
+  it('the regexes remain only as a fallback when category is absent (the lexical pass)', () => {
+    expect(tierForFact(fact({ text: 'My name is Priya.', durable: true }))).toBe('identity')
+    expect(tierForFact(fact({ text: 'I prefer tea over coffee.', durable: true }))).toBe('preference')
+  })
+
+  it('origin and source rules still run before category', () => {
+    expect(tierForFact(fact({ durable: true, category: 'identity', origin: 'agent' }))).toBe('episodic')
+    expect(tierForFact(fact({ durable: true, category: 'identity', source: 'observed' }))).toBe('episodic')
+    expect(tierForFact(fact({ durable: true, category: 'identity', source: 'model_inferred', confidence: 'medium' }))).toBe('episodic')
+    expect(tierForFact(fact({ durable: true, category: 'identity', source: 'model_inferred', confidence: 'high' }))).toBe('identity')
+  })
+})
+
 describe('isKnowledgeTier — contradiction-detection scope (Phase E)', () => {
   it('treats semantic, identity, and preference as Knowledge', () => {
     expect(isKnowledgeTier('semantic')).toBe(true)

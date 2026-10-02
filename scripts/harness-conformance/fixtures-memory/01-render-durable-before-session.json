@@ -1,0 +1,245 @@
+{
+ "description": "25 durable + 5 newer session facts under a 300-char budget: every shown line is durable (priority) and the block fits the budget; the dropped count is the remainder.",
+ "flags": {
+  "writeGate": false,
+  "auditLog": true
+ },
+ "config": {
+  "budgetChars": 300
+ },
+ "clock": [
+  "2026-03-01T00:00:00.000Z"
+ ],
+ "initial": {
+  "facts:durable": [
+   {
+    "text": "Durable fact 01",
+    "extractedAt": "2026-01-01T00:00:00.000Z",
+    "sourceTurn": "turn:s0",
+    "source": "user_asserted",
+    "durable": true
+   },
+   {
+    "text": "Durable fact 02",
+    "extractedAt": "2026-01-02T00:00:00.000Z",
+    "sourceTurn": "turn:s0",
+    "source": "user_asserted",
+    "durable": true
+   },
+   {
+    "text": "Durable fact 03",
+    "extractedAt": "2026-01-03T00:00:00.000Z",
+    "sourceTurn": "turn:s0",
+    "source": "user_asserted",
+    "durable": true
+   },
+   {
+    "text": "Durable fact 04",
+    "extractedAt": "2026-01-04T00:00:00.000Z",
+    "sourceTurn": "turn:s0",
+    "source": "user_asserted",
+    "durable": true
+   },
+   {
+    "text": "Durable fact 05",
+    "extractedAt": "2026-01-05T00:00:00.000Z",
+    "sourceTurn": "turn:s0",
+    "source": "user_asserted",
+    "durable": true
+   },
+   {
+    "text": "Durable fact 06",
+    "extractedAt": "2026-01-06T00:00:00.000Z",
+    "sourceTurn": "turn:s0",
+    "source": "user_asserted",
+    "durable": true
+   },
+   {
+    "text": "Durable fact 07",
+    "extractedAt": "2026-01-07T00:00:00.000Z",
+    "sourceTurn": "turn:s0",
+    "source": "user_asserted",
+    "durable": true
+   },
+   {
+    "text": "Durable fact 08",
+    "extractedAt": "2026-01-08T00:00:00.000Z",
+    "sourceTurn": "turn:s0",
+    "source": "user_asserted",
+    "durable": true
+   },
+   {
+    "text": "Durable fact 09",
+    "extractedAt": "2026-01-09T00:00:00.000Z",
+    "sourceTurn": "turn:s0",
+    "source": "user_asserted",
+    "durable": true
+   },
+   {
+    "text": "Durable fact 10",
+    "extractedAt": "2026-01-10T00:00:00.000Z",
+    "sourceTurn": "turn:s0",
+    "source": "user_asserted",
+    "durable": true
+   },
+   {
+    "text": "Durable fact 11",
+    "extractedAt": "2026-01-11T00:00:00.000Z",
+    "sourceTurn": "turn:s0",
+    "source": "user_asserted",
+    "durable": true
+   },
+   {
+    "text": "Durable fact 12",
+    "extractedAt": "2026-01-12T00:00:00.000Z",
+    "sourceTurn": "turn:s0",
+    "source": "user_asserted",
+    "durable": true
+   },
+   {
+    "text": "Durable fact 13",
+    "extractedAt": "2026-01-13T00:00:00.000Z",
+    "sourceTurn": "turn:s0",
+    "source": "user_asserted",
+    "durable": true
+   },
+   {
+    "text": "Durable fact 14",
+    "extractedAt": "2026-01-14T00:00:00.000Z",
+    "sourceTurn": "turn:s0",
+    "source": "user_asserted",
+    "durable": true
+   },
+   {
+    "text": "Durable fact 15",
+    "extractedAt": "2026-01-15T00:00:00.000Z",
+    "sourceTurn": "turn:s0",
+    "source": "user_asserted",
+    "durable": true
+   },
+   {
+    "text": "Durable fact 16",
+    "extractedAt": "2026-01-16T00:00:00.000Z",
+    "sourceTurn": "turn:s0",
+    "source": "user_asserted",
+    "durable": true
+   },
+   {
+    "text": "Durable fact 17",
+    "extractedAt": "2026-01-17T00:00:00.000Z",
+    "sourceTurn": "turn:s0",
+    "source": "user_asserted",
+    "durable": true
+   },
+   {
+    "text": "Durable fact 18",
+    "extractedAt": "2026-01-18T00:00:00.000Z",
+    "sourceTurn": "turn:s0",
+    "source": "user_asserted",
+    "durable": true
+   },
+   {
+    "text": "Durable fact 19",
+    "extractedAt": "2026-01-19T00:00:00.000Z",
+    "sourceTurn": "turn:s0",
+    "source": "user_asserted",
+    "durable": true
+   },
+   {
+    "text": "Durable fact 20",
+    "extractedAt": "2026-01-20T00:00:00.000Z",
+    "sourceTurn": "turn:s0",
+    "source": "user_asserted",
+    "durable": true
+   },
+   {
+    "text": "Durable fact 21",
+    "extractedAt": "2026-01-21T00:00:00.000Z",
+    "sourceTurn": "turn:s0",
+    "source": "user_asserted",
+    "durable": true
+   },
+   {
+    "text": "Durable fact 22",
+    "extractedAt": "2026-01-22T00:00:00.000Z",
+    "sourceTurn": "turn:s0",
+    "source": "user_asserted",
+    "durable": true
+   },
+   {
+    "text": "Durable fact 23",
+    "extractedAt": "2026-01-23T00:00:00.000Z",
+    "sourceTurn": "turn:s0",
+    "source": "user_asserted",
+    "durable": true
+   },
+   {
+    "text": "Durable fact 24",
+    "extractedAt": "2026-01-24T00:00:00.000Z",
+    "sourceTurn": "turn:s0",
+    "source": "user_asserted",
+    "durable": true
+   },
+   {
+    "text": "Durable fact 25",
+    "extractedAt": "2026-01-25T00:00:00.000Z",
+    "sourceTurn": "turn:s0",
+    "source": "user_asserted",
+    "durable": true
+   }
+  ],
+  "facts:s1": [
+   {
+    "text": "Session fact 01",
+    "extractedAt": "2026-02-01T00:00:00.000Z",
+    "sourceTurn": "turn:s0",
+    "source": "user_asserted",
+    "durable": false
+   },
+   {
+    "text": "Session fact 02",
+    "extractedAt": "2026-02-02T00:00:00.000Z",
+    "sourceTurn": "turn:s0",
+    "source": "user_asserted",
+    "durable": false
+   },
+   {
+    "text": "Session fact 03",
+    "extractedAt": "2026-02-03T00:00:00.000Z",
+    "sourceTurn": "turn:s0",
+    "source": "user_asserted",
+    "durable": false
+   },
+   {
+    "text": "Session fact 04",
+    "extractedAt": "2026-02-04T00:00:00.000Z",
+    "sourceTurn": "turn:s0",
+    "source": "user_asserted",
+    "durable": false
+   },
+   {
+    "text": "Session fact 05",
+    "extractedAt": "2026-02-05T00:00:00.000Z",
+    "sourceTurn": "turn:s0",
+    "source": "user_asserted",
+    "durable": false
+   }
+  ]
+ },
+ "steps": [
+  {
+   "call": "load_facts",
+   "args": {
+    "sessionId": "s1"
+   }
+  }
+ ],
+ "expected": {
+  "steps": [
+   {
+    "factsBlock": "\nKnown facts about the user:\n- Durable fact 25\n- Durable fact 24\n- Durable fact 23\n- Durable fact 22\n- Durable fact 21\n- Durable fact 20\n- Durable fact 19\n- Durable fact 18\n- Durable fact 17\n- Durable fact 16\n- Durable fact 15\n- Durable fact 14\n- Durable fact 13\n- Durable fact 12\n- Durable fact 11",
+    "droppedCount": 15
+   }
+  ]
+ }
+}
