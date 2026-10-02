@@ -134,10 +134,11 @@ def plan_undo(log: list[AuditEntry], seq: int, snapshot: UndoSnapshot, session_i
     entry, refusal = check_undoable(log, seq)
     if entry is None:
         return refuse(refusal or "")
+    shown = entry.before or entry.after
     message = UNDO_MESSAGES["success"].format(
         seq=seq,
         op=entry.op,
-        text=(entry.before or entry.after).text if (entry.before or entry.after) else entry.fact_id,
+        text=shown.text if shown else entry.fact_id,
     )
     draft = AuditDraft(
         op="undo",

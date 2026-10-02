@@ -177,7 +177,7 @@ class AgentMemoryService:
 
     async def is_off(self) -> bool:
         state = await self._store.get_state(self.owner_id, OFF)
-        return bool(state) and state.get("off") is True
+        return state is not None and state.get("off") is True
 
     async def set_off(self, off: bool) -> None:
         await self._store.set_state(self.owner_id, OFF, {"off": off, "at": self._clock()})
