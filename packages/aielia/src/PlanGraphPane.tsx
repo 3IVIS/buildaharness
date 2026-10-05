@@ -22,7 +22,7 @@ export interface PlanGraphPaneProps {
 }
 
 /**
- * Read-only plan graph pane (plans/plan_visualization_plan.html, R2). Keys: arrows move along edges and ranks,
+ * Read-only plan graph pane (plans/plan_visualization_plan.html, R2). Keys: arrows (or [ ]) move along edges and ranks, j/k and PgUp/PgDn scroll the detail drawer,
  * Tab/Shift+Tab walk task order, Enter or d toggles the detail drawer below 120 columns, q or Esc closes.
  * No key edits anything: the plan changes only through the approval gate.
  */
@@ -49,12 +49,27 @@ export function PlanGraphPane({ nodes, columns, rows, active = true, color = tru
   }
   if (model && selectedId) lastIndex.current = model.taskOrder.indexOf(selectedId)
 
+  // Drawer scrolling: the offset belongs to one selected node, so selecting another starts it back at the top.
+  const detail = useMemo(() => planDetailLines(nodes, selectedId, DRAWER_WIDTH - 2), [nodes, selectedId])
+  const [scroll, setScroll] = useState<{ id: string | undefined; offset: number }>({ id: undefined, offset: 0 })
+  const drawerRows = graphRows
+  const maxScroll = Math.max(0, detail.length - drawerRows)
+  const drawerOffset = scroll.id === selectedId ? Math.min(scroll.offset, maxScroll) : 0
+  const scrollDrawer = (delta: number): void => setScroll({ id: selectedId, offset: Math.max(0, Math.min(maxScroll, drawerOffset + delta)) })
+
   useInput(
     (input, key) => {
       if (key.escape || input === 'q') return onClose()
       if (key.return || input === 'd') return setDrawerOpen((open) => !open)
+      if (showDrawer) {
+        if (input === 'j') return scrollDrawer(1)
+        if (input === 'k') return scrollDrawer(-1)
+        if (key.pageDown) return scrollDrawer(drawerRows)
+        if (key.pageUp) return scrollDrawer(-drawerRows)
+      }
       if (!model || !selectedId) return
-      const k: NavKey | undefined = key.upArrow ? 'up' : key.downArrow ? 'down' : key.leftArrow ? 'left' : key.rightArrow ? 'right' : key.tab ? (key.shift ? 'shiftTab' : 'tab') : undefined
+      // [ and ] are kept from the git view as aliases of up/down (repeat to cycle the other dependencies/dependents).
+      const k: NavKey | undefined = key.upArrow || input === '[' ? 'up' : key.downArrow || input === ']' ? 'down' : key.leftArrow ? 'left' : key.rightArrow ? 'right' : key.tab ? (key.shift ? 'shiftTab' : 'tab') : undefined
       if (!k) return
       const from: NavState = nav && nav.cur === selectedId ? nav : planNavigator.start(model, selectedId)
       setNav(planNavigator.press(model, from, k))
@@ -94,13 +109,13 @@ export function PlanGraphPane({ nodes, columns, rows, active = true, color = tru
         </Box>
         {showDrawer && (
           <Box flexDirection="column" width={DRAWER_WIDTH + 1} paddingLeft={1} borderStyle="single" borderTop={false} borderBottom={false} borderRight={false}>
-            {planDetailLines(nodes, selectedId, DRAWER_WIDTH - 2).map((line, i) => (
+            {detail.slice(drawerOffset, drawerOffset + drawerRows).map((line, i) => (
               <Text key={i} wrap="truncate">{line.length ? line : ' '}</Text>
             ))}
           </Box>
         )}
       </Box>
-      <Text dimColor>{docked ? '↑↓←→ move · Tab next · q close' : '↑↓←→ move · Tab next · Enter details · q close'}</Text>
+      <Text dimColor>{docked ? '↑↓←→ move · Tab next · j/k PgUp/PgDn scroll details · q close' : '↑↓←→ move · Tab next · Enter details · q close'}</Text>
     </Box>
   )
 }

@@ -40,11 +40,12 @@ Live statuses come from harness checkpoints (per checkpoint, not per token).
 
 | Key | Action |
 |---|---|
-| `↑` | Select the nearest dependency; press again to cycle the other dependencies |
-| `↓` | Select the nearest dependent; press again to cycle the other dependents |
+| `↑` or `[` | Select the nearest dependency; press again to cycle the other dependencies |
+| `↓` or `]` | Select the nearest dependent; press again to cycle the other dependents |
 | `←` / `→` | Neighbour in the same rank, wrapping |
 | `Tab` / `Shift+Tab` | Next / previous node in task order (reaches any node, including other threads) |
 | `Enter` or `d` | Toggle the detail drawer (docked automatically at 120+ columns) |
+| `j` / `k`, `PgDn` / `PgUp` | Scroll the detail drawer by a line / a page (while it is showing; it starts at the top for each selected node) |
 | `q` or `Esc` | Close |
 | `Ctrl+C` | Exit, as everywhere |
 

@@ -70,6 +70,50 @@ describe('PlanGraphPane', () => {
     expect(strip(wide.lastFrame())).toContain('Status:')
   })
 
+  it('[ and ] are aliases of the up and down arrows', async () => {
+    const selectAfter = async (keys: string[]): Promise<string> => {
+      const i = mount(NINE_TASK_PLAN)
+      await sleep()
+      for (const k of keys) await press(i, k)
+      const line = selectedLine(i)
+      i.unmount()
+      inst = undefined
+      return line
+    }
+    expect(await selectAfter([']'])).toBe(await selectAfter([DOWN]))
+    expect(await selectAfter([']'])).not.toBe(await selectAfter([]))
+    expect(await selectAfter([']', '['])).toBe(await selectAfter([DOWN, UP]))
+    expect(await selectAfter([']', ']', '['])).toBe(await selectAfter([DOWN, DOWN, UP]))
+  })
+
+  it('scrolls the detail drawer with j/k and PgUp/PgDn, clamped, and starts at the top for another node', async () => {
+    const PGUP = '\x1b[5~'
+    const PGDN = '\x1b[6~'
+    const long: VizNode[] = [
+      { id: 'A', label: Array.from({ length: 60 }, (_, n) => `word${n}`).join(' '), status: 'running', deps: [] },
+      { id: 'B', label: 'short', status: 'pending', deps: ['A'] },
+    ]
+    const i = mount(long, { columns: 140, rows: 10 }) // docked drawer, 8 visible rows
+    await sleep()
+    // The graph box also shows the label's first words, so the checks key on lines only the drawer reaches.
+    expect(strip(i.lastFrame())).not.toContain('word30') // 8 drawer rows: the id, a blank, then label lines up to word25
+    expect(strip(i.lastFrame())).not.toContain('Status:')
+    await press(i, 'j')
+    expect(strip(i.lastFrame())).toContain('word30') // moved down one line
+    await press(i, 'k')
+    await press(i, 'k') // clamped at the top
+    expect(strip(i.lastFrame())).not.toContain('word30')
+    for (let n = 0; n < 6; n++) await press(i, PGDN)
+    expect(strip(i.lastFrame())).toContain('Status:') // clamped at the bottom, tail visible
+    expect(strip(i.lastFrame())).not.toContain('word30')
+    await press(i, PGUP)
+    expect(strip(i.lastFrame())).not.toContain('Status:')
+    await press(i, PGDN)
+    await press(i, TAB) // a different node: drawer text starts at the top again
+    expect(strip(i.lastFrame())).toContain('Status:')
+    expect(strip(i.lastFrame())).toContain('short')
+  })
+
   it('keeps the selection across a live update and falls back deterministically when the node disappears', async () => {
     const i = mount(NINE_TASK_PLAN)
     await sleep()
