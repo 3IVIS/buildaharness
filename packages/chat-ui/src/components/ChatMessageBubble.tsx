@@ -33,6 +33,8 @@ interface Props {
   sources?: AssistantSource[]
   toolSteps?: AssistantToolStep[]
   planStatus?: AssistantTurnResult['planStatus']
+  /** Set only when planGraphMode is enabled: renders a "View as graph" link under the plan checklist. */
+  onViewPlanGraph?: () => void
   answerClaim?: AnswerClaim
   /** M6: which stored facts were in this turn's prompt, and how many were not shown — rendered in the "Why?" panel via the same formatter the CLI's /why uses. */
   memoryInjection?: MemoryInjection
@@ -114,7 +116,7 @@ const SOURCE_TOOL_LABEL: Record<AssistantSource['tool'], string> = {
 // doesn't vouch for the same way it does its own workspace files.
 const EXTERNAL_SOURCE_TOOLS: ReadonlySet<AssistantSource['tool']> = new Set(['web_search', 'fetch_url'])
 
-export function ChatMessageBubble({ role, content, riskLevel, trace, harnessSkipped, sources, toolSteps, planStatus, answerClaim, memoryInjection, proposerKind, onRetry }: Props): React.JSX.Element {
+export function ChatMessageBubble({ role, content, riskLevel, trace, harnessSkipped, sources, toolSteps, planStatus, onViewPlanGraph, answerClaim, memoryInjection, proposerKind, onRetry }: Props): React.JSX.Element {
   const [showWhy, setShowWhy] = useState(false)
   const [showSources, setShowSources] = useState(false)
   const [showSteps, setShowSteps] = useState(false)
@@ -290,6 +292,7 @@ export function ChatMessageBubble({ role, content, riskLevel, trace, harnessSkip
                 </ul>
               )}
               {planStatus && (
+                <>
                 <ul className="bubble__why-steps bubble__plan-checklist">
                   {planStatus.tasks.map((t) => (
                     <li key={t.id} className={t.status === 'RUNNING' ? 'bubble__plan-checklist-item--active' : undefined}>
@@ -298,6 +301,10 @@ export function ChatMessageBubble({ role, content, riskLevel, trace, harnessSkip
                     </li>
                   ))}
                 </ul>
+                {onViewPlanGraph && (
+                  <button type="button" className="bubble__plan-graph-link" onClick={onViewPlanGraph}>View as graph</button>
+                )}
+                </>
               )}
             </div>
           )}

@@ -15,14 +15,15 @@ import reactRefresh from 'eslint-plugin-react-refresh'
 /** @type {import("eslint").Linter.Config[]} */
 export default [
   {
-    ignores: ['dist/', 'node_modules/', 'spec/dist/'],
+    // `**/` so build output inside workspace packages (packages/*/dist, sea-build, dist-e2e) is skipped too, not just the root's.
+    ignores: ['**/dist/', '**/node_modules/', '**/spec/dist/', '**/sea-build/', '**/dist-e2e/', '**/playwright-report/', '**/test-results/'],
   },
   {
-    files: ['src/**/*.{ts,tsx}'],
+    files: ['src/**/*.{ts,tsx}', 'packages/*/{src,eval,scripts,e2e}/**/*.{ts,tsx}'],
     languageOptions: {
       parser: tsParser,
+      // No `project`: none of the rules are type-aware, and a single tsconfig cannot describe every workspace package.
       parserOptions: {
-        project: './tsconfig.json',
         ecmaFeatures: { jsx: true },
       },
     },
@@ -51,5 +52,20 @@ export default [
       'no-console': ['warn', { allow: ['warn', 'error', 'info', 'debug'] }],
       'eqeqeq':     ['error', 'always', { null: 'ignore' }],
     },
+  },
+  {
+    // aielia is a terminal app: console.* is its output channel, not leftover debugging.
+    files: ['packages/aielia/**/*.{ts,tsx}'],
+    rules: { 'no-console': 'off' },
+  },
+  {
+    // Playwright fixtures take a `use` callback, which the hooks rule mistakes for React's `use` hook.
+    files: ['packages/chat-ui/e2e/**/*.ts'],
+    rules: { 'react-hooks/rules-of-hooks': 'off' },
+  },
+  {
+    // The proxy is a server and the harness scripts are CLIs: console output there is the product, not leftover debugging.
+    files: ['packages/proxy/**/*.ts', 'packages/*/scripts/**/*.ts'],
+    rules: { 'no-console': 'off' },
   },
 ]

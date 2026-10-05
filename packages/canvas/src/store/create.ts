@@ -199,7 +199,7 @@ export interface CreateCanvasStoreOpts {
   initialSpec?: FlowSpec
 }
 
-export function createCanvasStore(opts: CreateCanvasStoreOpts = {}) {
+export function createCanvasStore(_opts: CreateCanvasStoreOpts = {}) {
   // Debounce timer lives outside the store so it isn't serialised.
   let _updateDebounceTimer: ReturnType<typeof setTimeout> | null = null
 

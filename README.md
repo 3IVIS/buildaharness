@@ -7,7 +7,7 @@
 [![License](https://img.shields.io/badge/License-Apache%202.0-blue.svg)](https://opensource.org/licenses/Apache-2.0)
 [![Version](https://img.shields.io/badge/version-v0.8.0-brightgreen.svg)](https://github.com/3IVIS/buildaharness/releases)
 [![Status](https://img.shields.io/badge/status-public%20alpha-orange.svg)](https://github.com/3IVIS/buildaharness)
-[![Tests](https://img.shields.io/badge/tests-5%2C455%20passing-brightgreen.svg)](#)
+[![Tests](https://img.shields.io/badge/tests-5%2C809%20passing-brightgreen.svg)](#)
 [![GitHub Stars](https://img.shields.io/github/stars/3IVIS/buildaharness?style=social)](https://github.com/3IVIS/buildaharness/stargazers)
 [![PRs Welcome](https://img.shields.io/badge/PRs-welcome-brightgreen.svg)](CONTRIBUTING.md)
 [![Node.js](https://img.shields.io/badge/Node.js-18+-339933.svg?logo=node.js&logoColor=white)](https://nodejs.org/)
@@ -129,8 +129,9 @@ An agent you can hand real, multi-step work to, held in bounds by the harness �
 npx @buildaharness/aielia
 ```
 
-First run walks you through picking a model — paste an Anthropic / OpenAI /
-OpenRouter key. Then just talk to it.
+First run walks you through picking a model — reuse an existing `claude` CLI
+login (no API key), or paste an Anthropic / OpenAI / OpenRouter key. Then just
+talk to it.
 
 ```ts
 import { LLMClient } from '@buildaharness/runtime'

@@ -1,5 +1,6 @@
 import { defineConfig } from 'vite'
 import react from '@vitejs/plugin-react'
+import { planVizVendorPlugin } from './plan-viz-aliases'
 
 // The hosted browser trial is served from myaielia.com/try, so its build needs
 // base '/try/'. Local dev and the Tauri desktop build (which serves chat-ui/dist from
@@ -9,6 +10,6 @@ const base = process.env.CHAT_UI_BASE || '/'
 
 export default defineConfig({
   base,
-  plugins: [react()],
+  plugins: [planVizVendorPlugin(), react()],
   server: { port: 3010 },
 })

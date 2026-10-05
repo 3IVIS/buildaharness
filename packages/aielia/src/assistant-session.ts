@@ -9,7 +9,6 @@ import { ANTHROPIC_DEFAULT_MODEL } from '@buildaharness/runtime'
 import type { MemoryAdapter, ChatMessage, TokenUsage, FsBackend, MemoryResult } from '@buildaharness/runtime'
 import { compactTranscript, compactTranscriptSemantic, messagesAboutToBeCompacted } from './transcript-compaction.js'
 import {
-  loadPendingAction,
   stagePendingAction,
   sweepAbandonedPendingActions,
   type FileToolsContext,

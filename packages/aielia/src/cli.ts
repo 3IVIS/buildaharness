@@ -46,6 +46,11 @@ import { checkProxyHealth, checkClaudeCli, checkWorkspaceRoot, checkDataDirWrita
 import { resolveNonInteractiveApprovalMode, type NonInteractiveApprovalMode } from './non-interactive-mode.js'
 import { LiveSteeringChannel } from './live-steering-channel.js'
 import { isGoalGraphEnabled } from './goal-graph-flag.js'
+import { isPlanGraphEnabled } from './plan-graph-flag.js'
+import { planToSnapshot } from './plan-viz/plan-snapshot.js'
+import { renderPlan } from './plan-viz/plan-raster.js'
+import type { VizNode } from './plan-viz/types.js'
+import type { TaskStatus } from '@buildaharness/harness'
 import { isGoalGraphSuggestEnabled } from './goal-graph-suggest-flag.js'
 import type { NextStepSuggestion } from './next-step-proposer.js'
 import { maybeRunFirstRunSetup } from './first-run.js'
@@ -229,6 +234,13 @@ export interface SelectOption {
 }
 
 export interface RunCliOptions {
+  /**
+   * The Ink shell's seam for `/plan graph` (planGraphMode enabled): called with the drawable nodes to open the
+   * full-screen pane. Without it (plain REPL, piped input) `/plan graph` prints one static render instead.
+   */
+  openPlanGraph?: (nodes: VizNode[]) => void
+  /** Live per-task statuses from a running turn, forwarded for the open plan graph pane. */
+  onPlanProgress?: (tasks: { id: string; status: TaskStatus }[]) => void
   dataDir?: string
   configStore?: ConfigStore
   backend?: FsBackend
@@ -271,6 +283,8 @@ export interface CliInstance {
    * readline REPL or by non-interactive/piped mode — only the TUI shell polls this.
    */
   getStatusIndicators(): Promise<string[]>
+  /** Read-only: the plan graph's drawable nodes (with `live` statuses overlaid), or undefined when planGraphMode is disabled or there is no plan. Feeds the TUI's open plan graph pane. */
+  getPlanGraphNodes(live?: { id: string; status: TaskStatus }[]): Promise<VizNode[] | undefined>
 }
 
 /**
@@ -627,8 +641,55 @@ export async function runCli(options: RunCliOptions = {}): Promise<CliInstance> 
     await handleTurn(message, false, undefined, undefined, undefined, id, decision, edits)
   }
 
+  /** The plan graph's nodes (live statuses overlaid), optionally narrowed to one goal thread; undefined when there is nothing to draw. */
+  async function loadPlanGraphNodes(live?: { id: string; status: TaskStatus }[], threadId?: string): Promise<VizNode[] | undefined> {
+    const record = await assistant.getPlanGraph('cli')
+    if (!record) return undefined
+    let nodes = planToSnapshot(record, live ?? []).nodes
+    if (threadId) nodes = nodes.filter((n) => n.id.startsWith(`${threadId}__`))
+    return nodes.length ? nodes : undefined
+  }
+
+  /** `/plan graph [thread-id]` — read-only plan graph. TUI: opens the pane. Plain CLI: one static render at the terminal width (checklist when it cannot be drawn). */
+  async function handlePlanGraph(args: string[]): Promise<void> {
+    const nodes = await loadPlanGraphNodes(undefined, args[0])
+    if (!nodes) {
+      console.log(args[0] ? `\nNo plan graph for thread "${args[0]}".\n` : '\nNo active plan for this session.\n')
+      return
+    }
+    if (options.openPlanGraph) {
+      const probe = renderPlan(nodes, { maxCols: 80 })
+      if (probe.ok) {
+        options.openPlanGraph(nodes)
+        return
+      }
+      console.log(`\n[plan graph unavailable: ${probe.message}] showing the checklist instead.`)
+      printPlan()
+      return
+    }
+    const cols = process.stdout.columns || 80
+    const color = Boolean(process.stdout.isTTY) && !process.env.NO_COLOR
+    const result = renderPlan(nodes, { maxCols: cols, color })
+    if (!result.ok) {
+      console.log(`\n[plan graph unavailable: ${result.message}] showing the checklist instead.`)
+      printPlan()
+      return
+    }
+    if (!result.fits) {
+      console.log(`\n[plan graph is wider than ${cols} columns] dependency list:\n`)
+      for (const n of nodes) console.log(`  [${n.status}] ${n.id} — ${n.label}${n.deps.length ? `  (after: ${n.deps.join(', ')})` : ''}`)
+      console.log('')
+      return
+    }
+    console.log(`\n${result.lines.join('\n')}\n`)
+  }
+
   async function handlePlan(args: string[]): Promise<void> {
     const sub = args[0]
+    if (sub === 'graph' && isPlanGraphEnabled(config.planGraphMode)) {
+      await handlePlanGraph(args.slice(1))
+      return
+    }
     if (sub === 'sketch') {
       await handlePlanSketch(args.slice(1))
       return
@@ -1335,6 +1396,7 @@ export async function runCli(options: RunCliOptions = {}): Promise<CliInstance> 
         // right after it finished streaming. Once streaming has started this turn, further
         // progress has nothing safe to overwrite, so it's dropped instead.
         onProgress: (progress) => {
+          if (progress.planTasks) options.onPlanProgress?.(progress.planTasks)
           if (!streamedAnyTokens) writeProgress(progress)
         },
         onToken: writeToken,
@@ -1952,6 +2014,7 @@ export async function runCli(options: RunCliOptions = {}): Promise<CliInstance> 
       await routeMessage(message)
     },
     close: () => rl.close(),
+    getPlanGraphNodes: async (live) => (isPlanGraphEnabled(config.planGraphMode) ? loadPlanGraphNodes(live) : undefined),
     getStatusIndicators: async () => {
       const indicators: string[] = []
       // Persistent context, not a notable/active state — always shown, same reasoning as the

@@ -1,4 +1,4 @@
-import type { FlowSpec, AnyNode } from './schema'
+import type { FlowSpec } from './schema'
 
 export interface ValidationError {
   nodeId?:   string

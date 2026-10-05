@@ -20,7 +20,7 @@ describe('formatHelp', () => {
       '/memory export [file]', '/memory confirm <n|category>', '/memory reject <n|category>', '/memory forget <n> [erase]', '/memory forget digest [id]',
       '/memory history', '/memory undo <seq>', '/memory status', '/memory archive [restore <n> | forget <n>]', '/memory consolidate [accept|dismiss <n>]', '/memory off | on', '/search <query>',
       '/model [name]', '/project [name]', '/cost', '/doctor', '/why', '/layers',
-      '/sources', '/plan', '/plan sketch <request>', '/goals', '/config ...', '/layers settings', '/checkpoint [clear]',
+      '/sources', '/plan', '/plan graph [thread-id]', '/plan sketch <request>', '/goals', '/config ...', '/layers settings', '/checkpoint [clear]',
     ])
   })
 })

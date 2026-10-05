@@ -57,6 +57,7 @@ export const CLI_COMMANDS_HELP: CliCommandHelp[] = [
   { command: '/layers', description: 'Show all 11 harness layers — fired/skipped and why, for the last turn' },
   { command: '/sources', description: 'List files/URLs the last turn actually consulted' },
   { command: '/plan', description: "Show the active structured plan's task status" },
+  { command: '/plan graph [thread-id]', description: 'Draw the active plan as a dependency graph (needs planGraphMode enabled)' },
   { command: '/plan sketch <request>', description: 'One-shot, advisory plan sketch — no PlanRecord, nothing staged, cannot execute' },
   { command: '/goals', description: 'Review every known goal thread this session — status, tasks, and visibility (freshly computed / carried over / done / suggested)' },
   { command: '/config ...', description: 'View or change persisted settings' },

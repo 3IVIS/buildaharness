@@ -416,7 +416,6 @@ const QUESTION_SHAPE = /\?\s*$|^(what|when|where|why|who|which|how)\b/i
 // sourced from CLAUSE_BOUNDARY's per-language JSON, for the same reason QUESTION_SHAPE itself
 // isn't: this pre-check only makes sense paired with QUESTION_SHAPE's own already-English-only
 // anchors, so scoping it the same way avoids a mismatched half-fix for zh.
-const SENTENCE_END = /[.!?;]+/
 
 // batch (re-probing conv B, h2's shell-decline follow-up): `splitOnAny([SENTENCE_END], trimmed)`
 // below used to feed the per-sentence QUESTION_SHAPE filter, but `String.prototype.split()` on a

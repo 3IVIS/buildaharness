@@ -5,7 +5,6 @@ import { formatWriteDiff } from './diff-format.js'
 
 // Same isolation reason as tui-input.test.tsx — see vite.config.ts's exclude comment for this file.
 
-// eslint-disable-next-line no-control-regex
 const ANSI = /\x1b\[[0-9;]*m/g
 function strip(frame: string | undefined): string {
   return (frame ?? '').replace(ANSI, '')

@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import type { ChatMessage, ChatOptions, ILLMClient, ToolDefinition, TokenUsage } from '@buildaharness/runtime'
+import type { ChatMessage, ChatOptions, ILLMClient, TokenUsage } from '@buildaharness/runtime'
 import { sketchPlan } from './plan-sketch.js'
 
 class FakeLLMClient implements ILLMClient {

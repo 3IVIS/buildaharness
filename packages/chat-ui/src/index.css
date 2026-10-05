@@ -1431,3 +1431,25 @@ body {
 .settings__layer .settings__field-label input[type='checkbox'] {
   width: auto;
 }
+
+/* Plan graph drawer (P4 of plans/plan_visualization_plan.html) */
+.plan-viz-panel {
+  position: fixed;
+  top: 0;
+  right: 0;
+  bottom: 0;
+  width: min(520px, 50vw);
+  display: flex;
+  flex-direction: column;
+  background: var(--bg, #fff);
+  border-left: 1px solid var(--border);
+  z-index: 20;
+}
+.plan-viz-panel--fullscreen { width: 100vw; }
+.plan-viz-panel__header { display: flex; gap: 8px; align-items: center; padding: 8px 12px; border-bottom: 1px solid var(--border); }
+.plan-viz-panel__title { flex: 1; font-weight: 600; }
+.plan-viz-panel__frame { flex: 1; border: 0; width: 100%; }
+.plan-viz-panel__empty { padding: 16px; color: var(--muted); }
+.app__plan-graph-link, .bubble__plan-graph-link, .plan-approval-card__graph-link {
+  background: none; border: 0; padding: 0; color: inherit; text-decoration: underline; cursor: pointer; font-size: 12.5px;
+}

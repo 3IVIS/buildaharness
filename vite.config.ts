@@ -1,9 +1,12 @@
 import { defineConfig } from 'vite'
 import react from '@vitejs/plugin-react'
 import { resolve } from 'path'
+// Root's blanket vitest run also picks up packages/chat-ui tests, which import the plan-graph
+// viewer's `plan-viz-vendor/*?raw` bundles — resolve them the same way chat-ui's own configs do.
+import { planVizVendorPlugin } from './packages/chat-ui/plan-viz-aliases'
 
 export default defineConfig({
-  plugins: [react()],
+  plugins: [planVizVendorPlugin(), react()],
   resolve: {
     // Fix #14: tsconfig.json declares "@/*" → "src/*" paths but Vite requires its own alias.
     // Without this, any `import ... from '@/...'` compiles in TS but fails at build time.
@@ -49,6 +52,8 @@ export default defineConfig({
       // same plan) also mounts real `ink` components via ink-test-render.ts. Already covered by
       // `npm run test:aielia`'s own vitest.config.ts.
       'packages/aielia/src/tui-app.test.tsx',
+      // Same reason — PlanGraphPane.test.tsx mounts the real `ink` PlanGraphPane via ink-test-render.ts.
+      'packages/aielia/src/PlanGraphPane.test.tsx',
       // Same reason as tui-input.test.tsx immediately above — ink-select-prompt.test.tsx (Phase 7
       // of the same plan) also mounts a real `ink` component via ink-test-render.ts. Already
       // covered by `npm run test:aielia`'s own vitest.config.ts.

@@ -15,10 +15,7 @@ import { InMemoryExperienceStore, UnavailableExperienceStore } from '../state/ex
 
 import {
   initializeHarness,
-  validateRecoveryActionDependencies,
-  validateTaskGraph,
   SelfReferentialDependencyError,
-  InvalidTaskGraphError,
 } from './initialize.js'
 import { warmStart, softmaxStrategyPolicy } from './warm-start.js'
 import { contextCompression } from './context-compression.js'
@@ -197,7 +194,7 @@ describe('warmStart', () => {
     // Second call should overwrite (upsert), not create a new entry
     expect(updateSpy).toHaveBeenCalledTimes(2)
     // InMemoryExperienceStore uses Map.set (upsert) — check it doesn't duplicate
-    const data = store.toJSON()
+    const _data = store.toJSON()
     // No directly observable duplicate entries at public level (Map.set replaces)
     expect(updateSpy).toHaveBeenCalledWith('run-1', { outcome: 'COMPLETE' })
   })

@@ -10,7 +10,7 @@
     "build": "tsc && vite build",
     "preview": "vite preview",
     "test": "vitest run",
-    "lint": "eslint src --max-warnings 0",
+    "lint": "eslint src packages --max-warnings 0",
     "typecheck": "tsc --noEmit",
     "gen:harness-core": "node spec/gen-harness-core.mjs",
     "gen:memory-core": "node spec/gen-memory-core.mjs",

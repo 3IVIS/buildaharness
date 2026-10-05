@@ -3,6 +3,7 @@ import { DEFAULT_CONFIG } from './config.js'
 import { DEFAULT_ONE_LOOP_MODE } from './one-loop-flag.js'
 import { DEFAULT_TUI_MODE } from './tui-mode-flag.js'
 import { DEFAULT_GOAL_GRAPH_MODE } from './goal-graph-flag.js'
+import { DEFAULT_PLAN_GRAPH_MODE } from './plan-graph-flag.js'
 import { DEFAULT_GOAL_GRAPH_SUGGEST_MODE } from './goal-graph-suggest-flag.js'
 import {
   isConfigKey,
@@ -91,6 +92,16 @@ describe('envOverridesFromProcessEnv', () => {
     warn.mockRestore()
   })
 
+  it('resolves ASSISTANT_PLAN_GRAPH into planGraphMode, defaulting a typo to the current default; unset leaves it absent', () => {
+    const warn = vi.spyOn(console, 'error').mockImplementation(() => {})
+    expect(envOverridesFromProcessEnv({ ASSISTANT_PLAN_GRAPH: 'enabled' })).toEqual({ planGraphMode: 'enabled' })
+    expect(envOverridesFromProcessEnv({ ASSISTANT_PLAN_GRAPH: 'disabled' })).toEqual({ planGraphMode: 'disabled' })
+    expect(envOverridesFromProcessEnv({ ASSISTANT_PLAN_GRAPH: 'on' })).toEqual({ planGraphMode: DEFAULT_PLAN_GRAPH_MODE })
+    expect(warn).toHaveBeenCalledTimes(1)
+    expect(envOverridesFromProcessEnv({})).not.toHaveProperty('planGraphMode')
+    warn.mockRestore()
+  })
+
   it('resolves ASSISTANT_GOAL_GRAPH_SUGGEST into goalGraphSuggestMode, defaulting a typo to the current default', () => {
     const warn = vi.spyOn(console, 'error').mockImplementation(() => {})
     expect(envOverridesFromProcessEnv({ ASSISTANT_GOAL_GRAPH_SUGGEST: 'enabled' })).toEqual({ goalGraphSuggestMode: 'enabled' })
@@ -102,6 +113,13 @@ describe('envOverridesFromProcessEnv', () => {
 })
 
 describe('parseConfigValue', () => {
+  it('parses planGraphMode as enabled/disabled and rejects anything else', () => {
+    expect(isConfigKey('planGraphMode')).toBe(true)
+    expect(parseConfigValue('planGraphMode', 'enabled')).toBe('enabled')
+    expect(parseConfigValue('planGraphMode', 'disabled')).toBe('disabled')
+    expect(() => parseConfigValue('planGraphMode', 'on')).toThrow(ConfigValueParseError)
+  })
+
   it('parses valid booleans for enableWeb/enableShell/dangerouslySkipPermissions', () => {
     expect(parseConfigValue('enableWeb', 'true')).toBe(true)
     expect(parseConfigValue('enableShell', 'false')).toBe(false)

@@ -1,11 +1,13 @@
 import { Readable, Writable } from 'node:stream'
-import { useCallback, useEffect, useState, useSyncExternalStore } from 'react'
+import { useCallback, useEffect, useRef, useState, useSyncExternalStore } from 'react'
 import { Box, Static, Text, render as inkRender, useInput, useWindowSize } from 'ink'
 import { runCli, type CliInstance, type RunCliOptions, type SelectOption } from './cli.js'
 import { startCapture, type CaptureEvent } from './tui-output-capture.js'
 import { TuiInput } from './tui-input.js'
 import { SelectPrompt } from './ink-select-prompt.js'
 import { ICONS, PLAN_LINE_PREFIX } from './cli-icons.js'
+import { PlanGraphPane } from './PlanGraphPane.js'
+import type { VizNode } from './plan-viz/types.js'
 import { renderMarkdownLine, renderDiffLine, renderNeedsApprovalLine } from './markdown-line.js'
 
 // "Indent everything coming from the assistant" — a uniform left margin on every assistant-reply
@@ -287,10 +289,136 @@ export class StatusBridge implements Store<string[]> {
   }
 }
 
+/** Escape sequences for the terminal's alternate screen. */
+const ALT_SCREEN_ON = '\x1b[?1049h'
+const ALT_SCREEN_OFF = '\x1b[?1049l'
+/** Pause between the empty frame and the screen switch (verified in the S2 probe) so Ink's last chat frame is erased before the switch. */
+const ALT_SCREEN_SETTLE_MS = 80
+/** At most one pane re-render per interval, however fast progress updates arrive. */
+const PLAN_GRAPH_MIN_RENDER_MS = 100
+
+export interface PlanGraphView {
+  /** 'chat': normal UI. 'blank': the empty frame bracketing a screen switch. 'pane': the full-screen plan graph. */
+  mode: 'chat' | 'blank' | 'pane'
+  nodes: VizNode[]
+}
+
+/**
+ * State for the full-screen plan graph pane (read-only; plans/plan_visualization_plan.html, R2). Same pub/sub shape as
+ * `StatusBridge`. `writeRaw` must be the UNPATCHED stdout write so `startCapture` never turns the screen-switch escape
+ * sequences into log lines. Opening/closing brackets the switch with an empty Ink frame: empty frame, wait, switch, pane.
+ */
+export class PlanGraphBridge implements Store<PlanGraphView> {
+  private view: PlanGraphView = { mode: 'chat', nodes: [] }
+  private listeners = new Set<() => void>()
+  private timer: ReturnType<typeof setTimeout> | undefined
+  private pendingNodes: VizNode[] | undefined
+  private transition: Promise<void> = Promise.resolve()
+
+  constructor(private readonly writeRaw: (chunk: string) => void, private readonly settleMs = ALT_SCREEN_SETTLE_MS, private readonly minRenderMs = PLAN_GRAPH_MIN_RENDER_MS) {}
+
+  subscribe = (listener: () => void): (() => void) => {
+    this.listeners.add(listener)
+    return () => {
+      this.listeners.delete(listener)
+    }
+  }
+
+  getSnapshot = (): PlanGraphView => this.view
+
+  isOpen(): boolean {
+    return this.view.mode !== 'chat'
+  }
+
+  private set(view: PlanGraphView): void {
+    this.view = view
+    for (const listener of this.listeners) listener()
+  }
+
+  private sleep(): Promise<void> {
+    return new Promise((resolve) => setTimeout(resolve, this.settleMs))
+  }
+
+  open(nodes: VizNode[]): Promise<void> {
+    this.transition = this.transition.then(async () => {
+      if (this.view.mode !== 'chat') {
+        this.update(nodes)
+        return
+      }
+      this.set({ mode: 'blank', nodes })
+      await this.sleep()
+      this.writeRaw(ALT_SCREEN_ON)
+      this.set({ mode: 'pane', nodes: this.pendingNodes ?? nodes })
+      this.pendingNodes = undefined
+    })
+    return this.transition
+  }
+
+  close(): Promise<void> {
+    this.transition = this.transition.then(async () => {
+      if (this.view.mode === 'chat') return
+      this.clearTimer()
+      this.set({ mode: 'blank', nodes: this.view.nodes })
+      await this.sleep()
+      this.writeRaw(ALT_SCREEN_OFF)
+      this.set({ mode: 'chat', nodes: [] })
+    })
+    return this.transition
+  }
+
+  /** Synchronous leave for process exit: restores the main screen without waiting. */
+  restore(): void {
+    this.clearTimer()
+    if (this.view.mode === 'pane') this.writeRaw(ALT_SCREEN_OFF)
+    this.view = { mode: 'chat', nodes: [] }
+  }
+
+  /** Throttled node update: the first goes through at once, later ones coalesce to the newest within `minRenderMs`. Identical content is ignored. */
+  update(nodes: VizNode[]): void {
+    if (this.view.mode === 'chat') return
+    if (this.view.mode === 'blank') {
+      this.pendingNodes = nodes
+      return
+    }
+    if (this.timer) {
+      this.pendingNodes = nodes
+      return
+    }
+    this.apply(nodes)
+    this.timer = setTimeout(() => this.flush(), this.minRenderMs)
+  }
+
+  private apply(nodes: VizNode[]): void {
+    if (this.view.mode !== 'pane' || JSON.stringify(nodes) === JSON.stringify(this.view.nodes)) return
+    this.set({ mode: 'pane', nodes })
+  }
+
+  private flush(): void {
+    this.timer = undefined
+    const next = this.pendingNodes
+    this.pendingNodes = undefined
+    if (next) {
+      this.apply(next)
+      this.timer = setTimeout(() => this.flush(), this.minRenderMs)
+    }
+  }
+
+  private clearTimer(): void {
+    if (this.timer) clearTimeout(this.timer)
+    this.timer = undefined
+    this.pendingNodes = undefined
+  }
+}
+
+/** Stand-in store for when no plan graph bridge is wired: always the chat view. */
+const NO_PLAN_GRAPH: Store<PlanGraphView> = { subscribe: () => () => {}, getSnapshot: (() => { const v: PlanGraphView = { mode: 'chat', nodes: [] }; return () => v })() }
+
 export interface TuiAppProps {
   eventLog: EventLogBridge
   prompt: PromptBridge
   status: StatusBridge
+  /** Optional: absent means the plan graph pane can never open (flag-off wiring). */
+  planGraph?: PlanGraphBridge
   onSubmitChat: (line: string) => void
   onExit: () => void
   /** Overrides the live terminal width for tests — same seam `TuiInput` already accepts. */
@@ -447,12 +575,16 @@ function StatusLine({ indicators }: { indicators: string[] }): React.JSX.Element
  * and this component never re-implements it.
  */
 export function TuiApp(props: TuiAppProps): React.JSX.Element {
-  const { eventLog, prompt, status, onSubmitChat, onExit, columns } = props
+  const { eventLog, prompt, status, planGraph, onSubmitChat, onExit, columns } = props
   const log = useStore(eventLog)
   const pending = useStore(prompt)
   const statusIndicators = useStore(status)
   const windowSize = useWindowSize()
   const width = columns ?? windowSize.columns
+  const graphView = useStore(planGraph ?? NO_PLAN_GRAPH)
+  // While the pane (or its screen-switch frame) is up, no new scrollback may print: Static output would land on the alternate screen.
+  const frozenLines = useRef(0)
+  if (graphView.mode === 'chat') frozenLines.current = log.lines.length
 
   // Always active, regardless of chat-vs-prompt mode — Ctrl+C must exit either way, unlike
   // TuiInput's own useInput, which deliberately ignores every ctrl/meta/tab/escape key (its
@@ -501,12 +633,37 @@ export function TuiApp(props: TuiAppProps): React.JSX.Element {
     [eventLog, prompt, pending],
   )
 
+  const closePane = useCallback(() => {
+    void planGraph?.close()
+  }, [planGraph])
+
   const hasTransient = log.progressText.length > 0 || log.transientText.length > 0
   const showSpinner = log.waitingForOutput && !hasTransient
 
+  const staticItems = graphView.mode === 'chat' ? log.lines : log.lines.slice(0, frozenLines.current)
+  // One row short of the viewport on purpose: Ink treats a frame as fullscreen at height >= rows, and leaving fullscreen emits
+  // clearTerminal (which includes ESC[3J, erasing the user's scrollback). Never reaching that height keeps close lossless.
+  const paneRows = Math.max(3, (windowSize.rows ?? 24) - 1)
+  if (graphView.mode !== 'chat') {
+    // An approval prompt takes priority: the pane stays drawn but stops reading keys, and the prompt is shown below it.
+    const promptRows = pending ? Math.min(10, Math.floor(paneRows / 2)) : 0
+    return (
+      <Box flexDirection="column">
+        <Static items={staticItems}>{(line, index) => <LogLineText key={index} line={line} width={width} />}</Static>
+        {graphView.mode === 'pane' && (
+          <PlanGraphPane nodes={graphView.nodes} columns={width} rows={paneRows - promptRows} active={!pending} color={!process.env.NO_COLOR} onClose={closePane} />
+        )}
+        {graphView.mode === 'pane' && pending?.options && <SelectPrompt question={pending.question} options={pending.options} onSubmit={handleSubmitPrompt} />}
+        {graphView.mode === 'pane' && pending && !pending.options && (
+          <TuiInput promptLabel={pending.question} onSubmitChat={handleSubmitChat} onSubmitPrompt={handleSubmitPrompt} columns={columns} />
+        )}
+      </Box>
+    )
+  }
+
   return (
     <Box flexDirection="column">
-      <Static items={log.lines}>{(line, index) => <LogLineText key={index} line={line} width={width} />}</Static>
+      <Static items={staticItems}>{(line, index) => <LogLineText key={index} line={line} width={width} />}</Static>
       {showSpinner && <Spinner />}
       {hasTransient && (
         <Box flexDirection="column">
@@ -596,12 +753,19 @@ export async function runTuiApp(options: RunTuiAppOptions = {}): Promise<void> {
   // (backend, capabilities, undo-log carryover) via plain console.log, which must land in the
   // Static scrollback like everything else, not leak to the real terminal underneath Ink's frame.
   const restoreCapture = startCapture((event) => eventLog.handleEvent(event))
+  // Screen-switch escapes go through the unpatched write, never the captured one (see PlanGraphBridge).
+  const planGraph = new PlanGraphBridge((chunk) => void originalWrite(chunk))
+  let instanceRef: CliInstance | undefined
 
   let instance: CliInstance
   try {
     const inert = createInertStreams()
     instance = await runCli({
       ...options,
+      openPlanGraph: (nodes) => void planGraph.open(nodes),
+      onPlanProgress: (tasks) => {
+        if (planGraph.isOpen()) void instanceRef?.getPlanGraphNodes(tasks).then((nodes) => nodes && planGraph.update(nodes))
+      },
       input: options.input ?? inert.input,
       output: options.output ?? inert.output,
       askYesNo: prompt.askYesNo,
@@ -613,8 +777,13 @@ export async function runTuiApp(options: RunTuiAppOptions = {}): Promise<void> {
     throw err
   }
 
+  instanceRef = instance
   const refreshStatus = async (): Promise<void> => {
     status.set(await instance.getStatusIndicators())
+    if (planGraph.isOpen()) {
+      const nodes = await instance.getPlanGraphNodes()
+      if (nodes) planGraph.update(nodes)
+    }
   }
   await refreshStatus()
 
@@ -626,13 +795,14 @@ export async function runTuiApp(options: RunTuiAppOptions = {}): Promise<void> {
   const exit = (): void => {
     if (exiting) return
     exiting = true
+    planGraph.restore()
     restoreCapture()
     instance.close()
     app.unmount()
     process.exit(0)
   }
 
-  const app = inkRender(<TuiApp eventLog={eventLog} prompt={prompt} status={status} onSubmitChat={handleSubmitChat} onExit={exit} />, {
+  const app = inkRender(<TuiApp eventLog={eventLog} prompt={prompt} status={status} planGraph={planGraph} onSubmitChat={handleSubmitChat} onExit={exit} />, {
     // Phase 1's startCapture already routes every console.log/process.stdout.write call into
     // eventLog — ink's own patchConsole would double-intercept the same calls with a competing
     // mechanism (writing them above its own Static area independently), not compose with it.

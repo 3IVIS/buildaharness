@@ -872,6 +872,7 @@ change local session/config state — none of them make an LLM call themselves.
 | `/why` | Explain the harness path the last turn took (verification confidence + node sequence) |
 | `/sources` | List files/URLs the last turn actually consulted |
 | `/plan` | Show the active structured plan's task status |
+| `/plan graph [thread-id]` | Draw the active plan as a read-only dependency graph (needs `planGraphMode` enabled; full-screen pane in the terminal UI with arrows/Tab/Enter/q, one static render in the plain REPL). Glyphs, mapping and keys: `docs/plan-visualization.md` |
 | `/checkpoint [clear]` | Inspect a stuck in-progress harness checkpoint (step, node, failed-resume count so far), or `/checkpoint clear` to discard it — see "Recovering a stuck checkpoint" above. Scoped to just the checkpoint: unlike `/clear`, transcript/facts/plan are untouched |
 
 ### `/cost` and real vs. estimated dollar figures

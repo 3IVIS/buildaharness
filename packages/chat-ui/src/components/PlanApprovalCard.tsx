@@ -10,6 +10,8 @@ interface Props {
   onApproveTrusted: () => void
   onApproveWithEdits: (edits: PlanApprovalEdits) => void
   onDecline: () => void
+  /** Set only when planGraphMode is enabled: previews the plan's shape before approving. */
+  onViewGraph?: () => void
 }
 
 /**
@@ -19,7 +21,7 @@ interface Props {
  * submit" pattern: `cancelled`/`edited` here is local UI state, collapsed into a
  * `PlanApprovalEdits` only when the user actually confirms edits, never sent implicitly.
  */
-export function PlanApprovalCard({ planApproval, resolution, onApprove, onApproveTrusted, onApproveWithEdits, onDecline }: Props): React.JSX.Element {
+export function PlanApprovalCard({ planApproval, resolution, onApprove, onApproveTrusted, onApproveWithEdits, onDecline, onViewGraph }: Props): React.JSX.Element {
   const [editing, setEditing] = useState(false)
   const [cancelled, setCancelled] = useState<Set<string>>(new Set())
   const [edited, setEdited] = useState<Record<string, string>>({})
@@ -90,6 +92,9 @@ export function PlanApprovalCard({ planApproval, resolution, onApprove, onApprov
           </li>
         ))}
       </ul>
+      {onViewGraph && (
+        <button type="button" className="plan-approval-card__graph-link" onClick={onViewGraph}>View as graph</button>
+      )}
       {planApproval.reviewNotes && planApproval.reviewNotes.length > 0 && (
         <ul className="plan-approval-card__review-notes">
           {planApproval.reviewNotes.map((note: string, i: number) => (

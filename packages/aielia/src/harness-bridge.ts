@@ -718,6 +718,7 @@ export class HarnessBridge {
             maxSteps: this.maxSteps,
             currentNode: checkpoint.progress.nodeExecutionOrder.at(-1),
             planPosition,
+            planTasks: activePlan ? checkpoint.runState.taskGraph.tasks.map((t) => ({ id: t.id, status: t.status })) : undefined,
           })
           const node = checkpoint.progress.nodeExecutionOrder.at(-1)
           if (node) this.onTrace?.({ kind: 'harness_node', node, stepsUsed: checkpoint.progress.stepsUsed })
