@@ -252,8 +252,6 @@ export interface RunCliOptions {
   askSelect?: (question: string, options: SelectOption[]) => Promise<string>
   /** Test seam: skip the interactive first-run setup regardless of TTY state (also implied when `assistant` is passed). */
   skipFirstRunSetup?: boolean
-  /** Test seam: stub `claude` binary detection for the first-run setup. */
-  detectClaudeCli?: () => Promise<boolean>
   /** Test seam: script the first-run setup's line reads. */
   firstRunAsk?: (question: string) => Promise<string>
   /** Test seam: stub the live API-key check in the first-run setup (defaults to a real call to the provider). */
@@ -324,9 +322,6 @@ export async function runCli(options: RunCliOptions = {}): Promise<CliInstance> 
         overriddenKeys,
         isInteractive,
         ask: firstRunAsk,
-        detectClaudeCli:
-          options.detectClaudeCli ??
-          (async () => (await checkClaudeCli(process.env.CLAUDE_PATH ?? 'claude')).ok),
         log: (line) => outputStream.write(`${line}\n`),
         testKey: options.firstRunTestKey ?? ((backend, key) => testApiKey(backend, key)),
       })

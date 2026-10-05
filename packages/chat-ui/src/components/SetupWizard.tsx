@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useState } from 'react'
 import {
   PROVIDER_SETUP,
   checkApiKeyFormat,
@@ -10,10 +10,8 @@ import {
 } from '@buildaharness/aielia'
 
 interface Props {
-  /** True on the Tauri desktop build — the only place a local `claude` login can be used. */
+  /** True on the Tauri desktop build. */
   isDesktop: boolean
-  /** Desktop only: resolves true when an authenticated `claude` CLI is on the machine (the check_claude_available command). */
-  detectClaude?: () => Promise<boolean>
   /** Persists the choice and starts the assistant. Rejections are shown inline. */
   onComplete: (patch: Partial<AssistantConfig>) => Promise<void>
   /** "Set up later" — leaves config untouched; the wizard returns on next launch. */
@@ -44,26 +42,14 @@ function ExternalLink({ url, label, isDesktop, copied, onCopy }: { url: string; 
   )
 }
 
-export function SetupWizard({ isDesktop, detectClaude, onComplete, onSkip, testKey = testApiKey }: Props): React.JSX.Element {
+export function SetupWizard({ isDesktop, onComplete, onSkip, testKey = testApiKey }: Props): React.JSX.Element {
   const [step, setStep] = useState<Step>({ kind: 'choose' })
-  // undefined = still checking; only ever checked on desktop.
-  const [claudeFound, setClaudeFound] = useState<boolean | undefined>(isDesktop && detectClaude ? undefined : false)
   const [key, setKey] = useState('')
   const [showKey, setShowKey] = useState(false)
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [warning, setWarning] = useState<string | null>(null)
   const [copied, setCopied] = useState(false)
-
-  useEffect(() => {
-    if (!isDesktop || !detectClaude) return
-    let cancelled = false
-    detectClaude().then(
-      (found) => { if (!cancelled) setClaudeFound(found) },
-      () => { if (!cancelled) setClaudeFound(false) },
-    )
-    return () => { cancelled = true }
-  }, [isDesktop, detectClaude])
 
   async function finish(patch: Partial<AssistantConfig>): Promise<void> {
     setBusy(true)
@@ -177,34 +163,10 @@ export function SetupWizard({ isDesktop, detectClaude, onComplete, onSkip, testK
         <h1>Welcome to Aielia 👋</h1>
         <p>Aielia needs an AI model to think with. Let’s connect one — it takes about a minute.</p>
 
-        {isDesktop && claudeFound === undefined && <p className="setup__hint">Checking whether Claude is already set up on this computer…</p>}
-
-        {isDesktop && claudeFound === true && (
-          <button type="button" className="setup__option setup__option--recommended" disabled={busy} onClick={() => void finish({ llmBackend: 'claude-cli' })}>
-            <span className="setup__option-title">Use my Claude login <span className="setup__badge">Recommended</span></span>
-            <span className="setup__option-desc">
-              ✓ Claude is already running on this computer. You can start right now — no API key, nothing to paste.
-            </span>
-          </button>
-        )}
-
-        {isDesktop && claudeFound === false && (
-          <p className="setup__hint">
-            Already use Claude Code? Install it and sign in (run <code>claude</code> once), then reopen Aielia — you’ll be able to
-            start with no API key. Otherwise, pick a provider below.
-          </p>
-        )}
-
-        {!isDesktop && (
-          <p className="setup__hint">
-            Tip: the Aielia desktop app and command-line version can use your existing Claude Code login, with no API key at all.
-          </p>
-        )}
-
-        <h2 className="setup__subhead">{claudeFound ? 'Or use your own API key' : 'Choose a provider'}</h2>
+        <h2 className="setup__subhead">Choose a provider</h2>
         {PROVIDER_SETUP.map((p) => (
           <button key={p.backend} type="button" className="setup__option" disabled={busy} onClick={() => setStep({ kind: 'key', backend: p.backend })}>
-            <span className="setup__option-title">{p.name}{p.backend === 'openrouter' && !claudeFound && <span className="setup__badge">Easiest start</span>}</span>
+            <span className="setup__option-title">{p.name}{p.backend === 'openrouter' && <span className="setup__badge">Easiest start</span>}</span>
             <span className="setup__option-desc">{p.blurb}</span>
           </button>
         ))}
