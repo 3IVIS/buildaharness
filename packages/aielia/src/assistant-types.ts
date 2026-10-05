@@ -1,5 +1,5 @@
 import type { NextStepSuggestion } from './next-step-proposer.js'
-import type { RiskState, LayerActivityEvent, AskQuestion } from '@buildaharness/harness'
+import type { RiskState, LayerActivityEvent, AskQuestion, TaskStatus } from '@buildaharness/harness'
 import type { TokenUsage } from '@buildaharness/runtime'
 import type { AnswerClaim } from './answer-claim.js'
 import type { TurnIntentClassification } from './turn-intent-classifier.js'
@@ -99,7 +99,7 @@ export interface AssistantTurnResult {
     successCriteria: string
     completionPct: number
     /** `note`: why a FAILED task did not count as done (set only by the semantic task-completion check). */
-    tasks: { id: string; description: string; status: string; note?: string }[]
+    tasks: { id: string; description: string; status: string; note?: string; dependsOn?: string[]; cancelled?: boolean; riskLevel?: 'LOW' | 'MEDIUM' | 'HIGH' }[]
   }
   /**
    * Token usage accumulated across every real LLM call this turn made (can be more than one:
@@ -156,4 +156,10 @@ export interface AssistantProgress {
   currentNode?: string
   /** Live, mid-run position within a durable plan — set only while a plan is actually driving this turn. Absent for an ad hoc single-task/decomposed turn, same "absent when unused" convention as AssistantTurnResult.planStatus. */
   planPosition?: PlanPosition
+  /**
+   * Live per-task statuses of the plan driving this turn, for the plan graph view. Present only while a
+   * plan drives the turn (same "absent when unused" convention as `planPosition`). Granularity is per
+   * harness checkpoint (once per task), not per token: it changes when a task starts or finishes.
+   */
+  planTasks?: { id: string; status: TaskStatus }[]
 }

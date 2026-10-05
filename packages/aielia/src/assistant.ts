@@ -60,6 +60,7 @@ import { decomposedAnswerOnceEnabled } from './decomposed-answer.js'
 import { PlanApprovalService, type PlanDecision, type PlanApprovalEdits } from './plan-approval-service.js'
 import { PlanSketchService } from './plan-sketch-service.js'
 import type { PlanRecord } from './plan-store.js'
+import type { GoalGraphRecord } from './goal-graph-store.js'
 import { TurnInterpreter } from './turn-interpreter.js'
 import { HarnessBridge } from './harness-bridge.js'
 import { semanticConstraintCheckEnabled } from './constraint-check.js'
@@ -823,6 +824,20 @@ export class PersonalAssistant {
    */
   async getGoalGraphState(sessionId: string): Promise<GoalGraphState> {
     return getGoalGraphState(this.memory, sessionId, this.session.undoWorkspace())
+  }
+
+  /**
+   * Read-only source for the plan graph view: the session's goal graph when it has threads, else its
+   * plan record, else `null`. Never throws and never creates a record.
+   */
+  async getPlanGraph(sessionId: string): Promise<PlanRecord | GoalGraphRecord | null> {
+    try {
+      const goalGraph = await loadGoalGraphRecord(this.memory, sessionId, this.session.undoWorkspace())
+      if (goalGraph && goalGraph.threads.length > 0) return goalGraph
+      return await this.planService.loadPlanRecord(sessionId)
+    } catch {
+      return null
+    }
   }
 
   /**
