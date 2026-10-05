@@ -27,7 +27,8 @@ interface Props {
   onConfirm: (selector: string) => void
   onReject: (selector: string) => void
   /** 1-based, same number `/memory forget <n>` takes. */
-  onForget: (selector: string) => void
+  /** `erase` also scrubs the fact's text from the audit log, so Undo can no longer restore it (CLI: `/memory forget <n> erase`). */
+  onForget: (selector: string, erase?: boolean) => void
   onUndo: (seq: number) => void
   onForgetArchived: (selector: string) => void
   onConsolidate: () => void
@@ -134,6 +135,7 @@ export function MemoryPanel({ data, message, busy, onConfirm, onReject, onForget
               <li key={`${f.text}|${f.extractedAt}`}>
                 <span>{f.text}</span>
                 <button type="button" disabled={busy} aria-label={`Forget fact ${i + 1}`} onClick={() => onForget(String(i + 1))}>Forget</button>
+                <button type="button" disabled={busy} aria-label={`Erase fact ${i + 1} permanently`} title="Forget and remove from history, so it cannot be undone" onClick={() => onForget(String(i + 1), true)}>Erase</button>
               </li>
             ))}
           </ol>

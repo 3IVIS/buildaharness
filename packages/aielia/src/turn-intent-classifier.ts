@@ -53,6 +53,8 @@ export interface TurnIntentContext {
   hasActivePlan: boolean
   /** Constraints the user stated earlier this session (numbered 1..N in the prompt) — lets the message lift one. */
   standingConstraints?: string[]
+  /** Keyed facts already in durable memory. Shown to the classifier so a new value of the same attribute reuses the stored key (supersession matches keys by equality, so a re-worded key would miss). */
+  knownFactKeys?: { key: string; text: string }[]
 }
 
 export interface TurnIntentClassification {
@@ -630,9 +632,16 @@ export async function classifyTurnIntent(
         '\nIf the message withdraws or relaxes one of them ("tabs are fine now", "ignore the word limit"), put its number in ' +
         'liftedConstraints. Otherwise liftedConstraints is empty. Do not list a lifted rule in statedConstraints.'
       : ''
+    const known = context.knownFactKeys ?? []
+    const knownKeysNote = known.length > 0
+      ? '\n\nFacts already stored, as key: text:\n' +
+        known.map((k) => `- ${k.key}: ${k.text}`).join('\n') +
+        '\nWhen a fact in statesDurableFacts gives a new value for the SAME attribute as one of these (even if worded differently, ' +
+        'e.g. a new city for a stored home city), reuse that exact key. Use a new key only for an attribute not listed here.'
+      : ''
     const response = await llmClient.callChatStructured(
       [
-        { role: 'system', content: `${turnIntentSystemPrompt()}\n\n${contextNote}${standingNote}` },
+        { role: 'system', content: `${turnIntentSystemPrompt()}\n\n${contextNote}${standingNote}${knownKeysNote}` },
         { role: 'user', content: message },
       ],
       undefined,

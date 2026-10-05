@@ -233,6 +233,53 @@ function captureOutput(): string[] {
   return lines
 }
 
+describe('/layers settings|on|off|reset', () => {
+  afterEach(() => {
+    delete process.env.AUDIT_SEMANTIC_HYPOTHESES
+    delete process.env.AUDIT_DECOMPOSITION
+  })
+
+  it('persists a choice, applies it to the layer flag at once, and lists it as changed', async () => {
+    const { cli, configStore } = await setupCli()
+    const lines = captureOutput()
+
+    await cli.dispatchLine('/layers on semantic_hypotheses')
+    expect(await configStore.load()).toMatchObject({ layers: { semantic_hypotheses: true } })
+    expect(process.env.AUDIT_SEMANTIC_HYPOTHESES).toBe('1')
+
+    lines.length = 0
+    await cli.dispatchLine('/layers settings')
+    expect(lines.join('\n')).toMatch(/semantic_hypotheses\s+on\s.*\(changed\)/)
+
+    await cli.dispatchLine('/layers reset')
+    expect(await configStore.load()).toMatchObject({ layers: {} })
+    expect(process.env.AUDIT_SEMANTIC_HYPOTHESES).toBeUndefined()
+  })
+
+  it('refuses a locked or unknown layer and saves nothing', async () => {
+    const { cli, configStore } = await setupCli()
+    const lines = captureOutput()
+
+    await cli.dispatchLine('/layers off approval_staging')
+    await cli.dispatchLine('/layers off not_a_layer')
+
+    expect(lines.join('\n')).toContain('cannot be switched off')
+    expect(lines.join('\n')).toContain('Unknown layer')
+    expect(await configStore.load()).toEqual({})
+  })
+
+  it('says so when the operator pinned the flag, instead of claiming the choice took effect', async () => {
+    process.env.AUDIT_DECOMPOSITION = '1'
+    const { cli } = await setupCli()
+    const lines = captureOutput()
+
+    await cli.dispatchLine('/layers off decomposition_reframe')
+
+    expect(lines.join('\n')).toContain('pinned by its AUDIT_* env flag')
+    expect(process.env.AUDIT_DECOMPOSITION).toBe('1')
+  })
+})
+
 describe('/config', () => {
   it('bare /config lists every key at its current (default) value', async () => {
     const { cli } = await setupCli()
@@ -1149,6 +1196,39 @@ describe('/plan vs. the triviality fast path', () => {
     expect(output).toContain('scope_definition')
   })
 
+  // Plan-mode drafting is harnessSkipped (INV-30 — drafting runs no tool loop) but its result
+  // carries a real planStatus for the draft it just built (plan-drafting-service.ts). Regression
+  // for the live mismatch where the drafting reply printed its inline "(plan: 0% — /plan)" hint
+  // and /plan then answered "No active plan for this session" — the old `!harnessSkipped` gate
+  // dropped a planStatus the turn genuinely reported.
+  it('a plan-mode drafting turn (harnessSkipped but planStatus set) is remembered by /plan', async () => {
+    const assistant = new PersonalAssistant({ llmClient: new FakeLLMClient() })
+    const { cli } = await setupCli({ assistant })
+
+    const planStatus: NonNullable<Awaited<ReturnType<PersonalAssistant['turn']>>['planStatus']> = {
+      templateName: null,
+      successCriteria: 'Nakasendo locked as the hiking anchor',
+      completionPct: 0,
+      tasks: [{ id: 't1', description: 'Lock the route', status: 'PENDING' }],
+    }
+    vi.spyOn(assistant, 'turn').mockResolvedValueOnce({
+      status: 'ok',
+      reply: "I've drafted the plan — take a look.",
+      harnessSkipped: true,
+      planStatus,
+    })
+
+    await cli.dispatchLine('Plan a two-week trip to Japan')
+
+    const lines = captureOutput()
+    await cli.dispatchLine('/plan')
+
+    const output = lines.join('\n')
+    expect(output).not.toContain('No active plan for this session')
+    expect(output).toContain('custom plan')
+    expect(output).toContain('t1')
+  })
+
   // Mirror case: once a turn genuinely reports no plan (never created, or abandoned), /plan
   // must still correctly say so — the fix must not make lastPlanStatus "sticky" forever, only
   // resilient to a harness-skipped turn's uninformative absence.
@@ -1189,6 +1269,138 @@ describe('/plan vs. the triviality fast path', () => {
     await cli.dispatchLine('/plan')
 
     expect(lines.join('\n')).toContain(PLAN_LINE_PREFIX)
+  })
+})
+
+describe('/plan approval (the whole-plan P2 gate)', () => {
+  const snapshot = {
+    templateName: null as string | null,
+    successCriteria: 'Nakasendo locked as the hiking anchor',
+    rationale: 'Keeps the hike on the Tokyo–Kyoto corridor.',
+    tasks: [
+      { id: 't1', description: 'Lock the route', riskLevel: 'LOW' as const },
+      { id: 't2', description: 'Book lodging', riskLevel: 'MEDIUM' as const },
+    ],
+    reviewNotes: ['t2 has no fallback if lodging is full.'],
+  }
+  const staged = { status: 'needs_plan_approval' as const, reply: null, planApprovalId: 'pa1', planApproval: snapshot }
+
+  // Before this wiring existed the CLI had no needs_plan_approval branch at all: a staged plan
+  // (whose result carries reply: null) fell through to the ordinary render and printed as a bare
+  // "- null", with no way to approve, edit, or decline it. chat-ui's PlanApprovalCard was the
+  // only surface that could resolve one.
+  it('renders the staged plan (not "- null") and resolves an approve through turn({planApprovalId, planDecision})', async () => {
+    const assistant = new PersonalAssistant({ llmClient: new FakeLLMClient() })
+    const askSelect = vi.fn().mockResolvedValue('y')
+    const { cli } = await setupCli({ assistant, askSelect })
+    const turnSpy = vi.spyOn(assistant, 'turn')
+    turnSpy.mockResolvedValueOnce(staged)
+    turnSpy.mockResolvedValueOnce({ status: 'ok', reply: 'Plan is active — starting t1.' })
+
+    const lines = captureOutput()
+    await cli.dispatchLine('Plan a two-week trip to Japan')
+
+    const output = lines.join('\n')
+    expect(output).not.toContain('- null')
+    expect(output).toContain('Plan ready for approval')
+    expect(output).toContain('Lock the route')
+    expect(output).toContain('t2 has no fallback') // review notes surface at the gate
+    expect(output).toContain('Plan is active — starting t1.')
+    expect(askSelect).toHaveBeenCalledWith('Approve this plan?', expect.any(Array))
+    expect(turnSpy).toHaveBeenLastCalledWith(
+      'Plan a two-week trip to Japan',
+      expect.objectContaining({ planApprovalId: 'pa1', planDecision: 'approve' }),
+    )
+  })
+
+  it('a decline resolves turn({planDecision: "decline"}) and falls through to the ordinary reply', async () => {
+    const assistant = new PersonalAssistant({ llmClient: new FakeLLMClient() })
+    const { cli } = await setupCli({ assistant, askSelect: vi.fn().mockResolvedValue('n') })
+    const turnSpy = vi.spyOn(assistant, 'turn')
+    turnSpy.mockResolvedValueOnce(staged)
+    turnSpy.mockResolvedValueOnce({ status: 'ok', reply: 'Discarded the draft plan.' })
+
+    const lines = captureOutput()
+    await cli.dispatchLine('Plan a two-week trip to Japan')
+
+    expect(turnSpy).toHaveBeenLastCalledWith(
+      'Plan a two-week trip to Japan',
+      expect.objectContaining({ planDecision: 'decline' }),
+    )
+    expect(lines.join('\n')).toContain('Discarded the draft plan.')
+  })
+
+  it('"approve & trust" resolves approve_trusted', async () => {
+    const assistant = new PersonalAssistant({ llmClient: new FakeLLMClient() })
+    const { cli } = await setupCli({ assistant, askSelect: vi.fn().mockResolvedValue('t') })
+    const turnSpy = vi.spyOn(assistant, 'turn')
+    turnSpy.mockResolvedValueOnce(staged)
+    turnSpy.mockResolvedValueOnce({ status: 'ok', reply: 'Trusted — running.' })
+
+    await cli.dispatchLine('Plan a two-week trip to Japan')
+
+    expect(turnSpy).toHaveBeenLastCalledWith(
+      'Plan a two-week trip to Japan',
+      expect.objectContaining({ planDecision: 'approve_trusted' }),
+    )
+  })
+
+  it('"approve with edits" collects cancel/edited tasks via askLine and passes them as planEdits', async () => {
+    const assistant = new PersonalAssistant({ llmClient: new FakeLLMClient() })
+    const askLine = vi.fn().mockResolvedValueOnce('t2').mockResolvedValueOnce('t1=Lock the Nakasendo route')
+    const { cli } = await setupCli({ assistant, askSelect: vi.fn().mockResolvedValue('e'), askLine })
+    const turnSpy = vi.spyOn(assistant, 'turn')
+    turnSpy.mockResolvedValueOnce(staged)
+    turnSpy.mockResolvedValueOnce({ status: 'ok', reply: 'Applied edits — running.' })
+
+    await cli.dispatchLine('Plan a two-week trip to Japan')
+
+    expect(turnSpy).toHaveBeenLastCalledWith(
+      'Plan a two-week trip to Japan',
+      expect.objectContaining({
+        planDecision: 'approve_with_edits',
+        planEdits: { cancelTaskIds: ['t2'], editedTasks: [{ id: 't1', description: 'Lock the Nakasendo route' }] },
+      }),
+    )
+  })
+
+  it('"decide later" leaves the plan pending, and /plan approve then resolves it', async () => {
+    const assistant = new PersonalAssistant({ llmClient: new FakeLLMClient() })
+    const { cli } = await setupCli({ assistant, askSelect: vi.fn().mockResolvedValue('d') })
+    const turnSpy = vi.spyOn(assistant, 'turn')
+    turnSpy.mockResolvedValueOnce(staged)
+    turnSpy.mockResolvedValueOnce({ status: 'ok', reply: 'Plan is active.' })
+
+    const lines = captureOutput()
+    await cli.dispatchLine('Plan a two-week trip to Japan')
+    expect(lines.join('\n')).toContain('Left pending')
+
+    // /plan while a decision is pending shows the staged draft itself, not the previous plan / "No active plan".
+    lines.length = 0
+    await cli.dispatchLine('/plan')
+    expect(lines.join('\n')).toContain('Plan ready for approval')
+    expect(lines.join('\n')).not.toContain('No active plan')
+
+    lines.length = 0
+    await cli.dispatchLine('/plan approve')
+
+    expect(turnSpy).toHaveBeenLastCalledWith(
+      'Plan a two-week trip to Japan',
+      expect.objectContaining({ planApprovalId: 'pa1', planDecision: 'approve' }),
+    )
+    expect(lines.join('\n')).toContain('Plan is active.')
+  })
+
+  it('/plan decline with no plan awaiting approval says so and does not call turn', async () => {
+    const assistant = new PersonalAssistant({ llmClient: new FakeLLMClient() })
+    const { cli } = await setupCli({ assistant })
+    const turnSpy = vi.spyOn(assistant, 'turn')
+
+    const lines = captureOutput()
+    await cli.dispatchLine('/plan decline')
+
+    expect(lines.join('\n')).toContain('No plan is awaiting approval')
+    expect(turnSpy).not.toHaveBeenCalled()
   })
 })
 

@@ -224,6 +224,8 @@ export function parseConfigValue(key: keyof AssistantConfig, raw: string): unkno
     case 'layerPolicyMode':
       if (!isLayerPolicyMode(raw)) throw new ConfigValueParseError('layerPolicyMode must be "static", "shadow" or "adaptive"')
       return raw
+    case 'layers':
+      throw new ConfigValueParseError('layers is edited with /layers (e.g. /layers off decomposition_reframe), not /config set')
     case 'goalGraphSuggestMode':
       if (raw !== 'enabled' && raw !== 'disabled') throw new ConfigValueParseError('goalGraphSuggestMode must be "enabled" or "disabled"')
       return raw
@@ -236,6 +238,10 @@ function formatConfigValue(key: keyof AssistantConfig, config: AssistantConfig):
   const value = config[key]
   if (value === undefined || value === '') return '(not set)'
   if (SECRET_CONFIG_KEYS.has(key)) return '********'
+  if (key === 'layers') {
+    const changed = Object.entries(config.layers ?? {})
+    return changed.length === 0 ? '(defaults; see /layers)' : changed.map(([id, on]) => `${id}=${on ? 'on' : 'off'}`).join(' ')
+  }
   return String(value)
 }
 

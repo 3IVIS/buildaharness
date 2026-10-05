@@ -103,6 +103,18 @@ describe('M2 write gate', () => {
     expect(writes.length).toBe(1)
   })
 
+  it('forget with erase scrubs the fact text from the audit log, so undo can no longer restore it', async () => {
+    const { service, memory } = makeService()
+    await service.recordFacts('s', 'hi', [judged('the user likes tea')])
+    const forgotten = await service.forgetFact(0, 's', true)
+    expect(forgotten?.text).toBe('the user likes tea')
+    const log = (await memory.get(AUDIT_LOG_KEY)) as AuditEntry[]
+    expect(JSON.stringify(log)).not.toContain('likes tea')
+    expect(log.every((e) => e.erased)).toBe(true)
+    expect((await service.undoAudit(log[log.length - 1].seq)).ok).toBe(false)
+    expect(((await memory.get(DURABLE_FACTS_KEY)) as UserFact[]) ?? []).toEqual([])
+  })
+
   it('audit: add/remove/confirm/reject are logged and undo restores the pre-image exactly', async () => {
     const { service, memory } = makeService()
     await service.recordFacts('s', 'hi', [judged('the user likes tea')])

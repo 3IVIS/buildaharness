@@ -275,4 +275,36 @@ describe('SettingsScreen', () => {
       expect(screen.getByText(/100 in \/ 50 out tokens/)).toBeInTheDocument()
     })
   })
+
+  describe('Reasoning layers', () => {
+    it('lists the switchable layers at their defaults and leaves the locked floor out', () => {
+      renderSettings()
+      expect(screen.getByRole('checkbox', { name: 'decomposition_reframe' })).toBeChecked()
+      expect(screen.getByRole('checkbox', { name: 'semantic_hypotheses' })).not.toBeChecked()
+      expect(screen.queryByRole('checkbox', { name: 'approval_staging' })).not.toBeInTheDocument()
+    })
+
+    it('saves only the layers the user moved off their default', async () => {
+      const user = userEvent.setup()
+      const { onSave } = renderSettings()
+      await user.click(screen.getByRole('checkbox', { name: 'semantic_hypotheses' }))
+      await user.click(screen.getByRole('checkbox', { name: 'decomposition_reframe' }))
+      await user.click(screen.getByRole('button', { name: 'Save' }))
+      expect(onSave).toHaveBeenCalledWith({ layers: { semantic_hypotheses: true, decomposition_reframe: false } })
+    })
+
+    it('toggling back to the default removes the saved choice', async () => {
+      const user = userEvent.setup()
+      const { onSave } = renderSettings({ config: { ...DEFAULT_CONFIG, layers: { decomposition_reframe: false } } })
+      await user.click(screen.getByRole('checkbox', { name: 'decomposition_reframe' }))
+      await user.click(screen.getByRole('button', { name: 'Save' }))
+      expect(onSave).toHaveBeenCalledWith({ layers: {} })
+    })
+
+    it('disables a layer whose flag is pinned outside Settings and says which', () => {
+      renderSettings({ layerPins: new Set(['decomposition_reframe']) })
+      expect(screen.getByRole('checkbox', { name: 'decomposition_reframe' })).toBeDisabled()
+      expect(screen.getByText(/pinned by AUDIT_DECOMPOSITION/)).toBeInTheDocument()
+    })
+  })
 })

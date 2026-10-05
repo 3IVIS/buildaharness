@@ -218,6 +218,20 @@ export interface RecordFactsResult {
   corroborations: Corroboration[]
 }
 
+/** Live keyed durable facts as `{key, text}`, newest first, one per key, capped; empty when keyed supersession is off. */
+function knownKeysOf(durable: UserFact[], limit = 30): { key: string; text: string }[] {
+  if (!memoryBudgetedRenderEnabled()) return []
+  const seen = new Set<string>()
+  const out: { key: string; text: string }[] = []
+  for (const f of [...durable].reverse()) {
+    if (!f.key || f.retiredAt || seen.has(f.key)) continue
+    seen.add(f.key)
+    out.push({ key: f.key, text: f.text })
+    if (out.length >= limit) break
+  }
+  return out
+}
+
 /**
  * `AUDIT_MEMORY_BUDGETED_RENDER` gate (M1 of the agent memory framework plan). Gates budgeted/
  * priority rendering, keyed supersession and usage fields. `=0`/`off` restores `slice(-FACT_CAP)`
@@ -533,6 +547,16 @@ export class MemoryService {
   /** The facts block most recently injected into a prompt (what the M4 reviewer must strip from its input). */
   getInjectedBlock(): string { return this.lastInjectedBlock }
 
+  /**
+   * Keys of the live durable facts, with their text, for the classifier prompt (M1 key stability:
+   * the model reuses a stored key for a new value of the same attribute instead of inventing a
+   * variant that would miss supersession). Newest first, capped so the prompt stays small. Empty
+   * when keyed supersession is off.
+   */
+  async getKnownFactKeys(limit = 30): Promise<{ key: string; text: string }[]> {
+    return knownKeysOf(await this.getDurableFacts(), limit)
+  }
+
   /** Durable facts in stored order — the list a reviewer `retire` op's `targetId` indexes into. */
   async getDurableFacts(): Promise<UserFact[]> {
     return (((await this.memory.get(DURABLE_FACTS_KEY)) as UserFact[] | undefined) ?? []).map(migrateFact)
@@ -733,17 +757,19 @@ export class MemoryService {
    * global-or-current-project only, so an unrelated project's facts don't leak into context (see
    * UserFact.project's doc comment).
    */
-  async loadFacts(sessionId: string, opts: { record?: boolean } = {}): Promise<{ facts: UserFact[]; factsBlock: string }> {
+  async loadFacts(sessionId: string, opts: { record?: boolean } = {}): Promise<{ facts: UserFact[]; factsBlock: string; knownFactKeys: { key: string; text: string }[] }> {
     // `record: false` (M6) is for read-only views (/memory, status): looking at memory must not count as the model having seen it, nor replace what the last turn injected.
     const record = opts.record !== false
     const sessionFacts = (((await this.memory.get(`facts:${sessionId}`)) as UserFact[] | undefined) ?? []).map(migrateFact)
     const durableFacts = (((await this.memory.get(DURABLE_FACTS_KEY)) as UserFact[] | undefined) ?? []).map(migrateFact)
     const facts = mergeFacts(durableFacts, sessionFacts)
+    // Computed here, from the read above, so the turn needs no extra await for the classifier's key context.
+    const knownFactKeys = knownKeysOf(durableFacts)
     const project = this.currentProject()
     const inScope = facts.filter((f) => f.project === undefined || f.project === project)
     if (memoryBudgetedRenderEnabled()) {
       const rendered = renderFactsBlock(inScope, this.memoryBudgetChars())
-      if (!record) return { facts, factsBlock: rendered.block }
+      if (!record) return { facts, factsBlock: rendered.block, knownFactKeys }
       this.lastDroppedCount = rendered.droppedCount
       this.lastInjectedBlock = rendered.block
       this.lastInjection = { facts: rendered.shown.map((f) => ({ text: f.text, unconfirmed: isUnconfirmed(f) })), notShown: rendered.droppedCount }
@@ -751,7 +777,7 @@ export class MemoryService {
         const id = `${f.text}|${f.extractedAt}`
         this.pendingInjections.set(id, (this.pendingInjections.get(id) ?? 0) + 1)
       }
-      return { facts, factsBlock: rendered.block }
+      return { facts, factsBlock: rendered.block, knownFactKeys }
     }
     const shown = inScope.slice(-FACT_CAP)
     const factsBlock = inScope.length > 0
@@ -761,7 +787,7 @@ export class MemoryService {
       this.lastInjectedBlock = factsBlock
       this.lastInjection = { facts: shown.map((f) => ({ text: f.text, unconfirmed: isUnconfirmed(f) })), notShown: inScope.length - shown.length }
     }
-    return { facts, factsBlock }
+    return { facts, factsBlock, knownFactKeys }
   }
 
   /**
@@ -774,7 +800,7 @@ export class MemoryService {
    * happened to win the display dedup. Returns undefined for an out-of-range index (the caller's
    * `/memory` view is stale — nothing to forget).
    */
-  async forgetFact(index: number, sessionId: string): Promise<UserFact | undefined> {
+  async forgetFact(index: number, sessionId: string, erase = false): Promise<UserFact | undefined> {
     const sessionFacts = (((await this.memory.get(`facts:${sessionId}`)) as UserFact[] | undefined) ?? []).map(migrateFact)
     const durableFacts = (((await this.memory.get(DURABLE_FACTS_KEY)) as UserFact[] | undefined) ?? []).map(migrateFact)
     const merged = mergeFacts(durableFacts, sessionFacts)
@@ -786,6 +812,8 @@ export class MemoryService {
       await this.commitDurable(remainingDurable, [{ op: 'remove', factId: factId(fact), before: fact, index: durableFacts.findIndex((f) => sameFact(f, fact)), store: 'durable', writer: 'forget', turn: sessionId }])
     }
     if (remainingSession.length !== sessionFacts.length) await this.memory.set(`facts:${sessionId}`, remainingSession)
+    // `erase`: also drop the fact's text from the audit log, so `/memory history` and `/memory undo` can no longer bring it back.
+    if (erase) await this.eraseFromAuditLog(fact)
     return fact
   }
 
@@ -1451,6 +1479,13 @@ export class MemoryService {
     if (setAside.some((f) => sameFact(f, fact))) await this.memory.set(ARCHIVED_FACTS_KEY, setAside.filter((f) => !sameFact(f, fact)))
     const durable = ((await this.memory.get(DURABLE_FACTS_KEY)) as UserFact[] | undefined) ?? []
     if (durable.some((f) => f.supersedes === fact.text)) await this.commitDurable(durable.map(unlink))
+    await this.eraseFromAuditLog(fact)
+    return fact
+  }
+
+  /** Strips one fact's pre/post-images from the audit log (entries stay, marked `erased`, and can no longer be undone) and unlinks `supersedes` references to it. */
+  private async eraseFromAuditLog(fact: UserFact): Promise<void> {
+    const unlink = <T extends UserFact>(f: T): T => (f.supersedes === fact.text ? { ...f, supersedes: undefined } : f)
     const log = ((await this.memory.get(AUDIT_LOG_KEY)) as AuditEntry[] | undefined) ?? []
     const touches = (e: AuditEntry): boolean => e.factId === factId(fact) || (e.before !== undefined && sameFact(e.before, fact)) || (e.after !== undefined && sameFact(e.after, fact))
     if (log.some((e) => touches(e) || e.before?.supersedes === fact.text || e.after?.supersedes === fact.text)) {
@@ -1467,7 +1502,6 @@ export class MemoryService {
         }
       }))
     }
-    return fact
   }
 
   /** Read-only health snapshot (`/doctor`, memory panel). Never touches usage counters or the last-injection record. */

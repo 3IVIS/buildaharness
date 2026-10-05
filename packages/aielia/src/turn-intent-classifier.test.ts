@@ -615,6 +615,23 @@ describe('liftedConstraints', () => {
   })
 })
 
+describe('knownFactKeys', () => {
+  it('lists stored keys with their text so the model can reuse one, and only when there are some', async () => {
+    const seen: string[] = []
+    const client = new StructuredOnlyLLMClient(response({}))
+    const orig = client.callChatStructured.bind(client)
+    client.callChatStructured = (async (m: Parameters<typeof orig>[0], ...rest: unknown[]) => {
+      seen.push(m[0].content)
+      return (orig as (...a: unknown[]) => unknown)(m, ...rest)
+    }) as typeof client.callChatStructured
+    await classifyTurnIntent('I moved to Oslo', client, { hasActivePlan: false, knownFactKeys: [{ key: 'home_city', text: 'the user lives in Austin' }] })
+    await classifyTurnIntent('hi', client, { hasActivePlan: false })
+    expect(seen[0]).toContain('- home_city: the user lives in Austin')
+    expect(seen[0]).toContain('reuse that exact key')
+    expect(seen[1]).not.toContain('Facts already stored')
+  })
+})
+
 describe('lastingConstraints', () => {
   const lasting = async (overrides: Record<string, unknown>) =>
     (await classifyTurnIntent('x', new StructuredOnlyLLMClient(response({ statesConstraint: true, statedConstraints: ['a', 'b'], ...overrides })), NO_PLAN)).lastingConstraints

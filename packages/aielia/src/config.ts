@@ -202,6 +202,12 @@ export interface AssistantConfig {
    * set` chain, via `ASSISTANT_GOAL_GRAPH_SUGGEST`/`VITE_ASSISTANT_GOAL_GRAPH_SUGGEST`.
    */
   goalGraphSuggestMode?: GoalGraphSuggestMode
+  /**
+   * Per-layer on/off choices for the reasoning layers (layer-settings.ts's LAYER_SETTINGS), keyed by layer id. An absent id means
+   * "the layer's own default". Applied onto the layers' `AUDIT_*` env flags by `applyLayerSettings`; a flag already set in the real
+   * environment wins and renders pinned. Edited with the CLI's `/layers` and the Settings screen's Layers section, not `/config set`.
+   */
+  layers?: Record<string, boolean>
 }
 
 /** Every AssistantConfig key, in the order every surface's settings UI/listing renders them. */
@@ -241,6 +247,7 @@ export const CONFIG_KEYS: readonly (keyof AssistantConfig)[] = [
   'goalGraphMode',
   'layerPolicyMode',
   'goalGraphSuggestMode',
+  'layers',
 ]
 
 /** Matches today's actual hardcoded defaults (proxy backend, web/shell off) — this plan changes nothing for a caller that never touches config. */

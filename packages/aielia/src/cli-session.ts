@@ -40,7 +40,7 @@ export const CLI_COMMANDS_HELP: CliCommandHelp[] = [
   { command: '/memory export [file]', description: 'Save the full, unbounded learned-experience contents (plus facts/reminders/pending) to a JSON file' },
   { command: '/memory confirm <n|category>', description: 'Promote a pending-confirmation guess (or a whole category of them) to durable memory' },
   { command: '/memory reject <n|category>', description: 'Discard a pending-confirmation guess (or a whole category of them)' },
-  { command: '/memory forget <n>', description: 'Remove an already-learned fact by its number in the "Facts I know" listing' },
+  { command: '/memory forget <n> [erase]', description: 'Remove an already-learned fact by its number in the "Facts I know" listing; `erase` also scrubs its text from the audit log (otherwise /memory undo can restore it)' },
   { command: '/memory forget digest [id]', description: 'Erase one stored session digest (or, with no id, all of them)' },
   { command: '/memory history', description: 'Show recent memory changes (needs AUDIT_MEMORY_AUDIT_LOG), with the number /memory undo takes' },
   { command: '/memory undo <seq>', description: 'Restore the pre-image of one memory change (a whole consolidation at once)' },
@@ -60,6 +60,7 @@ export const CLI_COMMANDS_HELP: CliCommandHelp[] = [
   { command: '/plan sketch <request>', description: 'One-shot, advisory plan sketch — no PlanRecord, nothing staged, cannot execute' },
   { command: '/goals', description: 'Review every known goal thread this session — status, tasks, and visibility (freshly computed / carried over / done / suggested)' },
   { command: '/config ...', description: 'View or change persisted settings' },
+  { command: '/layers settings', description: 'List reasoning layers with cost/evidence; /layers on|off|reset <id> to change' },
   { command: '/checkpoint [clear]', description: 'Inspect, or clear, a stuck in-progress harness checkpoint' },
 ]
 

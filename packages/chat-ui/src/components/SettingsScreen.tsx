@@ -6,6 +6,8 @@ import {
   formatMemorySummary,
   formatCostSummary,
   formatDoctorReport,
+  LAYER_SETTINGS,
+  isToggleable,
   type AssistantConfig,
   type MemorySummary,
   type DoctorCheck,
@@ -36,6 +38,8 @@ const DIRECT_API_BACKENDS: ReadonlySet<AssistantConfig['llmBackend']> = new Set(
 interface Props {
   config: AssistantConfig
   overriddenKeys: ReadonlySet<keyof AssistantConfig>
+  /** Layer ids whose AUDIT_* flag is set outside Settings, so the saved choice has no effect (shown disabled). */
+  layerPins?: ReadonlySet<string>
   /** Hides the Connection section (proxy/token/model don't apply — desktop always talks to the user's own claude-cli session) and shows the Workspace section instead. */
   isDesktop: boolean
   /** T7: true for one render right after this app just migrated a pre-existing plaintext apiKey into the OS keychain — shows a one-time notice, then the caller (App.tsx) clears it. Always false on the browser build. */
@@ -73,6 +77,7 @@ function FieldRow({ label, pinnedBy, children }: { label: string; pinnedBy?: str
 export function SettingsScreen({
   config,
   overriddenKeys,
+  layerPins = new Set<string>(),
   isDesktop,
   apiKeyMigrationNotice,
   busy,
@@ -95,6 +100,16 @@ export function SettingsScreen({
 
   function pinned(key: keyof AssistantConfig): boolean {
     return isPinned(overriddenKeys, key)
+  }
+
+  /** Stores a layer choice only when it differs from the layer's default, so "default" stays default if the default later changes. */
+  function setLayer(id: string, on: boolean, defaultOn: boolean): void {
+    setForm((prev) => {
+      const layers = { ...(prev.layers ?? {}) }
+      if (on === defaultOn) delete layers[id]
+      else layers[id] = on
+      return { ...prev, layers }
+    })
   }
 
   async function handleSave(): Promise<void> {
@@ -304,6 +319,36 @@ export function SettingsScreen({
             </FieldRow>
           </section>
         )}
+
+        <section className="settings__section">
+          <h2>Reasoning layers</h2>
+          <p className="settings__hint">
+            Extra checks that run on top of the assistant. Each costs extra model calls when it fires; the audit found limited benefit for
+            some. Safety layers (approvals, tool policy, verification) are always on and not listed.
+          </p>
+          {LAYER_SETTINGS.filter(isToggleable).map((layer) => {
+            const isPinned = layerPins.has(layer.id)
+            const checked = form.layers?.[layer.id] ?? layer.defaultOn
+            return (
+              <label key={layer.id} className="settings__field settings__layer">
+                <span className="settings__field-label">
+                  <input
+                    type="checkbox"
+                    aria-label={layer.id}
+                    checked={checked}
+                    disabled={disabled || isPinned}
+                    onChange={(e) => setLayer(layer.id, e.target.checked, layer.defaultOn)}
+                  />{' '}
+                  {layer.id}
+                  {isPinned ? <span className="settings__pinned"> (pinned by {layer.flag})</span> : null}
+                </span>
+                <span className="settings__hint">
+                  {layer.summary}. Cost: {layer.cost}. Evidence: {layer.evidence}.
+                </span>
+              </label>
+            )
+          })}
+        </section>
 
         <section className="settings__section">
           <h2>Diagnostics</h2>
