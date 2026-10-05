@@ -20,7 +20,9 @@ const PLAN = {
   ],
 }
 
-function fakeAssistant(getPlanGraph: ReturnType<typeof vi.fn>) {
+type PlanGraphFn = () => Promise<unknown>
+
+function fakeAssistant(getPlanGraph: PlanGraphFn) {
   return {
     turn: vi.fn(async () => ({ status: 'ok', reply: 'ok', riskLevel: 'LOW', usage: { inputTokens: 1, outputTokens: 1 } })),
     getTranscript: vi.fn(async () => []),
@@ -35,7 +37,7 @@ function fakeAssistant(getPlanGraph: ReturnType<typeof vi.fn>) {
   }
 }
 
-async function mountApp(getPlanGraph: ReturnType<typeof vi.fn>): Promise<void> {
+async function mountApp(getPlanGraph: PlanGraphFn): Promise<void> {
   vi.doMock('@buildaharness/aielia', async () => {
     const actual = await vi.importActual<typeof import('@buildaharness/aielia')>('@buildaharness/aielia')
     return { ...actual, PersonalAssistant: { create: vi.fn(async () => fakeAssistant(getPlanGraph)) } }
