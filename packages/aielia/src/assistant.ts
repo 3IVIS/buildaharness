@@ -926,12 +926,13 @@ export class PersonalAssistant {
    * facts first, then session facts — the same order `getMemorySummary()` returns). Unlike
    * confirm/reject, there's no category form: a durable/session fact carries no `category` field,
    * only pending model-inferred guesses do. Hard-deletes rather than routing through
-   * REJECTED_FACTS_KEY — see MemoryService.forgetFact's doc comment.
+   * REJECTED_FACTS_KEY — see MemoryService.forgetFact's doc comment. By default the removal is recorded
+   * in the audit log with the fact's text (so `/memory undo` can restore it); `erase` also scrubs that text.
    */
-  async forgetFact(selector: string, sessionId: string): Promise<MemoryPendingOutcome> {
+  async forgetFact(selector: string, sessionId: string, erase = false): Promise<MemoryPendingOutcome> {
     const index = parsePendingIndex(selector)
     if (index === undefined) return { ok: false, error: 'Usage: /memory forget <n>' }
-    const fact = await this.memoryService.forgetFact(index, sessionId)
+    const fact = await this.memoryService.forgetFact(index, sessionId, erase)
     if (!fact) return { ok: false, error: `No fact #${index + 1}.` }
     return { ok: true, facts: [fact], conflictNotices: [] }
   }
@@ -1136,7 +1137,7 @@ export class PersonalAssistant {
       semanticCompactionEnabled() ? (older) => summarizeOlderMessages(older, this.llmClient, this.model, accumulateUsage) : undefined,
       episodicDigestEnabled() ? (older) => this.memoryService.flushBeforeCompaction(sessionId, older, accumulateUsage) : undefined,
     )
-    const { facts, factsBlock } = await this.memoryService.loadFacts(sessionId)
+    const { facts, factsBlock, knownFactKeys } = await this.memoryService.loadFacts(sessionId)
     const { remindersBlock } = await this.memoryService.loadActiveReminders()
     const recallBlock = await recallPointerBlock(this.agentLoop.digestReader)
     let systemPrompt = `${SYSTEM_PROMPT}${factsBlock}${recallBlock}${remindersBlock}`
@@ -1150,6 +1151,7 @@ export class PersonalAssistant {
       onUsage: accumulateUsage,
       recentTranscript: transcript,
       standingConstraints: semanticConstraintCheckEnabled() ? await this.session.getStandingConstraints(sessionId) : undefined,
+      knownFactKeys,
     })
 
     if (interpretation.kind === 'bypass') {

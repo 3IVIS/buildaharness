@@ -342,6 +342,27 @@ const userFact = (overrides: Partial<UserFact> = {}): UserFact => ({
   ...overrides,
 })
 
+describe('MemoryService.getKnownFactKeys', () => {
+  it('returns live keyed durable facts newest first, one per key, skipping retired and unkeyed ones', async () => {
+    const { service, memory } = newService(new QueuedStructuredLLMClient([]))
+    await memory.set(DURABLE_FACTS_KEY, [
+      userFact({ text: 'old city', key: 'home_city', retiredAt: '2026-01-01T00:00:00.000Z' }),
+      userFact({ text: 'likes tea' }),
+      userFact({ text: 'uses vim', key: 'editor' }),
+      userFact({ text: 'lives in Oslo', key: 'home_city' }),
+    ])
+    expect(await service.getKnownFactKeys()).toEqual([{ key: 'home_city', text: 'lives in Oslo' }, { key: 'editor', text: 'uses vim' }])
+    expect(await service.getKnownFactKeys(1)).toEqual([{ key: 'home_city', text: 'lives in Oslo' }])
+  })
+
+  it('is empty when keyed supersession is off', async () => {
+    const { service, memory } = newService(new QueuedStructuredLLMClient([]))
+    await memory.set(DURABLE_FACTS_KEY, [userFact({ text: 'uses vim', key: 'editor' })])
+    process.env.AUDIT_MEMORY_BUDGETED_RENDER = '0'
+    try { expect(await service.getKnownFactKeys()).toEqual([]) } finally { delete process.env.AUDIT_MEMORY_BUDGETED_RENDER }
+  })
+})
+
 describe('MemoryService.forgetFact', () => {
   it('removes a durable fact by its 1-based /memory display index (0-based here)', async () => {
     const { service, memory } = newService(new QueuedStructuredLLMClient([]))

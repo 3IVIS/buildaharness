@@ -40,7 +40,7 @@ export const CLI_COMMANDS_HELP: CliCommandHelp[] = [
   { command: '/memory export [file]', description: 'Save the full, unbounded learned-experience contents (plus facts/reminders/pending) to a JSON file' },
   { command: '/memory confirm <n|category>', description: 'Promote a pending-confirmation guess (or a whole category of them) to durable memory' },
   { command: '/memory reject <n|category>', description: 'Discard a pending-confirmation guess (or a whole category of them)' },
-  { command: '/memory forget <n>', description: 'Remove an already-learned fact by its number in the "Facts I know" listing' },
+  { command: '/memory forget <n> [erase]', description: 'Remove an already-learned fact by its number in the "Facts I know" listing; `erase` also scrubs its text from the audit log (otherwise /memory undo can restore it)' },
   { command: '/memory forget digest [id]', description: 'Erase one stored session digest (or, with no id, all of them)' },
   { command: '/memory history', description: 'Show recent memory changes (needs AUDIT_MEMORY_AUDIT_LOG), with the number /memory undo takes' },
   { command: '/memory undo <seq>', description: 'Restore the pre-image of one memory change (a whole consolidation at once)' },

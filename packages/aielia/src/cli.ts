@@ -24,7 +24,9 @@ import {
 } from '@buildaharness/runtime'
 import type { AskAnswer, AskQuestion, AskQuestionOption, AskResponse } from '@buildaharness/harness'
 import { PersonalAssistant, type AssistantProgress, type AssistantTrace, type AssistantSource, type AssistantTurnResult } from './assistant.js'
+import { memoryAuditLogEnabled } from './memory-service.js'
 import type { AssistantToolStep } from './tool-step.js'
+import type { PlanDecision, PlanApprovalEdits } from './plan-approval-service.js'
 import { nodeDisplayName, nodeToLayer, buildWhyChain, LAYER_ORDER, LAYER_DISPLAY_NAME, LAYER_SHORT_CODE } from './node-display-names.js'
 import { classifyError } from './error-classifier.js'
 import { createNodeFsBackend } from './node-fs-backend.js'
@@ -430,6 +432,12 @@ export async function runCli(options: RunCliOptions = {}): Promise<CliInstance> 
   let lastTrace: AssistantTrace | undefined
   let lastSources: AssistantSource[] | undefined
   let lastPlanStatus: AssistantTurnResult['planStatus']
+  // A whole-plan approval that was staged but not yet resolved (status 'needs_plan_approval') —
+  // kept so the /plan approve|decline|edit commands can resolve it after the turn has already
+  // returned control to the prompt. Cleared the moment a decision is dispatched. Without this,
+  // a staged plan had no way to be approved or declined at all from the CLI (chat-ui's
+  // PlanApprovalCard + its handlers were the only surface that could resolve one).
+  let pendingPlanApproval: { id: string; message: string; snapshot: AssistantTurnResult['planApproval'] } | undefined
   let lastTurnUsage: TokenUsage | undefined
   // Tool calls made by the most recent turn — used only so /undo can warn about a real
   // side effect (e.g. a created reminder) it's about to claim to have removed but can't
@@ -528,9 +536,118 @@ export async function runCli(options: RunCliOptions = {}): Promise<CliInstance> 
     if (result.usage) lastTurnUsage = withCostEstimate(result.usage)
   }
 
+  /**
+   * The choices a staged whole-plan approval offers — the CLI counterpart to chat-ui's
+   * `PlanApprovalCard` buttons, resolved through the exact same `PlanApprovalService`. `'d'`
+   * ("decide later") is CLI-specific: unlike the action-approval prompt above, a plan is a
+   * document worth reading before signing off, so returning control to the REPL (with the
+   * /plan approve|edit|decline commands) beats forcing an answer under the prompt. `'n'` (Decline)
+   * stays last so `askSelect`'s fail-closed fallback can only ever decline, never approve.
+   */
+  const PLAN_APPROVAL_OPTIONS: SelectOption[] = [
+    { key: 'y', label: 'Approve' },
+    { key: 'e', label: 'Approve with edits' },
+    { key: 't', label: 'Approve & trust this plan (its write/shell steps stop re-prompting)' },
+    { key: 'd', label: 'Decide later — /plan approve|edit|decline' },
+    { key: 'n', label: 'Decline' },
+  ]
+
+  /** Renders a plan staged for approval — same PLAN_LINE_PREFIX-wrapped single console.log as printPlan, so the TUI's classifyLineKind (tui-app.tsx) draws it as one bordered PlanBox. */
+  function printPlanApproval(snapshot: NonNullable<AssistantTurnResult['planApproval']>): void {
+    const lines = [
+      PLAN_LINE_PREFIX,
+      `Plan ready for approval${snapshot.templateName ? `: ${snapshot.templateName}` : ' (custom plan)'}`,
+      `Success criteria: ${snapshot.successCriteria}`,
+      ...(snapshot.rationale ? [`Why: ${snapshot.rationale}`] : []),
+      ...snapshot.tasks.map((task) => `  ${task.riskLevel === 'HIGH' ? '!' : task.riskLevel === 'MEDIUM' ? '·' : '○'} [${task.riskLevel ?? 'LOW'}] ${task.id} — ${task.description}`),
+      ...(snapshot.reviewNotes && snapshot.reviewNotes.length > 0
+        ? ['Review notes:', ...snapshot.reviewNotes.map((note) => `  - ${note}`)]
+        : []),
+    ]
+    console.log(`\n${lines.join('\n')}\n`)
+  }
+
+  /**
+   * Reads the "approve with edits" payload — the CLI counterpart to `PlanApprovalCard`'s
+   * checkbox-cancel + inline-edit controls, the only other surface that builds `PlanApprovalEdits`.
+   * Unknown task ids are dropped here (with a warning) rather than passed through:
+   * `resolvePendingPlanApproval` throws on an unrecognized id and fails the whole approval closed,
+   * so a single typo would otherwise re-stage the plan with a bare "couldn't apply" reason.
+   */
+  async function promptPlanEdits(snapshot: NonNullable<AssistantTurnResult['planApproval']>): Promise<PlanApprovalEdits> {
+    const knownIds = new Set(snapshot.tasks.map((task) => task.id))
+    const cancelRaw = await askLine('Task ids to cancel (comma-separated, blank for none): ')
+    const editRaw = await askLine('Edits as "id=new description" pairs separated by ";", e.g. t2=Reword this. (blank for none): ')
+    const cancelTaskIds = cancelRaw.split(/[\s,]+/).map((s) => s.trim()).filter(Boolean)
+    const parsedEdits = editRaw
+      .split(';')
+      .map((pair) => pair.trim())
+      .filter(Boolean)
+      .map((pair) => {
+        const sep = pair.indexOf('=')
+        return sep >= 0 ? { id: pair.slice(0, sep).trim(), description: pair.slice(sep + 1).trim() } : { id: pair, description: '' }
+      })
+    const validCancels = cancelTaskIds.filter((id) => knownIds.has(id))
+    const validEdits = parsedEdits.filter((edit) => knownIds.has(edit.id) && edit.description)
+    const unknown = [...cancelTaskIds.filter((id) => !knownIds.has(id)), ...parsedEdits.filter((e) => !knownIds.has(e.id)).map((e) => e.id)]
+    if (unknown.length > 0) console.log(`  [ignoring unknown task id(s): ${[...new Set(unknown)].join(', ')}]`)
+    return {
+      ...(validCancels.length > 0 ? { cancelTaskIds: validCancels } : {}),
+      ...(validEdits.length > 0 ? { editedTasks: validEdits } : {}),
+    }
+  }
+
+  /**
+   * `/plan approve|trust|edit|decline` — resolves the plan stashed by the `needs_plan_approval`
+   * branch of handleTurn (the "decide later" path), re-entering the ordinary turn pipeline with
+   * the same originating message so an approve runs the now-active plan's first task exactly the
+   * way a freshly template-matched plan would.
+   */
+  async function handlePlanApprovalCommand(sub: string): Promise<void> {
+    if (!pendingPlanApproval) {
+      console.log('\nNo plan is awaiting approval.\n')
+      return
+    }
+    const { id, message, snapshot } = pendingPlanApproval
+    let decision: PlanDecision
+    let edits: PlanApprovalEdits | undefined
+    if (sub === 'approve') {
+      decision = 'approve'
+    } else if (sub === 'trust') {
+      decision = 'approve_trusted'
+    } else if (sub === 'edit') {
+      if (!snapshot) {
+        console.log('\n[tasks unavailable for editing — /plan approve or /plan decline]\n')
+        return
+      }
+      printPlanApproval(snapshot)
+      edits = await promptPlanEdits(snapshot)
+      decision = 'approve_with_edits'
+    } else {
+      decision = 'decline'
+    }
+    pendingPlanApproval = undefined
+    lastTrace = undefined
+    lastNoTraceReason = `No harness trace — the last turn staged a plan that was ${decision === 'decline' ? 'declined' : 'approved'} before the harness ran.`
+    await handleTurn(message, false, undefined, undefined, undefined, id, decision, edits)
+  }
+
   async function handlePlan(args: string[]): Promise<void> {
-    if (args[0] === 'sketch') {
+    const sub = args[0]
+    if (sub === 'sketch') {
       await handlePlanSketch(args.slice(1))
+      return
+    }
+    if (sub === 'approve' || sub === 'trust' || sub === 'edit' || sub === 'decline') {
+      await handlePlanApprovalCommand(sub)
+      return
+    }
+    // A plan staged for approval is what "/plan" should show while it's pending — the
+    // "Decide later — /plan to review" option points here. lastPlanStatus isn't set on a
+    // needs_plan_approval turn (the branch returns before the ordinary render), so without this
+    // /plan would show the previous plan or "No active plan" instead of the draft awaiting a decision.
+    if (pendingPlanApproval?.snapshot) {
+      printPlanApproval(pendingPlanApproval.snapshot)
       return
     }
     printPlan()
@@ -639,6 +756,7 @@ export async function runCli(options: RunCliOptions = {}): Promise<CliInstance> 
     lastTrace = undefined
     lastSources = undefined
     lastPlanStatus = undefined
+    pendingPlanApproval = undefined
     lastTurnUsage = undefined
     lastNoTraceReason = undefined
     console.log('\n✓ Started a fresh conversation.\n')
@@ -825,11 +943,13 @@ export async function runCli(options: RunCliOptions = {}): Promise<CliInstance> 
   async function handleMemoryForget(args: string[]): Promise<void> {
     const selector = args[0]
     if (!selector) {
-      console.log('\nUsage: /memory forget <n>\n')
+      console.log('\nUsage: /memory forget <n> [erase]\n')
       return
     }
-    const outcome = await assistant.forgetFact(selector, 'cli')
-    console.log(`\n${formatMemoryPendingOutcome('forgotten', outcome)}\n`)
+    const erase = args[1] === 'erase'
+    const outcome = await assistant.forgetFact(selector, 'cli', erase)
+    const note = outcome.ok && !erase && memoryAuditLogEnabled() ? ' The audit log still holds its text (see /memory history); use `/memory forget <n> erase` to remove that too.' : ''
+    console.log(`\n${formatMemoryPendingOutcome('forgotten', outcome)}${note}\n`)
   }
 
   /** `/memory` with no args shows a preview; `/memory export [file]` writes the full contents to disk (see handleMemoryExport); `/memory confirm|reject <n|category>` resolves a pending-confirmation guess (see handleMemoryPending); `/memory forget <n>` removes an already-learned fact (see handleMemoryForget). */
@@ -1183,6 +1303,9 @@ export async function runCli(options: RunCliOptions = {}): Promise<CliInstance> 
     pendingActionId?: string,
     pendingClarificationId?: string,
     clarificationAnswer?: AskResponse,
+    planApprovalId?: string,
+    planDecision?: PlanDecision,
+    planEdits?: PlanApprovalEdits,
   ): Promise<void> {
     lastTurnToolSteps = []
     // Set only once the first token of an actual streamed reply arrives — the
@@ -1205,6 +1328,9 @@ export async function runCli(options: RunCliOptions = {}): Promise<CliInstance> 
         pendingActionId,
         pendingClarificationId,
         clarificationAnswer,
+        planApprovalId,
+        planDecision,
+        planEdits,
         // Gated on streamedAnyTokens: onProgress keeps firing for layers (Memory,
         // Verification) that run after the LLM call, i.e. after writeToken has already put
         // the reply on the current line with no trailing newline. writeProgress's \r-based
@@ -1312,6 +1438,55 @@ export async function runCli(options: RunCliOptions = {}): Promise<CliInstance> 
         return
       }
 
+      // P2's whole-plan approval gate — the CLI surface for it, mirroring chat-ui's
+      // PlanApprovalCard + its approve/approve-with-edits/approve-trusted/decline handlers, all
+      // resolving through the same PlanApprovalService. Before this branch existed the CLI fell
+      // through to the ordinary render below, so a staged plan (whose result carries reply: null)
+      // printed as a bare "- null" and could not be approved, edited, or declined at all.
+      if (result.status === 'needs_plan_approval') {
+        if (!result.planApprovalId) {
+          console.log(`\n[needs plan approval] ${result.reason ?? 'A plan is awaiting approval, but its approval id is missing.'}\n`)
+          return
+        }
+        const id = result.planApprovalId
+        const snapshot = result.planApproval
+        if (result.reason) console.log(`\n${result.reason}`)
+        if (snapshot) printPlanApproval(snapshot)
+        // Stashed (not just resolved inline) so the /plan approve|edit|decline commands can finish
+        // the job if the user picks "decide later" below.
+        pendingPlanApproval = { id, message, snapshot }
+        lastTrace = undefined
+        lastNoTraceReason = 'No harness trace — the last turn staged a plan for approval (pending /plan approve|decline|edit).'
+        if (!snapshot) {
+          console.log('Decide with /plan approve or /plan decline.\n')
+          return
+        }
+        const choice = await askSelect('Approve this plan?', PLAN_APPROVAL_OPTIONS)
+        if (choice === 'd') {
+          console.log('Left pending — /plan to review, /plan approve|edit|decline to decide.\n')
+          return
+        }
+        pendingPlanApproval = undefined
+        let decision: PlanDecision
+        let edits: PlanApprovalEdits | undefined
+        if (choice === 't') {
+          decision = 'approve_trusted'
+        } else if (choice === 'e') {
+          edits = await promptPlanEdits(snapshot)
+          decision = 'approve_with_edits'
+        } else if (choice === 'y') {
+          decision = 'approve'
+        } else {
+          decision = 'decline'
+        }
+        lastNoTraceReason = `No harness trace — the last turn staged a plan that was ${decision === 'decline' ? 'declined' : 'approved'} before the harness ran.`
+        // Same originating message, so an approve falls through to the ordinary pipeline with the
+        // now-active plan (see PlanApprovalService.resolvePendingPlanApproval's doc comment) exactly
+        // the way a freshly template-matched plan already does.
+        await handleTurn(message, false, undefined, undefined, undefined, id, decision, edits)
+        return
+      }
+
       if (result.status === 'escalated') {
         lastTrace = undefined
         lastNoTraceReason = `No harness trace — the last turn escalated (${result.reason}) before completing.`
@@ -1352,7 +1527,17 @@ export async function runCli(options: RunCliOptions = {}): Promise<CliInstance> 
       // way). Same reasoning applies to a resolved pendingAction (resolvePendingAction never
       // touches plan state either, same as the trivial path) — the `pendingActionId` guard above
       // covers both cases.
-      if (!pendingActionId && !result.harnessSkipped) lastPlanStatus = result.planStatus
+      //
+      // The plan-mode drafting path is the one deliberate exception: PlanDraftingService's
+      // results are harnessSkipped (INV-30 — drafting runs no tool loop) yet DO carry a real
+      // planStatus for the draft they just built or revised, and so does TurnInterpreter's
+      // plan-task-cancel bypass. The old `!result.harnessSkipped` gate silently dropped those —
+      // the drafting reply printed its inline "(plan: 0% — /plan)" hint (line below, which reads
+      // result.planStatus directly) while /plan then answered "No active plan for this session".
+      // Record whenever the turn ran the pipeline OR actually reported a planStatus; a
+      // harness-skipped turn with no planStatus (trivial fast path, plan sketch) still leaves the
+      // last known plan untouched, and a non-skipped turn reporting none still clears it.
+      if (!pendingActionId && (!result.harnessSkipped || result.planStatus)) lastPlanStatus = result.planStatus
       lastTurnUsage = result.usage ? withCostEstimate(result.usage) : undefined
       const riskSuffix = result.riskLevel && result.riskLevel !== 'LOW' ? ` [risk: ${result.riskLevel}]` : ''
       const sourcesHint = result.sources && result.sources.length > 0 ? ` (${result.sources.length} source${result.sources.length > 1 ? 's' : ''} — /sources)` : ''

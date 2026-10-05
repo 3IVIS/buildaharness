@@ -542,7 +542,7 @@ export function App(): React.JSX.Element {
   const memoryPanelHandlers = {
     onConfirm: (selector: string) => void runMemoryAction(async (a) => outcomeMessage('confirmed', await a.confirmPendingFact(selector))),
     onReject: (selector: string) => void runMemoryAction(async (a) => outcomeMessage('rejected', await a.rejectPendingFact(selector))),
-    onForget: (selector: string) => void runMemoryAction(async (a) => outcomeMessage('forgotten', await a.forgetFact(selector, sessionIdRef.current))),
+    onForget: (selector: string, erase?: boolean) => void runMemoryAction(async (a) => outcomeMessage('forgotten', await a.forgetFact(selector, sessionIdRef.current, erase === true))),
     onUndo: (seq: number) => void runMemoryAction(async (a) => (await a.undoMemoryChange(String(seq), sessionIdRef.current)).message),
     onForgetArchived: (selector: string) => void runMemoryAction(async (a) => outcomeMessage('erased', await a.forgetArchivedFact(selector))),
     onAcceptProposal: (selector: string) => void runMemoryAction(async (a) => (await a.acceptMemoryProposal(selector, sessionIdRef.current)).message),
