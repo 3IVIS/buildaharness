@@ -39,8 +39,7 @@ Each row names the code that enforces it and the test that pins it.
 that proposes them — they stage a record under `.pending-actions/` and return
 `needs_approval`. The apply step is a separate, explicit call. The gate lives
 *inside* each tool (`file-tools.ts`, `file-tools-mcp-server.mjs`), not in a
-wrapper, so it holds even on the claude-cli backend where Claude Code's own
-agentic loop calls the tools autonomously.
+wrapper, so it holds regardless of which backend drives the tool loop.
 
 - Enforced: `stagePendingAction` / `applyPendingAction` (`file-tools.ts`).
 - Tested: `file-tools.test.ts`, `assistant.test.ts` (approval/decline flow).

@@ -742,17 +742,7 @@ non-functional `web_search`. The active state is shown in the startup banner
 running session with `/config set` instead of an env var — see
 "Configuration" below.
 
-Set `ASSISTANT_LLM_BACKEND=claude-cli` to skip the proxy entirely and run turns
-through a local `claude -p` subprocess instead, using your already-authenticated
-Claude Code CLI session rather than an API key (`CLAUDE_PATH` overrides the
-`claude` binary path if it's not on `PATH`):
-
-```bash
-ASSISTANT_LLM_BACKEND=claude-cli npm run cli --workspace=packages/aielia
-```
-
-Or skip both the proxy and claude-cli and call a provider directly with your
-own API key — `ASSISTANT_LLM_BACKEND=anthropic|openai|openrouter` plus
+Skip the proxy and call a provider directly with your own API key — `ASSISTANT_LLM_BACKEND=anthropic|openai|openrouter` plus
 `ASSISTANT_API_KEY`:
 
 ```bash
@@ -878,7 +868,7 @@ change local session/config state — none of them make an LLM call themselves.
 | `/search <query>` | Ranked search over past messages, across every session in this install — a hit is the one message that matched, not the whole session transcript around it. Read-only: never an LLM call or network request. Scoring is tokenized/graduated, not exact-substring-only (see "Conversation history" above), and a query matching nothing returns an explicit "no results" line |
 | `/model [name]` | Show the active model, or switch it — a thin alias over `/config set model <name>` (see "Configuration" above); rejected the same way if `model` is pinned by `ASSISTANT_MODEL` |
 | `/cost` | Show token usage for the last turn and the running session total |
-| `/doctor` | Check proxy reachability (proxy backend) or the `claude` binary (claude-cli backend), plus workspace root and data dir health — no dedicated check yet for the anthropic/openai/openrouter backends, only the backend-agnostic checks run for those |
+| `/doctor` | Check proxy reachability (proxy backend), plus workspace root and data dir health — no dedicated check yet for the anthropic/openai/openrouter backends, only the backend-agnostic checks run for those |
 | `/why` | Explain the harness path the last turn took (verification confidence + node sequence) |
 | `/sources` | List files/URLs the last turn actually consulted |
 | `/plan` | Show the active structured plan's task status |
@@ -889,13 +879,7 @@ change local session/config state — none of them make an LLM call themselves.
 Token counts are always real, on every backend. The dollar figure attached to
 them is not always the same kind of number:
 
-- **claude-cli backend**: `costUsd` comes straight from `claude
-  --output-format json`'s own `total_cost_usd` field — real Anthropic
-  accounting. It may read `$0` if the underlying `claude` session is
-  authenticated against a Pro/Max subscription rather than API billing, in
-  which case `$0` does *not* mean "this turn was free" — `/cost`'s output
-  says so explicitly.
-- **every other backend** (`proxy`, `anthropic`, `openai`, `openrouter`):
+- **every backend** (`proxy`, `anthropic`, `openai`, `openrouter`):
   none of these compute a dollar cost themselves — only the raw token counts
   each provider's response already includes (`@buildaharness/proxy` is a thin
   pass-through, see `packages/proxy/src/forward.ts`; the three direct clients

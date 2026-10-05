@@ -49,9 +49,7 @@ On the first launch with nothing configured (no persisted backend/key and no
 `VITE_ASSISTANT_*` var pinning one — so hosted/self-hosted builds skip it),
 `App.tsx` shows `SetupWizard.tsx` instead of the chat. It is the GUI twin of the CLI's
 `first-run.ts` and shares its provider names, key-format checks and live key test
-(`provider-setup.ts` in `@buildaharness/aielia`). On desktop it detects a signed-in
-`claude` CLI (`check_claude_available`) and offers "Use my Claude login" first — no key
-needed; otherwise the user picks a provider, follows the "where do I get a key" steps,
+(`provider-setup.ts` in `@buildaharness/aielia`). The user picks a provider, follows the "where do I get a key" steps,
 pastes the key (hidden by default, cleaned and format-checked, then verified with a free
 read-only call to the provider) and is dropped into chat. "Set up later" skips it for
 that launch; the wizard returns until something is configured.
@@ -66,24 +64,18 @@ timeout), and, on the Tauri desktop build only, Workspace (a
 native folder picker, via the Rust `pick_workspace_directory` command in
 `packages/desktop/src-tauri`).
 
-The Provider section's backend picker (`llmBackend`) offers five values —
-`proxy`, `claude-cli`, `anthropic`, `openai`, `openrouter` — with `claude-cli`
-only listed as an option on the desktop build (a plain browser tab has no way
-to spawn `claude -p`; see `App.tsx`'s `createLlmClient`). Fields below the
+The Provider section's backend picker (`llmBackend`) offers four values —
+`proxy`, `anthropic`, `openai`, `openrouter` (see `App.tsx`'s
+`createLlmClient`). Fields below the
 picker change per backend: Proxy URL + Auth token only for `proxy`; a single
 masked API key field (plus a plaintext-storage warning, same styling as the
-`dangerouslySkipPermissions` callout) for `anthropic`/`openai`/`openrouter`;
-nothing beyond the picker itself for `claude-cli`, which relies on the host's
-already-authenticated `claude` session. A free-text Model field is always
+`dangerouslySkipPermissions` callout) for `anthropic`/`openai`/`openrouter`. A free-text Model field is always
 shown, with a backend-specific placeholder (e.g. `gpt-4o-mini` for `openai`) —
 leaving it blank falls through to that backend's own hardcoded default rather
 than writing a value into the form.
 
-This used to be a `Connection` section that was hidden outright on desktop
-(desktop could only ever run `claude-cli`, unconditionally, regardless of
-`config.llmBackend`) — `createLlmClient` (`App.tsx`) is now shared between
-the plain-browser and desktop build paths, so desktop can use any of the 5
-backends, and the three direct-API ones (`anthropic`/`openai`/`openrouter`)
+`createLlmClient` (`App.tsx`) is shared between the plain-browser and desktop
+build paths, so desktop can use any of the 4 backends, and the three direct-API ones (`anthropic`/`openai`/`openrouter`)
 behave identically on both surfaces since they're just `fetch()` calls to the
 provider, which works the same inside Tauri's webview as in a browser tab.
 
@@ -186,13 +178,11 @@ checks the `claude` binary (a new `check_claude_available` Rust command),
 workspace configuration, and data-dir writability instead, since desktop has
 no proxy to check.
 
-Cost estimation follows the same real-vs-approximate split the CLI's `/cost`
-documents: real cost only for the `claude-cli` backend (`claude`'s own
-accounting) — every other backend, including `proxy` and now the three
-direct-API ones, gets the same static-table estimate (`estimateCostUsd`, from
-`model-pricing.ts`). This is keyed off `config.llmBackend` directly, not
-`isTauri()` — desktop is no longer synonymous with claude-cli, see
-`App.tsx`'s `withCostEstimate`. See the aielia README's
+Cost estimation follows the CLI's `/cost`: every backend, including `proxy`
+and the three direct-API ones, gets the same static-table estimate
+(`estimateCostUsd`, from `model-pricing.ts`). This is keyed off
+`config.llmBackend` directly, not `isTauri()` — see `App.tsx`'s
+`withCostEstimate`. See the aielia README's
 "`/cost` and real vs. estimated dollar figures" section for the full
 explanation.
 

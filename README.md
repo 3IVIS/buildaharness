@@ -129,9 +129,8 @@ An agent you can hand real, multi-step work to, held in bounds by the harness �
 npx @buildaharness/aielia
 ```
 
-First run walks you through picking a model — reuse an existing `claude` CLI
-login (no API key), or paste an Anthropic / OpenAI / OpenRouter key. Then just
-talk to it.
+First run walks you through picking a model — paste an Anthropic / OpenAI /
+OpenRouter key. Then just talk to it.
 
 ```ts
 import { LLMClient } from '@buildaharness/runtime'
