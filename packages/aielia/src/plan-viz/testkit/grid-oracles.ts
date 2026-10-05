@@ -35,6 +35,8 @@ const ASCII_BITS: Record<string, number> = { '|': U | D, '-': L | R, '+': U | D 
 const ARROWS = new Set(['▼', 'v'])
 const CROSSING = '┼'
 const LINE_GLYPHS = new Set([...Object.keys(UNICODE_BITS), '|', '-', '+'])
+/** Box-drawing glyphs only: a plain '-', '|' or '+' inside a label ("sign-off") is text, not a line (oracle fix, see grid-oracles.test.ts). */
+const UNICODE_LINE_GLYPHS = new Set(Object.keys(UNICODE_BITS))
 
 export interface OracleOptions {
   /** The diagram uses the ASCII glyph set (`| - + v`). `+` is ambiguous, so edge checks become connectivity-only. */
@@ -187,7 +189,7 @@ export function checkBoxesDrawn(lines: readonly string[], boxes: readonly Box[],
     const g = (r: number, c: number): string => grid.glyph(r, c)
     if (!corner(g(b.y, b.x), '┌') || !corner(g(b.y, b.x + b.w - 1), '┐') || !corner(g(b.y + b.h - 1, b.x), '└') || !corner(g(b.y + b.h - 1, b.x + b.w - 1), '┘')) problems.push(`box ${b.id} is missing a corner`)
     for (let r = b.y + 1; r < b.y + b.h - 1; r++) if (!['│', '|'].includes(g(r, b.x)) || !['│', '|'].includes(g(r, b.x + b.w - 1))) problems.push(`box ${b.id} has a broken side at row ${r}`)
-    for (let r = b.y + 1; r < b.y + b.h - 1; r++) for (let c = b.x + 1; c < b.x + b.w - 1; c++) if (LINE_GLYPHS.has(g(r, c)) && !(ascii && /[v+|-]/.test(g(r, c)))) problems.push(`a line character '${g(r, c)}' runs through box ${b.id}`)
+    for (let r = b.y + 1; r < b.y + b.h - 1; r++) for (let c = b.x + 1; c < b.x + b.w - 1; c++) if (!ascii && UNICODE_LINE_GLYPHS.has(g(r, c))) problems.push(`a line character '${g(r, c)}' runs through box ${b.id}`)
   }
   return problems
 }

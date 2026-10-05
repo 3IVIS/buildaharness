@@ -170,3 +170,14 @@ describe('ASCII glyph set', () => {
     expect(checkEdges(mutate(lines, 3, 3, ' '), boxes, [{ from: 'A', to: 'B' }], { ascii: true }).join()).toMatch(/A → B/)
   })
 })
+
+describe('checkBoxesDrawn: ASCII punctuation in labels is text, not a line', () => {
+  it('accepts a Unicode-drawn box whose label contains - | +', () => {
+    const lines = ['┌────────────────┐', '│ ○ sign-off a|b+│', '└────────────────┘']
+    expect(checkBoxesDrawn(lines, [{ id: 'A', x: 0, y: 0, w: 18, h: 3 }])).toEqual([])
+  })
+  it('still rejects a box-drawing line character inside a box', () => {
+    const lines = ['┌────────────────┐', '│ ○ sign─off     │', '└────────────────┘']
+    expect(checkBoxesDrawn(lines, [{ id: 'A', x: 0, y: 0, w: 18, h: 3 }]).length).toBeGreaterThan(0)
+  })
+})
