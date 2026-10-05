@@ -103,6 +103,8 @@ export { resolveGoalGraphMode, normalizeGoalGraphMode, isGoalGraphEnabled, DEFAU
 export type { GoalGraphMode } from './goal-graph-flag.js'
 export { resolvePlanGraphMode, normalizePlanGraphMode, isPlanGraphEnabled, DEFAULT_PLAN_GRAPH_MODE } from './plan-graph-flag.js'
 export type { PlanGraphMode } from './plan-graph-flag.js'
+export { planToSnapshot } from './plan-viz/plan-snapshot.js'
+export type { PlanSnapshot, PlanSnapshotResult } from './plan-viz/plan-snapshot.js'
 export type { NextStepSuggestion } from './next-step-proposer.js'
 export { resolveGoalGraphSuggestMode, normalizeGoalGraphSuggestMode, isGoalGraphSuggestEnabled, DEFAULT_GOAL_GRAPH_SUGGEST_MODE } from './goal-graph-suggest-flag.js'
 export type { GoalGraphSuggestMode } from './goal-graph-suggest-flag.js'

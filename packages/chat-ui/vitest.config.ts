@@ -1,8 +1,9 @@
 import { configDefaults, defineConfig } from 'vitest/config'
 import react from '@vitejs/plugin-react'
+import { planVizVendorPlugin } from './plan-viz-aliases'
 
 export default defineConfig({
-  plugins: [react()],
+  plugins: [planVizVendorPlugin(), react()],
   test: {
     environment: 'jsdom',
     globals: true,

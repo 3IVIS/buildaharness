@@ -1,4 +1,4 @@
-import { Fragment, useEffect, useRef, useState } from 'react'
+import { Fragment, useEffect, useMemo, useRef, useState } from 'react'
 import { isTauri, invoke } from '@tauri-apps/api/core'
 import {
   PersonalAssistant,
@@ -29,6 +29,8 @@ import {
   type MemoryWriteMode,
   memoryStatusChecks,
   isGoalGraphEnabled,
+  isPlanGraphEnabled,
+  planToSnapshot,
   isGoalGraphSuggestEnabled,
 } from '@buildaharness/aielia'
 import {
@@ -51,6 +53,7 @@ import { tauriExecuteShellCommand } from './tauri-shell-executor'
 import { ChatMessageBubble } from './components/ChatMessageBubble'
 import { ApprovalCard } from './components/ApprovalCard'
 import { AskQuestionCard } from './components/AskQuestionCard'
+import { PlanVizPanel } from './components/PlanVizPanel'
 import { PlanApprovalCard } from './components/PlanApprovalCard'
 import { EscalationBanner } from './components/EscalationBanner'
 import { shouldRenderAskQuestionCard } from './ask-question-render'
@@ -102,6 +105,26 @@ function accumulateUsage(prev: TokenUsage | undefined, usage: TokenUsage): Token
 // config.ts's resolveConfig — so nothing changes for a deployed build that already sets
 // VITE_ASSISTANT_PROXY_URL/_TOKEN/_MODEL and never opens Settings.
 const envOverrides = envOverridesFromImportMetaEnv(import.meta.env)
+
+const PLAN_VIZ_OPEN_KEY = 'aielia.planViz.open'
+const PLAN_VIZ_FULLSCREEN_KEY = 'aielia.planViz.fullscreen'
+
+/** localStorage can throw (private mode, quota, no window); the drawer just starts closed/docked then. */
+function readPlanVizPref(key: string): boolean {
+  try {
+    return localStorage.getItem(key) === '1'
+  } catch {
+    return false
+  }
+}
+
+function writePlanVizPref(key: string, value: boolean): void {
+  try {
+    localStorage.setItem(key, value ? '1' : '0')
+  } catch {
+    // preference simply isn't remembered
+  }
+}
 
 function newId(): string {
   return typeof crypto !== 'undefined' && crypto.randomUUID ? crypto.randomUUID() : `${Date.now()}-${Math.random()}`
@@ -402,6 +425,18 @@ export function App(): React.JSX.Element {
   // comment). Default OFF: the composer/Send button stay disabled while busy, byte-identical to
   // today (INV-43).
   const goalGraphModeEnabled = isGoalGraphEnabled(config.goalGraphMode)
+  // P4 of plans/plan_visualization_plan.html — read-only plan graph drawer. Default OFF: no button, no
+  // panel, no asset loaded (the viewer is imported lazily by PlanVizPanel, which only mounts when open).
+  const planGraphModeEnabled = isPlanGraphEnabled(config.planGraphMode)
+  const [planVizOpen, setPlanVizOpen] = useState(() => readPlanVizPref(PLAN_VIZ_OPEN_KEY))
+  const [planVizFullscreen, setPlanVizFullscreen] = useState(() => readPlanVizPref(PLAN_VIZ_FULLSCREEN_KEY))
+  // Whole plan/goal-graph record as of the last completed turn, and the live per-task statuses of the turn in flight.
+  const [planGraphSource, setPlanGraphSource] = useState<Awaited<ReturnType<PersonalAssistant['getPlanGraph']>>>(null)
+  const [livePlanTasks, setLivePlanTasks] = useState<NonNullable<AssistantProgress['planTasks']>>([])
+  const planSnapshot = useMemo(
+    () => (planGraphModeEnabled && planGraphSource ? planToSnapshot(planGraphSource, livePlanTasks).snapshot : null),
+    [planGraphModeEnabled, planGraphSource, livePlanTasks],
+  )
   // T7: true for one Settings-screen render right after TauriConfigStore.load() has just
   // migrated a pre-existing plaintext apiKey into the OS keychain — see that class's
   // consumeMigrationNotice() doc comment. Always false on a plain-browser build (BrowserConfigStore
@@ -587,6 +622,23 @@ export function App(): React.JSX.Element {
     setGoalGraphState(await assistant.getGoalGraphState(sessionIdRef.current))
   }
 
+  async function refreshPlanGraph(): Promise<void> {
+    const assistant = assistantRef.current
+    if (!assistant) return
+    setPlanGraphSource(await assistant.getPlanGraph(sessionIdRef.current))
+  }
+
+  function setPlanVizOpenPersisted(open: boolean): void {
+    setPlanVizOpen(open)
+    writePlanVizPref(PLAN_VIZ_OPEN_KEY, open)
+    if (open) void refreshPlanGraph()
+  }
+
+  function setPlanVizFullscreenPersisted(fullscreen: boolean): void {
+    setPlanVizFullscreen(fullscreen)
+    writePlanVizPref(PLAN_VIZ_FULLSCREEN_KEY, fullscreen)
+  }
+
   /** GUI equivalent of /clear — ends the conversation and resets every piece of derived UI state alongside it, so nothing shows stale data for the fresh session. */
   async function handleClearConversation(): Promise<void> {
     const assistant = assistantRef.current
@@ -601,6 +653,8 @@ export function App(): React.JSX.Element {
     setTranscriptLength(0)
     setActivePlanStatus(undefined)
     setPlanState(null)
+    setPlanGraphSource(null)
+    setLivePlanTasks([])
   }
 
   /** GUI equivalent of /export — downloads the transcript as a markdown file via a throwaway Blob URL (works the same in a plain browser tab and inside the Tauri webview, so desktop doesn't need a separate native-save-dialog path). */
@@ -662,7 +716,11 @@ export function App(): React.JSX.Element {
       if (store instanceof TauriConfigStore) setApiKeyMigrationNotice(store.consumeMigrationNotice())
       setNeedsSetup(isFirstRun(persisted, resolved.overriddenKeys))
       const assistant = await buildAssistant(resolved.config)
-      if (!cancelled) assistantRef.current = assistant
+      if (!cancelled) {
+        assistantRef.current = assistant
+        // Plan graph: pick up a plan persisted by an earlier session so the header button/drawer reflect it.
+        if (isPlanGraphEnabled(resolved.config.planGraphMode)) setPlanGraphSource(await assistant.getPlanGraph(sessionIdRef.current))
+      }
     })()
     return () => { cancelled = true }
   }, [])
@@ -732,7 +790,10 @@ export function App(): React.JSX.Element {
         planApprovalId,
         planDecision,
         planEdits,
-        onProgress: setProgress,
+        onProgress: (p) => {
+          setProgress(p)
+          if (p.planTasks) setLivePlanTasks(p.planTasks)
+        },
         onToken: (token) => setStreamingText((prev) => (prev ?? '') + token),
         onToolStep: (step) => {
           toolSteps.push(step)
@@ -747,6 +808,11 @@ export function App(): React.JSX.Element {
       // P7: refresh the persistent plan-mode banner state after every turn (drafting/
       // awaiting_approval/active/none) — independent of which status branch below fires.
       void assistant.getPlanState(sessionIdRef.current).then(setPlanState)
+      // Plan graph: the turn is over, so the persisted record is now authoritative — drop the live overlay and re-query.
+      if (planGraphModeEnabled) {
+        setLivePlanTasks([])
+        void refreshPlanGraph()
+      }
 
       if (result.status === 'ok') {
         setEntries((prev) => [
@@ -1062,9 +1128,20 @@ export function App(): React.JSX.Element {
           >
             Sketch
           </button>
+          {planGraphModeEnabled && (planGraphSource || activePlanStatus || planState) && (
+            <button type="button" className="app__plan-graph-link" onClick={() => setPlanVizOpenPersisted(!planVizOpen)}>Plan graph</button>
+          )}
           <button type="button" className="app__settings-button" aria-label="Settings" onClick={() => void handleOpenSettings()}>⚙</button>
         </div>
       </header>
+      {planGraphModeEnabled && planVizOpen && (
+        <PlanVizPanel
+          snapshot={planSnapshot}
+          fullscreen={planVizFullscreen}
+          onToggleFullscreen={() => setPlanVizFullscreenPersisted(!planVizFullscreen)}
+          onClose={() => setPlanVizOpenPersisted(false)}
+        />
+      )}
       <div className="app__messages">
         {showDemo && entries.length === 0 && (
           <div className="app__demo">
@@ -1096,6 +1173,7 @@ export function App(): React.JSX.Element {
                   sources={entry.sources}
                   toolSteps={entry.toolSteps}
                   planStatus={entry.planStatus}
+                  onViewPlanGraph={planGraphModeEnabled ? () => setPlanVizOpenPersisted(true) : undefined}
                   answerClaim={entry.answerClaim}
                   memoryInjection={entry.memoryInjection}
                   proposerKind={entry.proposerKind}
@@ -1164,6 +1242,7 @@ export function App(): React.JSX.Element {
                   onApproveTrusted={() => handlePlanApproveTrusted(entry.id, entry.pendingMessage, entry.planApprovalId)}
                   onApproveWithEdits={(edits) => handlePlanApproveWithEdits(entry.id, entry.pendingMessage, entry.planApprovalId, edits)}
                   onDecline={() => handlePlanDecline(entry.id, entry.pendingMessage, entry.planApprovalId)}
+                  onViewGraph={planGraphModeEnabled ? () => setPlanVizOpenPersisted(true) : undefined}
                 />
               )
           }

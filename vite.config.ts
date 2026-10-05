@@ -1,9 +1,12 @@
 import { defineConfig } from 'vite'
 import react from '@vitejs/plugin-react'
 import { resolve } from 'path'
+// Root's blanket vitest run also picks up packages/chat-ui tests, which import the plan-graph
+// viewer's `plan-viz-vendor/*?raw` bundles — resolve them the same way chat-ui's own configs do.
+import { planVizVendorPlugin } from './packages/chat-ui/plan-viz-aliases'
 
 export default defineConfig({
-  plugins: [react()],
+  plugins: [planVizVendorPlugin(), react()],
   resolve: {
     // Fix #14: tsconfig.json declares "@/*" → "src/*" paths but Vite requires its own alias.
     // Without this, any `import ... from '@/...'` compiles in TS but fails at build time.
