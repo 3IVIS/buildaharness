@@ -1,6 +1,6 @@
 import { describe, it, expect, vi } from 'vitest'
 import { envOverridesFromImportMetaEnv, ENV_VAR_FOR_CONFIG_KEY } from './browser-config'
-import { DEFAULT_ONE_LOOP_MODE, DEFAULT_GOAL_GRAPH_MODE, DEFAULT_GOAL_GRAPH_SUGGEST_MODE } from '@buildaharness/aielia'
+import { DEFAULT_ONE_LOOP_MODE, DEFAULT_GOAL_GRAPH_MODE, DEFAULT_GOAL_GRAPH_SUGGEST_MODE, DEFAULT_PLAN_GRAPH_MODE } from '@buildaharness/aielia'
 
 /** A minimal ImportMetaEnv stand-in — the real one has an index signature, so this is enough. */
 function env(overrides: Record<string, string>): ImportMetaEnv {
@@ -73,6 +73,18 @@ describe('envOverridesFromImportMetaEnv', () => {
 
   it('advertises VITE_ASSISTANT_GOAL_GRAPH as the pinning var for goalGraphMode', () => {
     expect(ENV_VAR_FOR_CONFIG_KEY.goalGraphMode).toBe('VITE_ASSISTANT_GOAL_GRAPH')
+  })
+
+  it('resolves VITE_ASSISTANT_PLAN_GRAPH into planGraphMode; unset/empty leaves it absent; a typo warns and defaults', () => {
+    const warn = vi.spyOn(console, 'error').mockImplementation(() => {})
+    expect(envOverridesFromImportMetaEnv(env({ VITE_ASSISTANT_PLAN_GRAPH: 'enabled' }))).toEqual({ planGraphMode: 'enabled' })
+    expect(envOverridesFromImportMetaEnv(env({ VITE_ASSISTANT_PLAN_GRAPH: 'disabled' }))).toEqual({ planGraphMode: 'disabled' })
+    expect(envOverridesFromImportMetaEnv(env({}))).not.toHaveProperty('planGraphMode')
+    expect(envOverridesFromImportMetaEnv(env({ VITE_ASSISTANT_PLAN_GRAPH: '' }))).not.toHaveProperty('planGraphMode')
+    expect(envOverridesFromImportMetaEnv(env({ VITE_ASSISTANT_PLAN_GRAPH: 'on' }))).toEqual({ planGraphMode: DEFAULT_PLAN_GRAPH_MODE })
+    expect(warn.mock.calls[0][0]).toContain('VITE_ASSISTANT_PLAN_GRAPH')
+    warn.mockRestore()
+    expect(ENV_VAR_FOR_CONFIG_KEY.planGraphMode).toBe('VITE_ASSISTANT_PLAN_GRAPH')
   })
 
   it('resolves VITE_ASSISTANT_GOAL_GRAPH_SUGGEST into goalGraphSuggestMode', () => {

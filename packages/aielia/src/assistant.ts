@@ -35,7 +35,7 @@ import type { TraceEvent } from './trace-events.js'
 import type { AssistantToolStep } from './tool-step.js'
 
 import type { LayerPolicyMode } from '@buildaharness/harness'
-import { MemoryService, DEFAULT_MEMORY_BUDGET_CHARS, buildTurnFacts, type MemorySummary, type MemoryExport, type PendingFact, type AuditEntry, type MemoryStatus, type MemoryInjection, type ConsolidationOutcome } from './memory-service.js'
+import { MemoryService, DEFAULT_MEMORY_BUDGET_CHARS, buildTurnFacts, type MemorySummary, type MemoryExport, type AuditEntry, type MemoryStatus, type MemoryInjection, type ConsolidationOutcome } from './memory-service.js'
 import { resolveMemoryWriteMode, type MemoryWriteMode } from './memory-governance.js'
 import { memoryConsolidationEnabled, type ConsolidationProposal } from './memory-consolidation.js'
 import type { UserFact } from './fact-extraction.js'
@@ -44,12 +44,12 @@ import { renderHypothesisNote, hypothesisContextMessage, proposeCompetingExplana
 import type { SemanticHypothesisProposal } from '@buildaharness/harness'
 import { RECOVERY_NOTE_PREFIX, recoveryNoteText, learnedRecoveryNoteText } from './recovery-note.js'
 import { REVISION_NOTE_PREFIX } from './reviewer-revision.js'
-import { AssistantSession, type IndexedMessage, type TranscriptSearchHit } from './assistant-session.js'
+import { AssistantSession, type TranscriptSearchHit } from './assistant-session.js'
 import { episodicDigestEnabled, type SessionDigest } from './episodic-digest.js'
 import { recallPointerBlock, storeDigestReader } from './recall-tool.js'
 import { semanticCompactionEnabled, summarizeOlderMessages } from './semantic-compaction.js'
 import { MemoryReviewer, memoryReviewerEnabled } from './memory-reviewer.js'
-import { AgentLoop, OneLoopPause, type BatchBudgetState, type BatchBudgetTrace, type ToolLoopResult, trimmedAverage, nextItemBudget } from './agent-loop.js'
+import { AgentLoop, OneLoopPause, type BatchBudgetTrace, type ToolLoopResult } from './agent-loop.js'
 import type { TurnIntentClassification, FactCategory } from './turn-intent-classifier.js'
 import { ActionApprovalService } from './action-approval-service.js'
 import { PlanService } from './plan-service.js'
@@ -60,6 +60,7 @@ import { decomposedAnswerOnceEnabled } from './decomposed-answer.js'
 import { PlanApprovalService, type PlanDecision, type PlanApprovalEdits } from './plan-approval-service.js'
 import { PlanSketchService } from './plan-sketch-service.js'
 import type { PlanRecord } from './plan-store.js'
+import type { GoalGraphRecord } from './goal-graph-store.js'
 import { TurnInterpreter } from './turn-interpreter.js'
 import { HarnessBridge } from './harness-bridge.js'
 import { semanticConstraintCheckEnabled } from './constraint-check.js'
@@ -83,7 +84,7 @@ import { getGoalGraphState, type GoalGraphState } from './goal-graph-service.js'
 import type { LiveSteeringChannel } from './live-steering-channel.js'
 import type { AssistantSource } from './assistant-source.js'
 import type { DebugLogEntry } from './debug-log.js'
-import type { AssistantTrace, AssistantTurnResult, AssistantProgress, ProposerKind } from './assistant-types.js'
+import type { AssistantTurnResult, AssistantProgress, ProposerKind } from './assistant-types.js'
 import { resolveSupervisorEnabled } from './supervisor-flag.js'
 
 // Re-exported for full backward compatibility — every one of these used to be defined directly
@@ -823,6 +824,20 @@ export class PersonalAssistant {
    */
   async getGoalGraphState(sessionId: string): Promise<GoalGraphState> {
     return getGoalGraphState(this.memory, sessionId, this.session.undoWorkspace())
+  }
+
+  /**
+   * Read-only source for the plan graph view: the session's goal graph when it has threads, else its
+   * plan record, else `null`. Never throws and never creates a record.
+   */
+  async getPlanGraph(sessionId: string): Promise<PlanRecord | GoalGraphRecord | null> {
+    try {
+      const goalGraph = await loadGoalGraphRecord(this.memory, sessionId, this.session.undoWorkspace())
+      if (goalGraph && goalGraph.threads.length > 0) return goalGraph
+      return await this.planService.loadPlanRecord(sessionId)
+    } catch {
+      return null
+    }
   }
 
   /**

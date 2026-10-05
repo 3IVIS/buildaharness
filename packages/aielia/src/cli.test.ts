@@ -1529,3 +1529,63 @@ describe('/memory governance surfaces (M6)', () => {
     expect(await configStore.load()).toMatchObject({ memoryWriteMode: 'user_only' })
   })
 })
+
+
+describe('/plan graph', () => {
+  const record = {
+    templateName: null,
+    successCriteria: 'Ship it',
+    rationale: '',
+    mode: 'gated',
+    executingOnPlan: false,
+    tasks: [
+      { id: 'research', description: 'Research the options', status: 'COMPLETE', depends_on: [] },
+      { id: 'build', description: 'Build the thing', status: 'PENDING', depends_on: ['research'] },
+    ],
+  } as unknown as NonNullable<Awaited<ReturnType<PersonalAssistant['getPlanGraph']>>>
+
+  it('flag off (default): behaves as plain /plan and never reads the graph', async () => {
+    const assistant = new PersonalAssistant({ llmClient: new FakeLLMClient() })
+    const spy = vi.spyOn(assistant, 'getPlanGraph').mockResolvedValue(record)
+    const { cli } = await setupCli({ assistant })
+    const lines = captureOutput()
+    await cli.dispatchLine('/plan graph')
+    expect(lines.join('\n')).toContain('No active plan for this session')
+    expect(spy).not.toHaveBeenCalled()
+    expect(await cli.getPlanGraphNodes()).toBeUndefined()
+  })
+
+  it('flag on, plain CLI: prints one static render of the plan', async () => {
+    const assistant = new PersonalAssistant({ llmClient: new FakeLLMClient() })
+    vi.spyOn(assistant, 'getPlanGraph').mockResolvedValue(record)
+    const { cli } = await setupCli({ assistant, envOverrides: { planGraphMode: 'enabled' } })
+    const lines = captureOutput()
+    await cli.dispatchLine('/plan graph')
+    const output = lines.join('\n')
+    expect(output).toContain('Research the options')
+    expect(output).toContain('Build the thing')
+    expect(output).toMatch(/[┌└│]/)
+  })
+
+  it('flag on, TUI seam: hands the nodes to openPlanGraph instead of printing', async () => {
+    const assistant = new PersonalAssistant({ llmClient: new FakeLLMClient() })
+    vi.spyOn(assistant, 'getPlanGraph').mockResolvedValue(record)
+    const openPlanGraph = vi.fn()
+    const { cli } = await setupCli({ assistant, envOverrides: { planGraphMode: 'enabled' }, openPlanGraph })
+    const lines = captureOutput()
+    await cli.dispatchLine('/plan graph')
+    expect(openPlanGraph).toHaveBeenCalledTimes(1)
+    expect(openPlanGraph.mock.calls[0][0].map((n: { id: string }) => n.id)).toEqual(['research', 'build', 'plan'])
+    expect(lines.join('\n')).not.toContain('Research the options')
+    const live = await cli.getPlanGraphNodes([{ id: 'build', status: 'RUNNING' as never }])
+    expect(live?.find((n) => n.id === 'build')?.status).toBe('running')
+  })
+
+  it('flag on, no plan: says so', async () => {
+    const assistant = new PersonalAssistant({ llmClient: new FakeLLMClient() })
+    const { cli } = await setupCli({ assistant, envOverrides: { planGraphMode: 'enabled' } })
+    const lines = captureOutput()
+    await cli.dispatchLine('/plan graph')
+    expect(lines.join('\n')).toContain('No active plan for this session')
+  })
+})

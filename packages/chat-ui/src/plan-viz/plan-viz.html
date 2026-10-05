@@ -1,0 +1,3692 @@
+<!--
+  Plan graph viewer for chat-ui's PlanVizPanel (plans/plan_visualization_plan.html).
+  Derived from cuddlytoddly (MIT License, Copyright (c) 2026 3IVIS): cuddlytoddly/ui/web_ui.html.
+  Copied once and edited by hand; there is no upstream sync (cuddlytoddly is unmaintained).
+  Edits: E-1 CDN scripts -> host-injected markers, E-2 postMessage boot, E-3 server controls hidden,
+  E-4 no node actions, E-5 api() read-only, E-6 duplicate initSVG()/selectNode removed.
+-->
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>cuddlytoddly</title>
+<!--PLAN_VIZ_D3-->
+<!--PLAN_VIZ_DAGRE-->
+<style>
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+:root {
+  --bg:         #f5f6f8;
+  --surface:    #ffffff;
+  --surface2:   #f0f1f4;
+  --surface3:   #e6e8ec;
+
+  --border:     #d4d7dd;
+  --border2:    #c7cbd3;
+
+  --text:       #1e1f22;
+  --text-muted: #6b7078;
+  --text-dim:   #8a9099;
+
+  --accent:     #4f6df5;
+  --accent-glow:#4f6df522;
+
+  --s-pending:    #9aa0aa;
+  --s-ready:      #3b82f6;
+  --s-running:    #d89a3c;
+  --s-done:       #2f9e6f;
+  --s-failed:     #d35a5a;
+  --s-expanded:   #8b5cf6;
+  --s-awaiting:   #e879f9;
+  --s-awaiting-user: #f97316;
+  --border-subtle:#e2e4e8;
+  --bg-card:      #f8f9fb;
+  --bg-code:      #1e2533;
+  --amber:        #d89a3c;
+  --mono:         'SF Mono', 'Fira Code', monospace;
+  --t-goal:     #7b61d9;
+  --t-task:     #4db7e5;
+  --t-reflect:  #5fbf8f;
+  --t-step:     #9aa0aa;
+
+  --toolbar-h:  52px;
+  --panel-w:    340px;
+  --radius:     8px;
+}
+
+
+body {
+  background: var(--bg);
+  color: var(--text);
+  font-family: 'Inter', system-ui, -apple-system, sans-serif;
+  font-size: 13px;
+  height: 100vh;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+}
+
+/* ── Toolbar ─────────────────────────────────────────────────────────── */
+#toolbar {
+  height: var(--toolbar-h);
+  min-height: var(--toolbar-h);
+  background: var(--surface);
+  border-bottom: 1px solid var(--border);
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 0 16px;
+  z-index: 10;
+}
+
+#toolbar-brand {
+  font-size: 14px;
+  font-weight: 700;
+  color: var(--accent);
+  letter-spacing: -0.3px;
+  white-space: nowrap;
+}
+
+#toolbar-goal {
+  font-size: 12px;
+  color: var(--text-dim);
+  max-width: 300px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  padding: 4px 10px;
+  border-left: 1px solid var(--border2);
+  background: none;
+  border-top: none;
+  border-right: none;
+  border-bottom: none;
+  border-radius: 6px;
+  cursor: pointer;
+  transition: background 0.15s, color 0.15s;
+  font-family: inherit;
+}
+#toolbar-goal:hover {
+  background: var(--surface2);
+  color: var(--text);
+}
+
+#toolbar-counts {
+  display: flex;
+  gap: 6px;
+  margin-left: auto;
+}
+
+.count-pill {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  padding: 2px 8px;
+  border-radius: 20px;
+  font-size: 11px;
+  font-weight: 600;
+  background: var(--surface2);
+  border: 1px solid var(--border);
+  color: var(--text-muted);
+  transition: opacity 0.2s;
+}
+.count-pill.has-value { opacity: 1; }
+.count-pill .dot { width: 6px; height: 6px; border-radius: 50%; }
+
+/* ── Status Panel (floating, bottom-left) ───────────────────────────── */
+#status-panel {
+  position: absolute;
+  bottom: 16px;
+  left: 16px;
+  width: 320px;
+  min-width: 240px;
+  min-height: 80px;
+  background: var(--surface);
+  border: 1px solid var(--border2);
+  border-radius: var(--radius);
+  box-shadow: 0 6px 24px rgba(0,0,0,0.13);
+  z-index: 15;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  transition: opacity 0.2s;
+}
+#status-panel.hidden { display: none; }
+#status-panel.minimized #sp-body,
+#status-panel.minimized #sp-footer { display: none; }
+
+#sp-header {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  padding: 8px 10px;
+  background: var(--surface2);
+  border-bottom: 1px solid var(--border);
+  cursor: move;
+  user-select: none;
+  flex-shrink: 0;
+}
+#sp-activity {
+  flex: 1;
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--text);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+#sp-elapsed {
+  font-size: 10px;
+  color: var(--s-running);
+  white-space: nowrap;
+  flex-shrink: 0;
+}
+#sp-toggle-btn {
+  background: none;
+  border: none;
+  color: var(--text-muted);
+  cursor: pointer;
+  font-size: 15px;
+  line-height: 1;
+  padding: 0 2px;
+  flex-shrink: 0;
+}
+#sp-toggle-btn:hover { color: var(--text); }
+
+#sp-copy-btn {
+  background: none;
+  border: none;
+  color: var(--text-muted);
+  cursor: pointer;
+  font-size: 13px;
+  line-height: 1;
+  padding: 0 2px;
+  flex-shrink: 0;
+  transition: color 0.15s;
+}
+#sp-copy-btn:hover { color: var(--text); }
+#sp-copy-btn.copied { color: var(--s-done); }
+
+#sp-body {
+  padding: 10px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+}
+#sp-body::-webkit-scrollbar { width: 3px; }
+#sp-body::-webkit-scrollbar-track { background: transparent; }
+#sp-body::-webkit-scrollbar-thumb { background: var(--border2); border-radius: 2px; }
+
+/* ── Status message log ──────────────────────────────────────────────── */
+.sp-msg {
+  display: grid;
+  grid-template-columns: auto 14px 1fr;
+  gap: 4px;
+  align-items: baseline;
+  font-size: 10px;
+  line-height: 1.5;
+  padding: 2px 4px;
+  border-radius: 3px;
+}
+.sp-msg:hover { background: var(--surface2); }
+.sp-msg-ts {
+  font-family: var(--mono);
+  color: var(--text-dim);
+  white-space: nowrap;
+  font-size: 9px;
+}
+.sp-msg-icon { text-align: center; font-size: 9px; }
+.sp-msg-text { color: var(--text); word-break: break-word; }
+/* kind-specific accent colours */
+.sp-msg[data-kind="ready"]    .sp-msg-icon { color: #4ade80; }
+.sp-msg[data-kind="error"]    .sp-msg-icon { color: #f87171; }
+.sp-msg[data-kind="error"]    .sp-msg-text { color: #f87171; }
+.sp-msg[data-kind="loading"]  .sp-msg-icon { color: #60a5fa; }
+.sp-msg[data-kind="planning"] .sp-msg-icon { color: #a78bfa; }
+.sp-msg[data-kind="exec"]     .sp-msg-icon { color: #34d399; }
+.sp-msg[data-kind="verify"]   .sp-msg-icon { color: #fbbf24; }
+.sp-msg[data-kind="done"]     .sp-msg-icon { color: #94a3b8; }
+.sp-msg[data-kind="info"]     .sp-msg-icon { color: #94a3b8; }
+.sp-msg[data-kind="user"]     .sp-msg-icon { color: #f97316; }
+/* ── Planning live: folded input/output sections ────────────────────── */
+.sp-fold-section {
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  overflow: hidden;
+  flex-shrink: 0;
+}
+.sp-fold-summary {
+  font-size: 10px;
+  font-weight: 600;
+  color: var(--text-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  padding: 5px 8px;
+  background: var(--surface2);
+  cursor: pointer;
+  user-select: none;
+  list-style: none;
+  display: flex;
+  align-items: center;
+  gap: 5px;
+}
+.sp-fold-summary::-webkit-details-marker { display: none; }
+.sp-fold-summary::before { content: '▶'; font-size: 8px; color: var(--text-dim); }
+details[open] > .sp-fold-summary::before { content: '▼'; }
+/* Historical (completed) call sections are visually dimmed */
+.sp-fold-section.sp-fold-history > .sp-fold-summary { opacity: 0.55; }
+.sp-fold-body {
+  font-family: var(--mono);
+  font-size: 10px;
+  color: #94a3b8;
+  background: var(--bg-code);
+  padding: 6px 8px;
+  /* No max-height cap — full prompt is visible when the section is open.
+     The containing #sp-body is scrollable so long content never overflows. */
+  overflow-y: auto;
+  white-space: pre-wrap;
+  word-break: break-word;
+  line-height: 1.5;
+  margin: 0;
+  border-top: 1px solid var(--border);
+}
+.sp-fold-body::-webkit-scrollbar { width: 3px; }
+.sp-fold-body::-webkit-scrollbar-thumb { background: var(--border2); border-radius: 2px; }
+
+/* ── Status panel resize handle (bottom-right corner) ───────────────── */
+#sp-resize-handle {
+  position: absolute;
+  bottom: 0; right: 0;
+  width: 16px; height: 16px;
+  cursor: nwse-resize;
+  z-index: 20;
+  background:
+    linear-gradient(135deg,
+      transparent 0%, transparent 40%,
+      var(--border2) 40%, var(--border2) 50%,
+      transparent 50%, transparent 65%,
+      var(--border2) 65%, var(--border2) 75%,
+      transparent 75%);
+  border-radius: 0 0 var(--radius) 0;
+  opacity: 0.5;
+  transition: opacity 0.15s;
+}
+#sp-resize-handle:hover { opacity: 1; }
+
+#sp-footer {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 6px 10px;
+  border-top: 1px solid var(--border);
+  flex-shrink: 0;
+}
+#sp-tokens {
+  font-size: 10px;
+  color: var(--text-muted);
+}
+#sp-tokens b { font-weight: 600; color: var(--text-dim); }
+#sp-pause-btn {
+  font-size: 11px;
+  padding: 3px 10px;
+  border-radius: 5px;
+  background: var(--surface2);
+  border: 1px solid var(--border2);
+  color: var(--text-dim);
+  cursor: pointer;
+  transition: all 0.15s;
+  white-space: nowrap;
+}
+#sp-pause-btn:hover { background: var(--surface3); color: var(--text); }
+#sp-pause-btn.active { background: var(--s-running); color: #fff; border-color: var(--s-running); font-weight: 600; }
+
+.spinner {
+  width: 10px; height: 10px;
+  border: 2px solid var(--s-running);
+  border-top-color: transparent;
+  border-radius: 50%;
+  animation: spin 0.7s linear infinite;
+  flex-shrink: 0;
+}
+@keyframes spin { to { transform: rotate(360deg); } }
+
+.toolbar-btn {
+  background: var(--surface2);
+  border: 1px solid var(--border2);
+  color: var(--text-dim);
+  border-radius: 6px;
+  padding: 5px 11px;
+  font-size: 12px;
+  cursor: pointer;
+  transition: all 0.15s;
+  white-space: nowrap;
+}
+.toolbar-btn:hover { background: var(--surface3); color: var(--text); border-color: var(--border2); }
+.toolbar-btn.active { background: var(--s-running); color: #0b1120; border-color: var(--s-running); font-weight: 600; }
+.toolbar-btn.primary { background: var(--accent); color: #fff; border-color: var(--accent); }
+.toolbar-btn.primary:hover { filter: brightness(1.1); }
+
+#conn-dot {
+  width: 7px; height: 7px; border-radius: 50%;
+  background: var(--s-failed); flex-shrink: 0;
+  transition: background 0.3s;
+}
+#conn-dot.ok { background: var(--s-done); }
+
+/* ── Canvas ──────────────────────────────────────────────────────────── */
+#canvas-wrap {
+  flex: 1;
+  position: relative;
+  overflow: hidden;
+}
+
+#dag-canvas {
+  width: 100%;
+  height: 100%;
+  cursor: grab;
+}
+#dag-canvas:active { cursor: grabbing; }
+
+.node-g { cursor: pointer; }
+.node-g .node-hit { fill: transparent; }
+.node-g .bg { transition: filter 0.15s; }
+.node-g:hover .bg { filter: brightness(1.15); }
+.node-g.selected .bg { filter: brightness(1.2); }
+
+@keyframes pulse-glow {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.6; }
+}
+.node-running .status-ring { animation: pulse-glow 1.2s ease-in-out infinite; }
+
+.edge-path {
+  fill: none;
+  stroke: var(--border2);
+  stroke-width: 1.5;
+  marker-end: url(#arrowhead);
+  transition: stroke 0.3s;
+}
+
+/* ── Zoom controls ───────────────────────────────────────────────────── */
+#zoom-controls {
+  position: absolute;
+  top: 16px;
+  right: 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+.zoom-btn {
+  width: 28px; height: 28px;
+  background: var(--surface);
+  border: 1px solid var(--border2);
+  color: var(--text-dim);
+  border-radius: 6px;
+  font-size: 16px;
+  cursor: pointer;
+  display: flex; align-items: center; justify-content: center;
+  transition: all 0.15s;
+}
+.zoom-btn:hover { background: var(--surface2); color: var(--text); }
+.zoom-btn-fit   { font-size: 11px; }
+
+/* Status dot colour helpers (replaces per-element inline styles) */
+.dot-pending  { background: var(--s-pending); }
+.dot-ready    { background: var(--s-ready); }
+.dot-running  { background: var(--s-running); }
+.dot-awaiting { background: var(--s-awaiting); }
+.dot-awaiting-user { background: var(--s-awaiting-user); }
+.dot-done     { background: var(--s-done); }
+.dot-failed   { background: var(--s-failed); }
+.dot-accent   { background: var(--accent); }
+.pill-init-hidden { display: none; }
+
+/* Misc helpers */
+.form-hint-inline   { display: inline; margin-left: 6px; }
+.form-textarea-code { font-size: 11px; font-family: 'SF Mono', 'Fira Code', monospace; }
+.form-input-code    { background: var(--bg-code); font-family: 'SF Mono', 'Fira Code', monospace; }
+.form-label-amber   { color: var(--amber); }
+.form-label-required { color: var(--s-failed); }
+
+/* ── Info Panel ──────────────────────────────────────────────────────── */
+#info-panel {
+  position: absolute;
+  bottom: 16px; right: 16px;
+  width: var(--panel-w);
+  max-height: calc(100vh - var(--toolbar-h) - 32px);
+  background: var(--surface);
+  border: 1px solid var(--border2);
+  border-radius: var(--radius);
+  box-shadow: 0 8px 32px rgba(0,0,0,0.5);
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  transition: opacity 0.2s;
+  z-index: 20;
+}
+#info-panel.hidden { display: none; }
+
+.panel-header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 12px;
+  background: var(--surface2);
+  border-bottom: 1px solid var(--border);
+  cursor: move;
+  user-select: none;
+  flex-shrink: 0;
+}
+
+.panel-node-id {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--text);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  flex: 1;
+}
+
+.panel-close {
+  background: none;
+  border: none;
+  color: var(--text-muted);
+  cursor: pointer;
+  font-size: 14px;
+  padding: 2px 4px;
+  border-radius: 4px;
+  line-height: 1;
+  flex-shrink: 0;
+}
+.panel-close:hover { background: var(--surface3); color: var(--text); }
+
+.panel-actions {
+  display: flex;
+  gap: 6px;
+  padding: 8px 12px;
+  border-bottom: 1px solid var(--border);
+  flex-shrink: 0;
+}
+
+.panel-btn {
+  background: var(--surface2);
+  border: 1px solid var(--border2);
+  color: var(--text-dim);
+  border-radius: 5px;
+  padding: 4px 10px;
+  font-size: 11px;
+  cursor: pointer;
+  transition: all 0.15s;
+}
+.panel-btn:hover { background: var(--surface3); color: var(--text); }
+.panel-btn.danger { border-color: #7f1d1d; color: #fca5a5; }
+.panel-btn.danger:hover { background: #7f1d1d; color: #fef2f2; }
+
+.panel-body {
+  overflow-y: auto;
+  padding: 12px;
+  flex: 1;
+  min-height: 0;
+}
+.panel-body::-webkit-scrollbar { width: 4px; }
+.panel-body::-webkit-scrollbar-track { background: transparent; }
+.panel-body::-webkit-scrollbar-thumb { background: var(--border2); border-radius: 2px; }
+
+.info-row {
+  margin-bottom: 12px;
+}
+.info-label {
+  font-size: 10px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.6px;
+  color: var(--text-muted);
+  margin-bottom: 3px;
+}
+.info-value {
+  color: var(--text-dim);
+  line-height: 1.5;
+  word-break: break-word;
+}
+.info-value.prominent { color: var(--text); font-size: 13px; }
+
+.badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 2px 8px;
+  border-radius: 20px;
+  font-size: 10px;
+  font-weight: 600;
+  background: var(--surface2);
+  border: 1px solid var(--border);
+}
+
+.dep-tag {
+  display: inline-block;
+  background: var(--surface2);
+  border: 1px solid var(--border2);
+  border-radius: 4px;
+  padding: 2px 7px;
+  font-size: 11px;
+  color: var(--text-dim);
+  cursor: pointer;
+  margin: 2px 2px 2px 0;
+  transition: all 0.15s;
+}
+.dep-tag:hover { background: var(--surface3); color: var(--accent); border-color: var(--accent); }
+
+.result-box {
+  background: var(--surface2);
+  border: 1px solid var(--border);
+  border-radius: 5px;
+  padding: 8px 10px;
+  font-size: 11px;
+  line-height: 1.6;
+  color: var(--text-dim);
+  overflow-y: visible;
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+.result-box::-webkit-scrollbar { width: 3px; }
+.result-box::-webkit-scrollbar-thumb { background: var(--border2); }
+
+.step-item {
+  display: flex;
+  gap: 8px;
+  align-items: flex-start;
+  padding: 6px 0;
+  border-bottom: 1px solid var(--border);
+  font-size: 11px;
+}
+.step-item:last-child { border-bottom: none; padding-bottom: 8px; }
+.step-icon { flex-shrink: 0; padding-top: 1px; }
+.step-desc { color: var(--text-dim); line-height: 1.4; }
+.step-result { color: var(--text-muted); font-size: 10px; margin-top: 2px; white-space: pre-wrap; word-break: break-word; }
+.step-tool-name { font-family: var(--mono); font-size: 10px; font-weight: 600; color: var(--accent); }
+.step-args     { font-size: 10px; color: var(--text-muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.step-dur      { font-size: 9px; color: var(--text-muted); white-space: nowrap; margin-left: 4px; }
+.step-dur-bar  { display: inline-block; height: 3px; background: var(--border2); border-radius: 2px; vertical-align: middle; margin-left: 3px; }
+.step-retry    { font-size: 9px; color: var(--text-dim); margin-top: 1px; }
+.step-running  { animation: pulse-glow 1.2s ease-in-out infinite; }
+
+/* ── Modal ───────────────────────────────────────────────────────────── */
+#modal-overlay {
+  position: fixed; inset: 0;
+  background: rgba(0,0,0,0.65);
+  display: flex; align-items: center; justify-content: center;
+  z-index: 100;
+  backdrop-filter: blur(2px);
+}
+#modal-overlay.hidden { display: none; }
+
+#modal {
+  background: var(--surface);
+  border: 1px solid var(--border2);
+  border-radius: var(--radius);
+  width: 460px;
+  max-width: calc(100vw - 32px);
+  max-height: calc(100vh - 64px);
+  display: flex;
+  flex-direction: column;
+  box-shadow: 0 20px 60px rgba(0,0,0,0.6);
+}
+
+.modal-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 14px 18px;
+  border-bottom: 1px solid var(--border);
+  flex-shrink: 0;
+}
+.modal-title {
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--text);
+}
+.modal-close {
+  background: none; border: none;
+  color: var(--text-muted); cursor: pointer;
+  font-size: 16px; padding: 2px 5px;
+  border-radius: 4px; line-height: 1;
+}
+.modal-close:hover { background: var(--surface2); color: var(--text); }
+
+.modal-body {
+  padding: 18px;
+  overflow-y: auto;
+  flex: 1;
+}
+.modal-body::-webkit-scrollbar { width: 4px; }
+.modal-body::-webkit-scrollbar-thumb { background: var(--border2); }
+
+.form-group { margin-bottom: 14px; }
+.form-label {
+  display: block;
+  font-size: 11px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  color: var(--text-muted);
+  margin-bottom: 5px;
+}
+.form-input, .form-select, .form-textarea {
+  width: 100%;
+  background: var(--surface2);
+  border: 1px solid var(--border2);
+  border-radius: 5px;
+  padding: 8px 10px;
+  color: var(--text);
+  font-size: 13px;
+  font-family: inherit;
+  outline: none;
+  transition: border-color 0.15s;
+}
+.form-input:focus, .form-select:focus, .form-textarea:focus {
+  border-color: var(--accent);
+}
+.form-select { cursor: pointer; }
+.form-select option { background: var(--surface2); }
+.form-textarea { resize: vertical; min-height: 70px; line-height: 1.5; }
+.form-hint { font-size: 10px; color: var(--text-muted); margin-top: 3px; }
+
+.radio-group { display: flex; flex-direction: column; gap: 8px; }
+.radio-item {
+  display: flex; align-items: flex-start; gap: 10px;
+  background: var(--surface2);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  padding: 10px 12px;
+  cursor: pointer;
+  transition: all 0.15s;
+}
+.radio-item:hover { border-color: var(--border2); background: var(--surface3); }
+.radio-item input { margin-top: 2px; accent-color: var(--accent); flex-shrink: 0; }
+.radio-item-label { font-size: 12px; font-weight: 600; color: var(--text); }
+.radio-item-desc { font-size: 11px; color: var(--text-muted); margin-top: 2px; }
+
+.modal-footer {
+  display: flex; justify-content: flex-end; gap: 8px;
+  padding: 12px 18px;
+  border-top: 1px solid var(--border);
+  flex-shrink: 0;
+}
+.btn {
+  padding: 7px 16px;
+  border-radius: 6px;
+  font-size: 13px;
+  cursor: pointer;
+  border: 1px solid transparent;
+  transition: all 0.15s;
+  font-family: inherit;
+}
+.btn-ghost { background: var(--surface2); border-color: var(--border2); color: var(--text-dim); }
+.btn-ghost:hover { background: var(--surface3); color: var(--text); }
+.btn-primary { background: var(--accent); color: #fff; }
+.btn-primary:hover { filter: brightness(1.1); }
+.btn-danger { background: #7f1d1d; border-color: #991b1b; color: #fef2f2; }
+.btn-danger:hover { background: #991b1b; }
+
+/* ── Panel resize handle ─────────────────────────────────────────────── */
+.panel-resize {
+  position: absolute;
+  bottom: 0; right: 0;
+  width: 16px; height: 16px;
+  cursor: nwse-resize;
+  z-index: 5;
+  /* subtle diagonal grip indicator */
+  background:
+    linear-gradient(135deg,
+      transparent 0%, transparent 40%,
+      var(--border2) 40%, var(--border2) 50%,
+      transparent 50%, transparent 65%,
+      var(--border2) 65%, var(--border2) 75%,
+      transparent 75%);
+  border-radius: 0 0 var(--radius) 0;
+  opacity: 0.5;
+  transition: opacity 0.15s;
+}
+.panel-resize:hover { opacity: 1; }
+
+/* ── Tag picker ──────────────────────────────────────────────────────── */
+.tag-picker {
+  background: var(--surface2);
+  border: 1px solid var(--border2);
+  border-radius: 5px;
+  padding: 5px 8px;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  align-items: center;
+  min-height: 36px;
+  cursor: text;
+  transition: border-color 0.15s;
+  position: relative;
+}
+.tag-picker:focus-within { border-color: var(--accent); }
+
+.tag-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  background: var(--surface3);
+  border: 1px solid var(--border2);
+  border-radius: 4px;
+  padding: 2px 6px;
+  font-size: 12px;
+  color: var(--text);
+  white-space: nowrap;
+}
+.tag-chip-remove {
+  background: none; border: none;
+  color: var(--text-muted); cursor: pointer;
+  font-size: 12px; line-height: 1; padding: 0 1px;
+}
+.tag-chip-remove:hover { color: var(--s-failed); }
+
+.tag-input {
+  background: none; border: none; outline: none;
+  color: var(--text); font-size: 13px; font-family: inherit;
+  min-width: 80px; flex: 1;
+  padding: 2px 0;
+}
+
+.tag-dropdown {
+  position: absolute;
+  top: calc(100% + 4px); left: 0; right: 0;
+  background: var(--surface);
+  border: 1px solid var(--border2);
+  border-radius: 6px;
+  max-height: 180px;
+  overflow-y: auto;
+  z-index: 50;
+  box-shadow: 0 6px 20px rgba(0,0,0,0.4);
+}
+.tag-dropdown.hidden { display: none; }
+.tag-dropdown-item {
+  padding: 7px 10px;
+  font-size: 12px;
+  color: var(--text-dim);
+  cursor: pointer;
+  transition: background 0.1s;
+}
+.tag-dropdown-item:hover,
+.tag-dropdown-item.active { background: var(--surface2); color: var(--text); }
+.tag-dropdown-empty {
+  padding: 8px 10px;
+  font-size: 12px;
+  color: var(--text-muted);
+  font-style: italic;
+}
+
+/* ── Toast ───────────────────────────────────────────────────────────── */
+#toast {
+  position: fixed;
+  bottom: 24px; left: 50%; transform: translateX(-50%);
+  background: var(--surface2);
+  border: 1px solid var(--border2);
+  border-radius: 8px;
+  padding: 10px 18px;
+  font-size: 12px;
+  color: var(--text);
+  box-shadow: 0 4px 16px rgba(0,0,0,0.4);
+  z-index: 200;
+  transition: opacity 0.3s;
+  pointer-events: none;
+}
+#toast.hidden { opacity: 0; }
+
+/* ── Empty state ─────────────────────────────────────────────────────── */
+#empty-state {
+  position: absolute; inset: 0;
+  display: flex; align-items: center; justify-content: center;
+  flex-direction: column; gap: 8px;
+  color: var(--text-muted); font-size: 13px; pointer-events: none;
+}
+#empty-state.hidden { display: none; }
+#empty-state .big { font-size: 32px; opacity: 0.3; }
+
+/* ── Switch-goal modal ───────────────────────────────────────────────── */
+#switch-overlay {
+  position: fixed; inset: 0;
+  background: rgba(0,0,0,0.55);
+  display: flex; align-items: center; justify-content: center;
+  z-index: 100;
+  opacity: 1; transition: opacity 0.2s;
+}
+#switch-overlay.hidden { display: none; }
+
+#switch-shell {
+  width: 600px;
+  max-width: calc(100vw - 32px);
+  background: #111827;
+  border: 1px solid #2e3f58;
+  border-radius: 10px;
+  box-shadow: 0 24px 80px rgba(0,0,0,0.7);
+  overflow: hidden;
+  font-family: 'Inter', system-ui, sans-serif;
+  color: #e2e8f0;
+}
+#switch-shell-header {
+  padding: 18px 22px 14px;
+  border-bottom: 1px solid #1f2d42;
+  background: #1e2a3d;
+  display: flex; align-items: center; justify-content: space-between;
+}
+.sw-brand { font-size: 15px; font-weight: 700; color: #6366f1; letter-spacing: -0.3px; }
+.sw-close  {
+  background: none; border: none; color: #64748b;
+  font-size: 18px; cursor: pointer; padding: 2px 6px; border-radius: 4px;
+}
+.sw-close:hover { color: #e2e8f0; background: #263350; }
+
+.sw-tabs { display: flex; border-bottom: 1px solid #1f2d42; background: #1e2a3d; }
+.sw-tab  {
+  flex: 1; padding: 10px 12px; font-size: 12px; font-weight: 500;
+  color: #64748b; cursor: pointer; border-bottom: 2px solid transparent;
+  transition: all 0.15s; text-align: center; user-select: none;
+  background: none; border-top: none; border-right: none; border-left: none;
+  font-family: inherit;
+}
+.sw-tab:hover { color: #94a3b8; }
+.sw-tab.active { color: #6366f1; border-bottom-color: #6366f1; background: #111827; }
+
+.sw-pane { display: none; padding: 22px; }
+.sw-pane.active { display: block; }
+
+.sw-runs-list {
+  max-height: 260px; overflow-y: auto;
+  border: 1px solid #1f2d42; border-radius: 6px;
+}
+.sw-runs-list::-webkit-scrollbar { width: 4px; }
+.sw-runs-list::-webkit-scrollbar-thumb { background: #2e3f58; }
+.sw-run-item {
+  display: flex; align-items: center; gap: 12px;
+  padding: 11px 14px; border-bottom: 1px solid #1f2d42;
+  cursor: pointer; transition: background 0.12s;
+}
+.sw-run-item:last-child { border-bottom: none; }
+.sw-run-item:hover { background: #1e2a3d; }
+.sw-run-item.selected { background: #263350; }
+.sw-run-dot { width: 8px; height: 8px; border-radius: 50%; background: #6366f1; flex-shrink: 0; }
+.sw-run-goal {
+  flex: 1; font-size: 13px; font-weight: 500; color: #e2e8f0;
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+.sw-run-meta { font-size: 10px; color: #64748b; white-space: nowrap; text-align: right; }
+.sw-empty { padding: 28px 16px; text-align: center; color: #64748b; font-size: 12px; }
+
+.sw-label {
+  display: block; font-size: 11px; font-weight: 600;
+  text-transform: uppercase; letter-spacing: 0.5px;
+  color: #64748b; margin-bottom: 6px;
+}
+.sw-input {
+  width: 100%; background: #1e2a3d; border: 1px solid #2e3f58;
+  border-radius: 6px; padding: 10px 12px; color: #e2e8f0;
+  font-size: 13px; font-family: inherit; outline: none;
+  transition: border-color 0.15s;
+}
+.sw-input:focus { border-color: #6366f1; }
+.sw-textarea {
+  width: 100%; background: #1e2a3d; border: 1px solid #2e3f58;
+  border-radius: 6px; padding: 10px 12px; color: #e2e8f0;
+  font-size: 12px; font-family: 'SF Mono','Fira Code',monospace;
+  line-height: 1.6; outline: none; resize: vertical; min-height: 160px;
+  transition: border-color 0.15s;
+}
+.sw-textarea:focus { border-color: #6366f1; }
+.sw-hint { font-size: 11px; color: #64748b; margin-top: 5px; line-height: 1.5; }
+.sw-hint code { background: #263350; padding: 1px 4px; border-radius: 3px; }
+.sw-error { color: #ef4444; font-size: 12px; margin-top: 8px; min-height: 16px; }
+
+.sw-footer {
+  padding: 14px 22px; border-top: 1px solid #1f2d42;
+  display: flex; justify-content: flex-end; gap: 8px;
+  background: #111827;
+}
+.sw-btn {
+  padding: 8px 18px; border-radius: 6px; font-size: 13px;
+  font-family: inherit; cursor: pointer; border: 1px solid transparent;
+  transition: all 0.15s;
+}
+.sw-btn-ghost { background: #1e2a3d; border-color: #2e3f58; color: #94a3b8; }
+.sw-btn-ghost:hover { background: #263350; color: #e2e8f0; }
+.sw-btn-primary { background: #6366f1; color: #fff; font-weight: 600; }
+.sw-btn-primary:hover { filter: brightness(1.1); }
+.sw-btn-primary:disabled { opacity: 0.45; cursor: not-allowed; filter: none; }
+
+.sw-loading {
+  display: none; flex-direction: column; align-items: center;
+  justify-content: center; gap: 14px; padding: 44px 24px;
+}
+.sw-loading.show { display: flex; }
+.sw-spinner {
+  width: 26px; height: 26px; border: 3px solid #2e3f58;
+  border-top-color: #6366f1; border-radius: 50%;
+  animation: spin 0.7s linear infinite;
+}
+.sw-loading-msg { color: #94a3b8; font-size: 13px; }
+
+/* ── Export dropdown ─────────────────────────────────────────────────── */
+.export-wrap {
+  position: relative;
+  display: flex;
+}
+.export-wrap .export-main {
+  border-radius: 6px 0 0 6px;
+  border-right: none;
+}
+.export-wrap .export-caret {
+  border-radius: 0 6px 6px 0;
+  padding: 5px 8px;
+  font-size: 10px;
+}
+.export-menu {
+  position: absolute;
+  top: calc(100% + 5px);
+  right: 0;
+  background: var(--surface);
+  border: 1px solid var(--border2);
+  border-radius: 7px;
+  box-shadow: 0 6px 20px rgba(0,0,0,0.15);
+  min-width: 178px;
+  z-index: 50;
+  overflow: hidden;
+}
+.export-menu.hidden { display: none; }
+.export-item {
+  display: block;
+  width: 100%;
+  padding: 9px 13px;
+  text-align: left;
+  font-size: 12px;
+  font-family: inherit;
+  background: none;
+  border: none;
+  color: var(--text-dim);
+  cursor: pointer;
+  transition: background 0.12s, color 0.12s;
+}
+.export-item:hover { background: var(--surface2); color: var(--text); }
+.export-item + .export-item {
+  border-top: 1px solid var(--border);
+}
+/* read-only embed */
+.toolbar-btn[onclick="addNodePrompt()"], #export-wrap, #sp-pause-btn, #conn-dot { display: none !important; }
+#toolbar-goal { cursor: default; pointer-events: none; }
+button[onclick*="/confirm"] { display: none !important; }
+</style>
+</head>
+<body>
+
+<!-- ── Toolbar ──────────────────────────────────────────────────────────── -->
+<div id="toolbar">
+  <span id="toolbar-brand">cuddlytoddly</span>
+  <button id="toolbar-goal" onclick="openSwitchModal()" title="Switch goal"></button>
+  <div id="toolbar-counts">
+    <div class="count-pill" id="pill-pending">
+      <div class="dot dot-pending"></div>
+      <span id="cnt-pending">0</span> pending
+    </div>
+    <div class="count-pill" id="pill-ready">
+      <div class="dot dot-ready"></div>
+      <span id="cnt-ready">0</span> ready
+    </div>
+    <div class="count-pill" id="pill-running">
+      <div class="dot dot-running"></div>
+      <span id="cnt-running">0</span> running
+    </div>
+    <div class="count-pill pill-init-hidden" id="pill-awaiting">
+      <div class="dot dot-awaiting"></div>
+      <span id="cnt-awaiting">0</span> awaiting
+    </div>
+    <div class="count-pill pill-init-hidden" id="pill-awaiting-user">
+      <div class="dot dot-awaiting-user"></div>
+      <span id="cnt-awaiting_user">0</span> awaiting user
+    </div>
+    <div class="count-pill" id="pill-done">
+      <div class="dot dot-done"></div>
+      <span id="cnt-done">0</span> done
+    </div>
+    <div class="count-pill" id="pill-failed">
+      <div class="dot dot-failed"></div>
+      <span id="cnt-failed">0</span> failed
+    </div>
+  </div>
+  <div class="count-pill" id="pill-tokens">
+    <div class="dot dot-accent"></div>
+    <span id="cnt-tokens">0</span> tokens
+  </div>
+  <button class="toolbar-btn" onclick="addNodePrompt()">＋ Add Node</button>
+  <div class="export-wrap" id="export-wrap">
+  <button class="toolbar-btn primary export-main" onclick="exportMD()">↓ Export</button>
+  <button class="toolbar-btn primary export-caret" onclick="toggleExportMenu(event)" title="More export options">▾</button>
+  <div class="export-menu hidden" id="export-menu">
+    <button class="export-item" onclick="exportMD(); closeExportMenu()">📄 Markdown report</button>
+    <button class="export-item" onclick="exportHTML(); closeExportMenu()">🌐 Snapshot HTML</button>
+  </div>
+</div>
+  <div id="conn-dot" title="WebSocket connection"></div>
+</div>
+
+<!-- ── Canvas ───────────────────────────────────────────────────────────── -->
+<div id="canvas-wrap">
+  <svg id="dag-canvas"></svg>
+
+  <div id="empty-state">
+    <div class="big">◎</div>
+    <div>Waiting for graph data…</div>
+  </div>
+
+  <div id="zoom-controls">
+    <button class="zoom-btn" onclick="zoomIn()" title="Zoom in">+</button>
+    <button class="zoom-btn zoom-btn-fit" onclick="zoomReset()" title="Fit to screen">⊡</button>
+    <button class="zoom-btn" onclick="zoomOut()" title="Zoom out">−</button>
+  </div>
+
+  <!-- ── Status Panel ───────────────────────────────────────────────────── -->
+  <div id="status-panel" class="hidden">
+    <div id="sp-header">
+      <div class="spinner" id="sp-spinner" style="display:none"></div>
+      <span id="sp-activity">idle</span>
+      <span id="sp-elapsed"></span>
+      <button id="sp-toggle-btn" onclick="toggleStatusPanel()" title="Minimise">−</button>
+      <button id="sp-copy-btn" onclick="copyStatusPanel()" title="Copy all status messages">⎘</button>
+    </div>
+    <div id="sp-body">
+    </div>
+    <div id="sp-footer">
+      <span id="sp-tokens"><b>0</b> tokens</span>
+      <button id="sp-pause-btn" onclick="toggleLLM()">⏸ Pause</button>
+    </div>
+    <div id="sp-resize-handle" title="Drag to resize"></div>
+  </div>
+</div>
+
+<!-- ── Info Panel ────────────────────────────────────────────────────────── -->
+<div id="info-panel" class="hidden">
+  <div class="panel-header" id="panel-drag-handle">
+    <span class="panel-node-id" id="panel-title">—</span>
+    <button class="panel-close" onclick="closePanel()">✕</button>
+  </div>
+  <div class="panel-actions" id="panel-actions"></div>
+  <div class="panel-body" id="panel-body"></div>
+  <div class="panel-resize" id="panel-resize-handle" title="Drag to resize"></div>
+</div>
+
+<!-- ── Modal ─────────────────────────────────────────────────────────────── -->
+<div id="modal-overlay" class="hidden" onclick="overlayClick(event)">
+  <div id="modal">
+    <div class="modal-header">
+      <span class="modal-title" id="modal-title">—</span>
+      <button class="modal-close" onclick="closeModal()">✕</button>
+    </div>
+    <div class="modal-body" id="modal-body"></div>
+    <div class="modal-footer" id="modal-footer"></div>
+  </div>
+</div>
+
+<!-- ── Toast ─────────────────────────────────────────────────────────────── -->
+<div id="toast" class="hidden"></div>
+
+<script>
+// ════════════════════════════════════════════════════════════════════════════
+// DOMAIN CONFIG
+// Replace the values in this section when adapting for a new project.
+// Every reference in the generic code below reads from these constants,
+// so changing them here is all that is needed for the configuration layer.
+// ════════════════════════════════════════════════════════════════════════════
+
+// Icon character rendered on each node in the DAG canvas
+const TYPE_ICON  = { goal: '◎', task: '▣', reflection: '◈', execution_step: '·', clarification: '?' };
+
+// Colour used for the type icon and the type badge in the info panel
+const TYPE_COLOR = { goal: '#a78bfa', task: '#7dd3fc', reflection: '#86efac', execution_step: '#475569', clarification: '#f9a825' };
+
+// Node types that are hidden from the DAG canvas and omitted from status counts.
+// execution_step nodes are internal bookkeeping entries managed by the executor.
+const HIDDEN_NODE_TYPES = new Set(['execution_step']);
+
+// Node type whose description is shown in the toolbar as the "current goal" label.
+// This type also receives the Replan button in the info panel.
+const GOAL_NODE_TYPE = 'goal';
+
+// Status values listed in the edit-node status dropdown.
+const EDITABLE_STATUSES = ['pending', 'ready', 'running', 'done', 'failed', 'to_be_expanded'];
+
+// Node types available in the add-node type dropdown.
+const ADDABLE_NODE_TYPES = ['task', 'goal'];
+
+// ── Constants ────────────────────────────────────────────────────────────────
+
+const STATUS_COLOR = {
+  pending:        'var(--s-pending)',
+  ready:          'var(--s-ready)',
+  running:        'var(--s-running)',
+  done:           'var(--s-done)',
+  failed:         'var(--s-failed)',
+  to_be_expanded: 'var(--s-expanded)',
+  awaiting_input: 'var(--s-awaiting)',
+  awaiting_user:  'var(--s-awaiting)',
+};
+const STATUS_COLOR_HEX = {
+  pending: '#475569', ready: '#3b82f6', running: '#f59e0b',
+  done: '#10b981', failed: '#ef4444', to_be_expanded: '#8b5cf6',
+  awaiting_input: '#e879f9', awaiting_user: '#f97316',
+};
+const NODE_W = 210, NODE_H = 54;
+
+// ── State ────────────────────────────────────────────────────────────────────
+
+let nodes = {};        // current snapshot
+let selectedId = null;
+let paused = false;
+let firstRender = true;
+let currentG = null;   // last dagre graph
+let ws, reconnectTimer;
+let modalSubmitFn = null;
+let modalMode = null;
+let _stepsDraft = [];  // mutable copy of execution_steps while the edit modal is open
+
+// Tracks the last-seen structure_version to detect orchestrator replacement
+// (server resets it to 0 when /api/switch starts a new run).
+let _lastKnownSv = -1;
+
+// ── WebSocket ────────────────────────────────────────────────────────────────
+
+function connect() {
+  ws = new WebSocket(`ws://${location.host}/ws`);
+  ws.onopen = () => {
+    document.getElementById('conn-dot').classList.add('ok');
+    clearTimeout(reconnectTimer);
+  };
+  ws.onclose = () => {
+    document.getElementById('conn-dot').classList.remove('ok');
+    reconnectTimer = setTimeout(connect, 2500);
+  };
+  ws.onmessage = e => handleMessage(JSON.parse(e.data));
+  ws.onerror = () => ws.close();
+}
+
+function _resetPanelState() {
+  // Clear all per-session status panel state so a new run starts fresh.
+  // Called whenever the server signals an orchestrator replacement.
+  _panelPinned       = false;
+  _failuresLogged.clear();
+  _lastActivity      = null;
+  _lastActivityBase  = null;
+  _currentActivityEl = null;
+  Object.keys(_lastNodeActivities).forEach(k => delete _lastNodeActivities[k]);
+  _execState = { nodeId: null, turn: null, renderedCalls: new Set() };
+  const spBody = document.getElementById('sp-body');
+  if (spBody) spBody.replaceChildren();
+}
+
+function handleMessage(data) {
+  if (data.type !== 'snapshot') return;
+
+  // Detect orchestrator replacement: structure_version resets to 0 on /api/switch.
+  // A decrease (or a jump from -1 to a value lower than our last-seen) means the
+  // server is running a brand-new orchestrator — wipe all per-session panel state
+  // so stale errors, pinned banners, and old fold sections don't bleed into the new run.
+  const sv = data.structure_version ?? _lastKnownSv;
+  if (sv < _lastKnownSv) {
+    _resetPanelState();
+  }
+  _lastKnownSv = sv;
+
+  nodes = data.nodes || {};
+  paused = data.paused || false;
+
+  // Status panel — tokens
+  if (data.tokens) {
+    const t = data.tokens.total;
+    document.getElementById('cnt-tokens').textContent =
+      t >= 1_000_000 ? `${(t/1_000_000).toFixed(1)}M`
+      : t >= 1_000   ? `${(t/1_000).toFixed(1)}K`
+      : t;
+    const tokLabel = t >= 1_000_000 ? `${(t/1_000_000).toFixed(1)}M`
+      : t >= 1_000 ? `${(t/1_000).toFixed(1)}K` : String(t);
+    document.getElementById('sp-tokens').innerHTML = `<b>${tokLabel}</b> tokens`;
+  }
+
+  // Toolbar counts
+  const counts = (data.status && data.status.by_status) || {};
+  for (const st of ['pending','ready','running','awaiting_input','awaiting_user','done','failed']) {
+    const el = document.getElementById(`cnt-${st === 'awaiting_input' ? 'awaiting' : st}`);
+    if (el) el.textContent = counts[st] || 0;
+  }
+  // Show/hide the awaiting pill — only relevant when nodes are waiting for input
+  const awaitingPill = document.getElementById('pill-awaiting');
+  if (awaitingPill) awaitingPill.style.display = (counts.awaiting_input || 0) > 0 ? '' : 'none';
+  // Show/hide the awaiting-user pill — only relevant when nodes require manual action
+  const awaitingUserPill = document.getElementById('pill-awaiting-user');
+  if (awaitingUserPill) awaitingUserPill.style.display = (counts.awaiting_user || 0) > 0 ? '' : 'none';
+
+  // Goal description in toolbar (now a button)
+  const goal = Object.values(nodes).find(n => n.node_type === GOAL_NODE_TYPE);
+  const goalDesc = goal?.metadata?.description || goal?.id || '';
+  const goalEl = document.getElementById('toolbar-goal');
+  goalEl.textContent = goalDesc ? `⊹ ${goalDesc}` : '';
+  goalEl.style.display = goalDesc ? '' : 'none';
+  goalEl.title = goalDesc ? `Current goal: ${goalDesc} — click to switch` : '';
+
+  // Status panel — activity
+  updateStatusPanel(data);
+
+  // Empty state
+  const hasNodes = Object.keys(nodes).length > 0;
+  document.getElementById('empty-state').classList.toggle('hidden', hasNodes);
+
+  // Re-render DAG
+  if (hasNodes) renderDAG();
+
+  // Update info panel if open
+  if (selectedId && nodes[selectedId]) updatePanel();
+  else if (selectedId && !nodes[selectedId]) closePanel();
+}
+
+// ── Status message log ────────────────────────────────────────────────────────
+// All entries append directly to #sp-body in arrival order so log messages,
+// planning fold sections, and execution fold sections form one chronological
+// stream.  There is no separate container that would push folds to the bottom.
+
+const _MSG_LOG_MAX = 300;
+let   _lastActivity    = null;   // last data.activity value seen
+let   _lastActivityBase = null;  // base activity (stripped of heartbeat suffix)
+// Per-node activity state for parallel execution — maps node_id → {base, el}
+// so each parallel node gets its own log row that updates independently.
+const _lastNodeActivities = {};
+let   _currentActivityEl = null; // DOM row for the current in-progress activity
+// Set to true when an error event (e.g. llm_load_failed) is received so the
+// panel stays visible even after activity clears and the run is not paused.
+let   _panelPinned = false;
+// Tracks node IDs whose failure reason has already been appended to the log
+// so we don't repeat the same message on every subsequent poll tick.
+const _failuresLogged = new Set();
+// Execution fold state — tracks which node/turn we've last persisted so we
+// only create a new result fold when a tool call actually completes.
+let   _execState = { nodeId: null, turn: null };
+
+// Strip the variable-suffix part of an activity string so heartbeat ticks
+// ("Executing: X · generating… 4s") and tool turns ("… · web_search (turn 3)")
+// compare equal to the base ("Executing: X").
+function _activityBase(s) {
+  if (!s) return null;
+  // Strip only the variable elapsed-time counter at the end of heartbeat
+  // strings (e.g. "… 4s" → "…", "… 30s" → "…") so that:
+  //   - Repeated heartbeat ticks for the same phase update a single row in place
+  //   - Distinct phases (different tool names, turn numbers, tool→generating
+  //     transitions) create new rows rather than all collapsing to "Executing: X"
+  // The old regex stripped everything from " ·" onwards which made every
+  // "Executing: X · <anything>" map to the same base.
+  return s.replace(/\s+\d+s$/, '').trim();
+}
+
+function _classifyActivity(activity) {
+  if (!activity) return null;
+  const a = activity.toLowerCase();
+  if (a.startsWith('planning'))  return { kind: 'planning', icon: '◈' };
+  if (a.startsWith('executing')) return { kind: 'exec',     icon: '▶' };
+  if (a.startsWith('verifying')) return { kind: 'verify',   icon: '◎' };
+  if (a.includes('load failed') || a.includes('error')) return { kind: 'error', icon: '✕' };
+  if (a.includes('loading') || a.includes('initialising')) return { kind: 'loading', icon: '⟳' };
+  if (a.includes('ready'))       return { kind: 'ready',    icon: '✓' };
+  if (a.includes('paused'))      return { kind: 'info',     icon: '⏸' };
+  return { kind: 'info', icon: '·' };
+}
+
+function _classifyEvent(kind) {
+  switch (kind) {
+    case 'llm_loading':    return { kind: 'loading', icon: '⟳' };
+    case 'llm_ready':      return { kind: 'ready',   icon: '✓' };
+    case 'llm_load_failed':return { kind: 'error',   icon: '✕' };
+    case 'user_action':    return { kind: 'user',    icon: '✎' };
+    default:
+      console.warn('[status panel] unrecognised StatusEvent kind:', kind);
+      return { kind: 'info', icon: '·' };
+  }
+}
+
+// Append a new log row to #sp-body and return the created element.
+function _appendMsg(ts, kind, icon, text) {
+  const spBody = document.getElementById('sp-body');
+  if (!spBody) return null;
+
+  const fmtTime = new Date(ts).toTimeString().slice(0, 8);
+  const row = document.createElement('div');
+  row.className = 'sp-msg';
+  row.dataset.kind = kind;
+  // Build with DOM API — no innerHTML risk for arbitrary text content.
+  const tsSpan = document.createElement('span');
+  tsSpan.className = 'sp-msg-ts';
+  tsSpan.textContent = fmtTime;
+  const iconSpan = document.createElement('span');
+  iconSpan.className = 'sp-msg-icon';
+  iconSpan.textContent = icon;
+  const textSpan = document.createElement('span');
+  textSpan.className = 'sp-msg-text';
+  textSpan.textContent = text;
+  row.appendChild(tsSpan);
+  row.appendChild(iconSpan);
+  row.appendChild(textSpan);
+  // Insert before the live fold section (stream / planning output) if one
+  // exists, so that log messages always sit above the live generation box
+  // rather than being pushed below it when they arrive in the same tick.
+  const liveSection = spBody.querySelector('.sp-fold-section[data-live="1"]');
+  if (liveSection) {
+    spBody.insertBefore(row, liveSection);
+  } else {
+    spBody.appendChild(row);
+  }
+
+  // Trim oldest .sp-msg rows (never remove fold sections)
+  const msgs = spBody.querySelectorAll('.sp-msg');
+  if (msgs.length > _MSG_LOG_MAX) msgs[0].remove();
+
+  _scrollIfNearBottom(spBody);
+  return row;
+}
+
+// Update an existing row's text in place (used for heartbeat ticks).
+function _updateMsg(el, text) {
+  if (!el) return;
+  const textSpan = el.querySelector('.sp-msg-text');
+  if (textSpan) textSpan.textContent = text;
+}
+
+function _scrollIfNearBottom(spBody) {
+  if (spBody.scrollHeight - spBody.scrollTop - spBody.clientHeight < 60) {
+    spBody.scrollTop = spBody.scrollHeight;
+  }
+}
+
+// ── Status Panel ─────────────────────────────────────────────────────────────
+
+// Client-side activity timer — ticks every second independently of WS pushes.
+// The server sends activity_started_ms (epoch ms) whenever an activity is
+// active; the client stores it and resets the interval on change.
+let _activityStartedAt = null;   // ms since epoch, or null
+let _timerInterval     = null;   // setInterval handle
+
+function _startTimer(startedMs) {
+  if (_activityStartedAt === startedMs) return;  // already running for this activity
+  _activityStartedAt = startedMs;
+  if (_timerInterval) clearInterval(_timerInterval);
+  if (!startedMs) { _timerInterval = null; return; }
+  const elapsEl = document.getElementById('sp-elapsed');
+  function _tick() {
+    const total = Math.max(0, Math.round((Date.now() - _activityStartedAt) / 1000));
+    const h = Math.floor(total / 3600);
+    const m = Math.floor((total % 3600) / 60);
+    const s = total % 60;
+    const pad = n => String(n).padStart(2, '0');
+    elapsEl.textContent = h > 0
+      ? `${h}:${pad(m)}:${pad(s)}`
+      : `${m}:${pad(s)}`;
+  }
+  _tick();
+  _timerInterval = setInterval(_tick, 1000);
+}
+
+function _stopTimer() {
+  if (_timerInterval) { clearInterval(_timerInterval); _timerInterval = null; }
+  _activityStartedAt = null;
+  const elapsEl = document.getElementById('sp-elapsed');
+  if (elapsEl) elapsEl.textContent = '';
+}
+
+// Format a JSON string — works on both complete and partial (mid-stream) output.
+// For complete valid JSON, uses JSON.parse → JSON.stringify for canonical output.
+// For partial streams, falls back to a character-by-character depth tracker that
+// adds indentation and newlines after structural characters without needing to
+// fully parse the input.  String contents (including \n, \", \\, \uXXXX escapes)
+// are passed through verbatim so _setPreContent can decode them for display.
+function _formatPartialJSON(s) {
+  if (!s) return s;
+
+  // Fast path: complete valid JSON — use the engine's own serialiser.
+  try { return JSON.stringify(JSON.parse(s), null, 2); } catch (_) {}
+
+  // Partial stream path: structural formatter.
+  const INDENT = '  ';
+  let out      = '';
+  let depth    = 0;
+  let inStr    = false;   // inside a JSON string value / key
+  let escaped  = false;   // previous char was backslash inside a string
+
+  for (let i = 0; i < s.length; i++) {
+    const ch = s[i];
+
+    // ── Inside a string: pass characters through, track escape state ───────
+    if (inStr) {
+      out += ch;
+      if (escaped) {
+        escaped = false;
+      } else if (ch === '\\') {
+        escaped = true;
+      } else if (ch === '"') {
+        inStr = false;
+      }
+      continue;
+    }
+
+    // ── Outside a string ────────────────────────────────────────────────────
+    // Skip whitespace — we supply our own.
+    if (ch === ' ' || ch === '\t' || ch === '\n' || ch === '\r') continue;
+
+    if (ch === '"') {
+      inStr = true;
+      out += ch;
+    } else if (ch === '{' || ch === '[') {
+      out += ch;
+      depth++;
+      // Peek ahead: if the next non-whitespace char closes immediately, keep
+      // empty containers on one line (e.g. {} or []).
+      let j = i + 1;
+      while (j < s.length && (s[j] === ' ' || s[j] === '\t')) j++;
+      const closes = s[j] === '}' || s[j] === ']';
+      if (!closes) out += '\n' + INDENT.repeat(depth);
+    } else if (ch === '}' || ch === ']') {
+      depth = Math.max(0, depth - 1);
+      out += '\n' + INDENT.repeat(depth) + ch;
+    } else if (ch === ',') {
+      out += ch + '\n' + INDENT.repeat(depth);
+    } else if (ch === ':') {
+      out += ': ';
+    } else {
+      out += ch;
+    }
+  }
+  return out;
+}
+
+// Set the textContent of an existing <pre> element, interpreting escape
+// sequences that the server serialised as literal backslash sequences:
+//   \n  →  newline     \"  →  "     \\  →  \
+// Unicode escapes (\uXXXX) are also decoded so → renders as → not \u2192.
+function _setPreContent(preEl, text) {
+  if (!text) { preEl.textContent = ''; return; }
+  // Replace JSON-style escape sequences with their real characters.
+  let decoded = text
+    .replace(/\\n/g,  '\n')
+    .replace(/\\t/g,  '\t')
+    .replace(/\\r/g,  '\r')
+    .replace(/\\"/g,  '"')
+    .replace(/\\\\/g, '\\')
+    .replace(/\\u([0-9a-fA-F]{4})/g, (_, hex) => String.fromCharCode(parseInt(hex, 16)));
+  // textContent assigns the raw string — the browser renders it literally
+  // inside <pre> without any further HTML-entity encoding needed.
+  preEl.textContent = decoded;
+}
+
+function updateStatusPanel(data) {
+  const panel   = document.getElementById('status-panel');
+  const spinner = document.getElementById('sp-spinner');
+  const actEl   = document.getElementById('sp-activity');
+  const elapsEl = document.getElementById('sp-elapsed');
+  const pauseBtn = document.getElementById('sp-pause-btn');
+  const spBody  = document.getElementById('sp-body');
+
+  // Pause button state
+  pauseBtn.textContent = paused ? '▶ Resume' : '⏸ Pause';
+  pauseBtn.classList.toggle('active', paused);
+
+  // ── Message log: server StatusEvents ────────────────────────────────────
+  const now = Date.now();
+  for (const ev of (data.status_events || [])) {
+    const { kind, icon } = _classifyEvent(ev.kind);
+    const msg =
+      ev.payload?.message || ev.payload?.error ||
+      ev.kind.replace(/_/g, ' ');
+    // Pin the panel open whenever an error event arrives (e.g. llm_load_failed)
+    // so the user can read what went wrong even after activity clears.
+    if (kind === 'error') _panelPinned = true;
+    // llm_loading events arrive every 2s — update the last loading row in
+    // place rather than appending a fresh one on every tick.
+    if (ev.kind === 'llm_loading' && _currentActivityEl?.dataset.kind === 'loading') {
+      _updateMsg(_currentActivityEl, msg);
+    } else {
+      // llm_ready: before appending the ready row, retrospectively mark the
+      // last loading row as done so it shows ✓ rather than keeping its ⟳ icon.
+      // Without this the activity-transition path (below) marks the wrong row
+      // because _currentActivityEl has already been replaced by the ready row.
+      if (ev.kind === 'llm_ready' && _currentActivityEl?.dataset.kind === 'loading') {
+        _currentActivityEl.dataset.kind = 'done';
+        const loadingIcon = _currentActivityEl.querySelector('.sp-msg-icon');
+        if (loadingIcon) loadingIcon.textContent = '✓';
+      }
+      _currentActivityEl = _appendMsg(ev.ts || now, kind, icon, msg);
+    }
+  }
+
+  // ── Execution live status (running node with _live_status) ─────────────
+  // Processed BEFORE activity transitions so that completed tool-call result
+  // folds are inserted before streamSection first — then the next-turn
+  // activity row is inserted before streamSection too, landing between the
+  // fold and the stream in correct chronological order.
+  // Each completed tool call is persisted as a collapsed fold section so the
+  // full history of tool calls stays visible as the user scrolls up.
+  // The live LLM streaming section updates in place (one per node, reused
+  // across turns) so only the current generation is "live".
+  const runningNode = Object.values(nodes).find(
+    n => n.status === 'running' && n.metadata?._live_status
+  );
+
+  if (runningNode) {
+    const ls      = runningNode.metadata._live_status;
+    const nodeId  = runningNode.id;
+    // Sanitise node ID for use in element IDs (replace non-alphanumeric with -)
+    const safeId  = nodeId.replace(/[^a-zA-Z0-9]/g, '-');
+    const turn    = ls.turn ?? 0;
+
+    // ── New execution node or retry of the same node ─────────────────────
+    // When nodeId changes: different node running — always reset state.
+    // When nodeId is the same but completed_calls is empty while renderedCalls
+    // is non-empty: the server cleared _live_status (expose_all on retry),
+    // meaning this is a fresh run of the same node — reset so stale keys from
+    // the previous attempt don't silently swallow the new tool-result folds.
+    if (nodeId !== _execState.nodeId) {
+      _execState = { nodeId, turn: null, renderedCalls: new Set() };
+    } else if (
+      _execState.renderedCalls.size > 0 &&
+      (ls.completed_calls || []).length === 0
+    ) {
+      // completed_calls reset to [] while renderedCalls is non-empty →
+      // server cleared _live_status for a retry of the same node.
+      _execState = { nodeId, turn: null, renderedCalls: new Set() };
+    }
+    if (!_execState.renderedCalls) _execState.renderedCalls = new Set();
+
+    // ── Persist completed tool-call results ──────────────────────────────
+    // Iterate ls.completed_calls (a server-side append-only list) and create
+    // a collapsed fold for every entry not yet rendered.  Using a list instead
+    // of a single turn field means calls that complete faster than the 2s poll
+    // (fast-failing tools, short tools after long inference) are never lost —
+    // they stay in the list until the JS catches them on the next tick.
+    const completedCalls = ls.completed_calls || [];
+    completedCalls.forEach((call, idx) => {
+      const callKey = `${call.turn}-${call.tool}-${idx}`;
+      if (_execState.renderedCalls.has(callKey)) return;
+      _execState.renderedCalls.add(callKey);
+
+      const resultId = `sp-exec-${safeId}-call${idx}`;
+      if (!document.getElementById(resultId)) {
+        const section = document.createElement('details');
+        section.id = resultId;
+        section.className = 'sp-fold-section sp-fold-history';
+        section.dataset.live = '0';
+        section.open = false;
+        const summary = document.createElement('summary');
+        summary.className = 'sp-fold-summary';
+        summary.textContent = `Turn ${call.turn} · ${call.tool}`;
+        const body = document.createElement('pre');
+        body.className = 'sp-fold-body';
+        _setPreContent(body, call.preview);
+        section.appendChild(summary);
+        section.appendChild(body);
+        // Insert BEFORE the live streaming section so results appear above
+        // the next generation, maintaining chronological order.
+        const streamSection = document.getElementById(`sp-exec-${safeId}-stream`);
+        if (streamSection) {
+          spBody.insertBefore(section, streamSection);
+        } else {
+          spBody.appendChild(section);
+        }
+        _scrollIfNearBottom(spBody);
+      }
+    });
+
+    // ── Live streaming section (one per node, reused across turns) ───────
+    const streamSectionId = `sp-exec-${safeId}-stream`;
+    let streamSection = document.getElementById(streamSectionId);
+    if (!streamSection) {
+      streamSection = document.createElement('details');
+      streamSection.id = streamSectionId;
+      streamSection.appendChild(document.createElement('summary')).className = 'sp-fold-summary';
+      streamSection.querySelector('.sp-fold-summary').textContent = 'Generating…';
+      const body = document.createElement('pre');
+      body.className = 'sp-fold-body';
+      body.id = `${streamSectionId}-body`;
+      streamSection.appendChild(body);
+      spBody.appendChild(streamSection);
+    }
+    // Reopen and re-activate if previously closed (e.g. node was retried).
+    // data-live must be '1' for auto-scroll to fire; the section must be open
+    // so the live generation is visible without manual expansion.
+    if (streamSection.dataset.live !== '1') {
+      streamSection.dataset.live = '1';
+      streamSection.open = true;
+      streamSection.classList.remove('sp-fold-history');
+      const body = streamSection.querySelector('.sp-fold-body');
+      if (body) { body.textContent = ''; body.dataset.lastText = ''; }
+      _scrollIfNearBottom(spBody);
+    }
+    streamSection.className = 'sp-fold-section';
+    // Update the summary on every poll so it reflects whether we're waiting
+    // on a tool call or generating — not just when the section is first created.
+    // ls.tool is set by on_tool_start and cleared when the next LLM turn starts
+    // (make_token_cb resets _live_status). If tool is set but no matching entry
+    // exists yet in completed_calls, the tool is still in-flight.
+    {
+      const streamSummary = streamSection.querySelector('.sp-fold-summary');
+      if (streamSummary) {
+        const toolInFlight   = ls.tool && (ls.completed_calls || []).every(c => c.tool !== ls.tool || c.turn !== (ls.turn ?? 0));
+        streamSummary.textContent = toolInFlight ? `Running: ${ls.tool}…` : 'Generating…';
+      }
+    }
+    const streamBody = document.getElementById(`${streamSectionId}-body`);
+    if (streamBody) {
+      const newText = ls.streaming || '';
+      if (streamBody.dataset.lastText !== newText) {
+        streamBody.dataset.lastText = newText;
+        _setPreContent(streamBody, newText);
+        if (streamSection.dataset.live === '1') {
+          streamBody.scrollTop = streamBody.scrollHeight;
+        }
+      }
+    }
+
+  } else {
+    // No running node — finalize any live execution sections.
+    spBody.querySelectorAll('.sp-fold-section[data-live="1"]').forEach(el => {
+      if (!el.id?.startsWith('sp-exec-')) return;
+      const body = el.querySelector('.sp-fold-body');
+      const hasContent = body && body.textContent.trim().length > 0;
+      if (!hasContent) {
+        // No streaming content was ever written (e.g. constrained inference).
+        // Remove the empty "Generating…" stub rather than leaving it in history.
+        el.remove();
+      } else {
+        el.dataset.live = '0';
+        el.classList.add('sp-fold-history');
+        el.open = false;
+      }
+    });
+    if (_execState.nodeId) _execState = { nodeId: null, turn: null, renderedCalls: new Set() };
+  }
+
+  // ── Message log: activity transitions (detected client-side) ────────────
+  // Strip the variable heartbeat suffix ("· generating… 4s", "· web_search
+  // (turn 2)") before comparing so ticks on the same activity update the
+  // existing row instead of spawning a new one every 2 seconds.
+  // Strip the variable heartbeat suffix ("· generating… 4s", "· web_search
+  // (turn 2)") before comparing so ticks on the same activity update the
+  // existing row instead of spawning a new one every 2 seconds.
+  const newBase = _activityBase(data.activity);
+
+  if (newBase !== _lastActivityBase) {
+    // Base changed — new phase or new node.
+    if (_lastActivityBase && !data.activity) {
+      // Activity cleared: mark the current row as done.
+      if (_currentActivityEl) {
+        _currentActivityEl.dataset.kind = 'done';
+        const iconSpan = _currentActivityEl.querySelector('.sp-msg-icon');
+        if (iconSpan) iconSpan.textContent = '✓';
+      }
+    }
+    if (data.activity) {
+      const { kind, icon } = _classifyActivity(data.activity);
+      // Only reuse the current row when the status-events loop already created
+      // a row of the SAME kind in this tick — this prevents double-rows for
+      // llm_loading / llm_ready / llm_load_failed events which fire both as
+      // a StatusEvent AND as a data.activity change in the same poll.
+      // Critically: do NOT apply this for 'exec' / 'planning' / 'verify' /
+      // 'info' kinds — those must always create a new row when the base
+      // changes, otherwise phase transitions (e.g. web_search→generating→
+      // web_search again) silently overwrite a single row in place.
+      const DEDUP_KINDS = new Set(['loading', 'ready', 'error']);
+      if (DEDUP_KINDS.has(kind) && _currentActivityEl?.dataset.kind === kind) {
+        _updateMsg(_currentActivityEl, data.activity);
+      } else {
+        _currentActivityEl = _appendMsg(now, kind, icon, data.activity);
+      }
+    }
+    _lastActivityBase = newBase;
+  } else if (newBase && data.activity !== _lastActivity) {
+    // Same base, different suffix — heartbeat tick: update in place.
+    _updateMsg(_currentActivityEl, data.activity);
+  }
+
+  _lastActivity = data.activity;
+
+  // ── Parallel node activities ─────────────────────────────────────────────
+  // data.status.node_activities is a dict of {node_id: activity_string} for
+  // every node currently running.  Each parallel node gets its own log row
+  // that updates independently — no node tramples another's display.
+  const nodeActivities = data.status?.node_activities || {};
+
+  // Mark any node that has disappeared (finished) as done.
+  for (const [nid, state] of Object.entries(_lastNodeActivities)) {
+    if (!(nid in nodeActivities)) {
+      if (state.el) {
+        state.el.dataset.kind = 'done';
+        const iconSpan = state.el.querySelector('.sp-msg-icon');
+        if (iconSpan) iconSpan.textContent = '✓';
+      }
+      delete _lastNodeActivities[nid];
+    }
+  }
+
+  // Update or create a row for each currently active node.
+  for (const [nid, actText] of Object.entries(nodeActivities)) {
+    // Skip the node that is already handled by the single-activity path above
+    // (the "dominant" node whose activity === data.activity) to avoid duplicates.
+    if (actText === data.activity) continue;
+
+    const base = _activityBase(actText);
+    const state = _lastNodeActivities[nid];
+
+    if (!state || base !== state.base) {
+      // New node or phase change — create a new row.
+      const { kind, icon } = _classifyActivity(actText);
+      const el = _appendMsg(now, kind, icon, actText);
+      _lastNodeActivities[nid] = { base, el };
+    } else if (actText !== state.lastText) {
+      // Same base, heartbeat tick — update in place.
+      _updateMsg(state.el, actText);
+      state.lastText = actText;
+    }
+  }
+
+  if (data.activity) {
+    panel.classList.remove('hidden');
+    spinner.style.display = '';
+    actEl.textContent = data.activity;
+    _startTimer(data.activity_started_ms ?? null);
+  } else if (paused) {
+    panel.classList.remove('hidden');
+    spinner.style.display = 'none';
+    actEl.textContent = 'Paused';
+    _stopTimer();
+  } else {
+    // Keep the panel visible if any nodes failed or a fatal error event
+    // (e.g. llm_load_failed) was received — the user needs to see why
+    // the run stopped rather than having the panel disappear on them.
+    const hasFailed = (data.status?.by_status?.failed ?? 0) > 0;
+    if (hasFailed || _panelPinned) {
+      panel.classList.remove('hidden');
+      spinner.style.display = 'none';
+      actEl.textContent = hasFailed ? 'Run stopped — errors occurred' : 'Load error';
+      _stopTimer();
+      // Append verification_failure reasons once per failed node so the user
+      // can see exactly what went wrong without opening the node detail panel.
+      // Step nodes (hidden: true when healthy, but exposed on failure) are
+      // skipped — only nodes that carry a verification_failure message are shown.
+      if (hasFailed) {
+        for (const n of Object.values(nodes)) {
+          if (n.status === 'failed' && !_failuresLogged.has(n.id)) {
+            _failuresLogged.add(n.id);
+            const reason = n.metadata?.verification_failure;
+            if (reason) {
+              _appendMsg(Date.now(), 'error', '✕', `${n.id}: ${reason}`);
+            }
+          }
+        }
+      }
+    } else {
+      panel.classList.add('hidden');
+      spinner.style.display = 'none';
+      _stopTimer();
+    }
+  }
+
+  // ── Planning live status (_planning_live_status on the goal node) ────────
+  // Find the goal node that currently has live planning state.  There is at
+  // most one at any time (only one goal is planned at once).
+  const planningNode = Object.values(nodes).find(
+    n => n.node_type === GOAL_NODE_TYPE && n.metadata?._planning_live_status
+  );
+
+  if (planningNode) {
+    const pls = planningNode.metadata._planning_live_status;
+    const callId = pls.call_id ?? 0;
+
+    // ── Input section — keyed on call_id so each LLM call gets its own ─────
+    // section that survives as collapsed history once the call completes.
+    const inputId  = `sp-planning-input-${callId}`;
+    const streamId = `sp-planning-stream-${callId}`;
+
+    // Mark any previous live PLANNING sections (different call_id) as history.
+    // Use an id-prefix filter so execution streaming sections are never touched.
+    spBody.querySelectorAll('.sp-fold-section[data-live="1"]').forEach(el => {
+      if (!el.id.startsWith('sp-planning-')) return;
+      if (el.id !== inputId && el.id !== streamId) {
+        el.dataset.live = '0';
+        el.classList.add('sp-fold-history');
+        el.open = false;
+      }
+    });
+
+    let inputSection = document.getElementById(inputId);
+    if (!inputSection) {
+      inputSection = document.createElement('details');
+      inputSection.id = inputId;
+      inputSection.className = 'sp-fold-section';
+      inputSection.dataset.live = '1';
+      // Build structure with DOM API so textContent handles all special chars.
+      const summary = document.createElement('summary');
+      summary.className = 'sp-fold-summary';
+      const body = document.createElement('pre');
+      body.className = 'sp-fold-body';
+      body.id = `${inputId}-body`;
+      inputSection.appendChild(summary);
+      inputSection.appendChild(body);
+      spBody.appendChild(inputSection);
+    }
+    // Only update when label or input text actually changed to avoid collapsing
+    // a user-opened <details> on every 250ms tick.
+    const inputKey = `${pls.label || ''}||${pls.input || ''}`;
+    if (inputSection.dataset.contentKey !== inputKey) {
+      inputSection.dataset.contentKey = inputKey;
+      inputSection.querySelector('.sp-fold-summary').textContent = pls.label || 'LLM Input';
+      _setPreContent(inputSection.querySelector('.sp-fold-body'), pls.input || '');
+    }
+
+    // ── Output / streaming section — one per call, content grows in place ──
+    let streamSection = document.getElementById(streamId);
+    if (!streamSection) {
+      streamSection = document.createElement('details');
+      streamSection.id = streamId;
+      streamSection.open = true;
+      streamSection.className = 'sp-fold-section';
+      streamSection.dataset.live = '1';
+      const summary = document.createElement('summary');
+      summary.className = 'sp-fold-summary';
+      summary.textContent = 'Output';
+      const body = document.createElement('pre');
+      body.className = 'sp-fold-body';
+      body.id = `${streamId}-body`;
+      streamSection.appendChild(summary);
+      streamSection.appendChild(body);
+      spBody.appendChild(streamSection);
+      _scrollIfNearBottom(spBody);
+    }
+    const streamBody = document.getElementById(`${streamId}-body`);
+    if (streamBody) {
+      const newText = pls.streaming || '';
+      // Pretty-print JSON output; decode escape sequences for all content.
+      _setPreContent(streamBody, _formatPartialJSON(newText));
+      // Only auto-scroll while the call is still active (data-live="1").
+      if (streamSection.dataset.live === '1') {
+        streamBody.scrollTop = streamBody.scrollHeight;
+      }
+    }
+  } else {
+    // Planning finished — collapse and dim any remaining live PLANNING sections.
+    spBody.querySelectorAll('.sp-fold-section[data-live="1"]').forEach(el => {
+      if (!el.id.startsWith('sp-planning-')) return;
+      el.dataset.live = '0';
+      el.classList.add('sp-fold-history');
+      el.open = false;
+    });
+  }
+}
+
+function copyStatusPanel() {
+  const spBody = document.getElementById('sp-body');
+  const btn    = document.getElementById('sp-copy-btn');
+  if (!spBody) return;
+
+  // Collect text from every visible row and fold section in DOM order.
+  const lines = [];
+  spBody.querySelectorAll('.sp-msg, .sp-fold-section').forEach(el => {
+    if (el.classList.contains('sp-msg')) {
+      const ts   = el.querySelector('.sp-msg-ts')?.textContent  || '';
+      const icon = el.querySelector('.sp-msg-icon')?.textContent || '';
+      const text = el.querySelector('.sp-msg-text')?.textContent || '';
+      lines.push(`${ts} ${icon} ${text}`.trim());
+    } else {
+      // Fold section (tool result or stream)
+      const summary = el.querySelector('.sp-fold-summary')?.textContent || '';
+      const body    = el.querySelector('.sp-fold-body')?.textContent    || '';
+      lines.push(`[${summary.trim()}]`);
+      if (body.trim()) lines.push(body.trim());
+    }
+  });
+
+  const text = lines.join('\n');
+  navigator.clipboard.writeText(text).then(() => {
+    btn.textContent = '✓';
+    btn.classList.add('copied');
+    setTimeout(() => {
+      btn.textContent = '⎘';
+      btn.classList.remove('copied');
+    }, 1500);
+  }).catch(() => {
+    // Fallback for browsers that block clipboard without user gesture focus
+    const ta = document.createElement('textarea');
+    ta.value = text;
+    ta.style.position = 'fixed';
+    ta.style.opacity  = '0';
+    document.body.appendChild(ta);
+    ta.select();
+    document.execCommand('copy');
+    document.body.removeChild(ta);
+    btn.textContent = '✓';
+    btn.classList.add('copied');
+    setTimeout(() => {
+      btn.textContent = '⎘';
+      btn.classList.remove('copied');
+    }, 1500);
+  });
+}
+
+function toggleStatusPanel() {
+  const panel = document.getElementById('status-panel');
+  const btn   = document.getElementById('sp-toggle-btn');
+  const minimized = panel.classList.toggle('minimized');
+  btn.textContent = minimized ? '+' : '−';
+  btn.title = minimized ? 'Expand' : 'Minimise';
+}
+
+// Status panel drag
+(function() {
+  let dragging = false, ox, oy;
+  const panel  = document.getElementById('status-panel');
+  const handle = document.getElementById('sp-header');
+  handle.addEventListener('mousedown', e => {
+    if (e.target.id === 'sp-toggle-btn') return;
+    dragging = true;
+    const r = panel.getBoundingClientRect();
+    ox = e.clientX - r.left;
+    oy = e.clientY - r.top;
+    e.preventDefault();
+  });
+  document.addEventListener('mousemove', e => {
+    if (!dragging) return;
+    panel.style.left   = (e.clientX - ox) + 'px';
+    panel.style.top    = (e.clientY - oy) + 'px';
+    panel.style.bottom = 'auto';
+  });
+  document.addEventListener('mouseup', () => { dragging = false; });
+})();
+
+// Status panel resize (bottom-right handle)
+(function() {
+  let resizing = false, startX, startY, startW, startH;
+  const panel  = document.getElementById('status-panel');
+  const handle = document.getElementById('sp-resize-handle');
+  handle.addEventListener('mousedown', e => {
+    resizing = true;
+    startX = e.clientX; startY = e.clientY;
+    const r = panel.getBoundingClientRect();
+    startW = r.width; startH = r.height;
+    e.preventDefault(); e.stopPropagation();
+  });
+  document.addEventListener('mousemove', e => {
+    if (!resizing) return;
+    const w = Math.max(240, startW + (e.clientX - startX));
+    const h = Math.max(80,  startH + (e.clientY - startY));
+    panel.style.width     = w + 'px';
+    panel.style.height    = h + 'px';
+    panel.style.maxHeight = 'none';
+  });
+  document.addEventListener('mouseup', () => { resizing = false; });
+})();
+
+// ── Layout + Render ──────────────────────────────────────────────────────────
+
+let svg, svgG, zoomBehavior;
+
+function initSVG() {
+  svg = d3.select('#dag-canvas');
+
+  // Arrow marker
+  const defs = svg.append('defs');
+  defs.append('marker')
+    .attr('id', 'arrowhead')
+    .attr('viewBox', '-0 -4 8 8')
+    .attr('refX', 7).attr('refY', 0)
+    .attr('markerWidth', 5).attr('markerHeight', 5)
+    .attr('orient', 'auto')
+    .append('path')
+    .attr('d', 'M0,-4L8,0L0,4')
+    .attr('fill', '#2e3f58');
+
+  svgG = svg.append('g').attr('class', 'root');
+  svgG.append('g').attr('class', 'edge-layer');
+  svgG.append('g').attr('class', 'node-layer');
+
+  zoomBehavior = d3.zoom()
+    .scaleExtent([0.08, 4])
+    .on('zoom', e => svgG.attr('transform', e.transform));
+  svg.call(zoomBehavior);
+}
+
+function renderDAG() {
+  // Build dagre graph — edges go from dependent → dependency
+  // so goal (which depends on tasks) ends up at top in TB layout
+  const g = new dagre.graphlib.Graph({ multigraph: false });
+  g.setGraph({
+    rankdir: 'TB',
+    ranksep: 80, nodesep: 44,
+    marginx: 48, marginy: 48,
+  });
+  g.setDefaultEdgeLabel(() => ({}));
+
+  const visible = Object.entries(nodes)
+    .filter(([, n]) => !HIDDEN_NODE_TYPES.has(n.node_type));
+
+  for (const [id] of visible) {
+    g.setNode(id, { width: NODE_W, height: NODE_H });
+  }
+  const visibleIds = new Set(visible.map(([id]) => id));
+  for (const [id, node] of visible) {
+    for (const dep of node.dependencies) {
+      if (visibleIds.has(dep)) {
+        g.setEdge(dep, id); // dependent → prereq = goal at top
+      }
+    }
+  }
+  dagre.layout(g);
+  currentG = g;
+
+  // Edges
+  const line = d3.line().x(d => d.x).y(d => d.y).curve(d3.curveBasis);
+  const edgeLayer = svgG.select('.edge-layer');
+  const edgeData = g.edges().map(e => ({
+    key:    `${e.v}__${e.w}`,
+    v: e.v, w: e.w,
+    points: g.edge(e).points,
+  }));
+  const edges = edgeLayer.selectAll('path.edge-path')
+    .data(edgeData, d => d.key);
+  edges.enter().append('path').attr('class', 'edge-path')
+    .merge(edges)
+    .attr('d', d => line(d.points))
+    .attr('stroke', d => STATUS_COLOR_HEX[nodes[d.v]?.status] || '#2e3f58')
+    .attr('stroke-opacity', d => nodes[d.v]?.status === 'done' ? 0.35 : 0.55);
+  edges.exit().remove();
+
+  // Nodes
+  const nodeLayer = svgG.select('.node-layer');
+  const nodeData = g.nodes()
+    .filter(id => nodes[id])
+    .map(id => ({ id, pos: g.node(id), node: nodes[id] }));
+
+  const nodeGs = nodeLayer.selectAll('g.node-g')
+    .data(nodeData, d => d.id);
+
+  // Enter
+  const entered = nodeGs.enter().append('g')
+    .attr('class', d => `node-g ${d.node.status === 'running' ? 'node-running' : ''}`)
+    .on('click', (e, d) => { e.stopPropagation(); selectNode(d.id); });
+
+  entered.append('rect').attr('class', 'node-hit')
+    .attr('x', -NODE_W/2 - 4).attr('y', -NODE_H/2 - 4)
+    .attr('width', NODE_W + 8).attr('height', NODE_H + 8)
+    .attr('rx', 10).attr('fill', 'transparent');
+
+  // Selection glow ring
+  entered.append('rect').attr('class', 'status-ring')
+    .attr('x', -NODE_W/2 - 2).attr('y', -NODE_H/2 - 2)
+    .attr('width', NODE_W + 4).attr('height', NODE_H + 4)
+    .attr('rx', 9).attr('fill', 'none')
+    .attr('stroke-width', 2).attr('stroke', 'transparent');
+
+  entered.append('rect').attr('class', 'bg')
+    .attr('x', -NODE_W/2).attr('y', -NODE_H/2)
+    .attr('width', NODE_W).attr('height', NODE_H)
+    .attr('rx', 7);
+
+  // Left status bar
+  entered.append('rect').attr('class', 'sbar')
+    .attr('x', -NODE_W/2 + 4).attr('y', -NODE_H/2 + 7)
+    .attr('width', 3).attr('height', NODE_H - 14)
+    .attr('rx', 1.5);
+
+  entered.append('text').attr('class', 'ticon');
+  entered.append('text').attr('class', 'tdesc');
+  entered.append('text').attr('class', 'tstatus');
+  entered.append('text').attr('class', 'ttype');
+
+  // Merge + update
+  const merged = entered.merge(nodeGs);
+
+  merged
+    .attr('transform', d => `translate(${d.pos.x}, ${d.pos.y})`)
+    .attr('class', d => `node-g ${d.node.status === 'running' ? 'node-running' : ''} ${d.id === selectedId ? 'selected' : ''}`);
+
+  const isGoal = d => d.node.node_type === 'goal';
+  merged.select('.bg')
+    .attr('fill', d => d.id === selectedId ? '#1e2a3d' : '#111827')
+    .attr('stroke', d => d.id === selectedId ? '#6366f1' : isGoal(d) ? '#312e81' : '#1f2d42')
+    .attr('stroke-width', d => d.id === selectedId ? 2 : isGoal(d) ? 1.5 : 1);
+
+  merged.select('.status-ring')
+    .attr('stroke', d => {
+      if (d.id === selectedId) return '#6366f1';
+      if (d.node.status === 'running') return STATUS_COLOR_HEX.running;
+      return 'transparent';
+    })
+    .attr('stroke-opacity', d => d.id === selectedId || d.node.status === 'running' ? 0.4 : 0);
+
+  merged.select('.sbar')
+    .attr('fill', d => STATUS_COLOR_HEX[d.node.status] || '#475569');
+
+  merged.select('.ticon')
+    .attr('x', -NODE_W/2 + 14).attr('y', -NODE_H/2 + 20)
+    .attr('font-size', 12).attr('font-family', 'monospace')
+    .attr('fill', d => TYPE_COLOR[d.node.node_type] || '#94a3b8')
+    .text(d => TYPE_ICON[d.node.node_type] || '▣');
+
+  merged.select('.tdesc')
+    .attr('x', -NODE_W/2 + 28).attr('y', -NODE_H/2 + 20)
+    .attr('font-size', 12).attr('font-family', 'system-ui, sans-serif').attr('font-weight', '500')
+    .attr('fill', '#e2e8f0')
+    .text(d => trunc(d.node.metadata?.description || d.id, 24));
+
+  merged.select('.tstatus')
+    .attr('x', -NODE_W/2 + 14).attr('y', -NODE_H/2 + 38)
+    .attr('font-size', 10).attr('font-family', 'system-ui, sans-serif')
+    .attr('fill', d => STATUS_COLOR_HEX[d.node.status] || '#475569')
+    .text(d => d.node.status);
+
+  merged.select('.ttype')
+    .attr('x', NODE_W/2 - 8).attr('y', -NODE_H/2 + 38)
+    .attr('font-size', 10).attr('font-family', 'system-ui, sans-serif')
+    .attr('text-anchor', 'end').attr('fill', '#2e3f58')
+    .text(d => d.node.node_type);
+
+  nodeGs.exit().remove();
+
+  // Deselect on canvas click (not on node)
+  svg.on('click', () => { if (selectedId) closePanel(); });
+
+  // Auto-fit first render
+  if (firstRender) { fitGraph(); firstRender = false; }
+}
+
+// ── Selection ────────────────────────────────────────────────────────────────
+
+function selectNode(id) {
+  selectedId = id;
+  renderDAG();
+  updatePanel();
+}
+function updatePanel() {
+  const node = nodes[selectedId];
+  if (!node) return;
+
+  const panel = document.getElementById('info-panel');
+  panel.classList.remove('hidden');
+  document.getElementById('panel-title').textContent = selectedId;
+
+  // ── Actions — domain hook ─────────────────────────────────────────────────
+  const actions = document.getElementById('panel-actions');
+  actions.innerHTML = domainPanelActions(node);
+
+  // ── Body ──────────────────────────────────────────────────────────────────
+  const body    = document.getElementById('panel-body');
+  const helpers = { row, esc, trunc };
+
+  // Domain hook: special full-body rendering (e.g. clarification nodes).
+  // Returns an HTML string to set directly, or null to use the generic renderer.
+  const customBody = domainPanelBody(node, helpers);
+  if (customBody !== null) { body.innerHTML = customBody; return; }
+
+  const deps   = node.dependencies || [];
+  const result = node.result;
+  const notes  = node.metadata?.reflection_notes || [];
+
+  let html = '';
+
+  // Domain hook: main content block — description, plan, steps, requires,
+  // outputs, and broadening tabs when the node ran with a broadened goal.
+  html += domainBuildContent(node, helpers);
+
+  // ── 3. STATUS + DEPS ──────────────────────────────────────────────────────
+  // Spliced before the Plan row so the visual order is always:
+  //   [tab-header →] description → status → plan → [deps →] requires → outputs
+  {
+    const sColor = STATUS_COLOR_HEX[node.status] || '#475569';
+    const tColor = TYPE_COLOR[node.node_type] || '#94a3b8';
+    const statusBadge =
+      '<span class="badge" style="color:' + sColor + ';border-color:' + sColor + '30">' +
+        '<span style="width:6px;height:6px;border-radius:50%;background:' + sColor + ';display:inline-block"></span> ' +
+        esc(node.status) +
+      '</span>' +
+      '&nbsp;' +
+      '<span class="badge" style="color:' + tColor + '">' +
+        (TYPE_ICON[node.node_type] || '') + ' ' + esc(node.node_type) +
+      '</span>';
+
+    const planMarker = '<div class="info-label">Plan</div>';
+    const statusRow  = row('Status &amp; Type', statusBadge);
+    const depsRow    = deps.length
+      ? row('Dependencies', deps.map(d =>
+          '<span class="dep-tag" onclick="selectNode(\'' + esc(d) + '\')">' + esc(d) + '</span>'
+        ).join(''))
+      : '';
+
+    const planIdx = html.indexOf(planMarker);
+    if (planIdx !== -1) {
+      const rowStart = html.lastIndexOf('<div class="info-row">', planIdx);
+      if (rowStart !== -1) {
+        html = html.slice(0, rowStart) + statusRow + depsRow + html.slice(rowStart);
+      } else {
+        html = html.slice(0, planIdx) + statusRow + depsRow + html.slice(planIdx);
+      }
+    } else {
+      html += statusRow;
+      if (deps.length) html += depsRow;
+    }
+  }
+
+  // ── LIVE EXECUTION STATUS (running nodes only) ────────────────────────────
+  if (node.status === 'running') {
+    const ls = node.metadata?._live_status;
+    if (ls) {
+      const toolBadge = ls.tool
+        ? `<span style="font-size:10px;font-weight:600;padding:1px 7px;border-radius:3px;
+                        background:var(--surface3);border:1px solid var(--border2);
+                        color:var(--accent)">${esc(ls.tool)}</span>` : '';
+      const turnLabel = ls.turn
+        ? `<span style="font-size:10px;color:var(--text-muted);margin-left:5px">turn ${ls.turn}</span>` : '';
+      const previewHtml = ls.preview
+        ? `<pre style="font-size:10px;font-family:var(--mono);color:#94a3b8;
+                       white-space:pre-wrap;margin-top:6px;max-height:80px;
+                       overflow-y:auto;background:var(--bg-code);padding:6px 8px;
+                       border-radius:4px;border:1px solid var(--border);line-height:1.5">${esc(ls.preview)}</pre>`
+        : '';
+      // Streaming tokens — show the growing response text
+      const streamHtml = ls.streaming
+        ? `<pre style="font-size:10px;font-family:var(--mono);color:#94a3b8;
+                       white-space:pre-wrap;margin-top:4px;max-height:100px;
+                       overflow-y:auto;background:var(--bg-code);padding:6px 8px;
+                       border-radius:4px;border:1px solid var(--border);line-height:1.5;
+                       word-break:break-word">${esc(ls.streaming)}</pre>`
+        : '';
+      html += row('In progress',
+        `<div style="border:1px solid var(--s-running)40;border-left:3px solid var(--s-running);
+                     border-radius:4px;padding:8px 10px">
+           <div style="display:flex;align-items:center;flex-wrap:wrap;gap:2px;margin-bottom:2px">
+             ${toolBadge}${turnLabel}
+           </div>
+           ${previewHtml}${streamHtml}
+         </div>`);
+    }
+  }
+
+  // ── AWAITING INPUT indicator ──────────────────────────────────────────────
+  if (node.status === 'awaiting_input') {
+    const awaitReason  = node.metadata?.awaiting_input_reason || '';
+    const awaitMissing = node.metadata?.missing_fields || [];
+    const missingList  = awaitMissing.length
+      ? `<div style="font-size:10px;color:var(--text-muted);margin-top:4px">Waiting for: ${esc(awaitMissing.join(', '))}</div>` : '';
+    const reasonLine = awaitReason
+      ? `<div style="font-size:10px;color:var(--text-dim);font-style:italic;margin-top:2px">${esc(awaitReason)}</div>` : '';
+    html += row('Awaiting input', `
+      <div style="border:1px solid var(--s-awaiting)40;border-left:3px solid var(--s-awaiting);border-radius:4px;padding:8px 10px">
+        <div style="font-size:10px;color:var(--s-awaiting);font-weight:600;margin-bottom:4px;text-transform:uppercase;letter-spacing:0.5px">⏳ Waiting for user input</div>
+        ${missingList}${reasonLine}
+      </div>`);
+  }
+
+  // ── AWAITING USER indicator ───────────────────────────────────────────────
+  if (node.status === 'awaiting_user') {
+    const artifact     = node.metadata?.handoff_artifact || '';
+    const pendingSteps = node.metadata?.pending_steps || [];
+    const stepsHtml    = pendingSteps.length
+      ? `<div style="font-size:10px;color:#f97316;margin-top:4px">Pending steps: ${esc(pendingSteps.join(', '))}</div>` : '';
+    const artifactHtml = artifact
+      ? `<pre style="font-size:10px;color:var(--text-muted);white-space:pre-wrap;margin-top:6px;max-height:160px;overflow-y:auto;background:var(--bg-card);padding:6px;border-radius:4px">${esc(artifact)}</pre>` : '';
+    html += row('Action required', `
+      <div style="border:1px solid #f9741640;border-left:3px solid #f97316;border-radius:4px;padding:8px 10px">
+        <div style="font-size:10px;color:#f97316;font-weight:600;margin-bottom:4px;text-transform:uppercase;letter-spacing:0.5px">🙋 Waiting for you to act</div>
+        ${stepsHtml}${artifactHtml}
+        <button
+          onclick="api('POST', '/api/node/' + encodeURIComponent(selectedId) + '/confirm').then(d => { if (d.ok) toast('Confirmed done'); })"
+          style="margin-top:8px;padding:4px 12px;font-size:11px;background:#f97316;color:#fff;border:none;border-radius:4px;cursor:pointer;font-weight:600">
+          ✓ Mark as done
+        </button>
+      </div>`);
+  }
+
+  // ── FAILURE REASON ────────────────────────────────────────────────────────
+  if (node.status === 'failed') {
+    const failReason   = node.metadata?.verification_failure || '';
+    const retryCount   = node.metadata?.retry_count ?? null;
+    const retryLabel   = retryCount != null
+      ? `<div style="font-size:10px;color:var(--text-dim);margin-top:4px">Failed after ${retryCount} attempt${retryCount === 1 ? '' : 's'}</div>`
+      : '';
+    const reasonBody   = failReason
+      ? `<div style="font-size:11px;color:var(--text-muted);margin-top:4px;line-height:1.5">${esc(failReason)}</div>`
+      : `<div style="font-size:11px;color:var(--text-dim);font-style:italic;margin-top:4px">No reason recorded.</div>`;
+    html += row('Failure reason', `
+      <div style="border:1px solid var(--s-failed)40;border-left:3px solid var(--s-failed);border-radius:4px;padding:8px 10px">
+        <div style="font-size:10px;color:var(--s-failed);font-weight:600;text-transform:uppercase;letter-spacing:0.5px">✗ Node failed</div>
+        ${reasonBody}${retryLabel}
+      </div>`);
+  }
+
+  // ── RESULT ────────────────────────────────────────────────────────────────
+  if (result != null) {
+    html += row(domainResultLabel(node), `<div class="result-box">${esc(String(result))}</div>`);
+  }
+
+  // ── NOTES ─────────────────────────────────────────────────────────────────
+  if (notes.length) {
+    html += row('Notes', notes.map(n => `<div style="font-size:11px;color:var(--text-muted);margin-bottom:4px">• ${esc(n)}</div>`).join(''));
+  }
+
+  // Domain hook: bottom content — execution steps or other project-specific
+  // trailing detail.  Appended after result and notes.
+  html += domainPanelBottom(node, helpers);
+
+  body.innerHTML = html || '<div style="color:var(--text-muted);font-size:12px">No details available.</div>';
+}
+
+function row(label, content) {
+  return `<div class="info-row">
+    <div class="info-label">${label}</div>
+    <div class="info-value">${content}</div>
+  </div>`;
+}
+
+function closePanel() {
+  selectedId = null;
+  document.getElementById('info-panel').classList.add('hidden');
+  renderDAG();
+}
+
+// ── Panel dragging ────────────────────────────────────────────────────────────
+
+(function() {
+  let dragging = false, ox, oy;
+  const panel = document.getElementById('info-panel');
+  const handle = document.getElementById('panel-drag-handle');
+
+  handle.addEventListener('mousedown', e => {
+    dragging = true;
+    const r = panel.getBoundingClientRect();
+    ox = e.clientX - r.left;
+    oy = e.clientY - r.top;
+    e.preventDefault();
+  });
+  document.addEventListener('mousemove', e => {
+    if (!dragging) return;
+    panel.style.left   = (e.clientX - ox) + 'px';
+    panel.style.top    = (e.clientY - oy) + 'px';
+    panel.style.right  = 'auto';
+    panel.style.bottom = 'auto';
+  });
+  document.addEventListener('mouseup', () => { dragging = false; });
+})();
+
+// ── Modals ────────────────────────────────────────────────────────────────────
+
+// ── Steps editor ─────────────────────────────────────────────────────────────
+// Manages the _stepsDraft array that backs the execution_steps editor inside
+// the edit modal.  Re-renders the step list on structural mutations (add /
+// remove / reorder); individual field edits update _stepsDraft in-place via
+// oninput without triggering a full re-render so the cursor is never lost.
+
+function _stepsRender() {
+  const container = document.getElementById('f-steps-container');
+  if (!container) return;
+  if (!_stepsDraft.length) {
+    container.innerHTML = '<div style="font-size:11px;color:var(--text-muted);font-style:italic;padding:4px 0 8px">No steps defined.</div>';
+    return;
+  }
+  const btnBase = 'background:none;border:1px solid var(--border2);border-radius:4px;color:var(--text-dim);cursor:pointer;font-size:11px;padding:2px 6px;line-height:1.4;transition:all 0.12s';
+  container.innerHTML = _stepsDraft.map((s, i) => `
+    <div style="background:var(--surface2);border:1px solid var(--border);border-radius:6px;padding:10px 12px;margin-bottom:8px">
+      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px">
+        <span style="font-size:10px;font-weight:600;text-transform:uppercase;letter-spacing:0.5px;color:var(--text-muted)">Step ${i + 1}</span>
+        <div style="display:flex;gap:4px">
+          <button type="button" style="${btnBase}" title="Move up"
+                  onclick="_stepsMoveUp(${i})" ${i === 0 ? 'disabled style="' + btnBase + ';opacity:0.35;cursor:not-allowed"' : ''}>↑</button>
+          <button type="button" style="${btnBase}" title="Move down"
+                  onclick="_stepsMoveDown(${i})" ${i === _stepsDraft.length - 1 ? 'disabled style="' + btnBase + ';opacity:0.35;cursor:not-allowed"' : ''}>↓</button>
+          <button type="button" style="${btnBase};color:#fca5a5;border-color:#7f1d1d" title="Remove step"
+                  onclick="_stepsRemoveRow(${i})">×</button>
+        </div>
+      </div>
+      <div style="margin-bottom:6px">
+        <label style="font-size:10px;text-transform:uppercase;letter-spacing:0.5px;color:var(--text-muted);display:block;margin-bottom:3px">Type</label>
+        <input class="form-input" style="font-size:11px;font-family:'SF Mono','Fira Code',monospace"
+               value="${esc(s.execution_type || '')}"
+               placeholder="e.g. search_web, write_analysis, post_to_reddit"
+               oninput="_stepsDraft[${i}].execution_type=this.value">
+      </div>
+      <div style="margin-bottom:6px">
+        <label style="font-size:10px;text-transform:uppercase;letter-spacing:0.5px;color:var(--text-muted);display:block;margin-bottom:3px">Description</label>
+        <input class="form-input" style="font-size:12px"
+               value="${esc(s.description || '')}"
+               placeholder="What this step does"
+               oninput="_stepsDraft[${i}].description=this.value">
+      </div>
+      <div>
+        <label style="font-size:10px;text-transform:uppercase;letter-spacing:0.5px;color:var(--text-muted);display:block;margin-bottom:3px">Produces</label>
+        <input class="form-input" style="font-size:12px"
+               value="${esc(s.produces || '')}"
+               placeholder="What this step contributes toward the output"
+               oninput="_stepsDraft[${i}].produces=this.value">
+      </div>
+    </div>
+  `).join('');
+}
+
+function _stepsAddRow() {
+  _stepsDraft.push({ execution_type: '', description: '', produces: '' });
+  _stepsRender();
+  // Focus the type field of the new step
+  const inputs = document.querySelectorAll('#f-steps-container input');
+  if (inputs.length) inputs[inputs.length - 3]?.focus();
+}
+
+function _stepsMoveUp(i) {
+  if (i <= 0) return;
+  // Flush any pending oninput before swapping (defensive — JS is single-threaded
+  // but keeps the draft consistent with what is displayed after re-render)
+  [_stepsDraft[i - 1], _stepsDraft[i]] = [_stepsDraft[i], _stepsDraft[i - 1]];
+  _stepsRender();
+}
+
+function _stepsMoveDown(i) {
+  if (i >= _stepsDraft.length - 1) return;
+  [_stepsDraft[i], _stepsDraft[i + 1]] = [_stepsDraft[i + 1], _stepsDraft[i]];
+  _stepsRender();
+}
+
+function _stepsRemoveRow(i) {
+  _stepsDraft.splice(i, 1);
+  _stepsRender();
+}
+
+function openEditModal() {
+  const node = nodes[selectedId];
+  if (!node) return;
+  modalMode = 'edit';
+  document.getElementById('modal-title').textContent = 'Edit Node';
+
+  const allIds = Object.keys(nodes).filter(id => id !== selectedId);
+  const curDeps = node.dependencies || [];
+  // Compute current dependents — nodes that list selectedId in their own dependencies
+  const curDependents = Object.entries(nodes)
+    .filter(([, n]) => (n.dependencies || []).includes(selectedId))
+    .map(([id]) => id);
+
+  // Initialise the steps draft from the node's current execution_steps
+  _stepsDraft = (node.metadata?.execution_steps || []).map(s => ({ ...s }));
+
+  document.getElementById('modal-body').innerHTML = `
+    <div class="form-group">
+      <label class="form-label">Description</label>
+      <textarea class="form-textarea" id="f-desc" rows="3">${esc(node.metadata?.description || '')}</textarea>
+    </div>
+    <div class="form-group">
+      <label class="form-label">Status</label>
+      <select class="form-select" id="f-status">
+        ${EDITABLE_STATUSES.map(s =>
+          `<option value="${s}" ${node.status === s ? 'selected' : ''}>${s}</option>`
+        ).join('')}
+      </select>
+    </div>
+    <div class="form-group">
+      <label class="form-label">Dependencies
+        <span class="form-hint form-hint-inline">nodes this node waits for</span>
+      </label>
+      ${tagPickerHTML('edit-deps', curDeps, allIds)}
+    </div>
+    <div class="form-group">
+      <label class="form-label">Dependents
+        <span class="form-hint form-hint-inline">nodes that wait for this one</span>
+      </label>
+      ${tagPickerHTML('edit-dependents', curDependents, allIds)}
+    </div>
+    <div class="form-group">
+      <label class="form-label">Steps
+        <span class="form-hint form-hint-inline">execution steps the task works through — changes trigger a node reset</span>
+      </label>
+      <div id="f-steps-container"></div>
+      <button type="button"
+              onclick="_stepsAddRow()"
+              style="width:100%;padding:7px 10px;background:var(--surface2);border:1px dashed var(--border2);border-radius:5px;color:var(--text-dim);font-size:12px;cursor:pointer;transition:background 0.15s;text-align:center"
+              onmouseover="this.style.background='var(--surface3)'"
+              onmouseout="this.style.background='var(--surface2)'">＋ Add step</button>
+    </div>
+    <div class="form-group">
+      <label class="form-label">Result
+        <span class="form-hint form-hint-inline">editing this will rerun dependent nodes</span>
+      </label>
+      <textarea class="form-textarea form-textarea-code" id="f-result" rows="5">${esc(node.result != null ? String(node.result) : '')}</textarea>
+    </div>
+  `;
+  initTagPickers();
+  _stepsRender();
+
+  document.getElementById('modal-footer').innerHTML = `
+    <button class="btn btn-ghost" onclick="closeModal()">Cancel</button>
+    <button class="btn btn-primary" onclick="submitEdit()">Save</button>
+  `;
+
+  showModal();
+}
+
+function submitEdit() {
+  const desc       = document.getElementById('f-desc').value.trim();
+  const status     = document.getElementById('f-status').value;
+  const deps       = getTagPickerValues('edit-deps');
+  const dependents = getTagPickerValues('edit-dependents');
+  const result     = document.getElementById('f-result').value;
+
+  // Collect the current steps draft — filter out completely blank rows
+  const steps = _stepsDraft
+    .map(s => ({
+      execution_type: (s.execution_type || '').trim(),
+      description:    (s.description    || '').trim(),
+      produces:       (s.produces       || '').trim(),
+    }))
+    .filter(s => s.execution_type || s.description);
+
+  api('PUT', `/api/node/${encodeURIComponent(selectedId)}`, {
+    description: desc, status, dependencies: deps, dependents, result,
+    execution_steps: steps,
+  }).then(d => { if (d.ok) toast(`Saved: ${selectedId}`); });
+  closeModal();
+}
+
+// ── Clarification node editing ────────────────────────────────────────────────
+
+// Holds the in-progress field edits while the modal is open.
+function openRemoveModal() {
+  const node = nodes[selectedId];
+  if (!node) return;
+  modalMode = 'remove';
+  document.getElementById('modal-title').textContent = `Remove: ${selectedId}`;
+
+  document.getElementById('modal-body').innerHTML = `
+    <div class="radio-group">
+      <label class="radio-item">
+        <input type="radio" name="remove-mode" value="rewire" checked>
+        <div>
+          <div class="radio-item-label">Rewire children</div>
+          <div class="radio-item-desc">Remove this node and connect its children directly to its parents.</div>
+        </div>
+      </label>
+      <label class="radio-item">
+        <input type="radio" name="remove-mode" value="cascade">
+        <div>
+          <div class="radio-item-label">Cascade remove</div>
+          <div class="radio-item-desc">Remove this node and all its descendants.</div>
+        </div>
+      </label>
+      <label class="radio-item">
+        <input type="radio" name="remove-mode" value="disconnect">
+        <div>
+          <div class="radio-item-label">Disconnect</div>
+          <div class="radio-item-desc">Remove this node only, leaving children without this dependency.</div>
+        </div>
+      </label>
+    </div>
+  `;
+
+  document.getElementById('modal-footer').innerHTML = `
+    <button class="btn btn-ghost" onclick="closeModal()">Cancel</button>
+    <button class="btn btn-danger" onclick="submitRemove()">Remove</button>
+  `;
+
+  showModal();
+}
+
+function submitRemove() {
+  const mode = document.querySelector('input[name="remove-mode"]:checked')?.value || 'cascade';
+  const id = selectedId;
+  closeModal();
+  closePanel();
+  api('DELETE', `/api/node/${encodeURIComponent(id)}?mode=${mode}`)
+    .then(d => { if (d.ok) toast(`Removed: ${id}`); });
+}
+// Replacements for addNodePrompt() and submitAdd() in web_ui.html
+
+function addNodePrompt() {
+  modalMode = 'add';
+  document.getElementById('modal-title').textContent = 'Add Node';
+  const allIds = Object.keys(nodes);
+  const preselectedDep = selectedId ? [selectedId] : [];
+
+  document.getElementById('modal-body').innerHTML = `
+    <div class="form-group">
+      <label class="form-label">Node ID <span class="form-label-required">*</span></label>
+      <input class="form-input" id="f-node-id" placeholder="e.g. Research_Market" autocomplete="off">
+    </div>
+    <div class="form-group">
+      <label class="form-label">Description</label>
+      <textarea class="form-textarea" id="f-add-desc" rows="2" placeholder="What this node does"></textarea>
+    </div>
+    <div class="form-group">
+      <label class="form-label">Type</label>
+      <select class="form-select" id="f-type">
+        ${ADDABLE_NODE_TYPES.map((t, i) =>
+          `<option value="${t}" ${i === 0 ? 'selected' : ''}>${t}</option>`
+        ).join('')}
+      </select>
+    </div>
+    <div class="form-group">
+      <label class="form-label">Dependencies
+        <span class="form-hint form-hint-inline">nodes this node waits for</span>
+      </label>
+      ${tagPickerHTML('add-deps', preselectedDep, allIds)}
+    </div>
+    <div class="form-group">
+      <label class="form-label">Dependents
+        <span class="form-hint form-hint-inline">nodes that will wait for this one</span>
+      </label>
+      ${tagPickerHTML('add-dependents', [], allIds)}
+    </div>
+  `;
+  initTagPickers();
+
+  document.getElementById('modal-footer').innerHTML = `
+    <button class="btn btn-ghost" onclick="closeModal()">Cancel</button>
+    <button class="btn btn-primary" onclick="submitAdd()">Add Node</button>
+  `;
+
+  showModal();
+  document.getElementById('f-node-id').focus();
+}
+
+function submitAdd() {
+  const nodeId = document.getElementById('f-node-id').value.trim();
+  if (!nodeId) { toast('Node ID is required'); return; }
+  if (nodes[nodeId]) { toast('Node ID already exists'); return; }
+
+  const desc       = document.getElementById('f-add-desc').value.trim();
+  const type       = document.getElementById('f-type').value;
+  const deps       = getTagPickerValues('add-deps').filter(d => nodes[d]);
+  const dependents = getTagPickerValues('add-dependents').filter(d => nodes[d]);
+
+  api('POST', '/api/node', {
+    node_id:      nodeId,
+    node_type:    type,
+    description:  desc,
+    dependencies: deps,
+    dependents,
+  }).then(d => { if (d.ok) toast(`Added: ${nodeId}`); });
+  closeModal();
+}
+
+function showModal() {
+  document.getElementById('modal-overlay').classList.remove('hidden');
+}
+
+function closeModal() {
+  document.getElementById('modal-overlay').classList.add('hidden');
+}
+
+function overlayClick(e) {
+  if (e.target === document.getElementById('modal-overlay')) closeModal();
+}
+
+// ── Node actions ──────────────────────────────────────────────────────────────
+
+function retryNode() {
+  if (!selectedId) return;
+  api('POST', `/api/node/${encodeURIComponent(selectedId)}/retry`);
+  toast('Retry scheduled');
+}
+
+function toggleLLM() {
+  api('POST', paused ? '/api/llm/resume' : '/api/llm/pause');
+}
+
+// ── Export ────────────────────────────────────────────────────────────────────
+
+function exportMD() {
+  api('POST', '/api/export').then(data => {
+    if (data.ok) toast(`Exported → ${data.path.split('/').pop()}`);
+  });
+}
+
+function exportHTML() {
+  api('POST', '/api/export/html').then(data => {
+    if (data.ok) toast(`Snapshot HTML → ${data.path.split('/').pop()}`);
+  });
+}
+
+function toggleExportMenu(e) {
+  e.stopPropagation();
+  document.getElementById('export-menu').classList.toggle('hidden');
+}
+
+function closeExportMenu() {
+  document.getElementById('export-menu').classList.add('hidden');
+}
+
+// Close the menu when clicking anywhere outside it
+document.addEventListener('click', e => {
+  const wrap = document.getElementById('export-wrap');
+  if (wrap && !wrap.contains(e.target)) closeExportMenu();
+});
+
+// ── Zoom controls ─────────────────────────────────────────────────────────────
+
+function zoomIn()    { svg.transition().call(zoomBehavior.scaleBy, 1.4); }
+function zoomOut()   { svg.transition().call(zoomBehavior.scaleBy, 0.7); }
+function zoomReset() { fitGraph(); }
+
+function fitGraph() {
+  if (!currentG) return;
+  const graph = currentG.graph();
+  if (!graph.width || !graph.height) return;
+
+  const wrap = document.getElementById('canvas-wrap');
+  const W = wrap.clientWidth, H = wrap.clientHeight;
+  const pad = 60;
+  const scale = Math.min(
+    (W - pad * 2) / graph.width,
+    (H - pad * 2) / graph.height,
+    1.2
+  );
+  const tx = (W - graph.width  * scale) / 2;
+  const ty = (H - graph.height * scale) / 2;
+
+  svg.transition().duration(400).call(
+    zoomBehavior.transform,
+    d3.zoomIdentity.translate(tx, ty).scale(scale)
+  );
+}
+
+// ── API helper ────────────────────────────────────────────────────────────────
+
+async function api(method, path, body) {
+  const opts = {
+    method,
+    headers: { 'Content-Type': 'application/json' },
+  };
+  if (body) opts.body = JSON.stringify(body);
+  try {
+    const r = await fetch(path, opts);
+    const data = await r.json();
+    if (!r.ok) {
+      // FastAPI error responses carry the message in data.detail
+      const msg = (typeof data.detail === 'string' ? data.detail : null)
+        || data.error
+        || `${method} ${path} failed (${r.status})`;
+      toast(`Error: ${msg}`);
+      return { ok: false, error: msg };
+    }
+    return data;
+  } catch (e) {
+    toast('Request failed: ' + e.message);
+    return { ok: false };
+  }
+}
+
+// ── Utilities ─────────────────────────────────────────────────────────────────
+
+function esc(s) {
+  return String(s)
+    .replace(/&/g, '&amp;').replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+}
+
+function trunc(s, n) {
+  s = String(s);
+  return s.length > n ? s.slice(0, n - 1) + '…' : s;
+}
+
+let toastTimer;
+function toast(msg) {
+  const el = document.getElementById('toast');
+  el.textContent = msg;
+  el.classList.remove('hidden');
+  clearTimeout(toastTimer);
+  toastTimer = setTimeout(() => el.classList.add('hidden'), 3500);
+}
+
+// ── Switch-goal modal ────────────────────────────────────────────────────────
+
+let swActiveTab     = 'existing';
+let swSelectedRun   = null;
+let swPolling       = false;
+
+function openSwitchModal() {
+  swActiveTab   = 'existing';
+  swSelectedRun = null;
+  swPolling     = false;
+
+  // Reset to initial state
+  document.querySelectorAll('.sw-pane').forEach(el => el.classList.remove('active'));
+  document.getElementById('swpane-existing').classList.add('active');
+  document.querySelectorAll('.sw-tab').forEach(el => el.classList.remove('active'));
+  document.getElementById('swtab-existing').classList.add('active');
+  document.querySelectorAll('.sw-error').forEach(el => el.textContent = '');
+  document.getElementById('sw-loading').classList.remove('show');
+  document.getElementById('sw-footer').style.display = '';
+  document.getElementById('sw-main').querySelectorAll('.sw-pane')
+    .forEach(el => { if (!el.classList.contains('active')) el.classList.remove('active'); });
+
+  document.getElementById('switch-overlay').classList.remove('hidden');
+  loadSwitchRuns();
+}
+
+function closeSwitchModal() {
+  if (swPolling) return;   // don't close while switching
+  document.getElementById('switch-overlay').classList.add('hidden');
+}
+
+function switchModalTab(tab) {
+  swActiveTab   = tab;
+  swSelectedRun = null;
+  document.querySelectorAll('.sw-tab').forEach(el =>
+    el.classList.toggle('active', el.id === `swtab-${tab}`)
+  );
+  document.querySelectorAll('.sw-pane').forEach(el =>
+    el.classList.toggle('active', el.id === `swpane-${tab}`)
+  );
+  document.querySelectorAll('.sw-error').forEach(el => el.textContent = '');
+
+  if (tab === 'goal')     setTimeout(() => document.getElementById('sw-goal-input')?.focus(), 50);
+  if (tab === 'plan')     setTimeout(() => document.getElementById('sw-plan-input')?.focus(), 50);
+}
+
+async function loadSwitchRuns() {
+  const container = document.getElementById('sw-runs-container');
+  container.innerHTML = '<div class="sw-empty">Loading…</div>';
+  try {
+    const data = await (await fetch('/api/runs')).json();
+    const runs = data.runs || [];
+    if (!runs.length) {
+      container.innerHTML = '<div class="sw-empty">No existing runs found.</div>';
+      switchModalTab('goal');
+      return;
+    }
+    container.innerHTML = `<div class="sw-runs-list">
+      ${runs.map((r, i) => `
+        <div class="sw-run-item" id="swrun-${i}"
+             data-path="${swEsc(r.path)}" data-goal="${swEsc(r.goal)}"
+             onclick="selectSwitchRun(${i})">
+          <div class="sw-run-dot"></div>
+          <div class="sw-run-goal" title="${swEsc(r.goal)}">${swEsc(r.goal)}</div>
+          <div class="sw-run-meta">${swEsc(r.age)} · ${r.node_count} nodes</div>
+        </div>`).join('')}
+    </div>`;
+    selectSwitchRun(0);
+  } catch (e) {
+    container.innerHTML = `<div class="sw-empty">Could not load runs: ${swEsc(String(e))}</div>`;
+  }
+}
+
+function selectSwitchRun(i) {
+  swSelectedRun = i;
+  document.querySelectorAll('.sw-run-item').forEach((el, j) =>
+    el.classList.toggle('selected', j === i)
+  );
+}
+
+async function submitSwitch() {
+  document.querySelectorAll('.sw-error').forEach(el => el.textContent = '');
+  let body;
+
+  if (swActiveTab === 'existing') {
+    if (swSelectedRun === null) {
+      document.getElementById('swerr-existing').textContent = 'Select a run first.';
+      return;
+    }
+    const item = document.querySelector(`#swrun-${swSelectedRun}`);
+    body = { mode: 'existing', run_dir: item.dataset.path, goal_text: item.dataset.goal };
+
+  } else if (swActiveTab === 'goal') {
+    const gt = document.getElementById('sw-goal-input').value.trim();
+    if (!gt) { document.getElementById('swerr-goal').textContent = 'Please enter a goal.'; return; }
+    body = { mode: 'new_goal', goal_text: gt };
+
+  } else {
+    const plan = document.getElementById('sw-plan-input').value.trim();
+    if (!plan) { document.getElementById('swerr-plan').textContent = 'Please enter a plan.'; return; }
+    body = { mode: 'manual_plan', plan_text: plan };
+  }
+
+  // Show loading spinner
+  document.getElementById('sw-main').querySelectorAll('.sw-pane')
+    .forEach(el => el.classList.remove('active'));
+  document.getElementById('sw-loading').classList.add('show');
+  document.getElementById('sw-footer').style.display = 'none';
+  swPolling = true;
+
+  try {
+    const res  = await fetch('/api/switch', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(body),
+    });
+    const data = await res.json();
+    if (!data.ok) {
+      swShowError(data.error || 'Switch failed.');
+      return;
+    }
+    // Poll until the new orchestrator is ready
+    swPollReady();
+  } catch (e) {
+    swShowError(String(e));
+  }
+}
+
+function swPollReady() {
+  const msgs = ['Initialising…', 'Loading model…', 'Building graph…', 'Almost ready…'];
+  let tick = 0;
+  const iv = setInterval(async () => {
+    tick++;
+    document.getElementById('sw-loading-msg').textContent =
+      msgs[Math.floor(tick / 4) % msgs.length];
+    try {
+      const d = await (await fetch('/api/status')).json();
+      if (d.error) { clearInterval(iv); swShowError(d.error); return; }
+      if (d.initialized) {
+        clearInterval(iv);
+        window.location.reload();
+      }
+    } catch (_) { /* keep polling */ }
+  }, 1500);
+}
+
+function swShowError(msg) {
+  swPolling = false;
+  document.getElementById('sw-loading').classList.remove('show');
+  document.getElementById('sw-footer').style.display = '';
+  document.getElementById(`swpane-${swActiveTab}`).classList.add('active');
+  document.getElementById(`swerr-${swActiveTab}`).textContent = 'Error: ' + msg;
+}
+
+function swEsc(s) {
+  return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;')
+                  .replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+}
+
+// Close on overlay click (outside the shell)
+document.addEventListener('DOMContentLoaded', () => {
+  document.getElementById('switch-overlay').addEventListener('click', e => {
+    if (e.target === document.getElementById('switch-overlay')) closeSwitchModal();
+  });
+});
+
+// Esc key closes the modal
+document.addEventListener('keydown', e => {
+  if (e.key === 'Escape') closeSwitchModal();
+});
+
+// ── Panel resize ──────────────────────────────────────────────────────────────
+
+(function() {
+  let resizing = false, startX, startY, startW, startH;
+  const panel  = document.getElementById('info-panel');
+  const handle = document.getElementById('panel-resize-handle');
+
+  handle.addEventListener('mousedown', e => {
+    resizing = true;
+    startX = e.clientX; startY = e.clientY;
+    const r = panel.getBoundingClientRect();
+    startW = r.width; startH = r.height;
+    e.preventDefault(); e.stopPropagation();
+  });
+  document.addEventListener('mousemove', e => {
+    if (!resizing) return;
+    const w = Math.max(240, startW + (e.clientX - startX));
+    const h = Math.max(160, startH + (e.clientY - startY));
+    panel.style.width    = w + 'px';
+    panel.style.height   = h + 'px';
+    panel.style.maxHeight = 'none';
+  });
+  document.addEventListener('mouseup', () => { resizing = false; });
+})();
+
+// ── Tag-picker component ──────────────────────────────────────────────────────
+// Usage:
+//   tagPickerHTML(id, values, available)  → HTML string (set via innerHTML)
+//   initTagPickers()                      → wire events after HTML is in the DOM
+//   getTagPickerValues(id)                → string[] of selected values
+
+const _tp = {};   // state: id → { values: Set, available: string[] }
+
+function tagPickerHTML(id, values, available) {
+  _tp[id] = { values: new Set(values.filter(Boolean)), available };
+  return `
+  <div class="tag-picker" id="tp-${id}" onclick="document.getElementById('tp-${id}-input').focus()">
+    <span id="tp-${id}-tags"></span>
+    <input class="tag-input" id="tp-${id}-input" autocomplete="off"
+           placeholder="Type to search…"
+           oninput="_tpFilter('${id}')"
+           onkeydown="_tpKeydown(event,'${id}')"
+           onfocus="_tpFilter('${id}')"
+           onblur="_tpBlur('${id}')">
+    <div class="tag-dropdown hidden" id="tp-${id}-drop"></div>
+  </div>`;
+}
+
+function initTagPickers() {
+  for (const id of Object.keys(_tp)) {
+    _tpRenderTags(id);
+  }
+}
+
+function _tpRenderTags(id) {
+  const state = _tp[id]; if (!state) return;
+  const el = document.getElementById(`tp-${id}-tags`);
+  if (!el) return;
+  el.innerHTML = [...state.values].map(v =>
+    `<span class="tag-chip">
+       ${esc(v)}
+       <button class="tag-chip-remove" type="button"
+               onmousedown="event.preventDefault();_tpRemove('${id}','${esc(v)}')"
+       >✕</button>
+     </span>`
+  ).join('');
+}
+
+function _tpFilter(id) {
+  const state = _tp[id]; if (!state) return;
+  const input = document.getElementById(`tp-${id}-input`);
+  const drop  = document.getElementById(`tp-${id}-drop`);
+  if (!input || !drop) return;
+
+  const q = input.value.toLowerCase();
+  const matches = state.available
+    .filter(a => !state.values.has(a) && a.toLowerCase().includes(q))
+    .slice(0, 12);
+
+  if (!matches.length) {
+    drop.innerHTML = q
+      ? `<div class="tag-dropdown-empty">No matches</div>`
+      : `<div class="tag-dropdown-empty">No more nodes</div>`;
+  } else {
+    drop.innerHTML = matches.map((m, i) =>
+      `<div class="tag-dropdown-item" id="tp-${id}-item-${i}"
+            onmousedown="event.preventDefault();_tpSelect('${id}','${esc(m)}')"
+       >${esc(m)}</div>`
+    ).join('');
+  }
+  drop.classList.remove('hidden');
+  state._activeIdx = -1;
+}
+
+function _tpBlur(id) {
+  // Small delay so a mousedown on a dropdown item fires first
+  setTimeout(() => {
+    const drop = document.getElementById(`tp-${id}-drop`);
+    if (drop) drop.classList.add('hidden');
+  }, 150);
+}
+
+function _tpSelect(id, val) {
+  const state = _tp[id]; if (!state) return;
+  state.values.add(val);
+  _tpRenderTags(id);
+  const input = document.getElementById(`tp-${id}-input`);
+  if (input) { input.value = ''; input.focus(); }
+  _tpFilter(id);
+}
+
+function _tpRemove(id, val) {
+  const state = _tp[id]; if (!state) return;
+  state.values.delete(val);
+  _tpRenderTags(id);
+}
+
+function _tpKeydown(e, id) {
+  const state = _tp[id]; if (!state) return;
+  const drop  = document.getElementById(`tp-${id}-drop`);
+  const items = drop ? [...drop.querySelectorAll('.tag-dropdown-item')] : [];
+
+  if (e.key === 'ArrowDown') {
+    e.preventDefault();
+    state._activeIdx = Math.min((state._activeIdx ?? -1) + 1, items.length - 1);
+    items.forEach((el, i) => el.classList.toggle('active', i === state._activeIdx));
+  } else if (e.key === 'ArrowUp') {
+    e.preventDefault();
+    state._activeIdx = Math.max((state._activeIdx ?? 0) - 1, 0);
+    items.forEach((el, i) => el.classList.toggle('active', i === state._activeIdx));
+  } else if (e.key === 'Enter') {
+    e.preventDefault();
+    if (state._activeIdx >= 0 && items[state._activeIdx]) {
+      const val = items[state._activeIdx].textContent.trim();
+      _tpSelect(id, val);
+    }
+  } else if (e.key === 'Escape') {
+    if (drop) drop.classList.add('hidden');
+  } else if (e.key === 'Backspace' && e.target.value === '') {
+    // Remove last tag on backspace in empty input
+    const vals = [...state.values];
+    if (vals.length) { state.values.delete(vals[vals.length - 1]); _tpRenderTags(id); }
+  }
+}
+
+function getTagPickerValues(id) {
+  return _tp[id] ? [..._tp[id].values] : [];
+}
+
+// ── Boot ──────────────────────────────────────────────────────────────────────
+
+// (duplicate initSVG() call removed — see the bottom Boot block)
+
+// ════════════════════════════════════════════════════════════════════════════
+// DOMAIN FEATURES
+// Implements the hook functions called by the generic code above.
+// Replace this entire section when adapting for a new project.
+// The four hook functions (domainPanelActions, domainPanelBody,
+// domainBuildContent, domainPanelBottom, domainResultLabel) are the only
+// API the generic code depends on.
+// ════════════════════════════════════════════════════════════════════════════
+
+// ── Hook: panel action buttons ────────────────────────────────────────────────
+// Returns the HTML string for the panel-actions bar.
+// Called by updatePanel() after setting the panel title.
+function domainPanelActions(node) {
+  const isGoal          = node.node_type === GOAL_NODE_TYPE;
+  const isFailed        = node.status === 'failed';
+  const isDone          = node.status === 'done';
+  const isClarification = node.node_type === 'clarification';
+  return `
+    ${isClarification
+      ? `<button class="panel-btn" onclick="openClarificationModal()" style="color:#f9a825;border-color:#f9a82544">✎ Edit fields</button>
+         <button class="panel-btn" onclick="confirmClarification()" style="background:#f9a825;color:#18171a;border-color:#f9a825">✓ Confirm &amp; rerun</button>`
+      : `<button class="panel-btn" onclick="openEditModal()">✎ Edit</button>`
+    }
+    ${(!isClarification && (isFailed || isDone)) ? `<button class="panel-btn" onclick="retryNode()">↺ Retry</button>` : ''}
+    ${isGoal ? `<button class="panel-btn" onclick="replanGoal()">⟳ Replan</button>` : ''}
+    <button class="panel-btn danger" onclick="openRemoveModal()">✕ Remove</button>
+  `;
+}
+
+// ── Hook: full panel body for special node types ──────────────────────────────
+// Returns an HTML string to use as the entire panel body, or null to fall
+// through to the generic renderer.  Called at the start of updatePanel().
+function domainPanelBody(node, { row, esc }) {
+  if (node.node_type !== 'clarification') return null;
+
+  let fields = [];
+  try { fields = JSON.parse(node.result || '[]'); } catch (_) {}
+  let fhtml = '';
+  const desc = node.metadata?.description || '';
+  if (desc) fhtml += row('', `<span style="color:var(--text-muted);font-size:12px">${esc(desc)}</span>`);
+  fields.forEach(f => {
+    const isUnknown = !f.value || f.value === 'unknown';
+    const valColor  = isUnknown ? 'var(--s-failed)' : 'var(--text)';
+    fhtml += `<div style="padding:8px 0;border-bottom:1px solid var(--border-subtle)">
+      <div style="font-size:11px;color:var(--text-muted);margin-bottom:3px">${esc(f.label || f.key)}</div>
+      <div style="font-size:13px;color:${valColor};margin-bottom:3px">${esc(isUnknown ? 'unknown' : f.value)}</div>
+      ${f.hint ? `<div style="font-size:10px;color:var(--text-dim);margin-bottom:2px">${esc(f.hint)}</div>` : ''}
+      ${f.rationale ? `<div style="font-size:10px;color:var(--text-dim);font-style:italic">${esc(f.rationale)}</div>` : ''}
+    </div>`;
+  });
+  if (!fields.length) fhtml += '<div style="color:var(--text-muted);font-size:12px">No fields generated.</div>';
+  return fhtml;
+}
+
+// ── Hook: main content block ───────────────────────────────────────────────────
+// Returns the HTML for description, plan/steps, requires, outputs, and the
+// broadening tab UI when the node ran with a broadened goal description.
+// The status+deps splice, awaiting indicators, result, notes, and bottom
+// content are handled by the generic updatePanel() after this returns.
+function domainBuildContent(node, { row, esc, trunc }) {
+  const desc   = node.metadata?.description || '';
+  const reqIn  = node.metadata?.required_input || [];
+  const output = node.metadata?.output || [];
+  const isDone = node.status === 'done';
+
+  const LLM_TYPES = new Set([
+    'search_web','fetch_url','write_file','write_plan','write_document',
+    'write_analysis','write_code','analyse_data','summarise','synthesise',
+    'run_code','append_file','read_file','list_dir',
+  ]);
+  const isBroadened      = !!(node.metadata?.broadened_description);
+  const hasBroadSteps    = !!(node.metadata?.broadened_steps?.length);
+  const broadDesc        = node.metadata?.broadened_description || '';
+  const broadReason      = node.metadata?.broadened_reason || '';
+  const broadMissing     = node.metadata?.broadened_for_missing || [];
+  // '_active_tab' is written by the executor when it decides which plan to run.
+  // It is cleared by reset() so it only appears while the node is truly running.
+  const activeTab        = node.metadata?._active_tab || null;  // 'original' | 'broadened' | null
+  const isRunning        = node.status === 'running';
+  const origSteps        = node.metadata?.execution_steps || [];
+  const broadSteps       = node.metadata?.broadened_steps || [];
+  const pendingUserSteps = new Set(node.metadata?.pending_steps || []);
+  const isAwaitingUser   = node.status === 'awaiting_user';
+  const missingSet       = new Set(broadMissing);
+  const broadenedReqIn   = reqIn.filter(i => !missingSet.has(i.name));
+  const broadenedOutput  = node.metadata?.broadened_output || [];
+
+  function renderStepList(steps, isActive) {
+    if (!steps.length) return '<div style="font-size:11px;color:var(--text-dim);font-style:italic">No steps defined.</div>';
+    const legendItems = (isDone || isAwaitingUser) && isActive
+      ? `<span><span style="color:#10b981">✓</span> done</span>` +
+        (isAwaitingUser ? ` <span><span style="color:#f97316">⏳</span> awaiting you</span>` : '')
+      : `<span><span style="color:#2dd4bf">⚙</span> LLM</span>` +
+        `<span><span style="color:#f97316">👤</span> You</span>`;
+    const items = steps.map((s, i) => {
+      const etype     = s.execution_type || '?';
+      const isLLM     = LLM_TYPES.has(etype);
+      const isPending = pendingUserSteps.has(etype);
+      let stateIcon, stateColor, stateTip;
+      if (isActive && isAwaitingUser && isPending) {
+        stateIcon = '⏳'; stateColor = '#f97316'; stateTip = 'Waiting for you to complete this step';
+      } else if (isActive && (isDone || (isAwaitingUser && !isPending))) {
+        stateIcon = '✓'; stateColor = '#10b981'; stateTip = 'Completed';
+      } else {
+        stateIcon = isLLM ? '⚙' : '👤';
+        stateColor = isLLM ? '#2dd4bf' : '#f97316';
+        stateTip = isLLM ? 'LLM will handle this step' : 'You will need to do this step';
+      }
+      const rowOpacity = (isActive && isAwaitingUser && !isPending) ? 'opacity:0.55;' : '';
+      return `<div style="display:flex;gap:8px;align-items:flex-start;padding:5px 0;border-bottom:1px solid var(--border-subtle);${rowOpacity}">
+        <div style="min-width:18px;color:var(--text-dim);font-size:10px;padding-top:2px">${i + 1}.</div>
+        <div style="flex:1">
+          <div style="display:flex;align-items:center;gap:5px;margin-bottom:2px">
+            <span title="${stateTip}" style="font-size:10px;font-weight:600;color:${stateColor};background:${stateColor}18;border:1px solid ${stateColor}40;border-radius:3px;padding:1px 5px;cursor:default">
+              ${stateIcon} ${esc(etype)}
+            </span>
+          </div>
+          <div style="font-size:11px;color:var(--text);margin-bottom:2px">${esc(s.description || '')}</div>
+          ${s.produces ? `<div style="font-size:10px;color:var(--text-dim);font-style:italic">→ ${esc(s.produces)}</div>` : ''}
+        </div>
+      </div>`;
+    }).join('');
+    return `<div style="display:flex;gap:8px;margin-bottom:6px;font-size:10px;color:var(--text-dim)">${legendItems}</div>${items}`;
+  }
+
+  function renderInlineRequires(inputs) {
+    return inputs.map(i => `<div style="font-size:11px;color:var(--text-muted);margin-bottom:3px">
+      <span style="color:var(--text-dim)">${esc(i.name)}</span>
+      <span style="color:var(--s-pending);font-size:10px"> [${esc(i.type)}]</span>
+      — ${esc(i.description || '')}
+    </div>`).join('');
+  }
+
+  function renderInlineOutputs(outputs) {
+    return outputs.map(o => `<div style="font-size:11px;color:var(--text-muted);margin-bottom:3px">
+      <span style="color:var(--text-dim)">${esc(o.name)}</span>
+      <span style="color:var(--s-ready);font-size:10px"> [${esc(o.type)}]</span>
+      — ${esc(o.description || '')}
+    </div>`).join('');
+  }
+
+  let html = '';
+
+  // ── 1. TAB HEADER (broadened nodes only) ─────────────────────────────────
+  if (isBroadened) {
+    const tabId     = 'plan-tabs-' + selectedId.replace(/[^a-z0-9]/gi, '_');
+    const tooltipId = tabId + '-tip';
+    const missingLabels = broadMissing.map(k =>
+      k.replace(/_/g, ' ').replace(/^\w/, c => c.toUpperCase())
+    );
+    const tooltipReason = broadReason
+      ? `<div style="font-size:11px;color:var(--text-muted);margin-bottom:8px;line-height:1.4">${esc(broadReason)}</div>` : '';
+    const tooltipMissing = missingLabels.length
+      ? `<div style="font-size:10px;font-weight:600;color:var(--text-dim);text-transform:uppercase;letter-spacing:0.4px;margin-bottom:4px">Missing for original goal</div>` +
+        missingLabels.map(l =>
+          `<div style="display:flex;gap:5px;align-items:flex-start;font-size:11px;color:var(--text-muted);margin-bottom:2px">` +
+          `<span style="color:var(--s-running);margin-top:1px">•</span><span>${esc(l)}</span></div>`
+        ).join('') : '';
+
+    const switchFn = `switchTab_${tabId.replace(/-/g, '_')}`;
+
+    const _activeCSS   = 'font-size:11px;padding:4px 10px;border:none;border-bottom:2px solid var(--text);background:transparent;color:var(--text);cursor:pointer;font-weight:600;margin-bottom:-1px';
+    const _inactiveCSS = 'font-size:11px;padding:4px 10px;border:none;border-bottom:2px solid transparent;background:transparent;color:var(--text-muted);cursor:pointer;font-weight:400;margin-bottom:-1px';
+    window[switchFn] = (function(tid, activeCSS, inactiveCSS) {
+      return function(tab) {
+        const isOrig = tab === 'orig';
+        document.getElementById(tid + '-btn-orig').style.cssText  = isOrig ? activeCSS : inactiveCSS;
+        document.getElementById(tid + '-btn-broad').style.cssText = isOrig ? inactiveCSS : activeCSS;
+        ['desc','steps','req','out'].forEach(k => {
+          const eo = document.getElementById(tid + '-orig-' + k);
+          const eb = document.getElementById(tid + '-broad-' + k);
+          if (eo) eo.style.display = isOrig ? 'block' : 'none';
+          if (eb) eb.style.display = isOrig ? 'none' : 'block';
+        });
+      };
+    })(tabId, _activeCSS, _inactiveCSS);
+
+    // Determine which tab should be shown on initial render.
+    // While running: show the tab that is executing.
+    // After a run (done/failed/awaiting): show the tab that ran last (_active_tab
+    // persists through MARK_DONE and MARK_FAILED; it is only cleared by RESET_NODE).
+    // If _active_tab is null (never run or just reset): default to broadened.
+    const showOrig = activeTab === 'original';
+
+    // isActive controls whether step icons show completion ticks (✓) or type
+    // labels (⚙/👤).  Each tab is active when it is the one that ran / is running.
+    const origIsActive  = activeTab === 'original';
+    const broadIsActive = activeTab === 'broadened' || activeTab === null;
+
+    // ── Option A: outcome badge on whichever tab _active_tab names ────────────
+    // While running    → amber ▶ RUNNING badge on the running tab.
+    // After done       → green ✓ done badge on the tab that completed.
+    // After failed     → red   ✗ failed badge on the tab that failed.
+    // After awaiting_u → orange ⏳ badge on the relevant tab.
+    // The other tab gets no badge (it has not run in the most recent attempt).
+    function tabBadge(tabName) {
+      if (!activeTab || activeTab !== tabName) return '';
+      if (isRunning)
+        return `<span style="font-size:9px;font-weight:700;color:#0b1120;background:var(--s-running);border-radius:3px;padding:1px 5px;margin-left:5px;vertical-align:middle;letter-spacing:0.3px">▶ RUNNING</span>`;
+      const st = node.status;
+      if (st === 'done')
+        return `<span style="font-size:9px;font-weight:700;color:#0b1120;background:#10b981;border-radius:3px;padding:1px 5px;margin-left:5px;vertical-align:middle;letter-spacing:0.3px">✓ done</span>`;
+      if (st === 'failed')
+        return `<span style="font-size:9px;font-weight:700;color:#fff;background:var(--s-failed);border-radius:3px;padding:1px 5px;margin-left:5px;vertical-align:middle;letter-spacing:0.3px">✗ failed</span>`;
+      if (st === 'awaiting_user')
+        return `<span style="font-size:9px;font-weight:700;color:#0b1120;background:#f97316;border-radius:3px;padding:1px 5px;margin-left:5px;vertical-align:middle;letter-spacing:0.3px">⏳ awaiting</span>`;
+      return '';
+    }
+    const origBadge  = tabBadge('original');
+    const broadBadge = tabBadge('broadened');
+
+    html += `
+      <div style="display:flex;gap:2px;margin-bottom:12px;border-bottom:1px solid var(--border-subtle);padding-bottom:0">
+        <button id="${tabId}-btn-orig"
+          onclick="${switchFn}('orig')"
+          style="${showOrig ? _activeCSS : _inactiveCSS}">
+          Original${origBadge}
+        </button>
+        <div style="position:relative;display:inline-block">
+          <button id="${tabId}-btn-broad"
+            onclick="${switchFn}('broad')"
+            onmouseenter="document.getElementById('${tooltipId}').style.display='block'"
+            onmouseleave="document.getElementById('${tooltipId}').style.display='none'"
+            style="${showOrig ? _inactiveCSS : _activeCSS}">
+            ⟳ Broadened${broadBadge}
+          </button>
+          <div id="${tooltipId}" style="display:none;position:absolute;top:calc(100% + 6px);left:0;z-index:200;background:var(--surface);border:1px solid var(--border);border-radius:6px;padding:10px 12px;min-width:220px;max-width:280px;box-shadow:0 4px 12px rgba(0,0,0,0.15);pointer-events:none">
+            <div style="font-size:10px;font-weight:600;color:var(--s-running);text-transform:uppercase;letter-spacing:0.5px;margin-bottom:6px">⟳ Why this goal was generalised</div>
+            ${tooltipReason}${tooltipMissing}
+          </div>
+        </div>
+      </div>`;
+
+    // ── 2. DESCRIPTION (tab-aware) ──────────────────────────────────────────
+    html += row('Description', `
+      <div id="${tabId}-orig-desc" style="display:${showOrig ? 'block' : 'none'}">
+        <span class="info-value prominent">${esc(desc)}</span>
+      </div>
+      <div id="${tabId}-broad-desc" style="display:${showOrig ? 'none' : 'block'}">
+        <span class="info-value prominent">${esc(broadDesc)}</span>
+      </div>`);
+
+    // ── 4. PLAN / STEPS (tab-aware) ─────────────────────────────────────────
+    html += row('Plan', `
+      <div id="${tabId}-orig-steps" style="display:${showOrig ? 'block' : 'none'}">
+        ${origSteps.length ? renderStepList(origSteps, origIsActive) : '<div style="font-size:11px;color:var(--text-dim);font-style:italic">No steps defined.</div>'}
+      </div>
+      <div id="${tabId}-broad-steps" style="display:${showOrig ? 'none' : 'block'}">
+        ${hasBroadSteps ? renderStepList(broadSteps, broadIsActive) : '<div style="font-size:11px;color:var(--text-dim);font-style:italic">No broadened steps available.</div>'}
+      </div>`);
+
+    // ── 6. REQUIRES (tab-aware) ─────────────────────────────────────────────
+    if (reqIn.length || broadenedReqIn.length) {
+      html += row('Requires', `
+        <div id="${tabId}-orig-req" style="display:${showOrig ? 'block' : 'none'}">${renderInlineRequires(reqIn)}</div>
+        <div id="${tabId}-broad-req" style="display:${showOrig ? 'none' : 'block'}">${
+          broadenedReqIn.length ? renderInlineRequires(broadenedReqIn)
+          : '<div style="font-size:11px;color:var(--text-dim);font-style:italic">No inputs required for broadened goal.</div>'
+        }</div>`);
+    }
+
+    // ── 7. OUTPUTS (tab-aware) ──────────────────────────────────────────────
+    const effectiveBroadOutput = broadenedOutput.length ? broadenedOutput : output;
+    if (output.length || effectiveBroadOutput.length) {
+      html += row('Outputs', `
+        <div id="${tabId}-orig-out" style="display:${showOrig ? 'block' : 'none'}">${renderInlineOutputs(output)}</div>
+        <div id="${tabId}-broad-out" style="display:${showOrig ? 'none' : 'block'}">${renderInlineOutputs(effectiveBroadOutput)}</div>`);
+    }
+
+  } else {
+    // ── Non-broadened: fixed order ──────────────────────────────────────────
+    if (desc) html += row('Description', `<span class="info-value prominent">${esc(desc)}</span>`);
+    if (origSteps.length) {
+      html += row('Plan', `<div style="margin-top:2px">${renderStepList(origSteps, true)}</div>`);
+    }
+    if (reqIn.length)  html += row('Requires', renderInlineRequires(reqIn));
+    if (output.length) html += row('Outputs',  renderInlineOutputs(output));
+  }
+
+  return html;
+}
+
+// ── Hook: result section label ────────────────────────────────────────────────
+// Returns the label shown above the result box in the info panel.
+function domainResultLabel(node) {
+  return node.node_type === GOAL_NODE_TYPE ? 'Plan' : 'Result';
+}
+
+// ── Hook: bottom panel content ────────────────────────────────────────────────
+// Returns HTML appended after result and notes — used for execution step
+// children in cuddlytoddly.  Return '' to add nothing.
+function domainPanelBottom(node, { row, esc, trunc }) {
+  const stepChildren = Object.values(nodes)
+    .filter(n =>
+      n.node_type === 'execution_step' &&
+      n.id.startsWith(selectedId + '__step_') &&
+      !n.metadata?.hidden
+    )
+    .sort((a, b) => {
+      // Sort by first-attempt timestamp so the timeline reads chronologically
+      const ta = a.metadata?.attempts?.[0]?.timestamp || '';
+      const tb = b.metadata?.attempts?.[0]?.timestamp || '';
+      return ta < tb ? -1 : ta > tb ? 1 : 0;
+    });
+  if (!stepChildren.length) return '';
+
+  // Compute max total duration for proportional bar widths (cap at 80px)
+  const MAX_BAR_PX = 80;
+  const totals = stepChildren.map(s =>
+    (s.metadata?.attempts || []).reduce((sum, a) => sum + (a.duration_ms || 0), 0)
+  );
+  const maxMs = Math.max(1, ...totals);
+
+  const stepsHtml = stepChildren.map((step, i) => {
+    const attempts   = step.metadata?.attempts || [];
+    const totalMs    = totals[i];
+    const barWidth   = Math.round((totalMs / maxMs) * MAX_BAR_PX);
+
+    // Status icon and colour
+    const isRunning  = step.status === 'running';
+    const isDone     = step.status === 'done';
+    const isFailed   = step.status === 'failed';
+    const icon       = isDone ? '●' : isFailed ? '✗' : isRunning ? '↻' : '·';
+    const iconColor  = isDone    ? 'var(--s-done)'
+                     : isFailed  ? 'var(--s-failed)'
+                     : isRunning ? 'var(--s-running)'
+                     : 'var(--text-muted)';
+    const iconClass  = isRunning ? ' class="step-running"' : '';
+
+    // Tool name and args from metadata (set by on_tool_start)
+    const toolName   = step.metadata?.tool_name || '';
+    const lastAttempt = attempts[attempts.length - 1] || {};
+    const rawArgs    = lastAttempt.args || step.metadata?.tool_args || {};
+    const argsStr    = Object.entries(rawArgs)
+      .filter(([k]) => k !== '_cwd')
+      .map(([k, v]) => `${k}=${String(v).slice(0, 35)}`)
+      .join('  ');
+
+    // Duration badge and proportional bar
+    const durLabel   = totalMs > 0
+      ? (totalMs < 1000 ? Math.round(totalMs) + 'ms' : (totalMs / 1000).toFixed(1) + 's')
+      : '';
+    const durHtml    = durLabel
+      ? `<span class="step-dur">${esc(durLabel)}</span>` +
+        (barWidth > 2 ? `<span class="step-dur-bar" style="width:${barWidth}px"></span>` : '')
+      : '';
+
+    // Retry note when there were multiple attempts
+    const retryHtml  = attempts.length > 1
+      ? `<div class="step-retry">↺ ${attempts.length} attempts</div>` : '';
+
+    // Last result preview (truncated)
+    const resultText = (lastAttempt.result || step.result || '').trim();
+    const resultHtml = resultText
+      ? `<div class="step-result">${esc(trunc(resultText, 120))}</div>` : '';
+
+    return `<div class="step-item">
+      <span class="step-icon" style="color:${iconColor}"${iconClass}>${icon}</span>
+      <div style="flex:1;min-width:0">
+        <div style="display:flex;align-items:baseline;gap:4px;flex-wrap:wrap">
+          <span class="step-tool-name">${esc(toolName)}</span>
+          <span class="step-args" style="flex:1">${esc(argsStr)}</span>
+          ${durHtml}
+        </div>
+        ${retryHtml}${resultHtml}
+      </div>
+    </div>`;
+  }).join('');
+
+  return row('Tool calls', `<div style="margin-top:2px">${stepsHtml}</div>`);
+}
+
+// ── Clarification node editing ────────────────────────────────────────────────
+// Holds in-progress field edits while the clarification modal is open.
+let _clarificationDraft = [];
+
+function openClarificationModal() {
+  const node = nodes[selectedId];
+  if (!node || node.node_type !== 'clarification') return;
+
+  let fields = [];
+  try { fields = JSON.parse(node.result || '[]'); } catch (_) {}
+  _clarificationDraft = fields.map(f => ({ ...f }));  // deep-copy
+
+  modalMode = 'clarification';
+  document.getElementById('modal-title').textContent = 'Edit goal context';
+
+  _renderClarificationFields();
+
+  document.getElementById('modal-footer').innerHTML = `
+    <button class="btn btn-ghost" onclick="closeModal()">Cancel</button>
+    <button class="btn btn-primary" onclick="saveClarificationDraft()">Save draft</button>
+  `;
+  showModal();
+}
+
+function _renderClarificationFields() {
+  const html = _clarificationDraft.map((f, i) => {
+    const isUnknown = !f.value || f.value === 'unknown';
+    return `
+      <div class="form-group" style="border-bottom:1px solid var(--border-subtle);padding-bottom:12px;margin-bottom:12px">
+        <label class="form-label form-label-amber">${esc(f.label || f.key)}</label>
+        ${f.hint ? `<div style="font-size:11px;color:var(--text-dim);margin-bottom:4px">${esc(f.hint)}</div>` : ''}
+        ${f.rationale ? `<div style="font-size:11px;color:var(--text-dim);margin-bottom:6px;font-style:italic">${esc(f.rationale)}</div>` : ''}
+        <input
+          class="form-input form-input-code"
+          id="clarif-field-${i}"
+          type="text"
+          value="${esc(isUnknown ? '' : f.value)}"
+          placeholder="${esc(f.hint ? f.hint : 'unknown')}"
+          oninput="_clarificationDraft[${i}].value = this.value || 'unknown'"
+        >
+      </div>`;
+  }).join('');
+
+  document.getElementById('modal-body').innerHTML =
+    html || '<div style="color:var(--text-muted);font-size:12px">No fields.</div>';
+}
+
+function saveClarificationDraft() {
+  // Flush any pending oninput values
+  _clarificationDraft.forEach((f, i) => {
+    const el = document.getElementById(`clarif-field-${i}`);
+    if (el) f.value = el.value.trim() || 'unknown';
+  });
+  closeModal();
+  updatePanel();
+}
+
+function confirmClarification() {
+  const node = nodes[selectedId];
+  if (!node || node.node_type !== 'clarification') return;
+
+  // Use the draft if one exists; otherwise use current node result
+  let fields = _clarificationDraft.length
+    ? _clarificationDraft
+    : (() => { try { return JSON.parse(node.result || '[]'); } catch (_) { return []; } })();
+
+  api('POST', `/api/node/${encodeURIComponent(selectedId)}/clarification/confirm`, {
+    updated_fields: fields,
+  }).then(d => { if (d.ok) toast(`Clarification confirmed`); });
+
+  // Reset draft so the next open starts fresh from server state
+  _clarificationDraft = [];
+}
+
+// ── Goal replan ───────────────────────────────────────────────────────────────
+function replanGoal() {
+  if (!selectedId) return;
+  api('POST', `/api/goal/${encodeURIComponent(selectedId)}/replan`);
+  toast('Replan scheduled');
+  closePanel();
+}
+
+// ── Boot ──────────────────────────────────────────────────────────────────────
+
+initSVG();
+// Read-only embed: snapshots arrive from the host via postMessage instead of a WebSocket.
+window.addEventListener('message', e => { if (e.source === window.parent && e.data && e.data.type === 'snapshot') handleMessage(e.data) });
+window.parent.postMessage({ type: 'ready' }, '*');
+// Read-only: no node actions, no goal switching, safety net for any server call.
+domainPanelActions = function () { return '' };
+openSwitchModal = function () {};
+api = async function () { return { ok: false, error: 'read-only' } };
+</script>
+<!-- ── Switch-goal modal ─────────────────────────────────────────────────── -->
+<div id="switch-overlay" class="hidden">
+  <div id="switch-shell">
+
+    <div id="switch-shell-header">
+      <span class="sw-brand">Switch goal</span>
+      <button class="sw-close" onclick="closeSwitchModal()">✕</button>
+    </div>
+
+    <div class="sw-tabs">
+      <button class="sw-tab active" id="swtab-existing" onclick="switchModalTab('existing')">📂 Existing runs</button>
+      <button class="sw-tab"        id="swtab-goal"     onclick="switchModalTab('goal')">✦ New goal</button>
+      <button class="sw-tab"        id="swtab-plan"     onclick="switchModalTab('plan')">✎ Manual plan</button>
+    </div>
+
+    <div id="sw-main">
+      <!-- Existing runs -->
+      <div class="sw-pane active" id="swpane-existing">
+        <div id="sw-runs-container"><div class="sw-empty">Loading…</div></div>
+        <div class="sw-error" id="swerr-existing"></div>
+      </div>
+
+      <!-- New goal -->
+      <div class="sw-pane" id="swpane-goal">
+        <label class="sw-label">What do you want to achieve?</label>
+        <input class="sw-input" id="sw-goal-input"
+          placeholder="e.g. Build a CLI tool that summarises GitHub PRs"
+          autocomplete="off">
+        <div class="sw-hint">The planner will break this down into tasks automatically.</div>
+        <div class="sw-error" id="swerr-goal"></div>
+      </div>
+
+      <!-- Manual plan -->
+      <div class="sw-pane" id="swpane-plan">
+        <label class="sw-label">Your plan</label>
+        <textarea class="sw-textarea" id="sw-plan-input"
+          placeholder="First line = goal description&#10;- Task: description [depends: Other_Task]&#10;- Another_Task: does something else"></textarea>
+        <div class="sw-hint">First non-bullet line is the goal. Lines starting with <code>-</code> are tasks.</div>
+        <div class="sw-error" id="swerr-plan"></div>
+      </div>
+
+      <!-- Loading state -->
+      <div class="sw-loading" id="sw-loading">
+        <div class="sw-spinner"></div>
+        <div class="sw-loading-msg" id="sw-loading-msg">Switching goal…</div>
+      </div>
+    </div>
+
+    <div class="sw-footer" id="sw-footer">
+      <button class="sw-btn sw-btn-ghost" onclick="closeSwitchModal()">Cancel</button>
+      <button class="sw-btn sw-btn-primary" id="sw-start-btn" onclick="submitSwitch()">Switch →</button>
+    </div>
+
+  </div>
+</div>
+
+</body>
+</html>

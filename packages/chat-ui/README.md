@@ -213,6 +213,10 @@ npm test --workspace=packages/chat-ui
 npm run typecheck --workspace=packages/chat-ui
 ```
 
+## Plan graph (optional)
+
+With `VITE_ASSISTANT_PLAN_GRAPH=enabled` (or `planGraphMode` in settings), a plan shows a "Plan graph" header button, a "View as graph" link under its checklist and on the approval card. It opens a read-only dependency graph in a sandboxed right-hand drawer (full-screen toggle, "Export HTML snapshot"). Off by default: no button, no asset loaded. Status mapping and the terminal equivalent: `docs/plan-visualization.md`.
+
 ## Browser end-to-end tests (Playwright)
 
 `npm test` here is jsdom-only, and `App.test.tsx` module-mocks `PersonalAssistant`

@@ -3,7 +3,7 @@ import { InMemoryAdapter } from '@buildaharness/runtime'
 import type { ChatMessage, ChatOptions, ILLMClient, LLMStructuredResponse, ToolDefinition } from '@buildaharness/runtime'
 import { LiveSteeringChannel } from './live-steering-channel.js'
 import { createSteeringReconcileChannel } from './goal-graph-reconcile.js'
-import { loadGoalGraphRecord, saveGoalGraphRecord, createEmptyGoalGraphRecord, createGoalThreadFromPlanRecord } from './goal-graph-store.js'
+import { loadGoalGraphRecord, saveGoalGraphRecord, createGoalThreadFromPlanRecord } from './goal-graph-store.js'
 import { createPlanRecord } from './plan-store.js'
 import type { Plan } from './plan-builder.js'
 

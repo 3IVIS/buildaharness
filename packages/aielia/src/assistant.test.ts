@@ -1,5 +1,6 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 import type { ChatMessage, ChatOptions, ILLMClient, ToolDefinition, LLMStructuredResponse, FsBackend, TokenUsage, MemoryAdapter } from '@buildaharness/runtime'
+import type { AssistantProgress } from './assistant-types.js'
 import type { TraceEvent } from './trace-events.js'
 import { InMemoryAdapter, InMemoryReminderStore } from '@buildaharness/runtime'
 import { createPlanRecord, savePlan } from './plan-store.js'
@@ -2437,6 +2438,37 @@ describe('PersonalAssistant structured planning', () => {
     expect(result.reply).toBe('All set.')
   })
 
+  it('plan graph data: planStatus tasks carry dependsOn/riskLevel, progress carries planTasks only while a plan drives the turn, getPlanGraph reads without creating', async () => {
+    const llm = scriptedResponses([planDraftResponse(true), verifyResponse()], ['All set.'], undefined, overrideFor([[planningMessage, planTemplateMatch]]))
+    const assistant = new PersonalAssistant({ llmClient: llm, planMode: 'gated' })
+    expect(await assistant.getPlanGraph('plan-session')).toBeNull()
+
+    const staged = await assistant.turn(planningMessage, { sessionId: 'plan-session' })
+    const progress: AssistantProgress[] = []
+    const result = await assistant.turn('approve it', {
+      sessionId: 'plan-session',
+      planApprovalId: staged.planApprovalId,
+      planDecision: 'approve',
+      onProgress: (p) => progress.push(p),
+    })
+
+    const tasks = result.planStatus!.tasks
+    expect(tasks.find((t) => t.id === 'scope_definition')).not.toHaveProperty('dependsOn')
+    expect(tasks.find((t) => t.id === 'schedule')?.dependsOn).toEqual(['resource_planning', 'risk_assessment'])
+    expect(tasks.find((t) => t.id === 'risk_assessment')?.riskLevel).toBe('HIGH')
+
+    const withTasks = progress.filter((p) => p.planTasks)
+    expect(withTasks.length).toBeGreaterThan(0)
+    expect(withTasks.every((p) => p.planPosition !== undefined)).toBe(true)
+    expect(progress.filter((p) => p.planTasks === undefined).every((p) => p.planPosition === undefined)).toBe(true)
+    expect(withTasks.at(-1)!.planTasks!.map((t) => t.id)).toEqual(tasks.map((t) => t.id))
+
+    const source = await assistant.getPlanGraph('plan-session')
+    expect(source).not.toBeNull()
+    expect('tasks' in source! ? source.tasks.length : source!.threads.length).toBeGreaterThan(0)
+    expect(await assistant.getPlanGraph('never-used')).toBeNull()
+  })
+
   it('stops auto-advancing at PLAN_AUTO_ADVANCE_TASK_CEILING resolved tasks even when every step is LOW-risk (P4 Open Decision #2: a distinct count ceiling, not a reintroduction of the risk-based pause)', async () => {
     const memory = new InMemoryAdapter()
     const tasks = Array.from({ length: 12 }, (_, i) => ({
@@ -2570,8 +2602,8 @@ describe('PersonalAssistant structured planning', () => {
       expect(system).toContain('- [not started] Draft the announcement')
       // Nothing ran: the untouched task is still pending, the failed one keeps its status and reason.
       expect(result.planStatus?.tasks).toEqual([
-        { id: 't1', description: 'Define the launch scope', status: 'FAILED', note: 'the reply only asked questions' },
-        { id: 't2', description: 'Draft the announcement', status: 'PENDING' },
+        { id: 't1', description: 'Define the launch scope', status: 'FAILED', note: 'the reply only asked questions', riskLevel: 'LOW' },
+        { id: 't2', description: 'Draft the announcement', status: 'PENDING', riskLevel: 'LOW' },
       ])
       expect(result.planStatus?.completionPct).toBe(0)
     })

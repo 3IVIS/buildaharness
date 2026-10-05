@@ -1,5 +1,5 @@
 import type { AssistantConfig } from '@buildaharness/aielia'
-import { resolveMemoryWriteMode, MEMORY_WRITE_MODES, normalizeOneLoopMode, normalizeAskMode, normalizePlanMode, normalizeGoalGraphMode, normalizeGoalGraphSuggestMode, normalizeLayerPolicyMode } from '@buildaharness/aielia'
+import { resolveMemoryWriteMode, MEMORY_WRITE_MODES, normalizeOneLoopMode, normalizeAskMode, normalizePlanMode, normalizeGoalGraphMode, normalizeGoalGraphSuggestMode, normalizeLayerPolicyMode, normalizePlanGraphMode } from '@buildaharness/aielia'
 
 /**
  * Browser-side companion to aielia's cli-config.ts — same idea (env-var-name map
@@ -19,6 +19,7 @@ export const ENV_VAR_FOR_CONFIG_KEY: Partial<Record<keyof AssistantConfig, strin
   enableWeb: 'VITE_ASSISTANT_ENABLE_WEB',
   webBackend: 'VITE_ASSISTANT_WEB_BACKEND',
   goalGraphMode: 'VITE_ASSISTANT_GOAL_GRAPH',
+  planGraphMode: 'VITE_ASSISTANT_PLAN_GRAPH',
   layerPolicyMode: 'VITE_ASSISTANT_LAYER_POLICY',
   goalGraphSuggestMode: 'VITE_ASSISTANT_GOAL_GRAPH_SUGGEST',
   memoryWriteMode: 'VITE_ASSISTANT_MEMORY_WRITE_MODE',
@@ -61,6 +62,7 @@ export function envOverridesFromImportMetaEnv(env: ImportMetaEnv): Partial<Assis
   // default on a typo, so a build that sets either at all always resolves to a concrete
   // 'enabled'/'disabled'.
   if (env.VITE_ASSISTANT_GOAL_GRAPH) overrides.goalGraphMode = normalizeGoalGraphMode(env.VITE_ASSISTANT_GOAL_GRAPH, 'VITE_ASSISTANT_GOAL_GRAPH')
+  if (env.VITE_ASSISTANT_PLAN_GRAPH) overrides.planGraphMode = normalizePlanGraphMode(env.VITE_ASSISTANT_PLAN_GRAPH, 'VITE_ASSISTANT_PLAN_GRAPH')
   if (env.VITE_ASSISTANT_GOAL_GRAPH_SUGGEST) {
     overrides.goalGraphSuggestMode = normalizeGoalGraphSuggestMode(env.VITE_ASSISTANT_GOAL_GRAPH_SUGGEST, 'VITE_ASSISTANT_GOAL_GRAPH_SUGGEST')
   }

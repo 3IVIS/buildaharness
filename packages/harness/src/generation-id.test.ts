@@ -12,7 +12,7 @@ describe('_maybeResolve', () => {
     const diagnostics = new Diagnostics()
     const failureDiagnostics = new FailureDiagnostics()
 
-    const resolver: ControlStateResolverFn = vi.fn((d, wm, fd) => {
+    const resolver: ControlStateResolverFn = vi.fn((d, wm, _fd) => {
       return new ControlState({ generation_id: wm.generation_id, execution_mode: 'NORMAL' })
     })
 

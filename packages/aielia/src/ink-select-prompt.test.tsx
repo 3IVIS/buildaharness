@@ -7,7 +7,6 @@ import { SelectPrompt } from './ink-select-prompt.js'
 const UP = '\x1b[A'
 const DOWN = '\x1b[B'
 const ENTER = '\r'
-// eslint-disable-next-line no-control-regex
 const ANSI = /\[[0-9;]*m/g
 
 function strip(frame: string | undefined): string {

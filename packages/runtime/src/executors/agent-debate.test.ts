@@ -1,23 +1,9 @@
-import { describe, it, expect, vi } from 'vitest'
+import { describe, it, expect } from 'vitest'
 import { agentDebateExecutor } from './agent-debate'
 import { FlowState } from '../state'
 import { createExecutionContext } from '../context'
-import type { ILLMClient, ChatMessage, ChatOptions } from '../llm-client'
+import type { ILLMClient, ChatMessage } from '../llm-client'
 import type { AgentDef } from '../spec/schema'
-
-function makeMockLLMClient(responseMap?: Record<string, string>): ILLMClient {
-  let callIndex = 0
-  const responses = responseMap ? Object.values(responseMap) : []
-  return {
-    async *callChat(_msgs: ChatMessage[], _opts?: ChatOptions) { yield '' },
-    async callChatSync(_msgs: ChatMessage[], _opts?: ChatOptions) {
-      const response = responses[callIndex] ?? `response-${callIndex}`
-      callIndex++
-      return response
-    },
-    async callChatStructured() { return { content: '' } },
-  }
-}
 
 const agentA: AgentDef = {
   id: 'agent-a',

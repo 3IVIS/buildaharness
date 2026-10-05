@@ -12,7 +12,6 @@ const BACKSPACE = ''
 const ENTER = '\r'
 const PASTE_START = '[200~'
 const PASTE_END = '[201~'
-// eslint-disable-next-line no-control-regex
 const ANSI = /\[[0-9;]*m/g
 
 function strip(frame: string | undefined): string {

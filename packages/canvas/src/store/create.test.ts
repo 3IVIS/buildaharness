@@ -9,7 +9,7 @@
  *   5. BuildAHarnessCanvas — renders without crashing, fires onSpecChange
  *   6. Multiple simultaneous instances don't share state
  */
-import { describe, it, expect, vi, beforeEach } from 'vitest'
+import { describe, it, expect, vi } from 'vitest'
 import { createCanvasStore } from '../store/create'
 import type { FlowSpec } from '../spec/schema'
 

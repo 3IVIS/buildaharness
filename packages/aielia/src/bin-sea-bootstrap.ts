@@ -14,7 +14,7 @@ import { extractAssetOnce, seaCacheDir } from './sea-cache.js'
 
 async function bootstrap(): Promise<void> {
   // `require` (not `import`) — `node:sea` only resolves inside a real SEA, and this file is CJS.
-  // eslint-disable-next-line @typescript-eslint/no-var-requires
+  // eslint-disable-next-line @typescript-eslint/no-require-imports
   const sea = require('node:sea') as {
     isSea(): boolean
     getRawAsset(key: string): ArrayBuffer

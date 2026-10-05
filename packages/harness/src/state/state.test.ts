@@ -1,7 +1,6 @@
 import { describe, it, expect, beforeAll, afterAll } from 'vitest'
 import {
   WorldModel, type Belief, type Contradiction,
-  BeliefDepGraph,
 } from './world-model.js'
 import { CallerState } from './caller-state.js'
 import { ControlState } from './control-state.js'
