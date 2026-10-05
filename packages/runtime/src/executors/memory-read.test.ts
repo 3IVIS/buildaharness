@@ -1,7 +1,6 @@
 import { describe, it, expect, vi } from 'vitest'
 import { memoryReadExecutor } from './memory-read'
 import { FlowState } from '../state'
-import { EventBus } from '../events'
 import { createExecutionContext } from '../context'
 import { LLMClient } from '../llm-client'
 import type { MemoryAdapter, MemoryResult } from '../memory/adapter'

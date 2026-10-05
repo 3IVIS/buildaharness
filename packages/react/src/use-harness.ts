@@ -209,7 +209,6 @@ export function useHarness(flowSpec: unknown, options: HarnessOptions): HarnessH
         for (const unsub of unsubscribes) unsub()
       }
     },
-    // eslint-disable-next-line react-hooks/exhaustive-deps
     [flowSpec, options],
   )
 

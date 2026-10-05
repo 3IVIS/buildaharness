@@ -72,7 +72,7 @@ describe('SubgraphExecutor', () => {
 
   describe('input mapping', () => {
     it('input_map fields from parent state correctly passed as triggerData to nested flow', async () => {
-      const capturedTriggerData: Record<string, unknown>[] = []
+      const _capturedTriggerData: Record<string, unknown>[] = []
 
       // We'll use a flow with llm_call to capture what data gets passed
       const nestedFlow: FlowSpec = {

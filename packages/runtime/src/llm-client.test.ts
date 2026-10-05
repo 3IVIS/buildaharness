@@ -131,7 +131,6 @@ describe('LLMClient', () => {
       mockFetchError(401)
 
       await expect(async () => {
-        // eslint-disable-next-line @typescript-eslint/no-unused-vars
         for await (const _ of client.callChat([{ role: 'user', content: 'hi' }])) {
           // consume
         }

@@ -1,7 +1,7 @@
 import { describe, it, expect } from 'vitest'
 import {
   resolveLayerPolicy, staticLayerPolicy, ESCALATION_LAYERS, FLOOR_LAYERS, DEFAULT_LAYER_PRIORITY, LAYER_CALL_COST,
-  type PolicyBudget, type PolicyRules,
+  type PolicyRules,
 } from './layer-policy.js'
 import { computeTurnCallBudget, toPolicyBudget } from './layer-budget.js'
 import { Budget } from './state/budget.js'

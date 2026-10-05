@@ -1,4 +1,4 @@
-import { describe, it, expect, vi, beforeEach } from 'vitest'
+import { describe, it, expect, vi } from 'vitest'
 import { hitlBreakpointExecutor } from './hitl-breakpoint'
 import { FlowState } from '../state'
 import { createExecutionContext } from '../context'
@@ -93,7 +93,7 @@ describe('HITLBreakpointExecutor', () => {
       state.patch({ x: 'y' })
 
       let persistCallTime = -1
-      let pauseEventTime = -1
+      let _pauseEventTime = -1
 
       const setOrig = store.set as ReturnType<typeof vi.fn>
       setOrig.mockImplementation(async (key: string, value: unknown) => {
@@ -102,7 +102,7 @@ describe('HITLBreakpointExecutor', () => {
       })
 
       ctx.eventBus.subscribe('flow:paused', () => {
-        pauseEventTime = Date.now()
+        _pauseEventTime = Date.now()
       })
 
       const node = { ...baseNode, prompt: 'Approve?', output_key: 'out' }
