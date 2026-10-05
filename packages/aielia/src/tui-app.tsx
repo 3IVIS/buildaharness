@@ -641,7 +641,9 @@ export function TuiApp(props: TuiAppProps): React.JSX.Element {
   const showSpinner = log.waitingForOutput && !hasTransient
 
   const staticItems = graphView.mode === 'chat' ? log.lines : log.lines.slice(0, frozenLines.current)
-  const paneRows = windowSize.rows ?? 24
+  // One row short of the viewport on purpose: Ink treats a frame as fullscreen at height >= rows, and leaving fullscreen emits
+  // clearTerminal (which includes ESC[3J, erasing the user's scrollback). Never reaching that height keeps close lossless.
+  const paneRows = Math.max(3, (windowSize.rows ?? 24) - 1)
   if (graphView.mode !== 'chat') {
     // An approval prompt takes priority: the pane stays drawn but stops reading keys, and the prompt is shown below it.
     const promptRows = pending ? Math.min(10, Math.floor(paneRows / 2)) : 0
