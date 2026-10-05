@@ -63,6 +63,7 @@ import { NextStepChips } from './components/NextStepChips'
 import { BrowserConfigStore } from './browser-config-store'
 import { TauriConfigStore } from './tauri-config-store'
 import { envOverridesFromImportMetaEnv } from './browser-config'
+import { applyBrowserLayerSettings } from './layer-env'
 import { getAssistantTestHooks } from './assistant-test-hooks'
 import { DEMO_USER_MESSAGE, DEMO_APPROVAL_REASON, DEMO_NOTE } from './demo-seed'
 import { checkProxyReachable, checkWebSearchReachable, checkClaudeAvailable, checkWorkspaceConfigured, checkDataDirWritable } from './gui-doctor-checks'
@@ -437,6 +438,7 @@ export function App(): React.JSX.Element {
   const [goalGraphState, setGoalGraphState] = useState<GoalGraphState | null>(null)
   const assistantRef = useRef<PersonalAssistant | null>(null)
   const configStoreRef = useRef<ConfigStore | null>(null)
+  const [layerPins, setLayerPins] = useState<ReadonlySet<string>>(new Set())
   const sessionIdRef = useRef(newId())
   const bottomRef = useRef<HTMLDivElement>(null)
   const composerRef = useRef<HTMLTextAreaElement>(null)
@@ -656,6 +658,7 @@ export function App(): React.JSX.Element {
       configStoreRef.current = store
       setConfig(resolved.config)
       setOverriddenKeys(resolved.overriddenKeys)
+      setLayerPins(applyBrowserLayerSettings(resolved.config.layers))
       if (store instanceof TauriConfigStore) setApiKeyMigrationNotice(store.consumeMigrationNotice())
       setNeedsSetup(isFirstRun(persisted, resolved.overriddenKeys))
       const assistant = await buildAssistant(resolved.config)
@@ -672,6 +675,8 @@ export function App(): React.JSX.Element {
     const resolved = resolveConfig(persisted, envOverrides)
     setConfig(resolved.config)
     setOverriddenKeys(resolved.overriddenKeys)
+    // Before the rebuild: layers read their flags per turn, but a hook wired at build time must see the new choice too.
+    setLayerPins(applyBrowserLayerSettings(resolved.config.layers))
     assistantRef.current = await buildAssistant(resolved.config)
     setNeedsSetup(false)
     setView('chat')
@@ -1018,6 +1023,7 @@ export function App(): React.JSX.Element {
       <SettingsScreen
         config={config}
         overriddenKeys={overriddenKeys}
+        layerPins={layerPins}
         isDesktop={isTauri()}
         apiKeyMigrationNotice={apiKeyMigrationNotice}
         busy={busy}

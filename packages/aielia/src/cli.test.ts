@@ -233,6 +233,53 @@ function captureOutput(): string[] {
   return lines
 }
 
+describe('/layers settings|on|off|reset', () => {
+  afterEach(() => {
+    delete process.env.AUDIT_SEMANTIC_HYPOTHESES
+    delete process.env.AUDIT_DECOMPOSITION
+  })
+
+  it('persists a choice, applies it to the layer flag at once, and lists it as changed', async () => {
+    const { cli, configStore } = await setupCli()
+    const lines = captureOutput()
+
+    await cli.dispatchLine('/layers on semantic_hypotheses')
+    expect(await configStore.load()).toMatchObject({ layers: { semantic_hypotheses: true } })
+    expect(process.env.AUDIT_SEMANTIC_HYPOTHESES).toBe('1')
+
+    lines.length = 0
+    await cli.dispatchLine('/layers settings')
+    expect(lines.join('\n')).toMatch(/semantic_hypotheses\s+on\s.*\(changed\)/)
+
+    await cli.dispatchLine('/layers reset')
+    expect(await configStore.load()).toMatchObject({ layers: {} })
+    expect(process.env.AUDIT_SEMANTIC_HYPOTHESES).toBeUndefined()
+  })
+
+  it('refuses a locked or unknown layer and saves nothing', async () => {
+    const { cli, configStore } = await setupCli()
+    const lines = captureOutput()
+
+    await cli.dispatchLine('/layers off approval_staging')
+    await cli.dispatchLine('/layers off not_a_layer')
+
+    expect(lines.join('\n')).toContain('cannot be switched off')
+    expect(lines.join('\n')).toContain('Unknown layer')
+    expect(await configStore.load()).toEqual({})
+  })
+
+  it('says so when the operator pinned the flag, instead of claiming the choice took effect', async () => {
+    process.env.AUDIT_DECOMPOSITION = '1'
+    const { cli } = await setupCli()
+    const lines = captureOutput()
+
+    await cli.dispatchLine('/layers off decomposition_reframe')
+
+    expect(lines.join('\n')).toContain('pinned by its AUDIT_* env flag')
+    expect(process.env.AUDIT_DECOMPOSITION).toBe('1')
+  })
+})
+
 describe('/config', () => {
   it('bare /config lists every key at its current (default) value', async () => {
     const { cli } = await setupCli()

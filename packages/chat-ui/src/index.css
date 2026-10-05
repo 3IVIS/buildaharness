@@ -1423,3 +1423,11 @@ body {
 
 /* Heads-up notices (contradiction with an earlier fact, change-review conflict), shown under the assistant reply they belong to — the browser counterpart of the CLI's trailing notice lines. */
 .turn-notice { margin: 4px 0 8px; padding: 0 14px; color: var(--muted); font-size: 13.5px; }
+
+.settings__layer {
+  gap: 2px;
+  padding: 6px 0;
+}
+.settings__layer .settings__field-label input[type='checkbox'] {
+  width: auto;
+}

@@ -89,6 +89,8 @@ export type { PlanRecord, PlanTaskRecord, PlanPosition, PlanMode } from './plan-
 export type { PlanDecision, PlanApprovalEdits } from './plan-approval-service.js'
 export { resolveConfig, validateConfig, ConfigValidationError, DEFAULT_CONFIG, CONFIG_KEYS } from './config.js'
 export type { AssistantConfig, ConfigStore, ResolvedConfig } from './config.js'
+export { LAYER_SETTINGS, applyLayerSettings, effectiveState, withLayerChoice, sanitizeLayerChoices, formatLayerListing, findLayer, isToggleable, LayerSettingError } from './layer-settings.js'
+export type { LayerSetting, LayerGroup, LayerChoices, AppliedLayers } from './layer-settings.js'
 export { resolveOneLoopMode, normalizeOneLoopMode, DEFAULT_ONE_LOOP_MODE } from './one-loop-flag.js'
 export type { OneLoopMode } from './one-loop-flag.js'
 export { resolveAskMode, normalizeAskMode, DEFAULT_ASK_MODE } from './ask-mode-flag.js'

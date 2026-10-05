@@ -35,6 +35,7 @@ import { createSmtpSender } from './email-smtp.js'
 import { braveSearch } from './web-search-provider.js'
 import { resolveConfig, validateConfig, ConfigValidationError, type AssistantConfig, type ConfigStore } from './config.js'
 import { NodeConfigStore } from './node-config-store.js'
+import { applyLayerSettings, formatLayerListing, sanitizeLayerChoices, withLayerChoice, LayerSettingError } from './layer-settings.js'
 import { isConfigKey, envOverridesFromProcessEnv, parseConfigValue, ConfigValueParseError, formatConfigListing, ENV_VAR_FOR_CONFIG_KEY, CONFIG_KEYS } from './cli-config.js'
 import { formatHelp, isQuitCommand, formatStatus, formatTranscriptMarkdown, defaultExportFilename, formatMemorySummary, formatMemoryExport, defaultMemoryExportFilename, formatSearchResults, formatGoalGraphState, formatNextSteps, formatCostSummary, formatDoctorReport, formatUndoLogListing, formatMemoryPendingOutcome, formatMemoryHistory, formatMemoryArchive, formatMemoryInjection, formatMemoryStatus } from './cli-session.js'
 import { estimateCostUsd } from './model-pricing.js'
@@ -297,6 +298,9 @@ export async function runCli(options: RunCliOptions = {}): Promise<CliInstance> 
 
   let persisted = await configStore.load()
   let { config, overriddenKeys } = resolveConfig(persisted, envOverrides)
+  // The layers' AUDIT_* flags are the single source each layer reads, so the saved /layers choices are written onto process.env
+  // (a flag the operator already set stays and is reported pinned). Re-run after every config change.
+  let layerPins = applyLayerSettings(sanitizeLayerChoices(config.layers), process.env).pinned
 
   // First run with nothing configured: offer a one-line setup rather than
   // silently starting on the proxy backend against a proxy that isn't running.
@@ -328,6 +332,7 @@ export async function runCli(options: RunCliOptions = {}): Promise<CliInstance> 
       setupRl?.close()
     }
     ;({ config, overriddenKeys } = resolveConfig(persisted, envOverrides))
+    layerPins = applyLayerSettings(sanitizeLayerChoices(config.layers), process.env).pinned
   }
 
   try {
@@ -1477,6 +1482,7 @@ export async function runCli(options: RunCliOptions = {}): Promise<CliInstance> 
   async function reloadAssistant(): Promise<void> {
     const nextPersisted = await configStore.load()
     ;({ config, overriddenKeys } = resolveConfig(nextPersisted, envOverrides))
+    layerPins = applyLayerSettings(sanitizeLayerChoices(config.layers), process.env).pinned
     assistant = options.assistant ?? (await buildAssistant(config, { dataDir, backend, remindersFile }))
   }
 
@@ -1556,6 +1562,38 @@ export async function runCli(options: RunCliOptions = {}): Promise<CliInstance> 
     console.log('\nUsage: /config | /config set <key> <value> | /config reset [key]\n')
   }
 
+  /**
+   * `/layers settings|on|off|reset` — list the reasoning layers and switch one on or off (bare `/layers` is printLayers' last-turn view). Persists `config.layers` through the same store as /config and
+   * re-applies the flags immediately; floor layers are locked and an operator-set AUDIT_* flag is reported as pinned.
+   */
+  async function handleLayers(args: string[]): Promise<void> {
+    const [sub, id] = args
+    if (sub === 'settings' || sub === 'list') {
+      console.log(`\n${formatLayerListing(sanitizeLayerChoices(config.layers), layerPins, process.env)}\n`)
+      return
+    }
+    try {
+      if (sub === 'on' || sub === 'off') {
+        if (!id) { console.log(`\nUsage: /layers ${sub} <id>\n`); return }
+        const layers = withLayerChoice(sanitizeLayerChoices(config.layers), id, sub === 'on')
+        await configStore.save({ layers })
+      } else if (sub === 'reset') {
+        const layers = id ? withLayerChoice(sanitizeLayerChoices(config.layers), id, undefined) : {}
+        await configStore.save({ layers })
+      } else {
+        console.log('\nUsage: /layers settings | /layers on <id> | /layers off <id> | /layers reset [id]\n')
+        return
+      }
+    } catch (err) {
+      if (!(err instanceof LayerSettingError)) throw err
+      console.log(`\n✗ ${err.message}\n`)
+      return
+    }
+    await reloadAssistant()
+    const pinned = id !== undefined && layerPins.has(id)
+    console.log(pinned ? `\n✗ Saved, but "${id}" is pinned by its AUDIT_* env flag, so the saved choice has no effect until that is unset.\n` : `\n✓ Layers updated (took effect immediately, no restart needed)\n`)
+  }
+
   /** Thin convenience wrapper over /config set model — not a second mechanism. Bare /model shows the current value. */
   async function handleModel(args: string[]): Promise<void> {
     if (args.length === 0) {
@@ -1603,7 +1641,8 @@ export async function runCli(options: RunCliOptions = {}): Promise<CliInstance> 
   // close over `config`/`overriddenKeys`/`assistant`, which reloadAssistant() reassigns.
   const commands: Record<string, (args: string[]) => void | Promise<void>> = {
     '/why': () => printWhy(),
-    '/layers': () => printLayers(),
+    // Bare /layers is the last-turn fired/skipped view; its subcommands (settings/on/off/reset) edit the on/off choices.
+    '/layers': (args) => (args.length === 0 ? printLayers() : handleLayers(args)),
     '/sources': () => printSources(),
     '/plan': (args) => handlePlan(args),
     '/help': () => printHelp(),

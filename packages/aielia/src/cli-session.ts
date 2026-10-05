@@ -60,6 +60,7 @@ export const CLI_COMMANDS_HELP: CliCommandHelp[] = [
   { command: '/plan sketch <request>', description: 'One-shot, advisory plan sketch — no PlanRecord, nothing staged, cannot execute' },
   { command: '/goals', description: 'Review every known goal thread this session — status, tasks, and visibility (freshly computed / carried over / done / suggested)' },
   { command: '/config ...', description: 'View or change persisted settings' },
+  { command: '/layers settings', description: 'List reasoning layers with cost/evidence; /layers on|off|reset <id> to change' },
   { command: '/checkpoint [clear]', description: 'Inspect, or clear, a stuck in-progress harness checkpoint' },
 ]
 
