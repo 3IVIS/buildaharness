@@ -1649,6 +1649,7 @@ export class PersonalAssistant {
   ): Promise<AssistantTurnResult> {
     await this.session.appendTranscriptMessage(sessionId, transcriptKey, { role: 'user', content: userMessage })
     if (loopResult.kind === 'needs_approval') {
+      this.onDebugLog?.({ kind: 'approval_request', sessionId, content: `${loopResult.pendingActionKind} ${loopResult.pendingActionId}: ${loopResult.reason}` })
       classifyAndTraceExecutionMode(this.onTrace, { isPlanCancelBypass: false, isBatchResearch: false, isTrivial: false, requiresApproval: true })
       // dangerouslySkipPermissions auto-applies the staged action the same way a second turn()
       // call with `approved: true` would — resolvePendingAction is exactly that path, just

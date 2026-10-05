@@ -25,6 +25,7 @@ import {
 import type { AskAnswer, AskQuestion, AskQuestionOption, AskResponse } from '@buildaharness/harness'
 import { PersonalAssistant, type AssistantProgress, type AssistantTrace, type AssistantSource, type AssistantTurnResult } from './assistant.js'
 import { memoryAuditLogEnabled } from './memory-service.js'
+import { activityLogEnabled, createActivityLogger } from './activity-log.js'
 import type { AssistantToolStep } from './tool-step.js'
 import type { PlanDecision, PlanApprovalEdits } from './plan-approval-service.js'
 import { nodeDisplayName, nodeToLayer, buildWhyChain, LAYER_ORDER, LAYER_DISPLAY_NAME, LAYER_SHORT_CODE } from './node-display-names.js'
@@ -198,6 +199,8 @@ async function buildAssistant(config: AssistantConfig, { backend, dataDir, remin
       return sendEmail ? { backend, workspaceRoot, sendEmail } : undefined
     })(),
     dangerouslySkipPermissions: config.dangerouslySkipPermissions,
+    // Opt-in durable record of tool calls/results and approvals (see activity-log.ts).
+    onDebugLog: activityLogEnabled(process.env) ? createActivityLogger(join(dataDir, 'activity-log.jsonl')) : undefined,
     spendCap:
       config.sessionCostLimitUsd !== undefined || config.sessionCallLimit !== undefined
         ? { sessionCostLimitUsd: config.sessionCostLimitUsd, sessionCallLimit: config.sessionCallLimit }

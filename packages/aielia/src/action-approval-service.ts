@@ -64,6 +64,8 @@ export class ActionApprovalService {
       throw new Error('turn() received pendingActionId but none of fileTools/shellTools/actionTools are configured')
     }
 
+    this.onDebugLog?.({ kind: 'approval_decision', sessionId, content: `${approved ? 'approved' : 'declined'} ${pendingActionId}` })
+
     if (!approved) {
       // write_file/run_shell_command proposals already have the user's originating request
       // logged (the tool loop's needs_approval branch appends it before ever returning here) —

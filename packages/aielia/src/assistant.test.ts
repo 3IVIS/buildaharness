@@ -4434,3 +4434,43 @@ describe('PersonalAssistant control plane (Phase 4 of the harness/assistant arch
   })
 })
 
+describe('approval requests and decisions reach the debug log (activity log)', () => {
+  const ROOT = '/workspace'
+  const stage = async () => {
+    const entries: Array<{ kind: string; sessionId: string; content: string }> = []
+    const backend = makeFakeBackend()
+    const llm = scriptedResponses([
+      { content: '', toolCalls: [{ id: 'toolu_1', name: 'write_file', input: { path: 'summary.md', content: 'draft summary' } }] },
+    ])
+    const assistant = new PersonalAssistant({ llmClient: llm, fileTools: { backend, workspaceRoot: ROOT }, onDebugLog: (e) => entries.push(e) })
+    const staged = await assistant.turn('Write a summary to summary.md')
+    return { entries, assistant, staged, backend }
+  }
+
+  it('records an approval_request naming the kind and id when an action is staged', async () => {
+    const { entries, staged } = await stage()
+    expect(staged.status).toBe('needs_approval')
+    const req = entries.filter((e) => e.kind === 'approval_request')
+    expect(req).toHaveLength(1)
+    expect(req[0].content).toContain('write')
+    expect(req[0].content).toContain(staged.pendingActionId as string)
+    expect(entries.map((e) => e.kind)).not.toContain('approval_decision')
+  })
+
+  it('records approved, then the executed tool call, when the user approves', async () => {
+    const { entries, assistant, staged } = await stage()
+    await assistant.turn('yes', { approved: true, pendingActionId: staged.pendingActionId })
+    const kinds = entries.map((e) => e.kind)
+    expect(kinds.indexOf('approval_request')).toBeLessThan(kinds.indexOf('approval_decision'))
+    expect(kinds.indexOf('approval_decision')).toBeLessThan(kinds.lastIndexOf('tool_call'))
+    expect(entries.find((e) => e.kind === 'approval_decision')?.content).toBe(`approved ${staged.pendingActionId}`)
+    expect(entries.find((e) => e.kind === 'tool_call')?.content).toContain('write_file')
+  })
+
+  it('records declined when the user declines, and nothing is written', async () => {
+    const { entries, assistant, staged, backend } = await stage()
+    await assistant.turn('no', { approved: false, pendingActionId: staged.pendingActionId })
+    expect(entries.find((e) => e.kind === 'approval_decision')?.content).toBe(`declined ${staged.pendingActionId}`)
+    expect(await backend.readTextFile(`${ROOT}/summary.md`)).toBeUndefined()
+  })
+})
