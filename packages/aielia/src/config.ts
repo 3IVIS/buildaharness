@@ -13,6 +13,7 @@ import type { PlanRolloutMode } from './plan-mode-flag.js'
 import type { TuiMode } from './tui-mode-flag.js'
 import type { UpdateCheckMode } from './update-check-flag.js'
 import type { GoalGraphMode } from './goal-graph-flag.js'
+import type { PlanGraphMode } from './plan-graph-flag.js'
 import type { LayerPolicyMode } from './layer-policy-flag.js'
 import type { GoalGraphSuggestMode } from './goal-graph-suggest-flag.js'
 import type { MemoryWriteMode } from './memory-governance.js'
@@ -189,6 +190,12 @@ export interface AssistantConfig {
    */
   goalGraphMode?: GoalGraphMode
   /**
+   * Read-only plan-graph view (plans/plan_visualization_plan.html). 'disabled' (the package default,
+   * kept out of DEFAULT_CONFIG like goalGraphMode) leaves every surface byte-identical to before.
+   * Presentation only — never added to LAYER_SETTINGS.
+   */
+  planGraphMode?: PlanGraphMode
+  /**
    * AL7b of plans/adaptive_layer_selection_plan.html — 'static' (default; also the kill switch) |
    * 'shadow' (record what adaptive would decide, execute static) | 'adaptive'. Undefined falls back
    * to `DEFAULT_LAYER_POLICY_MODE`. Chain: `ASSISTANT_LAYER_POLICY`, `VITE_ASSISTANT_LAYER_POLICY`,
@@ -245,6 +252,7 @@ export const CONFIG_KEYS: readonly (keyof AssistantConfig)[] = [
   'updateCheck',
   'activeProject',
   'goalGraphMode',
+  'planGraphMode',
   'layerPolicyMode',
   'goalGraphSuggestMode',
   'layers',
