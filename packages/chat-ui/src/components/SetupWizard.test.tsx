@@ -13,28 +13,13 @@ function setup(overrides: Partial<React.ComponentProps<typeof SetupWizard>> = {}
 }
 
 describe('SetupWizard', () => {
-  it('offers the Claude login as the recommended option when claude is found on desktop', async () => {
-    const { onComplete } = setup({ isDesktop: true, detectClaude: async () => true })
-    await userEvent.click(await screen.findByRole('button', { name: /Use my Claude login/ }))
-    expect(onComplete).toHaveBeenCalledWith({ llmBackend: 'claude-cli' })
-  })
-
-  it('says claude is already running and needs no key', async () => {
-    setup({ isDesktop: true, detectClaude: async () => true })
-    expect(await screen.findByText(/Claude is already running on this computer/)).toBeInTheDocument()
-  })
-
-  it('points desktop users without claude at installing it, but still offers providers', async () => {
-    setup({ isDesktop: true, detectClaude: async () => false })
-    expect(await screen.findByText(/Already use Claude Code\?/)).toBeInTheDocument()
-    expect(screen.queryByRole('button', { name: /Use my Claude login/ })).toBeNull()
-    expect(screen.getByRole('button', { name: /Anthropic/ })).toBeInTheDocument()
-  })
-
-  it('mentions the desktop/CLI Claude-login option on the web build and never offers it directly', () => {
-    setup({ isDesktop: false })
-    expect(screen.getByText(/can use your existing Claude Code login/)).toBeInTheDocument()
-    expect(screen.queryByRole('button', { name: /Use my Claude login/ })).toBeNull()
+  it('never mentions or offers a Claude login, on desktop or the web build', async () => {
+    for (const isDesktop of [true, false]) {
+      const { unmount } = render(<SetupWizard isDesktop={isDesktop} onComplete={vi.fn()} onSkip={vi.fn()} />)
+      expect(await screen.findByRole('button', { name: /Anthropic/ })).toBeInTheDocument()
+      expect(screen.queryByText(/Claude login|Claude Code|already running|no API key/i)).toBeNull()
+      unmount()
+    }
   })
 
   it('walks through choosing a provider, validating and saving a key', async () => {
@@ -105,7 +90,7 @@ describe('SetupWizard', () => {
   })
 
   it('offers copyable links instead of anchors on desktop', async () => {
-    setup({ isDesktop: true, detectClaude: async () => false })
+    setup({ isDesktop: true })
     await userEvent.click(await screen.findByRole('button', { name: /OpenRouter/ }))
     expect(screen.queryByRole('link')).toBeNull()
     expect(screen.getAllByRole('button', { name: 'Copy link' }).length).toBe(2)

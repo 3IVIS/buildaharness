@@ -3,13 +3,13 @@
  * env vars and no persisted config used to land on the default `proxy` backend
  * pointed at `http://localhost:8787` — a proxy almost nobody running it for the
  * first time has, so every turn failed with a connection error and no hint about
- * what to do. This runs one short interactive pass instead: reuse an existing
- * `claude` CLI login if there is one, otherwise ask for a provider + API key,
- * and persist the choice via the same ConfigStore `/config set` writes to.
+ * what to do. This runs one short interactive pass instead: ask for a provider
+ * + API key, and persist the choice via the same ConfigStore `/config set`
+ * writes to.
  *
  * Split out of cli.ts (like non-interactive-mode.ts / error-classifier.ts) so it
  * can be unit-tested without a live REPL: every side-effecting dependency —
- * reading a line, detecting the `claude` binary — is injected.
+ * reading a line, testing a key — is injected.
  */
 
 import type { AssistantConfig, ConfigStore } from './config.js'
@@ -25,8 +25,6 @@ export interface FirstRunDeps {
   isInteractive: boolean
   /** Reads one line from the user, already trimmed. */
   ask: (question: string) => Promise<string>
-  /** True when an authenticated `claude` CLI is available on PATH. */
-  detectClaudeCli: () => Promise<boolean>
   /** Where to print prompts/status (defaults to process.stdout in cli.ts). */
   log: (line: string) => void
   /** Live-checks a key against the provider. Optional so unit tests can skip the network; cli.ts passes the real testApiKey. */
@@ -53,7 +51,7 @@ function alreadyConfigured(deps: FirstRunDeps): boolean {
  * object reflecting what was just written.
  */
 export async function maybeRunFirstRunSetup(deps: FirstRunDeps): Promise<Partial<AssistantConfig>> {
-  const { configStore, persisted, isInteractive, ask, detectClaudeCli, log, testKey } = deps
+  const { configStore, persisted, isInteractive, ask, log, testKey } = deps
 
   if (alreadyConfigured(deps)) return persisted
   if (!isInteractive) return persisted
@@ -66,27 +64,6 @@ export async function maybeRunFirstRunSetup(deps: FirstRunDeps): Promise<Partial
   log('')
 
   const patch: Partial<AssistantConfig> = {}
-
-  if (await detectClaudeCli()) {
-    log('✓ Claude is already running on this computer (Claude Code is installed and signed in).')
-    log('  That means you can start right now — no API key, no extra account, nothing to paste.')
-    log('')
-    const useClaude = await ask('Use your Claude login? (Y/n — Enter means yes) ')
-    if (useClaude === '' || useClaude.toLowerCase().startsWith('y')) {
-      patch.llmBackend = 'claude-cli'
-      await configStore.save(patch)
-      log('')
-      log('✓ All set — using your Claude login. Try "what time zone is Tokyo in?", then')
-      log('  "send an email to my boss saying I quit" to see the approval gate.')
-      log('')
-      return { ...persisted, ...patch }
-    }
-    log('')
-  } else {
-    log('Tip: if you already use Claude Code, install it and sign in (run `claude` once), then')
-    log('start Aielia again — you can use it with no API key. Otherwise, pick a provider below.')
-    log('')
-  }
 
   log('Which AI provider do you have (or want to use)?')
   log('')

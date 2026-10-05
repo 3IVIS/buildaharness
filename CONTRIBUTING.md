@@ -247,9 +247,9 @@ against `@buildaharness/harness` + `@buildaharness/runtime` by workspace link.
 npm install
 npm run build:harness && npm run build:runtime      # workspace deps the assistant imports
 
-# CLI — the fastest loop. claude-cli backend needs no API key (shells to `claude`).
+# CLI — the fastest loop. Needs a model key (Anthropic / OpenAI / OpenRouter).
 printf 'what time zone is Tokyo in?\nexit\n' | \
-  ASSISTANT_LLM_BACKEND=claude-cli node packages/aielia/dist/cli.js
+  ASSISTANT_LLM_BACKEND=anthropic ASSISTANT_API_KEY=sk-ant-... node packages/aielia/dist/cli.js
 # or, without a build step:
 npm run cli --workspace=packages/aielia
 

@@ -19,7 +19,6 @@ function makeDeps(overrides: Partial<FirstRunDeps> = {}): FirstRunDeps & { saved
     overriddenKeys: new Set(),
     isInteractive: true,
     ask: async () => '',
-    detectClaudeCli: async () => false,
     log: () => {},
     ...overrides,
   }
@@ -52,22 +51,6 @@ describe('maybeRunFirstRunSetup', () => {
     await maybeRunFirstRunSetup(deps)
     expect(ask).not.toHaveBeenCalled()
     expect(deps.saved).toEqual([])
-  })
-
-  it('adopts the claude-cli backend when the user accepts the detected binary', async () => {
-    const deps = makeDeps({ detectClaudeCli: async () => true, ask: async () => '' })
-    const result = await maybeRunFirstRunSetup(deps)
-    expect(deps.saved).toEqual([{ llmBackend: 'claude-cli' }])
-    expect(result.llmBackend).toBe('claude-cli')
-  })
-
-  it('falls through to provider selection when claude-cli is declined', async () => {
-    const answers = ['n', '2', LONG_ANT]
-    let i = 0
-    const deps = makeDeps({ detectClaudeCli: async () => true, ask: async () => answers[i++] })
-    const result = await maybeRunFirstRunSetup(deps)
-    expect(deps.saved).toEqual([{ llmBackend: 'anthropic', apiKey: LONG_ANT }])
-    expect(result).toMatchObject({ llmBackend: 'anthropic', apiKey: LONG_ANT })
   })
 
   it('saves the chosen provider and key', async () => {
@@ -151,15 +134,9 @@ describe('maybeRunFirstRunSetup', () => {
     expect(out).toContain('openrouter.ai/workspaces/default/guardrails')
   })
 
-  it('tells people without Claude Code that installing it is an alternative', async () => {
+  it('never offers or mentions a Claude login', async () => {
     const lines: string[] = []
     await maybeRunFirstRunSetup(makeDeps({ log: (l) => lines.push(l) }))
-    expect(lines.join('\n')).toMatch(/already use Claude Code/)
-  })
-
-  it('says Claude is already running when detected', async () => {
-    const lines: string[] = []
-    await maybeRunFirstRunSetup(makeDeps({ detectClaudeCli: async () => true, log: (l) => lines.push(l) }))
-    expect(lines.join('\n')).toContain('Claude is already running on this computer')
+    expect(lines.join('\n')).not.toMatch(/claude (login|code|cli)|already running|no api key/i)
   })
 })

@@ -1,3 +1,10 @@
+/*
+ * DEVELOPER TESTING ONLY. Not offered in the welcome/first-run flow, and not for use by end users
+ * or with anyone else's credentials. Anthropic's terms do not permit third-party products to route
+ * requests through Free/Pro/Max subscription credentials
+ * (https://code.claude.com/docs/en/legal-and-compliance) — use the anthropic/openai/openrouter
+ * API-key backends for anything beyond local testing on your own machine.
+ */
 import { spawn } from 'node:child_process'
 import { readdir, readFile, stat } from 'node:fs/promises'
 import { tmpdir } from 'node:os'

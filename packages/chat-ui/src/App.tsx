@@ -239,11 +239,6 @@ function isFirstRun(persisted: Partial<AssistantConfig>, overriddenKeys: Readonl
   return !(['llmBackend', 'apiKey', 'authToken', 'proxyUrl'] as const).some((k) => overriddenKeys.has(k))
 }
 
-/** Desktop only: whether an authenticated `claude` CLI is available (see lib.rs check_claude_available). */
-async function detectClaudeLogin(): Promise<boolean> {
-  return invoke<boolean>('check_claude_available')
-}
-
 /** Picks the platform-appropriate ConfigStore — localStorage in a plain browser, a Tauri-fs-backed JSON file on desktop (same appLocalDataDir already used for transcripts). */
 async function createConfigStore(): Promise<ConfigStore> {
   if (!isTauri()) return new BrowserConfigStore()
@@ -1065,7 +1060,6 @@ export function App(): React.JSX.Element {
     return (
       <SetupWizard
         isDesktop={isTauri()}
-        detectClaude={isTauri() ? detectClaudeLogin : undefined}
         onComplete={handleSaveSettings}
         onSkip={() => setNeedsSetup(false)}
       />
