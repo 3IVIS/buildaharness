@@ -1,6 +1,6 @@
 import { describe, it, expect, afterEach, vi } from 'vitest'
 import { renderInk, type TestInkInstance } from './ink-test-render.js'
-import { TuiApp, EventLogBridge, PromptBridge, StatusBridge } from './tui-app.js'
+import { TuiApp, EventLogBridge, PromptBridge, StatusBridge, PlanGraphBridge } from './tui-app.js'
 import { PLAN_LINE_PREFIX } from './cli-icons.js'
 
 // Full-mount smoke tests for the composed Ink shell (Phase 3). Excluded from root's blanket
@@ -226,5 +226,59 @@ describe('TuiApp', () => {
     eventLog.handleEvent({ type: 'progress', text: '[step 1/5] Gathering evidence…' })
     await sleep()
     expect(strip(instance.lastFrame())).not.toContain('Thinking…')
+  })
+})
+
+describe('TuiApp plan graph pane', () => {
+  const nodes = [
+    { id: 'a', label: 'First task', status: 'done' as const, deps: [] },
+    { id: 'b', label: 'Second task', status: 'pending' as const, deps: ['a'] },
+  ]
+
+  function mountWithGraph() {
+    const eventLog = new EventLogBridge()
+    const prompt = new PromptBridge()
+    const status = new StatusBridge()
+    const writes: string[] = []
+    const planGraph = new PlanGraphBridge((c) => writes.push(c), 5, 5)
+    const instance = render(<TuiApp eventLog={eventLog} prompt={prompt} status={status} planGraph={planGraph} onSubmitChat={vi.fn()} onExit={vi.fn()} columns={60} />)
+    return { eventLog, prompt, planGraph, writes, instance }
+  }
+
+  it('opens, shows the pane, and closes back to chat without re-printing scrollback', async () => {
+    const { eventLog, planGraph, writes, instance } = mountWithGraph()
+    eventLog.handleEvent({ type: 'line', stream: 'stdout', lines: ['scrollback marker'] })
+    await sleep(10)
+    // debug-mode Ink rewrites the whole frame (Static included) each render, so count in the last frame only.
+    const countMarker = (): number => strip(instance.lastFrame()).split('scrollback marker').length - 1
+    expect(countMarker()).toBe(1)
+    await planGraph.open(nodes)
+    await sleep(10)
+    expect(strip(instance.lastFrame())).toContain('Plan graph')
+    expect(writes).toEqual(['\x1b[?1049h'])
+    await key(instance, 'q')
+    await sleep(30)
+    expect(writes).toEqual(['\x1b[?1049h', '\x1b[?1049l'])
+    expect(strip(instance.lastFrame())).not.toContain('Plan graph')
+    expect(countMarker()).toBe(1)
+  })
+
+  it('an approval prompt arriving while the pane is open is shown and takes the keys; Ctrl+C still exits', async () => {
+    const onExit = vi.fn()
+    const eventLog = new EventLogBridge()
+    const prompt = new PromptBridge()
+    const planGraph = new PlanGraphBridge(() => {}, 1, 1)
+    const instance = render(<TuiApp eventLog={eventLog} prompt={prompt} status={new StatusBridge()} planGraph={planGraph} onSubmitChat={vi.fn()} onExit={onExit} columns={60} />)
+    await planGraph.open(nodes)
+    await sleep(10)
+    const answer = prompt.askYesNo('Run this? (y/N) ')
+    await sleep(10)
+    expect(strip(instance.lastFrame())).toContain('Run this?')
+    expect(strip(instance.lastFrame())).toContain('Plan graph')
+    await type(instance, 'q') // goes to the prompt's input, not the pane
+    expect(strip(instance.lastFrame())).toContain('Plan graph')
+    await key(instance, CTRL_C)
+    expect(onExit).toHaveBeenCalled()
+    void answer
   })
 })
