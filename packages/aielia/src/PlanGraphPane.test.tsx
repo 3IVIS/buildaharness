@@ -11,7 +11,6 @@ const LEFT = '\x1b[D'
 const RIGHT = '\x1b[C'
 const TAB = '\t'
 const SHIFT_TAB = '\x1b[Z'
-// eslint-disable-next-line no-control-regex
 const ANSI = /\x1b\[[0-9;]*m/g
 const sleep = (ms = 10): Promise<void> => new Promise((r) => setTimeout(r, ms))
 const strip = (f: string | undefined): string => (f ?? '').replace(ANSI, '')

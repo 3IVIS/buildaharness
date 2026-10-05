@@ -18,11 +18,11 @@ export default [
     ignores: ['dist/', 'node_modules/', 'spec/dist/'],
   },
   {
-    files: ['src/**/*.{ts,tsx}'],
+    files: ['src/**/*.{ts,tsx}', 'packages/{aielia,chat-ui}/{src,eval,scripts,e2e}/**/*.{ts,tsx}'],
     languageOptions: {
       parser: tsParser,
+      // No `project`: none of the rules are type-aware, and a single tsconfig cannot describe every workspace package.
       parserOptions: {
-        project: './tsconfig.json',
         ecmaFeatures: { jsx: true },
       },
     },
@@ -51,5 +51,15 @@ export default [
       'no-console': ['warn', { allow: ['warn', 'error', 'info', 'debug'] }],
       'eqeqeq':     ['error', 'always', { null: 'ignore' }],
     },
+  },
+  {
+    // aielia is a terminal app: console.* is its output channel, not leftover debugging.
+    files: ['packages/aielia/**/*.{ts,tsx}'],
+    rules: { 'no-console': 'off' },
+  },
+  {
+    // Playwright fixtures take a `use` callback, which the hooks rule mistakes for React's `use` hook.
+    files: ['packages/chat-ui/e2e/**/*.ts'],
+    rules: { 'react-hooks/rules-of-hooks': 'off' },
   },
 ]

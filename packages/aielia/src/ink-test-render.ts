@@ -16,7 +16,6 @@ import type { ReactElement } from 'react'
  */
 
 // Matches a bare ANSI CSI control sequence (cursor show/hide, bracketed-paste-mode toggle, ...).
-// eslint-disable-next-line no-control-regex
 const ANSI_CSI = /\x1b\[[0-9;?]*[a-zA-Z]/g
 
 class TestStdout extends EventEmitter {

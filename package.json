@@ -10,7 +10,7 @@
     "build": "tsc && vite build",
     "preview": "vite preview",
     "test": "vitest run",
-    "lint": "eslint src --max-warnings 0",
+    "lint": "eslint src packages/chat-ui/src packages/chat-ui/e2e packages/aielia/src packages/aielia/eval packages/aielia/scripts --max-warnings 0",
     "typecheck": "tsc --noEmit",
     "gen:harness-core": "node spec/gen-harness-core.mjs",
     "gen:memory-core": "node spec/gen-memory-core.mjs",

@@ -12,7 +12,6 @@ import type { PlanRecord, PlanTaskRecord } from '../plan-store.js'
 import type { VizNode } from './types.js'
 import { VIZ_STATUSES } from './types.js'
 
-// eslint-disable-next-line no-control-regex
 const strip = (lines: string[]): string[] => lines.map((l) => l.replace(/\u001b\[[0-9;]*m/g, ''))
 const T = (id: string, status: TaskStatus, depends_on: string[] = [], extra: Partial<PlanTaskRecord> = {}): PlanTaskRecord => ({ id, description: `Task ${id}`, depends_on, status, ...extra })
 const plan = (tasks: PlanTaskRecord[], mode: PlanRecord['mode'] = 'active'): PlanRecord => ({ templateName: null, successCriteria: 'Ship it', rationale: 'because', tasks, mode, executingOnPlan: true, createdAt: 'x', updatedAt: 'x' })

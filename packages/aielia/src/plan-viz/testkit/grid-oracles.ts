@@ -219,7 +219,6 @@ export function checkWidth(lines: readonly string[], maxCols: number): string[] 
 
 /** Output must be plain printable text: no stray control characters or newlines inside a line. */
 export function checkPrintable(lines: readonly string[]): string[] {
-  // eslint-disable-next-line no-control-regex
   return lines.flatMap((line, i) => (/[\u0000-\u001f\u007f]/.test(line.replace(/\u001b\[[0-9;]*m/g, '')) ? [`line ${i} contains a control character`] : []))
 }
 

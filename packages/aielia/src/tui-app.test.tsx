@@ -11,7 +11,6 @@ import { PLAN_LINE_PREFIX } from './cli-icons.js'
 
 const ENTER = '\r'
 const CTRL_C = ''
-// eslint-disable-next-line no-control-regex
 const ANSI = /\[[0-9;]*m/g
 
 function strip(frame: string | undefined): string {

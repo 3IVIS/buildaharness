@@ -8,7 +8,6 @@ import { checkHighlightIncident, checkViewport, navModelFrom } from './testkit/n
 import { edgesOf } from './testkit/generators.js'
 import type { VizNode } from './types.js'
 
-// eslint-disable-next-line no-control-regex
 const strip = (lines: string[]): string[] => lines.map((l) => l.replace(/\u001b\[[0-9;]*m/g, ''))
 
 function check(nodes: VizNode[], opts: Parameters<typeof renderPlan>[1] = {}): string[] {

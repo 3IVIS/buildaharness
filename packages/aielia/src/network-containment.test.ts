@@ -1,5 +1,5 @@
 import { describe, it, expect, afterEach } from 'vitest'
-import { connect, createServer, type Server } from 'node:net'
+import { connect, createServer } from 'node:net'
 import { getNetworkContainmentProxy, resetNetworkContainmentProxiesForTests } from './network-containment.js'
 
 /**
