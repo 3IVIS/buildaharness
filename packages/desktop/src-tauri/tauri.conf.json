@@ -22,6 +22,8 @@
         "title": "Aielia",
         "width": 800,
         "height": 600,
+        "minWidth": 520,
+        "minHeight": 420,
         "resizable": true,
         "fullscreen": false
       }

@@ -64,8 +64,74 @@ body {
 
 .app__header-actions {
   display: flex;
+  flex-wrap: wrap;
   align-items: center;
+  justify-content: flex-end;
   gap: 10px;
+}
+
+.app__header-actions button {
+  white-space: nowrap;
+}
+
+.app__header-more {
+  display: contents;
+}
+
+.app__header-secondary {
+  display: contents;
+}
+
+.app__more-button {
+  display: none;
+}
+
+@media (max-width: 640px) {
+  .app__header {
+    position: relative;
+    padding: 12px 12px;
+  }
+
+  .app__header-actions {
+    gap: 6px;
+    flex-wrap: nowrap;
+  }
+
+  .app__header-actions button:not(.app__settings-button) {
+    padding: 4px 7px;
+  }
+
+  .app__header-more {
+    display: block;
+  }
+
+  .app__more-button {
+    display: inline-block;
+  }
+
+  .app__header-secondary {
+    display: none;
+    position: absolute;
+    top: 100%;
+    right: 12px;
+    z-index: 20;
+    flex-direction: column;
+    gap: 4px;
+    min-width: 150px;
+    padding: 6px;
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    box-shadow: 0 6px 18px rgba(0, 0, 0, 0.35);
+  }
+
+  .app__header-secondary--open {
+    display: flex;
+  }
+
+  .app__header-secondary button {
+    text-align: left;
+  }
 }
 
 .app__header-actions button:not(.app__settings-button) {

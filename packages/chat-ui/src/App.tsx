@@ -472,6 +472,25 @@ export function App(): React.JSX.Element {
   const sessionIdRef = useRef(newId())
   const bottomRef = useRef<HTMLDivElement>(null)
   const composerRef = useRef<HTMLTextAreaElement>(null)
+  const headerMoreRef = useRef<HTMLDivElement>(null)
+  const [headerMenuOpen, setHeaderMenuOpen] = useState(false)
+
+  // Narrow-window "⋯" menu: close on Escape or a click outside it.
+  useEffect(() => {
+    if (!headerMenuOpen) return
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') setHeaderMenuOpen(false)
+    }
+    const onPointerDown = (event: MouseEvent) => {
+      if (headerMoreRef.current && !headerMoreRef.current.contains(event.target as Node)) setHeaderMenuOpen(false)
+    }
+    document.addEventListener('keydown', onKeyDown)
+    document.addEventListener('mousedown', onPointerDown)
+    return () => {
+      document.removeEventListener('keydown', onKeyDown)
+      document.removeEventListener('mousedown', onPointerDown)
+    }
+  }, [headerMenuOpen])
   // R1 (mid-task steering) — one channel per session, mirroring cli.ts's own module-scoped
   // steeringChannel. A ref, not state: enqueue()/poll() mutate it directly and nothing here needs
   // a re-render when its contents change (submitMessage already re-renders via setEntries).
@@ -1108,23 +1127,39 @@ export function App(): React.JSX.Element {
         </span>
         <div className="app__header-actions">
           <button type="button" aria-label="New chat" title="New chat" disabled={busy} onClick={() => void handleClearConversation()}>New chat</button>
-          <button type="button" aria-label="Export transcript" title="Export transcript" disabled={busy || entries.length === 0} onClick={() => void handleExportTranscript()}>Export</button>
-          <button type="button" aria-label="Undo last exchange" title="Undo last exchange" disabled={busy || entries.length === 0} onClick={() => void handleUndoLastTurn()}>Undo</button>
           <button type="button" aria-label="Search" title="Search past messages" onClick={() => setView('search')}>Search</button>
-          <button type="button" aria-label="Goals" title="Review goal threads for this session" onClick={() => void handleOpenGoals()}>Goals</button>
           <button type="button" aria-label="Memory" title="Review, confirm, undo or switch off what Aielia remembers" onClick={() => void handleOpenMemory()}>Memory</button>
-          <button
-            type="button"
-            aria-label="Sketch a plan"
-            title="One-shot, advisory plan sketch from the composer text — nothing staged, cannot execute"
-            disabled={busy || !input.trim()}
-            onClick={() => void handleSketchPlan()}
-          >
-            Sketch
-          </button>
-          {planGraphModeEnabled && (planGraphSource || activePlanStatus || planState) && (
-            <button type="button" className="app__plan-graph-link" onClick={() => setPlanVizOpenPersisted(!planVizOpen)}>Plan graph</button>
-          )}
+          <div className="app__header-more" ref={headerMoreRef}>
+            <button
+              type="button"
+              className="app__more-button"
+              aria-label="More actions"
+              title="More actions"
+              aria-haspopup="true"
+              aria-expanded={headerMenuOpen}
+              onClick={() => setHeaderMenuOpen((open) => !open)}
+            >
+              ⋯
+            </button>
+            {/* Wide windows show these inline; below 640px CSS folds them into the "⋯" menu. The real buttons stay in the DOM either way. */}
+            <div className={`app__header-secondary${headerMenuOpen ? ' app__header-secondary--open' : ''}`} onClick={() => setHeaderMenuOpen(false)}>
+              <button type="button" aria-label="Export transcript" title="Export transcript" disabled={busy || entries.length === 0} onClick={() => void handleExportTranscript()}>Export</button>
+              <button type="button" aria-label="Undo last exchange" title="Undo last exchange" disabled={busy || entries.length === 0} onClick={() => void handleUndoLastTurn()}>Undo</button>
+              <button type="button" aria-label="Goals" title="Review goal threads for this session" onClick={() => void handleOpenGoals()}>Goals</button>
+              <button
+                type="button"
+                aria-label="Sketch a plan"
+                title="One-shot, advisory plan sketch from the composer text — nothing staged, cannot execute"
+                disabled={busy || !input.trim()}
+                onClick={() => void handleSketchPlan()}
+              >
+                Sketch
+              </button>
+              {planGraphModeEnabled && (planGraphSource || activePlanStatus || planState) && (
+                <button type="button" className="app__plan-graph-link" onClick={() => setPlanVizOpenPersisted(!planVizOpen)}>Plan graph</button>
+              )}
+            </div>
+          </div>
           <button type="button" className="app__settings-button" aria-label="Settings" onClick={() => void handleOpenSettings()}>⚙</button>
         </div>
       </header>
