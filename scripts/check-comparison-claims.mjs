@@ -55,7 +55,7 @@ export const CLAIMS = [
   },
   {
     id: 'control_state_and_reviewer_shipped_together',
-    description: 'Aielia is the one of the four that ships BOTH a tiered Control State resolver and a reviewer gate.',
+    description: 'Aielia is the one of the seven compared agents (Claude Code, Codex CLI, Cline, Hermes, Kilo, OpenClaw, Pi) that ships BOTH a tiered Control State resolver and a reviewer gate.',
     expected: true,
     resolve: () =>
       fileHas('packages/harness/src/nodes/resolve-control-state.ts', /export function resolveControlState\b/) &&
@@ -137,14 +137,20 @@ export const CLAIMS = [
       fileHas('packages/harness/src/nodes/verify.ts', /layer: 'goal_correctness',\s*status: 'SKIPPED'/),
   },
   {
-    id: 'reviewer_three_lenses',
-    description: 'The Reviewer Pass has three lenses — implementer, reviewer, adversarial — plus a separate abstraction-fit recompute.',
+    id: 'reviewer_adversarial_lens_conditional',
+    description:
+      'The Reviewer Pass always runs the implementer and reviewer lenses (plus a separate abstraction-fit recompute); the adversarial lens runs only on a non-LOW-risk or 3+ task turn — the pages must not call it an unconditional "3-lens" review.',
     expected: true,
     resolve: () =>
       fileHas('packages/harness/src/nodes/reviewer-pass.ts', /function implementerLens\b/) &&
       fileHas('packages/harness/src/nodes/reviewer-pass.ts', /function reviewerLens\b/) &&
       fileHas('packages/harness/src/nodes/reviewer-pass.ts', /function adversarialLens\b/) &&
-      fileHas('packages/harness/src/nodes/reviewer-pass.ts', /recomputeAbstractionFit/),
+      fileHas('packages/harness/src/nodes/reviewer-pass.ts', /recomputeAbstractionFit/) &&
+      // the gate: adversarial only when risk is not LOW or the turn has 3+ tasks
+      fileHas(
+        'packages/harness/src/harness-runtime.ts',
+        /resolveGate\(ctx\.layerPolicy, 'reviewer_adversarial',\s*\(sigForReview\?\.riskLevel \?\? 'LOW'\) !== 'LOW' \|\| \(sigForReview\?\.taskCount \?\? 1\) >= 3\)/,
+      ),
   },
   {
     id: 'control_state_five_tiers',
