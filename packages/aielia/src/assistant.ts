@@ -648,6 +648,20 @@ export class PersonalAssistant {
         result.reply = stripActionRecord(result.reply)
         result.auditNotice = FORGED_ACTION_RECORD_NOTE
       }
+      // Logged before the reply audit and the next-step proposal (each an extra LLM call, the audit possibly followed by a
+      // retry turn, up to minutes): a reply that is already on screen must not be missing from the activity log because the
+      // process ended while those calls were in flight.
+      // cachedInputTokens is included here (not just in the usage/cost UI) specifically so it's
+      // visible in the same terminal log stream as every other debug-log line — the only way to
+      // confirm, from a real live response, whether a given backend/model is actually reporting
+      // prompt-cache hits at all (several OpenAI-compatible providers, OpenRouter included, only
+      // populate usage.prompt_tokens_details.cached_tokens for some underlying models).
+      const cacheNote = result.usage?.cachedInputTokens !== undefined ? ` [cached: ${result.usage.cachedInputTokens}/${result.usage.inputTokens} input tokens]` : ''
+      if (!this.replyLoggedEarly || result.status !== 'ok') this.onDebugLog?.({
+        kind: 'assistant_reply',
+        sessionId,
+        content: `[${result.status}]${result.riskLevel ? ` (${result.riskLevel})` : ''}${cacheNote} ${result.reply ?? (result.questions?.length ? formatAskQuestions(result.questions) : result.reason) ?? '(no reply)'}`,
+      })
       // Reply audit: claims of work the system did not record, promises of work not done, unverified outside facts.
       if (this.replyAuditOn && result.status === 'ok' && result.reply && result.reply.trim() !== '') {
         const recorded = this.actionApproval.appliedActions.slice(actionsBefore)
@@ -696,19 +710,6 @@ export class PersonalAssistant {
       // to 'posthoc'). A path that already set it explicitly (the spend-cap early return above)
       // never reaches here.
       result.proposerKind = this.lastProposerKind
-      // Logged before the next-step proposal (one more LLM call, up to a couple of minutes): a reply that is already
-      // on screen must not be missing from the activity log because the process ended while that call was in flight.
-      // cachedInputTokens is included here (not just in the usage/cost UI) specifically so it's
-      // visible in the same terminal log stream as every other debug-log line — the only way to
-      // confirm, from a real live response, whether a given backend/model is actually reporting
-      // prompt-cache hits at all (several OpenAI-compatible providers, OpenRouter included, only
-      // populate usage.prompt_tokens_details.cached_tokens for some underlying models).
-      const cacheNote = result.usage?.cachedInputTokens !== undefined ? ` [cached: ${result.usage.cachedInputTokens}/${result.usage.inputTokens} input tokens]` : ''
-      if (!this.replyLoggedEarly || result.status !== 'ok') this.onDebugLog?.({
-        kind: 'assistant_reply',
-        sessionId,
-        content: `[${result.status}]${result.riskLevel ? ` (${result.riskLevel})` : ''}${cacheNote} ${result.reply ?? (result.questions?.length ? formatAskQuestions(result.questions) : result.reason) ?? '(no reply)'}`,
-      })
       // R7: after a full turn (ok, and not the triviality fast path), propose next steps for the
       // user. Best-effort — proposeTurnNextSteps never throws — and its one LLM call is folded into
       // this turn's usage/spend like every other call the turn made.
