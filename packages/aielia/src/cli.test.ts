@@ -5,7 +5,7 @@ import { InMemoryAdapter } from '@buildaharness/runtime'
 import { HarnessRuntime, saveHarnessCheckpoint, type Task, type AskResponse } from '@buildaharness/harness'
 import { PersonalAssistant } from './assistant.js'
 import { createScriptedLLMClient } from './scripted-llm-client.js'
-import { runCli, type RunCliOptions, type CliInstance } from './cli.js'
+import { runCli, StartupError, type RunCliOptions, type CliInstance } from './cli.js'
 import { DEFAULT_CONFIG, type ConfigStore, type AssistantConfig } from './config.js'
 import { classifyRiskLexical } from './risk-classifier.js'
 import { PLAN_LINE_PREFIX } from './cli-icons.js'
@@ -457,6 +457,32 @@ describe('mid-task steering — LiveSteeringChannel routing (Phase 3, hierarchic
     expect((output.match(/Noted\./g) ?? []).length).toBe(2)
   })
 
+  it('onTurnBusyChange reports busy for the turn and for a deferred follow-up turn, idle at the end, and never for a slash command', async () => {
+    const llm = new DeferredReplyLLMClient()
+    const busy: boolean[] = []
+    const { cli } = await setupCli({
+      assistant: new PersonalAssistant({ llmClient: llm }),
+      envOverrides: { goalGraphMode: 'enabled' },
+      onTurnBusyChange: (b: boolean) => busy.push(b),
+    })
+    captureOutput()
+
+    await cli.dispatchLine('/status')
+    expect(busy).toEqual([])
+
+    const first = cli.dispatchLine('first message')
+    await flushAsync()
+    expect(busy).toEqual([true])
+    await cli.dispatchLine('second message') // queued mid-turn
+    llm.release()
+    await first
+    await cli.dispatchLine('/status')
+    await flushAsync()
+
+    // true,false for the first turn, then true,false for the queued message run as its own turn.
+    expect(busy).toEqual([true, false, true, false])
+  })
+
   it('goalGraphMode enabled: a slash command sent while a turn is running still keeps dispatchQueue\'s strict serialization (never steered) — /config race-avoidance still holds', async () => {
     const llm = new DeferredReplyLLMClient()
     const { cli, configStore } = await setupCli({ assistant: new PersonalAssistant({ llmClient: llm }), envOverrides: { goalGraphMode: 'enabled' } })
@@ -814,18 +840,15 @@ describe('approval-prompt handling', () => {
     const assistant = new PersonalAssistant({ llmClient: llm, fileTools: { backend, workspaceRoot: '/workspace' } })
     const askSelect = vi.fn().mockResolvedValue('a')
     const { cli } = await setupCli({ assistant, askSelect })
-    captureOutput()
+    const lines = captureOutput()
 
-    await cli.dispatchLine('Write a summary to one.md')
+    // The approved first write goes back to the model, which proposes the second write in the same
+    // turn: it is auto-approved from the remembered "don't ask again" — askSelect is not called
+    // again, and the write still actually applies.
+    await cli.dispatchLine('Write a summary to one.md and two.md')
+
     expect(askSelect).toHaveBeenCalledTimes(1)
     expect(await backend.readTextFile('/workspace/one.md')).toBe('first')
-
-    const lines = captureOutput()
-    await cli.dispatchLine('Write a summary to two.md')
-
-    // Second staged write_file is auto-approved from the remembered "don't ask again" — askSelect
-    // is not called again, and the write still actually applies.
-    expect(askSelect).toHaveBeenCalledTimes(1)
     expect(lines.join('\n')).toContain('auto-approved')
     expect(await backend.readTextFile('/workspace/two.md')).toBe('second')
   })
@@ -1587,5 +1610,25 @@ describe('/plan graph', () => {
     const lines = captureOutput()
     await cli.dispatchLine('/plan graph')
     expect(lines.join('\n')).toContain('No active plan for this session')
+  })
+})
+
+describe('invalid configuration fails loudly (benchmark 10-12: process exited silently under the TUI)', () => {
+  it('runCli rejects with a StartupError naming the problem and how to fix it, instead of calling process.exit', async () => {
+    const exit = vi.spyOn(process, 'exit').mockImplementation((() => { throw new Error('process.exit must not be called') }) as never)
+    vi.spyOn(console, 'log').mockImplementation(() => {})
+    const run = runCli({
+      dataDir: '/tmp/cli-test-unused',
+      backend: makeFakeBackend(),
+      remindersFile: '/tmp/cli-test-unused/reminders/reminders.json',
+      envOverrides: {},
+      input: new PassThrough(),
+      output: new Writable({ write: (_c, _e, cb) => cb() }),
+      configStore: makeConfigStore({ enableWeb: true }),
+    })
+    await expect(run).rejects.toBeInstanceOf(StartupError)
+    await expect(run).rejects.toThrow(/enableWeb requires braveApiKey/)
+    await expect(run).rejects.toThrow(/Fix it by setting the missing value/)
+    expect(exit).not.toHaveBeenCalled()
   })
 })

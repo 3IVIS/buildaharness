@@ -1,3 +1,5 @@
+import { auditReply, replyAuditNotice, replyAuditEnabled, auditRetryNudge } from './reply-audit.js'
+import { containsActionRecord, stripActionRecord, FORGED_ACTION_RECORD_NOTE } from './action-record.js'
 import { deriveConsequentialTools } from '@buildaharness/harness'
 import { TOOL_EFFECT_CLASS } from './tool-effect-class.js'
 import { resolveEscalationPlan, injectionDetectionEnabled, resolveOptInPlan, optInLayerEnabled } from './layer-policy-wiring.js'
@@ -49,9 +51,9 @@ import { episodicDigestEnabled, type SessionDigest } from './episodic-digest.js'
 import { recallPointerBlock, storeDigestReader } from './recall-tool.js'
 import { semanticCompactionEnabled, summarizeOlderMessages } from './semantic-compaction.js'
 import { MemoryReviewer, memoryReviewerEnabled } from './memory-reviewer.js'
-import { AgentLoop, OneLoopPause, type BatchBudgetTrace, type ToolLoopResult } from './agent-loop.js'
+import { AgentLoop, OneLoopPause, isDanglingAnnouncement, type BatchBudgetTrace, type ToolLoopResult } from './agent-loop.js'
 import type { TurnIntentClassification, FactCategory } from './turn-intent-classifier.js'
-import { ActionApprovalService } from './action-approval-service.js'
+import { ActionApprovalService, type ResumeOptions } from './action-approval-service.js'
 import { PlanService } from './plan-service.js'
 import { PlanDraftingService } from './plan-drafting-service.js'
 import { planQuestionRoutingMode, renderPlanStateBlock, renderStuckPlanNudge, shouldRoutePlanQuestion, shouldSetAsideStuckPlan, stuckPlanResumeEnabled } from './plan-question.js'
@@ -126,6 +128,8 @@ function parsePendingIndex(selector: string): number | undefined {
 
 export interface TurnOptions {
   sessionId?: string
+  /** Internal: this turn is the one-time correction the reply audit asked for; it is not a user message and is never retried again. */
+  auditRetry?: boolean
   /** M4: a scripted / piped / batch caller. The post-turn memory reviewer is skipped for it (it only runs for an interactive session). */
   nonInteractive?: boolean
   approved?: boolean
@@ -328,6 +332,8 @@ export interface PersonalAssistantOptions {
    * that never asks for suggestions makes no extra call and sees no new field (INV-43).
    */
   goalGraphSuggestMode?: GoalGraphSuggestMode
+  /** Run the reply audit (reply-audit.ts) after each successful turn; defaults to the AIELIA_REPLY_AUDIT env gate (on). */
+  replyAudit?: boolean
   /**
    * Q2 of the internal plan — global-flag control point (tier 1 of
    * INV-29) for the ask-question mechanism. Undefined (the default) falls back to
@@ -411,6 +417,11 @@ export class PersonalAssistant {
   private readonly session: AssistantSession
   private readonly agentLoop: AgentLoop
   private readonly actionApproval: ActionApprovalService
+  /** Set when the reply was already logged by the reply-ready hook this turn (see AssistantSession.replyReadyHook). */
+  private replyLoggedEarly = false
+  /** Automatic correction retries still allowed for the current user message; resumed (approval) turns share it so a retry cannot chain. */
+  private auditRetryBudget = 1
+  private readonly replyAuditOn: boolean
   private readonly planService: PlanService
   private readonly planApproval: PlanApprovalService
   private readonly planDrafting: PlanDraftingService
@@ -511,6 +522,7 @@ export class PersonalAssistant {
       this.planService, this.session, this.onTrace, this.oneLoopMode, options.layerPolicyMode ?? 'static',
     )
     this.goalGraphSuggestMode = options.goalGraphSuggestMode ?? 'disabled'
+    this.replyAuditOn = options.replyAudit ?? replyAuditEnabled()
     const goalGraphSuggestMode = this.goalGraphSuggestMode
     this.responseService = new ResponseService(
       this.memoryService, this.session, this.planService, this.onTrace, this.memory,
@@ -524,6 +536,10 @@ export class PersonalAssistant {
         ? (input, onUsage) => checkReplyGrounding(input, this.llmClient, this.model, onUsage)
         : undefined,
     )
+    this.session.replyReadyHook = (sessionId, reply) => {
+      this.replyLoggedEarly = true
+      this.onDebugLog?.({ kind: 'assistant_reply', sessionId, content: `[ok] ${stripActionRecord(reply)}` })
+    }
     this.askClarification = new AskClarificationService(this.memory, this.session, this.harnessBridge, this.responseService, this.onTrace)
 
     // Fire-and-forget, not awaited: a large pre-existing history must not delay this
@@ -578,6 +594,11 @@ export class PersonalAssistant {
     }
   }
 
+  /** Logs a message that arrived while a turn was running, at receipt time (its `user_message` is only logged when it is processed). */
+  logQueuedMessage(sessionId: string, message: string): void {
+    this.onDebugLog?.({ kind: 'user_message_queued', sessionId, content: message })
+  }
+
   /**
    * Thin wrapper around runTurn(): emits turn_start/turn_end/error trace events
    * around the actual logic, so every one of runTurn's return paths gets a
@@ -592,7 +613,16 @@ export class PersonalAssistant {
     this.memoryReviewer.abort()
     const writesBefore = this.memoryService.writeCount
     this.onTrace?.({ kind: 'turn_start', sessionId, message: userMessage })
-    this.onDebugLog?.({ kind: 'user_message', sessionId, content: userMessage })
+    this.replyLoggedEarly = false
+    if (!options.pendingActionId && !options.auditRetry && !(options.approved === true && !options.pendingClarificationId && !options.planApprovalId)) this.auditRetryBudget = 1
+    const actionsBefore = this.actionApproval.appliedActions.length
+    // A pendingActionId call resumes a turn whose user message was already logged when it first
+    // started (it only carries that message along), so logging it again duplicated every
+    // approved turn's user_message in the activity log.
+    // A message-level approval re-runs the same message with approved: true; that is likewise not a new user message.
+    const isMessageGateRetry = options.approved === true && !options.pendingActionId && !options.pendingClarificationId && !options.planApprovalId
+    if (!options.pendingActionId && !isMessageGateRetry && !options.auditRetry) this.onDebugLog?.({ kind: 'user_message', sessionId, content: userMessage })
+    if (isMessageGateRetry) this.onDebugLog?.({ kind: 'approval_decision', sessionId, content: 'approved message-level gate' })
 
     // Pre-turn only, never mid-turn — a turn already in flight always finishes (see
     // spend-cap.ts's checkSpendCap doc comment). A pendingActionId call is a continuation of a
@@ -611,6 +641,71 @@ export class PersonalAssistant {
 
     try {
       const result = await this.runTurn(userMessage, options, sessionId)
+      // The system's own action record goes into the stored transcript only, never into the reply that is shown. A marker in the
+      // reply is the model imitating it (it claimed writes and test runs that never happened in benchmark scenarios 05 and 13).
+      if (result.reply && containsActionRecord(result.reply)) {
+        this.onDebugLog?.({ kind: 'note', sessionId, content: 'the reply contained a forged "Recorded by the system" action list; removed' })
+        result.reply = stripActionRecord(result.reply)
+        result.auditNotice = FORGED_ACTION_RECORD_NOTE
+      }
+      // Logged before the reply audit and the next-step proposal (each an extra LLM call, the audit possibly followed by a
+      // retry turn, up to minutes): a reply that is already on screen must not be missing from the activity log because the
+      // process ended while those calls were in flight.
+      // cachedInputTokens is included here (not just in the usage/cost UI) specifically so it's
+      // visible in the same terminal log stream as every other debug-log line — the only way to
+      // confirm, from a real live response, whether a given backend/model is actually reporting
+      // prompt-cache hits at all (several OpenAI-compatible providers, OpenRouter included, only
+      // populate usage.prompt_tokens_details.cached_tokens for some underlying models).
+      const cacheNote = result.usage?.cachedInputTokens !== undefined ? ` [cached: ${result.usage.cachedInputTokens}/${result.usage.inputTokens} input tokens]` : ''
+      if (!this.replyLoggedEarly || result.status !== 'ok') this.onDebugLog?.({
+        kind: 'assistant_reply',
+        sessionId,
+        content: `[${result.status}]${result.riskLevel ? ` (${result.riskLevel})` : ''}${cacheNote} ${result.reply ?? (result.questions?.length ? formatAskQuestions(result.questions) : result.reason) ?? '(no reply)'}`,
+      })
+      // Reply audit: claims of work the system did not record, promises of work not done, unverified outside facts.
+      if (this.replyAuditOn && result.status === 'ok' && result.reply && result.reply.trim() !== '') {
+        const recorded = this.actionApproval.appliedActions.slice(actionsBefore)
+        const auditUsage: TokenUsage[] = []
+        const audit = await auditReply(
+          {
+            userMessage,
+            reply: result.reply,
+            actions: recorded,
+            earlierActions: this.actionApproval.appliedActions.slice(0, actionsBefore),
+            recentCommandOutputs: this.actionApproval.recentCommandOutputs,
+            sourcesRead: (result.sources ?? []).map((src) => `${src.tool}: ${src.path}`),
+            lookupUnavailable: this.actionApproval.networkDenied(sessionId),
+          },
+          this.llmClient,
+          this.model,
+          (u) => auditUsage.push(u),
+        )
+        // Structural backstop for the model's judgement: a short reply that ends on a colon or ellipsis announces more
+        // and delivers none of it.
+        if (isDanglingAnnouncement(result.reply)) audit.promisesWorkNotDone = true
+        const auditNotice = replyAuditNotice(audit, recorded)
+        if (!auditNotice) this.onDebugLog?.({ kind: 'note', sessionId, content: `reply audit: clean (recorded ${recorded.length} action(s), ${this.actionApproval.recentCommandOutputs.length} command output(s) checked)` })
+        // One automatic correction: the reply claimed or promised work with no recorded action, or stated outside
+        // facts as verified. The model gets a nudge to do the work with its tools or to say plainly that it did not.
+        const nudge = options.auditRetry || this.auditRetryBudget <= 0 ? undefined : auditRetryNudge(audit, recorded)
+        if (nudge) {
+          this.auditRetryBudget--
+          this.onDebugLog?.({ kind: 'note', sessionId, content: `reply audit: ${auditNotice ?? 'flagged'} — retrying once with a nudge` })
+          return await this.turn(nudge, { ...options, sessionId, auditRetry: true, approved: undefined, pendingActionId: undefined, pendingClarificationId: undefined, planApprovalId: undefined })
+        }
+        if (auditNotice) {
+          result.auditNotice = result.auditNotice ? `${result.auditNotice}\n${auditNotice}` : auditNotice
+          this.onDebugLog?.({ kind: 'note', sessionId, content: `reply audit: ${auditNotice}` })
+        }
+        for (const u of auditUsage) {
+          result.usage = {
+            inputTokens: (result.usage?.inputTokens ?? 0) + u.inputTokens,
+            outputTokens: (result.usage?.outputTokens ?? 0) + u.outputTokens,
+            costUsd: u.costUsd !== undefined ? (result.usage?.costUsd ?? 0) + u.costUsd : result.usage?.costUsd,
+            cachedInputTokens: u.cachedInputTokens !== undefined ? (result.usage?.cachedInputTokens ?? 0) + u.cachedInputTokens : result.usage?.cachedInputTokens,
+          }
+        }
+      }
       // Every return path leaves proposerKind unset — stamp the one runTurn resolved (defaults
       // to 'posthoc'). A path that already set it explicitly (the spend-cap early return above)
       // never reaches here.
@@ -622,7 +717,10 @@ export class PersonalAssistant {
         const extra: TokenUsage[] = []
         const bigPicture = await this.nextStepContext(sessionId, { currentUserMessage: userMessage, sources: result.sources })
         const nextSteps = await proposeTurnNextSteps({ userMessage, reply: result.reply }, this.llmClient, this.goalGraphSuggestMode, this.model, (u) => extra.push(u), bigPicture)
-        if (nextSteps.length > 0) result.nextSteps = nextSteps
+        if (nextSteps.length > 0) {
+          result.nextSteps = nextSteps
+          this.onDebugLog?.({ kind: 'next_steps', sessionId, content: nextSteps.map((s, i) => `${i + 1}. ${s.description} [${s.confidence}]`).join('\n') })
+        }
         for (const u of extra) {
           result.usage = {
             inputTokens: (result.usage?.inputTokens ?? 0) + u.inputTokens,
@@ -635,17 +733,6 @@ export class PersonalAssistant {
       if (result.status === 'ok') await this.session.recordSpend(sessionId, result.usage)
       if (result.status === 'ok' && !options.pendingActionId) this.maybeStartMemoryReview(sessionId, result, this.memoryService.writeCount !== writesBefore, options)
       this.onTrace?.({ kind: 'turn_end', sessionId, status: result.status })
-      // cachedInputTokens is included here (not just in the usage/cost UI) specifically so it's
-      // visible in the same terminal log stream as every other debug-log line — the only way to
-      // confirm, from a real live response, whether a given backend/model is actually reporting
-      // prompt-cache hits at all (several OpenAI-compatible providers, OpenRouter included, only
-      // populate usage.prompt_tokens_details.cached_tokens for some underlying models).
-      const cacheNote = result.usage?.cachedInputTokens !== undefined ? ` [cached: ${result.usage.cachedInputTokens}/${result.usage.inputTokens} input tokens]` : ''
-      this.onDebugLog?.({
-        kind: 'assistant_reply',
-        sessionId,
-        content: `[${result.status}]${result.riskLevel ? ` (${result.riskLevel})` : ''}${cacheNote} ${result.reply ?? (result.questions?.length ? formatAskQuestions(result.questions) : result.reason) ?? '(no reply)'}`,
-      })
       return result
     } catch (err) {
       const message = err instanceof Error ? err.message : String(err)
@@ -689,6 +776,7 @@ export class PersonalAssistant {
    * comment for the full reasoning.
    */
   async recordDeclinedRequest(sessionId: string, userMessage: string, reason: string): Promise<void> {
+    this.onDebugLog?.({ kind: 'approval_decision', sessionId, content: 'declined message-level gate' })
     return this.session.recordDeclinedRequest(sessionId, userMessage, reason)
   }
 
@@ -1089,7 +1177,13 @@ export class PersonalAssistant {
     // proposing identical content (and, for a shell command, no guarantee of proposing the same
     // command at all).
     if (options.pendingActionId) {
-      return this.actionApproval.resolvePendingAction(sessionId, transcriptKey, options.pendingActionId, options.approved ?? false, userMessage)
+      // Resuming an approved action continues the paused tool loop (more calls, further approvals,
+      // a final answer) — a further pause is turned into a result the same way a first one is,
+      // except the user message is already in the transcript (resumed: true).
+      return this.actionApproval.resolvePendingAction(
+        sessionId, transcriptKey, options.pendingActionId, options.approved ?? false, userMessage,
+        this.loopResumeOptions(sessionId, transcriptKey, userMessage, { onToken: options.onToken, onToolStep: options.onToolStep }),
+      )
     }
 
     // Q2 — resolving a staged needs_clarification result is a resume, not a fresh turn: the
@@ -1189,6 +1283,7 @@ export class PersonalAssistant {
     }
 
     if (interpretation.kind === 'needs_approval') {
+      this.onDebugLog?.({ kind: 'approval_request', sessionId, content: `message-level gate (${interpretation.result.riskLevel ?? 'HIGH'}): ${interpretation.result.reason ?? ''}` })
       classifyAndTraceExecutionMode(this.onTrace, { isPlanCancelBypass: false, isBatchResearch: false, isTrivial: false, requiresApproval: true })
       return interpretation.result
     }
@@ -1317,7 +1412,16 @@ export class PersonalAssistant {
     // Set on a tool-less turn, where the reply is drafted BEFORE the harness runs: the explanations are asked for up front so the
     // draft can see them, and the harness is handed the same answer instead of asking again. undefined = not asked.
     let precomputedHypotheses: SemanticHypothesisProposal[] | null | undefined
-    const takeProposerNotes = (): string[] => [...(steeringAdapter?.takeNotes() ?? []), ...reviewNotes.splice(0), ...recoveryNotes.splice(0), ...hypothesisNotes.splice(0), ...revisionNotes.splice(0)]
+    // A steering note handed to the model is a user message in its own right: log it once and queue it for the transcript.
+    const takeSteeringNotes = (): string[] => {
+      const taken = steeringAdapter?.takeNotes() ?? []
+      for (const note of taken) {
+        this.onDebugLog?.({ kind: 'user_message', sessionId, content: note })
+        this.session.recordAbsorbedSteering(sessionId, note)
+      }
+      return taken
+    }
+    const takeProposerNotes = (): string[] => [...takeSteeringNotes(), ...reviewNotes.splice(0), ...recoveryNotes.splice(0), ...hypothesisNotes.splice(0), ...revisionNotes.splice(0)]
     // R3 of the internal plan: set only on the flag-ON, non-batch,
     // non-trivial path below — passed to harnessBridge.run() as the toolExecutors 'default' entry
     // instead of precomputing draftReply via AgentLoop.runToolLoop up front, so the harness's own
@@ -1393,7 +1497,7 @@ export class PersonalAssistant {
           : await this.agentLoop.runToolLoop(sessionId, transcript, userMessage, systemPrompt, options.onToken, options.onToolStep, accumulateUsage, classification.riskLevel, controlPlaneState)
 
         if (loopResult.kind === 'needs_approval' || loopResult.kind === 'escalated') {
-          return this.buildToolLoopPauseResult(sessionId, transcriptKey, userMessage, loopResult, classification)
+          return this.buildToolLoopPauseResult(sessionId, transcriptKey, userMessage, loopResult, classification, undefined, undefined, { onToken: options.onToken, onToolStep: options.onToolStep })
         }
         draftReply = loopResult.content
         sources = loopResult.sources.length > 0 ? loopResult.sources : undefined
@@ -1609,7 +1713,7 @@ export class PersonalAssistant {
         // RUNNING", since it's reached only once the harness has actually started driving the
         // plan's task graph (see that method's own doc comment on why the flag-OFF call site
         // below can't supply either).
-        return this.buildToolLoopPauseResult(sessionId, transcriptKey, userMessage, err.result, classification, activePlan, err.currentTaskId)
+        return this.buildToolLoopPauseResult(sessionId, transcriptKey, userMessage, err.result, classification, activePlan, err.currentTaskId, { onToken: options.onToken, onToolStep: options.onToolStep })
       }
       throw err
     } finally {
@@ -1625,6 +1729,23 @@ export class PersonalAssistant {
     }
   }
 
+  /** What ActionApprovalService needs to continue a paused tool loop after an approval: the live callbacks, and how a further pause becomes a turn result. */
+  private loopResumeOptions(
+    sessionId: string,
+    transcriptKey: string,
+    userMessage: string,
+    live: { onToken?: (token: string) => void; onToolStep?: (step: AssistantToolStep) => void },
+    activePlan?: PlanRecord | null,
+    currentTaskId?: string,
+  ): ResumeOptions {
+    return {
+      onToken: live.onToken,
+      onToolStep: live.onToolStep,
+      handleLoopPause: (result) =>
+        this.buildToolLoopPauseResult(sessionId, transcriptKey, userMessage, result, { riskLevel: 'HIGH' }, activePlan, currentTaskId, { ...live, resumed: true }),
+    }
+  }
+
   /**
    * Shared by the flag-OFF flat/batch tool loop's own needs_approval/escalated ToolLoopResult and
    * the flag-ON harness-driven proposer's equivalent OneLoopPause (R3 of
@@ -1637,7 +1758,7 @@ export class PersonalAssistant {
     transcriptKey: string,
     userMessage: string,
     loopResult: Extract<ToolLoopResult, { kind: 'needs_approval' | 'escalated' }>,
-    classification: TurnIntentClassification,
+    classification: Pick<TurnIntentClassification, 'riskLevel'>,
     // P10: only ever supplied by the flag-ON OneLoopPause catch below, which is the only call
     // site with a real "which plan task was RUNNING" answer — the flag-OFF flat/batch loop calls
     // this before any plan task has been selected at all (see runTurn's own call site), so trust
@@ -1646,15 +1767,20 @@ export class PersonalAssistant {
     // doesn't need to thread through a value it doesn't have.
     activePlan?: PlanRecord | null,
     currentTaskId?: string,
+    live: { onToken?: (token: string) => void; onToolStep?: (step: AssistantToolStep) => void; resumed?: boolean } = {},
   ): Promise<AssistantTurnResult> {
-    await this.session.appendTranscriptMessage(sessionId, transcriptKey, { role: 'user', content: userMessage })
+    // A pause reached again while resuming an earlier one (the approved action's result went back
+    // into the loop, which then asked for another approval) belongs to a turn whose user message
+    // the first pause already recorded.
+    if (!live.resumed) await this.session.appendTranscriptMessage(sessionId, transcriptKey, { role: 'user', content: userMessage })
     if (loopResult.kind === 'needs_approval') {
+      this.onDebugLog?.({ kind: 'approval_request', sessionId, content: `${loopResult.pendingActionKind} ${loopResult.pendingActionId}: ${loopResult.reason}` })
       classifyAndTraceExecutionMode(this.onTrace, { isPlanCancelBypass: false, isBatchResearch: false, isTrivial: false, requiresApproval: true })
       // dangerouslySkipPermissions auto-applies the staged action the same way a second turn()
       // call with `approved: true` would — resolvePendingAction is exactly that path, just
       // invoked immediately instead of waiting for the caller to resume it.
       if (this.dangerouslySkipPermissions) {
-        return this.actionApproval.resolvePendingAction(sessionId, transcriptKey, loopResult.pendingActionId, true, userMessage)
+        return this.actionApproval.resolvePendingAction(sessionId, transcriptKey, loopResult.pendingActionId, true, userMessage, this.loopResumeOptions(sessionId, transcriptKey, userMessage, live, activePlan, currentTaskId))
       }
       // INV-36 (plan mode's P10): the one narrow, per-plan opt-in exception to the same rule —
       // auto-apply only a write/shell/email action proposed while executing the specific task
@@ -1668,7 +1794,7 @@ export class PersonalAssistant {
         activePlan.tasks.some((t) => t.id === currentTaskId)
       ) {
         this.onTrace?.({ kind: 'plan_trust_auto_applied', pendingActionKind: loopResult.pendingActionKind, taskId: currentTaskId })
-        return this.actionApproval.resolvePendingAction(sessionId, transcriptKey, loopResult.pendingActionId, true, userMessage)
+        return this.actionApproval.resolvePendingAction(sessionId, transcriptKey, loopResult.pendingActionId, true, userMessage, this.loopResumeOptions(sessionId, transcriptKey, userMessage, live, activePlan, currentTaskId))
       }
       return {
         status: 'needs_approval',

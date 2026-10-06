@@ -112,6 +112,7 @@ export class ResponseService {
     const { sessionId, transcriptKey, userMessage, draftReply, classification, sources, batchBudgetTrace, usageTotal, onUsage } = params
     await this.session.appendTranscriptMessage(sessionId, transcriptKey, { role: 'user', content: userMessage })
     await this.session.appendTranscriptMessage(sessionId, transcriptKey, { role: 'assistant', content: draftReply })
+    this.session.replyReady(sessionId, draftReply)
     // Phase 3 ordering constraint: recordFacts()'s entry-time consistency check must run, and its
     // contradictions must be folded into the turn's contradictionNotice, before returning — a
     // plain fact-stating message is exactly the shape most likely to hit this trivial fast path,
@@ -194,6 +195,7 @@ export class ResponseService {
 
     await this.session.appendTranscriptMessage(sessionId, transcriptKey, { role: 'user', content: userMessage })
     await this.session.appendTranscriptMessage(sessionId, transcriptKey, { role: 'assistant', content: reply })
+    this.session.replyReady(sessionId, reply)
     // Phase 3 ordering constraint — see buildTrivialResult's comment: recordFacts() must run, and
     // its contradictions must be folded in, before contradictionNotice is finalized below.
     const { contradictions } = await this.memoryService.recordFacts(sessionId, userMessage, classification.statesDurableFacts, onUsage)
@@ -274,6 +276,7 @@ export class ResponseService {
 
     await this.session.appendTranscriptMessage(sessionId, transcriptKey, { role: 'user', content: userMessage })
     await this.session.appendTranscriptMessage(sessionId, transcriptKey, { role: 'assistant', content: reply })
+    this.session.replyReady(sessionId, reply)
     // Phase 3 ordering constraint — see buildTrivialResult's comment: recordFacts() must run, and
     // its contradictions must be folded in, before contradictionNotice is finalized below.
     const { contradictions } = await this.memoryService.recordFacts(sessionId, userMessage, classification.statesDurableFacts, onUsage)

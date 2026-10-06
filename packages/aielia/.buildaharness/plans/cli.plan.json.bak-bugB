@@ -1,0 +1,63 @@
+{
+  "templateName": null,
+  "successCriteria": "Nakasendo / Kiso Valley is locked as the hiking anchor with a concrete two-day route (Magome–Tsumago, Tsumago–Nagiso) plus an optional Narai/Yabuhara extension day, day-by-day distances and post-town lodging, and rail + luggage-forwarding logistics that connect Tokyo and Kyoto without a major detour.",
+  "rationale": "Anchoring on the Nakasendo keeps the hiking on the existing Tokyo–Kyoto corridor, so it adds scenery and a cultural high point without forcing a separate side-trip — unlike alternatives such as the Kumano Kodo (far south, needs its own loop) or Kamikochi/Japan Alps (a northern detour off the main line). Structuring the plan as 'lock the segment → define days/distances → fit transport → book lodging' front-loads the decision that everything else depends on, so later booking and logistics steps don't have to be redone. With the two-day shape now settled, the remaining work is execution detail rather than open scoping.",
+  "tasks": [
+    {
+      "id": "t1",
+      "description": "Lock Nakasendo / Kiso Valley as the hiking anchor and define the core route: Magome → Tsumago → Nagiso, with Narai/Yabuhara as an optional extension. Note why this beats alternatives (on Tokyo–Kyoto corridor, minimal detour).",
+      "depends_on": [],
+      "status": "PENDING",
+      "riskLevel": "LOW"
+    },
+    {
+      "id": "t2",
+      "description": "Fix the hike as two walking days — Day 1 Magome → Tsumago, Day 2 Tsumago → Nagiso — with daily distances, walking hours, and elevation profile for each stage, plus the optional Narai/Yabuhara extension day defined as a third add-on.",
+      "depends_on": [
+        "t1"
+      ],
+      "status": "PENDING",
+      "riskLevel": "LOW"
+    },
+    {
+      "id": "t3",
+      "description": "Choose post-town lodging (ryokan/minshuku/guesthouse) in Magome and Tsumago matched to the two-day stages, add a Nagiso option, and identify booking windows for peak seasons.",
+      "depends_on": [
+        "t2"
+      ],
+      "status": "PENDING",
+      "riskLevel": "MEDIUM"
+    },
+    {
+      "id": "t4",
+      "description": "Fit the two-day segment into the Tokyo–Kyoto route: rail access (Chuo/Shinano lines, Limited Express Shinano via Nagoya or Nagano), station-to-trailhead transfers, and luggage forwarding (takuhaibin) so bags skip the trail.",
+      "depends_on": [
+        "t2"
+      ],
+      "status": "PENDING",
+      "riskLevel": "MEDIUM"
+    },
+    {
+      "id": "t5",
+      "description": "Prepare on-trail logistics and contingencies: Nakasendo waymarker route maps, seasonal weather check, bear bells, cash for post towns, and a fallback plan if a stage is rained out.",
+      "depends_on": [
+        "t3",
+        "t4"
+      ],
+      "status": "PENDING",
+      "riskLevel": "MEDIUM"
+    }
+  ],
+  "mode": "awaiting_approval",
+  "executingOnPlan": false,
+  "createdAt": "2026-10-05T08:02:57.685Z",
+  "updatedAt": "2026-10-05T08:06:13.323Z",
+  "reviewNotes": [
+    "t3 covers lodging only for Magome, Tsumago, and Nagiso; the optional Narai/Yabuhara extension day the success criteria calls for has no lodging option identified, so the extension is defined but not actually stayable.",
+    "t4 frames rail logistics around reaching the trailhead but never spells out the exit leg from Nagiso onward to Kyoto (e.g., Nagiso → Nagoya/Kiso-Fukushima → Kyoto), leaving the 'connect Tokyo and Kyoto' half of the criteria implicit.",
+    "The Narai/Yabuhara extension is defined in t2 but not integrated into the transport plan in t4 — no rail access or placement relative to the two-day route, so adding the extension day would require redoing t4's routing.",
+    "No task confirms luggage forwarding (takuhaibin) is actually available at the specific start/end points chosen (Magome, Nagiso, or Narai), which t4 assumes rather than verifies."
+  ],
+  "verifiedAt": "2026-10-05T08:06:13.323Z",
+  "planApprovalId": "c70b3fec-1eae-4f4e-816a-671c05bc633f"
+}

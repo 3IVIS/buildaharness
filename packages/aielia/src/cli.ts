@@ -1,4 +1,5 @@
 #!/usr/bin/env node
+import { excludeAieliaStateFromGit } from './git-exclude.js'
 import { createInterface } from 'node:readline'
 import { writeFile } from 'node:fs/promises'
 import { realpathSync } from 'node:fs'
@@ -25,6 +26,7 @@ import {
 import type { AskAnswer, AskQuestion, AskQuestionOption, AskResponse } from '@buildaharness/harness'
 import { PersonalAssistant, type AssistantProgress, type AssistantTrace, type AssistantSource, type AssistantTurnResult } from './assistant.js'
 import { memoryAuditLogEnabled } from './memory-service.js'
+import { activityLogEnabled, createActivityLogger } from './activity-log.js'
 import type { AssistantToolStep } from './tool-step.js'
 import type { PlanDecision, PlanApprovalEdits } from './plan-approval-service.js'
 import { nodeDisplayName, nodeToLayer, buildWhyChain, LAYER_ORDER, LAYER_DISPLAY_NAME, LAYER_SHORT_CODE } from './node-display-names.js'
@@ -161,6 +163,9 @@ interface BuildAssistantDeps {
 
 async function buildAssistant(config: AssistantConfig, { backend, dataDir, remindersFile }: BuildAssistantDeps): Promise<PersonalAssistant> {
   const workspaceRoot = config.workspaceRoot ?? process.cwd()
+  // Aielia's state dirs must not show up in the user's `git status` or end up in their commits. Only for the real disk
+  // backend: an injected one (tests) does not write into the working tree, and must not edit a real repo's git config.
+  if (backend === defaultBackend) excludeAieliaStateFromGit(workspaceRoot)
   const search = (query: string) => braveSearch(query, config.braveApiKey as string)
 
   // `search` above is the proxy backend's injected web_search implementation (its manual
@@ -198,6 +203,8 @@ async function buildAssistant(config: AssistantConfig, { backend, dataDir, remin
       return sendEmail ? { backend, workspaceRoot, sendEmail } : undefined
     })(),
     dangerouslySkipPermissions: config.dangerouslySkipPermissions,
+    // Opt-in durable record of tool calls/results and approvals (see activity-log.ts).
+    onDebugLog: activityLogEnabled(process.env) ? createActivityLogger(join(dataDir, 'activity-log.jsonl')) : undefined,
     spendCap:
       config.sessionCostLimitUsd !== undefined || config.sessionCallLimit !== undefined
         ? { sessionCostLimitUsd: config.sessionCostLimitUsd, sessionCallLimit: config.sessionCallLimit }
@@ -241,6 +248,12 @@ export interface RunCliOptions {
   openPlanGraph?: (nodes: VizNode[]) => void
   /** Live per-task statuses from a running turn, forwarded for the open plan graph pane. */
   onPlanProgress?: (tasks: { id: string; status: TaskStatus }[]) => void
+  /**
+   * Called with true when a conversational turn starts being worked on and false when it has finished (in a
+   * `finally`, so also after an error) — including turns run as deferred follow-ups, which no `dispatchLine()`
+   * promise covers. The TUI's liveness indicator follows this rather than guessing from output events.
+   */
+  onTurnBusyChange?: (busy: boolean) => void
   dataDir?: string
   configStore?: ConfigStore
   backend?: FsBackend
@@ -350,8 +363,14 @@ export async function runCli(options: RunCliOptions = {}): Promise<CliInstance> 
     validateConfig({}, config)
   } catch (err) {
     if (!(err instanceof ConfigValidationError)) throw err
-    console.error(err.message)
-    process.exit(1)
+    // Thrown, not printed + process.exit()ed here: under the Ink TUI console/stderr are captured into the (never rendered)
+    // event log at this point, so a message printed here was lost and the process vanished without a word. main() prints
+    // it on the real stderr, after the capture is restored, and sets a non-zero exit code.
+    throw new StartupError(
+      `Aielia cannot start with this configuration: ${err.message}\n` +
+        `Fix it by setting the missing value (in the config file under ${dataDir}, or via the matching ASSISTANT_* environment variable), ` +
+        'or by turning that feature off, then start again.',
+    )
   }
 
   // Checked before anything else starts, not lazily at the first approval prompt — a session
@@ -359,13 +378,12 @@ export async function runCli(options: RunCliOptions = {}): Promise<CliInstance> 
   // deep in, with no chance to recover the work already done, instead of failing immediately
   // with a clear explanation of what to do about it.
   if (nonInteractiveApprovalMode === 'require-tty' && !process.stdin.isTTY) {
-    console.error(
+    throw new StartupError(
       'ASSISTANT_NON_INTERACTIVE_APPROVAL=require-tty is set, but stdin is not a real TTY ' +
         '(piped/scripted input). Refusing to start rather than fail confusingly at the first ' +
         'approval prompt — see README.md\'s "Non-interactive / scripted use" section for the ' +
         'alternative (ASSISTANT_NON_INTERACTIVE_APPROVAL=decline).',
     )
-    process.exit(1)
   }
 
   let assistant = options.assistant ?? (await buildAssistant(config, { dataDir, backend, remindersFile }))
@@ -1606,7 +1624,7 @@ export async function runCli(options: RunCliOptions = {}): Promise<CliInstance> 
       // `reply` itself to the screen — see assistant.ts's findContradictionNotice doc comment.
       const contradictionNotice = result.contradictionNotice ? `\n\n${result.contradictionNotice}` : ''
       // Same treatment for the change reviewer's advisory notice (see AssistantTurnResult.reviewNotice).
-      const reviewNotice = result.reviewNotice ? `\n\n${result.reviewNotice}` : ''
+      const reviewNotice = (result.reviewNotice ? `\n\n${result.reviewNotice}` : '') + (result.auditNotice ? `\n\n${result.auditNotice}` : '')
       // R7: the turn-end next-step options, under the reply. Remembered so a bare 1/2/3 typed as
       // the very next input runs that option (see dispatchOne); any other input clears them.
       lastNextSteps = result.nextSteps && result.nextSteps.length > 0 ? result.nextSteps : undefined
@@ -1941,10 +1959,12 @@ export async function runCli(options: RunCliOptions = {}): Promise<CliInstance> 
       return
     }
     turnInProgress = true
+    options.onTurnBusyChange?.(true)
     try {
       await handleTurn(message)
     } finally {
       turnInProgress = false
+      options.onTurnBusyChange?.(false)
       // Phase 4: assistant.turn() above now absorbs queued steering messages in real time via
       // checkCallerUpdates (goal-graph-reconcile.ts), and re-enqueues onto steeringChannel
       // anything it didn't get around to this turn (a trivial turn that skipped harnessBridge.run
@@ -1992,6 +2012,7 @@ export async function runCli(options: RunCliOptions = {}): Promise<CliInstance> 
   function routeMessage(message: string): Promise<void> {
     if (isGoalGraphEnabled(config.goalGraphMode) && turnInProgress && !isKnownCommand(message)) {
       steeringChannel.enqueue(message)
+      assistant.logQueuedMessage('cli', message)
       console.log('\n[queued — the current turn is still running; this will be taken into account once it finishes]\n')
       return Promise.resolve()
     }
@@ -2060,7 +2081,21 @@ export async function runCli(options: RunCliOptions = {}): Promise<CliInstance> 
  * `runTuiApp` is imported dynamically so a disabled (the default) or non-TTY run never loads Ink
  * at all — `main()` behaves byte-for-byte as it does today in both those cases.
  */
+/** A reason the assistant refuses to start (invalid configuration, unusable environment): shown to the user verbatim, exit code 1. */
+export class StartupError extends Error {}
+
 export async function main(argv: readonly string[] = process.argv.slice(2)): Promise<void> {
+  try {
+    await mainInner(argv)
+  } catch (err) {
+    if (!(err instanceof StartupError)) throw err
+    // The real stderr, written synchronously so it is flushed before the process ends; by now any TUI capture is restored.
+    process.stderr.write(`${err.message}\n`)
+    process.exitCode = 1
+  }
+}
+
+async function mainInner(argv: readonly string[]): Promise<void> {
   const parsed = parseCliArgs(argv)
   if (parsed.command === 'version') {
     console.log(CLI_VERSION)

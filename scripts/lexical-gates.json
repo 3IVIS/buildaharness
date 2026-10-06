@@ -596,10 +596,21 @@
       "batch": null,
       "rationale": "Structured wire-format markup, not natural language (D5).",
       "class": "A"
+    },
+    {
+      "id": "activity-log-env",
+      "file": "packages/aielia/src/activity-log.ts",
+      "line": 17,
+      "decides": "whether the opt-in activity log is enabled (ASSISTANT_ACTIVITY_LOG env value)",
+      "inputs": null,
+      "batch": null,
+      "rationale": "Boolean parse of an operator-set env var, not user natural language (D5).",
+      "class": "A"
     }
   ],
   "scanBaseline": {
     "packages/aielia/src/action-snapshot.ts": 1,
+    "packages/aielia/src/activity-log.ts": 1,
     "packages/aielia/src/agent-loop.ts": 1,
     "packages/aielia/src/assistant-session.ts": 1,
     "packages/aielia/src/contradiction-checker.ts": 1,

@@ -214,6 +214,66 @@ describe('OpenAICompatibleLLMClient', () => {
       expect(result.content).toContain('Before pushing, let me check the remotes:')
     })
 
+    it('recovers the exact deepseek-v4-flash DSML sample seen in benchmark scenarios 02/03 (string="true" parameter, no leading prose)', async () => {
+      const command = 'git diff --stat && echo "---" && git diff'
+      mockFetchJson({
+        choices: [{
+          message: {
+            content:
+              '<｜DSML｜tool_calls>\n<｜DSML｜invoke name="run_shell_command">\n' +
+              `<｜DSML｜parameter name="command" string="true">${command}</｜DSML｜parameter>\n` +
+              '</｜DSML｜invoke>\n</｜DSML｜tool_calls>',
+          },
+        }],
+      })
+      const client = new OpenAICompatibleLLMClient({ apiKey: API_KEY, baseUrl: OPENAI_BASE_URL, defaultModel: 'deepseek/deepseek-v4-flash' })
+
+      const result = await client.callChatStructured(
+        [{ role: 'user', content: 'review my changes' }],
+        [{ name: 'run_shell_command', description: 'runs a shell command', input_schema: { type: 'object' } }],
+      )
+
+      expect(result.toolCalls).toEqual([{ id: 'leaked-tool-call-0', name: 'run_shell_command', input: { command } }])
+      expect(result.content).toBe('')
+    })
+
+    it('recovers several DSML invokes and types parameters by their string="true"/"false" attribute (JSON values for "false")', async () => {
+      mockFetchJson({
+        choices: [{
+          message: {
+            content:
+              '<｜DSML｜tool_calls>\n' +
+              '<｜DSML｜invoke name="read_file">\n<｜DSML｜parameter name="path" string="true">a.py</｜DSML｜parameter>\n</｜DSML｜invoke>\n' +
+              '<｜DSML｜invoke name="run_shell_command">\n' +
+              '<｜DSML｜parameter name="command" string="true">ls 42</｜DSML｜parameter>\n' +
+              '<｜DSML｜parameter name="timeout" string="false">30</｜DSML｜parameter>\n' +
+              '<｜DSML｜parameter name="recursive" string="false">true</｜DSML｜parameter>\n' +
+              '<｜DSML｜parameter name="files" string="false">["a","b"]</｜DSML｜parameter>\n' +
+              '<｜DSML｜parameter name="broken" string="false">not json</｜DSML｜parameter>\n' +
+              '</｜DSML｜invoke>\n</｜DSML｜tool_calls>',
+          },
+        }],
+      })
+      const client = new OpenAICompatibleLLMClient({ apiKey: API_KEY, baseUrl: OPENAI_BASE_URL, defaultModel: 'deepseek/deepseek-v4-flash' })
+
+      const result = await client.callChatStructured(
+        [{ role: 'user', content: 'x' }],
+        [
+          { name: 'read_file', description: 'reads', input_schema: { type: 'object' } },
+          { name: 'run_shell_command', description: 'runs', input_schema: { type: 'object' } },
+        ],
+      )
+
+      expect(result.toolCalls).toEqual([
+        { id: 'leaked-tool-call-0', name: 'read_file', input: { path: 'a.py' } },
+        {
+          id: 'leaked-tool-call-1',
+          name: 'run_shell_command',
+          input: { command: 'ls 42', timeout: 30, recursive: true, files: ['a', 'b'], broken: 'not json' },
+        },
+      ])
+    })
+
     it('never fabricates a tool call from a leaked block whose invoked name is not a registered tool', async () => {
       mockFetchJson({
         choices: [{
