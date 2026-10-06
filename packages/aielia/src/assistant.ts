@@ -654,6 +654,7 @@ export class PersonalAssistant {
             userMessage,
             reply: result.reply,
             actions: recorded,
+            earlierActions: this.actionApproval.appliedActions.slice(0, actionsBefore),
             sourcesRead: (result.sources ?? []).map((src) => `${src.tool}: ${src.path}`),
             lookupUnavailable: this.actionApproval.networkDenied(sessionId),
           },
