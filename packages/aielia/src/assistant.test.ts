@@ -578,6 +578,30 @@ describe('PersonalAssistant', () => {
       expect(result.auditNotice).toBeUndefined()
     })
 
+    it('records the spend of the flagged turn before its audit retry runs', async () => {
+      let audits = 0
+      const replies = ['Done, I changed the file.', 'I did not change anything; no write was made.']
+      class RetryLLM extends FakeLLMClient {
+        async callChatStructured(messages: ChatMessage[], tools?: ToolDefinition[], options?: ChatOptions): Promise<LLMStructuredResponse> {
+          if (String(messages[0]?.content).includes('You audit one reply')) {
+            audits++
+            options?.onUsage?.({ inputTokens: 1, outputTokens: 1, costUsd: 0.001 })
+            return { content: audits <= 2 ? '{"claimsUnrecordedWork": true, "promisesWorkNotDone": false, "unverifiedOutsideFacts": false, "contradictsCommandOutput": false}' : '{"claimsUnrecordedWork": false, "promisesWorkNotDone": false, "unverifiedOutsideFacts": false, "contradictsCommandOutput": false}' }
+          }
+          return super.callChatStructured(messages, tools, options)
+        }
+        async *callChat(_m: ChatMessage[], options?: ChatOptions): AsyncIterable<string> {
+          options?.onUsage?.({ inputTokens: 100, outputTokens: 10, costUsd: 0.5 })
+          yield replies.shift() ?? ''
+        }
+      }
+      const assistant = new PersonalAssistant({ llmClient: new RetryLLM(), replyAudit: true })
+      await assistant.turn('change the file', { sessionId: 'audit-spend' })
+      const state = await assistant.getSpendState('audit-spend')
+      expect(state.cumulativeCalls).toBe(2)
+      expect(state.cumulativeCostUsd).toBeGreaterThan(0.99) // both turns' 0.5, not only the retry's
+    })
+
     it('logs the suggestions as one next_steps entry per turn, and the proposer is told which language to write in', async () => {
       const llm = new NextStepAwareLLMClient('It is 3pm in Tokyo.')
       const prompts: string[] = []

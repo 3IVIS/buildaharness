@@ -105,6 +105,21 @@ export type { AssistantTrace, AssistantTurnResult, AssistantProgress, ProposerKi
 export type { PlanDecision, PlanApprovalEdits } from './plan-approval-service.js'
 export type { PlanMode } from './plan-store.js'
 
+/** Adds token usage records together; undefined when none carried any. */
+function sumUsage(parts: (TokenUsage | undefined)[]): TokenUsage | undefined {
+  let total: TokenUsage | undefined
+  for (const u of parts) {
+    if (!u) continue
+    total = {
+      inputTokens: (total?.inputTokens ?? 0) + u.inputTokens,
+      outputTokens: (total?.outputTokens ?? 0) + u.outputTokens,
+      costUsd: u.costUsd !== undefined ? (total?.costUsd ?? 0) + u.costUsd : total?.costUsd,
+      cachedInputTokens: u.cachedInputTokens !== undefined ? (total?.cachedInputTokens ?? 0) + u.cachedInputTokens : total?.cachedInputTokens,
+    }
+  }
+  return total
+}
+
 const isBrowser = (): boolean => typeof indexedDB !== 'undefined'
 
 /** Result of `/memory confirm`/`/memory reject` (single index or bulk category) — see PersonalAssistant.confirmPendingFact/rejectPendingFact. */
@@ -695,6 +710,8 @@ export class PersonalAssistant {
         if (nudge) {
           this.auditRetryBudget--
           this.onDebugLog?.({ kind: 'note', sessionId, content: `reply audit: ${auditNotice ?? 'flagged'} — retrying once with a nudge` })
+          // The flagged turn is a finished, billed turn: record what it and its audit cost before the retry runs (the early return skips recordSpend below).
+          await this.session.recordSpend(sessionId, sumUsage([result.usage, ...auditUsage]))
           return await this.turn(nudge, { ...options, sessionId, auditRetry: true, approved: undefined, pendingActionId: undefined, pendingClarificationId: undefined, planApprovalId: undefined })
         }
         if (auditNotice) {
