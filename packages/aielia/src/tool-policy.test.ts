@@ -16,6 +16,11 @@ describe('evaluateToolPolicy', () => {
     expect(result.decision).toBe('REQUIRE_APPROVAL')
   })
 
+  it('always requires approval for send_email (an effect tool), even with no control state', () => {
+    const result = evaluateToolPolicy({ toolName: 'send_email', riskHint: 'LOW' })
+    expect(result.decision).toBe('REQUIRE_APPROVAL')
+  })
+
   it('denies a read-only tool when the harness control state denies it, even with a LOW risk hint', () => {
     const result = evaluateToolPolicy({
       toolName: 'web_search',
