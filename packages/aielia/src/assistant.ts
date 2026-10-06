@@ -650,7 +650,8 @@ export class PersonalAssistant {
     // so it's exempt — otherwise a turn that was allowed to start, then paused for approval,
     // could get silently stuck refusing to ever resolve once the ceiling was crossed by
     // something else in between.
-    if (!options.pendingActionId) {
+    // The audit retry is the same user message's own correction: a cap crossed by the flagged turn must not replace its delivered reply with an escalation.
+    if (!options.pendingActionId && !options.auditRetry) {
       const check = await this.session.checkSpendCapForTurn(sessionId)
       if (!check.allowed) {
         this.onTrace?.({ kind: 'turn_end', sessionId, status: 'escalated' })
@@ -660,6 +661,8 @@ export class PersonalAssistant {
 
     try {
       const result = await this.runTurn(userMessage, options, sessionId)
+      // `excerpt` is raw tool text kept only for the grounding check; some paths (the approval-resume loop) hand sources back unstripped.
+      if (result.sources) result.sources = result.sources.map(({ excerpt: _excerpt, ...source }) => source)
       // The system's own action record goes into the stored transcript only, never into the reply that is shown. A marker in the
       // reply is the model imitating it (it claimed writes and test runs that never happened in benchmark scenarios 05 and 13).
       if (result.reply && containsActionRecord(result.reply)) {

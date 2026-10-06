@@ -595,8 +595,11 @@ describe('PersonalAssistant', () => {
           yield replies.shift() ?? ''
         }
       }
-      const assistant = new PersonalAssistant({ llmClient: new RetryLLM(), replyAudit: true })
-      await assistant.turn('change the file', { sessionId: 'audit-spend' })
+      // The cap (0.4) is crossed by the flagged turn's own 0.5; the correction of that same message must still run.
+      const assistant = new PersonalAssistant({ llmClient: new RetryLLM(), replyAudit: true, spendCap: { sessionCostLimitUsd: 0.4 } })
+      const result = await assistant.turn('change the file', { sessionId: 'audit-spend' })
+      expect(result.status).toBe('ok')
+      expect(result.reply).toContain('did not change anything')
       const state = await assistant.getSpendState('audit-spend')
       expect(state.cumulativeCalls).toBe(2)
       expect(state.cumulativeCostUsd).toBeGreaterThan(0.99) // both turns' 0.5, not only the retry's
@@ -2085,6 +2088,22 @@ describe('PersonalAssistant shell tools', () => {
 
     const userLogs = onDebugLog.mock.calls.map((c) => c[0]).filter((e) => e.kind === 'user_message')
     expect(userLogs).toHaveLength(1)
+  })
+
+  it('does not leak the internal source excerpt on the approval-resume path', async () => {
+    const executeCommand = vi.fn().mockResolvedValue({ output: 'ok\n', exitCode: 0, timedOut: false })
+    const { ctx, backend } = makeShellTools(executeCommand)
+    await backend.writeTextFile(`${ROOT}/notes.txt`, 'basil')
+    const llm = scriptedResponses([
+      { content: '', toolCalls: [{ id: 'toolu_1', name: 'run_shell_command', input: { command: 'ls' } }] },
+      { content: '', toolCalls: [{ id: 'toolu_2', name: 'read_file', input: { path: 'notes.txt' } }] },
+      { content: 'notes.txt says basil.' },
+    ])
+    const assistant = new PersonalAssistant({ llmClient: llm, shellTools: ctx, fileTools: { backend, workspaceRoot: ROOT } })
+    const staged = await assistant.turn('run ls then read notes.txt')
+    const result = await assistant.turn('run ls then read notes.txt', { approved: true, pendingActionId: staged.pendingActionId })
+    expect(result.status).toBe('ok')
+    expect(result.sources).toEqual([{ tool: 'read_file', path: 'notes.txt' }])
   })
 
   it('logs a declined staged run_shell_command to onDebugLog too', async () => {
