@@ -213,6 +213,9 @@ async fn run_claude_prompt_with_file_tools(
       args.push("--model".into());
       args.push(m);
     }
+    // "--" ends option parsing: a prompt that begins with "-" (or spells out "--mcp-config ...") must
+    // be taken as the prompt, never as a claude option.
+    args.push("--".into());
     args.push(prompt);
 
     let call_started_at = SystemTime::now();
@@ -336,6 +339,9 @@ async fn run_claude_prompt(
       args.push("--model".into());
       args.push(m);
     }
+    // "--" ends option parsing: a prompt that begins with "-" (or spells out "--mcp-config ...") must
+    // be taken as the prompt, never as a claude option.
+    args.push("--".into());
     args.push(prompt);
 
     // Pin cwd to the OS temp dir, never this app's own launch directory — `claude` has no
@@ -455,22 +461,20 @@ async fn run_shell_command(command: String, cwd: String, timeout_ms: Option<u64>
     let mut child = cmd.spawn().map_err(|e| format!("Couldn't run the command: {e}"))?;
     let stdout = child.stdout.take();
     let stderr = child.stderr.take();
-    let stdout_handle = std::thread::spawn(move || {
+    // Keep at most 2x the output cap in memory; anything past that is still drained (so the command
+    // never blocks on a full pipe) but discarded, so a command that floods output for the whole
+    // timeout cannot exhaust memory.
+    fn read_capped<R: std::io::Read>(source: Option<R>) -> String {
       use std::io::Read;
-      let mut s = String::new();
-      if let Some(mut o) = stdout {
-        let _ = o.read_to_string(&mut s);
+      let mut buf: Vec<u8> = Vec::new();
+      if let Some(mut r) = source {
+        let _ = (&mut r).take((SHELL_MAX_OUTPUT_BYTES * 2) as u64).read_to_end(&mut buf);
+        let _ = std::io::copy(&mut r, &mut std::io::sink());
       }
-      s
-    });
-    let stderr_handle = std::thread::spawn(move || {
-      use std::io::Read;
-      let mut s = String::new();
-      if let Some(mut e) = stderr {
-        let _ = e.read_to_string(&mut s);
-      }
-      s
-    });
+      String::from_utf8_lossy(&buf).into_owned()
+    }
+    let stdout_handle = std::thread::spawn(move || read_capped(stdout));
+    let stderr_handle = std::thread::spawn(move || read_capped(stderr));
 
     let start = std::time::Instant::now();
     let mut timed_out = false;
@@ -557,6 +561,12 @@ fn assert_within_workspace(workspace_root: &str, path: &str) -> Result<PathBuf, 
     .canonicalize()
     .map_err(|e| format!("Couldn't resolve workspace root \"{workspace_root}\": {e}"))?;
   let target = Path::new(path);
+  // The JS side always hands over an already-normalized path. A ".." component is never legitimate
+  // here, and when the tail of the path does not exist yet it would survive nearest_existing_ancestor
+  // un-resolved (e.g. "<root>/new/../../x"), passing the starts_with check while landing outside.
+  if target.components().any(|c| matches!(c, std::path::Component::ParentDir)) {
+    return Err(format!("Path \"{path}\" contains a parent-directory component."));
+  }
   let real_target = nearest_existing_ancestor(target).map_err(|e| format!("Couldn't resolve \"{path}\": {e}"))?;
   if real_target != root && !real_target.starts_with(&root) {
     return Err(format!("Path \"{path}\" resolves outside the workspace root."));
