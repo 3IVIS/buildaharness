@@ -64,3 +64,46 @@ describe('ChatMessageBubble — lower-confidence source line', () => {
     expect(text).not.toContain('Less reliable source')
   })
 })
+
+describe('ChatMessageBubble — details row, code blocks, why chain', () => {
+  const ev = (layer: string, fired = true) => ({ layer, fired, reason: `${layer} ran` })
+  const loop = ['hypothesis', 'diagnostics', 'execution'].map((l) => ev(l))
+  const trace = { layerActivity: [...loop, ...loop, ...loop], verificationHealth: { strength: 1, feasibility: 1 } } as never
+
+  it('puts Sources / Steps / Why? / Run detail in one Details group and counts distinct sources', async () => {
+    const { render, screen, within } = await import('@testing-library/react')
+    const { ChatMessageBubble } = await import('./ChatMessageBubble')
+    render(
+      <ChatMessageBubble
+        role="assistant" content="hi" trace={trace}
+        sources={[
+          { tool: 'read_file', path: 'a.md' }, { tool: 'read_file', path: 'a.md' },
+          { tool: 'web_search', path: 'q' }, { tool: 'fetch_url', path: 'https://x' },
+        ] as never}
+        toolSteps={[{ summary: 's1' }] as never}
+      />,
+    )
+    const group = screen.getByRole('group', { name: 'Details' })
+    for (const name of ['Sources (3)', 'Steps (1)', 'Why?', 'Run detail ▾']) {
+      expect(within(group).getByRole('button', { name })).toBeTruthy()
+    }
+  })
+
+  it('collapses a repeated layer loop in the Why? chain into ×3 and shows a legend', async () => {
+    const { render, screen, fireEvent } = await import('@testing-library/react')
+    const { ChatMessageBubble } = await import('./ChatMessageBubble')
+    const { container } = render(<ChatMessageBubble role="assistant" content="hi" trace={trace} />)
+    fireEvent.click(screen.getByText('Why?'))
+    expect(container.textContent).toContain('×3')
+    expect(container.querySelectorAll('.bubble__why-chain-code')).toHaveLength(3)
+    expect(container.querySelector('.bubble__why-legend')?.textContent).toContain(' = ')
+  })
+
+  it('wraps fenced code in a block with a language label and Copy button', async () => {
+    const { render } = await import('@testing-library/react')
+    const { ChatMessageBubble } = await import('./ChatMessageBubble')
+    const { container } = render(<ChatMessageBubble role="assistant" content={'```bash\nls -la\n```'} />)
+    expect(container.querySelector('.bubble__code-lang')?.textContent).toBe('bash')
+    expect(container.querySelector('button[aria-label="Copy code"]')).toBeTruthy()
+  })
+})

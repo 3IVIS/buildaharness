@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useRef, useState } from 'react'
 import ReactMarkdown, { type Components } from 'react-markdown'
 import remarkGfm from 'remark-gfm'
 import {
@@ -20,8 +20,62 @@ import {
 // A <table> laid out at its natural (often wider-than-bubble) width needs its own scroll
 // container — putting overflow-x directly on the <table> element instead breaks browsers'
 // table column-width algorithm (columns render collapsed/skewed rather than content-sized).
+function CodeBlock({ children }: { children?: React.ReactNode }): React.JSX.Element {
+  const preRef = useRef<HTMLPreElement>(null)
+  const [copied, setCopied] = useState(false)
+  // react-markdown renders a fenced block as <pre><code class="language-x">; the label comes from that class.
+  const codeChild = Array.isArray(children) ? children[0] : children
+  const className = (codeChild as { props?: { className?: string } } | null)?.props?.className ?? ''
+  const language = /language-(\S+)/.exec(className)?.[1]
+
+  async function handleCopy(): Promise<void> {
+    await navigator.clipboard.writeText(preRef.current?.textContent ?? '')
+    setCopied(true)
+    setTimeout(() => setCopied(false), 1500)
+  }
+
+  return (
+    <div className="bubble__code">
+      <div className="bubble__code-bar">
+        <span className="bubble__code-lang">{language ?? 'code'}</span>
+        <button type="button" className="bubble__code-copy" onClick={handleCopy} aria-label="Copy code">
+          {copied ? 'Copied' : 'Copy'}
+        </button>
+      </div>
+      <pre ref={preRef}>{children}</pre>
+    </div>
+  )
+}
+
 const MARKDOWN_COMPONENTS: Components = {
   table: ({ children }) => <div className="bubble__table-scroll"><table>{children}</table></div>,
+  pre: ({ children }) => <CodeBlock>{children}</CodeBlock>,
+}
+
+// The harness often loops the same few layers (HY > DG > EX, HY > DG > EX, ...). Folds immediately
+// repeated runs of 1–4 layers into one entry with a count, keeping the first occurrence's reasons.
+type WhyItem = ReturnType<typeof buildWhyChain>[number]
+
+function collapseWhyChain(chain: WhyItem[]): Array<{ items: WhyItem[]; count: number }> {
+  const out: Array<{ items: WhyItem[]; count: number }> = []
+  let i = 0
+  while (i < chain.length) {
+    let folded = false
+    for (let len = 1; len <= 4 && !folded; len++) {
+      let reps = 1
+      while (
+        i + (reps + 1) * len <= chain.length &&
+        chain.slice(i, i + len).every((item, k) => item.layer === chain[i + reps * len + k]?.layer)
+      ) reps++
+      if (reps > 1) {
+        out.push({ items: chain.slice(i, i + len), count: reps })
+        i += reps * len
+        folded = true
+      }
+    }
+    if (!folded) { out.push({ items: [chain[i]!], count: 1 }); i++ }
+  }
+  return out
 }
 
 interface Props {
@@ -123,6 +177,12 @@ export function ChatMessageBubble({ role, content, riskLevel, trace, harnessSkip
   const [showRunDetail, setShowRunDetail] = useState(false)
   const [copied, setCopied] = useState(false)
 
+  // The same file/URL read twice in one turn is still one cited source.
+  const uniqueSources = (sources ?? []).filter(
+    (source, i, all) => all.findIndex((o) => o.tool === source.tool && o.path === source.path) === i,
+  )
+  const hasDetails = uniqueSources.length > 0 || (toolSteps?.length ?? 0) > 0 || !!trace || !!planStatus
+
   async function handleCopy(): Promise<void> {
     await navigator.clipboard.writeText(content)
     setCopied(true)
@@ -157,15 +217,37 @@ export function ChatMessageBubble({ role, content, riskLevel, trace, harnessSkip
       {onRetry && (
         <button type="button" className="bubble__retry" onClick={onRetry}>Retry</button>
       )}
-      {sources && sources.length > 0 && (
+      {hasDetails && (
+        <div className="bubble__details" role="group" aria-label="Details">
+          <span className="bubble__details-label">Details</span>
+          {uniqueSources.length > 0 && (
+            <button type="button" className="bubble__why-toggle" aria-pressed={showSources} onClick={() => setShowSources((v) => !v)}>
+              {showSources ? 'Hide sources' : `Sources (${uniqueSources.length})`}
+            </button>
+          )}
+          {toolSteps && toolSteps.length > 0 && (
+            <button type="button" className="bubble__why-toggle" aria-pressed={showSteps} onClick={() => setShowSteps((v) => !v)}>
+              {showSteps ? 'Hide steps' : `Steps (${toolSteps.length})`}
+            </button>
+          )}
+          {trace && (
+            <button type="button" className="bubble__why-toggle" aria-pressed={showWhy} onClick={() => setShowWhy((v) => !v)}>
+              {showWhy ? 'Hide why' : 'Why?'}
+            </button>
+          )}
+          {(trace || planStatus) && (
+            <button type="button" className="bubble__why-toggle" aria-pressed={showRunDetail} onClick={() => setShowRunDetail((v) => !v)}>
+              {showRunDetail ? 'Hide run detail' : 'Run detail ▾'}
+            </button>
+          )}
+        </div>
+      )}
+      {uniqueSources.length > 0 && (
         <div className="bubble__why">
-          <button type="button" className="bubble__why-toggle" onClick={() => setShowSources((v) => !v)}>
-            {showSources ? 'Hide sources' : `Sources (${sources.length})`}
-          </button>
           {showSources && (
             <div className="bubble__why-detail">
               <ul className="bubble__why-steps">
-                {sources.map((source, i) => (
+                {uniqueSources.map((source, i) => (
                   <li key={`${source.tool}-${source.path}-${i}`}>
                     {SOURCE_TOOL_LABEL[source.tool]} <code>{source.path}</code>
                     {EXTERNAL_SOURCE_TOOLS.has(source.tool) && <span className="bubble__source-external"> (external)</span>}
@@ -178,9 +260,6 @@ export function ChatMessageBubble({ role, content, riskLevel, trace, harnessSkip
       )}
       {toolSteps && toolSteps.length > 0 && (
         <div className="bubble__why">
-          <button type="button" className="bubble__why-toggle" onClick={() => setShowSteps((v) => !v)}>
-            {showSteps ? 'Hide steps' : `Steps (${toolSteps.length})`}
-          </button>
           {showSteps && (
             <div className="bubble__why-detail">
               <ol className="bubble__why-steps">
@@ -194,9 +273,6 @@ export function ChatMessageBubble({ role, content, riskLevel, trace, harnessSkip
       )}
       {trace && (
         <div className="bubble__why">
-          <button type="button" className="bubble__why-toggle" onClick={() => setShowWhy((v) => !v)}>
-            {showWhy ? 'Hide why' : 'Why?'}
-          </button>
           {showWhy && (
             <div className="bubble__why-detail">
               {memoryInjection && <pre className="bubble__why-memory" data-testid="why-memory">{formatMemoryInjection(memoryInjection)}</pre>}
@@ -219,19 +295,33 @@ export function ChatMessageBubble({ role, content, riskLevel, trace, harnessSkip
                       convention above). The full fired/skipped picture for all 11 is one toggle
                       down, in "Run detail". */}
                   {(() => {
-                    const chain = buildWhyChain(trace.layerActivity)
+                    const chain = collapseWhyChain(buildWhyChain(trace.layerActivity))
                     return chain.length > 0 ? (
-                      <div className="bubble__why-chain">
-                        {chain.map((item, i) => (
-                          <span key={`${item.layer}-${i}`} className="bubble__why-chain-item">
-                            {i > 0 && <span className="bubble__why-chain-arrow"> {'>'} </span>}
-                            <span className="bubble__why-chain-code" title={LAYER_DISPLAY_NAME[item.layer]}>
-                              {LAYER_SHORT_CODE[item.layer]}
+                      <>
+                        <div className="bubble__why-chain">
+                          {chain.map((group, i) => (
+                            <span key={`${group.items[0]!.layer}-${i}`} className="bubble__why-chain-item">
+                              {i > 0 && <span className="bubble__why-chain-arrow"> {'>'} </span>}
+                              {group.count > 1 && <span className="bubble__why-chain-count">(</span>}
+                              {group.items.map((item, k) => (
+                                <span key={`${item.layer}-${k}`}>
+                                  {k > 0 && <span className="bubble__why-chain-arrow"> {'>'} </span>}
+                                  <span className="bubble__why-chain-code" title={LAYER_DISPLAY_NAME[item.layer]}>
+                                    {LAYER_SHORT_CODE[item.layer]}
+                                  </span>
+                                  <span className="bubble__why-chain-reason"> ({item.reason})</span>
+                                </span>
+                              ))}
+                              {group.count > 1 && <span className="bubble__why-chain-count">) ×{group.count}</span>}
                             </span>
-                            <span className="bubble__why-chain-reason"> ({item.reason})</span>
-                          </span>
-                        ))}
-                      </div>
+                          ))}
+                        </div>
+                        <div className="bubble__why-legend">
+                          {[...new Set(chain.flatMap((g) => g.items.map((item) => item.layer)))]
+                            .map((layer) => `${LAYER_SHORT_CODE[layer]} = ${LAYER_DISPLAY_NAME[layer]}`)
+                            .join(' · ')}
+                        </div>
+                      </>
                     ) : null
                   })()}
                   {trace.batchBudget && (() => {
@@ -251,9 +341,6 @@ export function ChatMessageBubble({ role, content, riskLevel, trace, harnessSkip
       )}
       {(trace || planStatus) && (
         <div className="bubble__why">
-          <button type="button" className="bubble__why-toggle" onClick={() => setShowRunDetail((v) => !v)}>
-            {showRunDetail ? 'Hide run detail' : 'Run detail ▾'}
-          </button>
           {showRunDetail && (
             <div className="bubble__why-detail">
               {trace && (
