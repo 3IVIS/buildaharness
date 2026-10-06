@@ -141,6 +141,15 @@ describe('SettingsScreen', () => {
     expect(screen.getByRole('button', { name: 'Cancel' })).toBeDisabled()
   })
 
+  it('saves a chosen theme', async () => {
+    const user = userEvent.setup()
+    const { onSave } = renderSettings()
+    expect(screen.getByRole('combobox', { name: 'Theme' })).toHaveValue('system')
+    await user.selectOptions(screen.getByRole('combobox', { name: 'Theme' }), 'light')
+    await user.click(screen.getByRole('button', { name: 'Save' }))
+    expect(onSave).toHaveBeenCalledWith({ theme: 'light' })
+  })
+
   it('Cancel discards edits without calling onSave', async () => {
     const user = userEvent.setup()
     const { onSave, onCancel } = renderSettings()

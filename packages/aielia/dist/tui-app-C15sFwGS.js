@@ -5,9 +5,9 @@ import { jsxs, jsx } from "react/jsx-runtime";
 import { Readable, Writable } from "node:stream";
 import { useState, useRef, useMemo, useCallback, useSyncExternalStore, useEffect } from "react";
 import { useWindowSize, usePaste, useInput, Box, Text, render, Static } from "ink";
-import { r as renderPlan, t as toLines, a as runCli, P as PLAN_LINE_PREFIX, I as ICONS } from "./bin-B4cq3CxQ.js";
+import { r as renderPlan, t as toLines, a as runCli, P as PLAN_LINE_PREFIX, I as ICONS } from "./bin-ntOYB5dE.js";
 import { format } from "node:util";
-import { n as DIFF_INDENT } from "./provider-setup-C0T3xqNH.js";
+import { n as DIFF_INDENT } from "./provider-setup-ecltIdus.js";
 function classify(raw, stream) {
   if (raw.startsWith("\r")) {
     return { type: "progress", text: raw.replace(/\r/g, "").trimEnd() };
@@ -948,4 +948,4 @@ export {
   TuiApp,
   runTuiApp
 };
-//# sourceMappingURL=tui-app-CqIQs79U.js.map
+//# sourceMappingURL=tui-app-C15sFwGS.js.map

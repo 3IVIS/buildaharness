@@ -361,6 +361,22 @@ export function SettingsScreen({
         </section>
 
         <section className="settings__section">
+          <h2>Appearance</h2>
+          <FieldRow label="Theme">
+            <select
+              aria-label="Theme"
+              value={form.theme ?? 'system'}
+              disabled={disabled}
+              onChange={(e) => set('theme', e.target.value as NonNullable<AssistantConfig['theme']>)}
+            >
+              <option value="system">System</option>
+              <option value="dark">Dark</option>
+              <option value="light">Light</option>
+            </select>
+          </FieldRow>
+        </section>
+
+        <section className="settings__section">
           <h2>Advanced</h2>
           <FieldRow label="⚠ Dangerously skip permissions">
             <input

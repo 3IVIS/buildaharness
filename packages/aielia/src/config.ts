@@ -166,6 +166,8 @@ export interface AssistantConfig {
    * check, never the explicit `aielia update` command. CLI-only, like `tuiMode`.
    */
   updateCheck?: UpdateCheckMode
+  /** Colour theme of the chat-ui/desktop window: 'system' (default, follows the OS), 'dark' or 'light'. The CLI ignores it. */
+  theme?: 'system' | 'dark' | 'light'
   /**
    * The project label newly captured project-scoped facts are tagged with, and the one
    * project-scoped facts are filtered against when building a turn's context (see
@@ -250,6 +252,7 @@ export const CONFIG_KEYS: readonly (keyof AssistantConfig)[] = [
   'ambiguityGuardMode',
   'tuiMode',
   'updateCheck',
+  'theme',
   'activeProject',
   'goalGraphMode',
   'planGraphMode',

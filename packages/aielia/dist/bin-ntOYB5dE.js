@@ -8,7 +8,7 @@ import { homedir, tmpdir } from "node:os";
 import { join, dirname, resolve } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import { OPENROUTER_DEFAULT_MODEL, OPENAI_DEFAULT_MODEL, ANTHROPIC_DEFAULT_MODEL, InMemoryReminderStore, FileSystemAdapter, FileSystemExperienceStore, LLMClient, OpenAICompatibleLLMClient, OPENROUTER_EXTRA_HEADERS, OPENROUTER_BASE_URL, OPENAI_BASE_URL, AnthropicLLMClient } from "@buildaharness/runtime";
-import { X as buildClaudePrompt, bH as stripJsonCodeFence, bm as recallToolEnabled, aX as lexicalOffEnvValue, a as ALREADY_STAGED_ACTION_TOOL, bG as stagedActionInput, bg as parseClaudeCliOutput, bI as stripMcpToolPrefix, b3 as memoryStatusChecks, bf as normalizePlanNodes, P as PROVIDER_SETUP, a3 as cleanApiKey, Z as checkApiKeyFormat, af as envOverridesFromProcessEnv, bp as resolveConfig, bE as shouldLaunchTuiApp, Q as applyLayerSettings, bC as sanitizeLayerChoices, bL as testApiKey, bO as validateConfig, c as ConfigValidationError, aF as formatSpendCapStatus, aS as isPlanGraphEnabled, z as PersonalAssistant, aP as isGoalGraphSuggestEnabled, aO as isGoalGraphEnabled, bl as planToSnapshot, V as braveSearch, a7 as createSmtpSender, a6 as createResendSender, aU as isQuitCommand, x as LiveSteeringChannel, aC as formatNextSteps, _ as classifyError, b6 as nodeToLayer, L as LAYER_DISPLAY_NAME, b5 as nodeDisplayName, ah as estimateCostUsd, ao as formatConfigListing, aN as isConfigKey, C as CONFIG_KEYS, E as ENV_VAR_FOR_CONFIG_KEY, bh as parseConfigValue, d as ConfigValueParseError, aq as formatDoctorReport, ap as formatCostSummary, as as formatGoalGraphState, aE as formatSearchResults, ax as formatMemoryHistory, aA as formatMemoryStatus, az as formatMemoryPendingOutcome, av as formatMemoryArchive, aI as formatUndoLogListing, aa as defaultExportFilename, aH as formatTranscriptMarkdown, aG as formatStatus, at as formatHelp, q as LAYER_ORDER, au as formatLayerListing, bP as withLayerChoice, w as LayerSettingError, ay as formatMemoryInjection, Y as buildWhyChain, s as LAYER_SHORT_CODE, ab as defaultMemoryExportFilename, aw as formatMemoryExport, b2 as memoryAuditLogEnabled, aB as formatMemorySummary } from "./provider-setup-C0T3xqNH.js";
+import { X as buildClaudePrompt, bH as stripJsonCodeFence, bm as recallToolEnabled, aX as lexicalOffEnvValue, a as ALREADY_STAGED_ACTION_TOOL, bG as stagedActionInput, bg as parseClaudeCliOutput, bI as stripMcpToolPrefix, b3 as memoryStatusChecks, bf as normalizePlanNodes, P as PROVIDER_SETUP, a3 as cleanApiKey, Z as checkApiKeyFormat, af as envOverridesFromProcessEnv, bp as resolveConfig, bE as shouldLaunchTuiApp, Q as applyLayerSettings, bC as sanitizeLayerChoices, bL as testApiKey, bO as validateConfig, c as ConfigValidationError, aF as formatSpendCapStatus, aS as isPlanGraphEnabled, z as PersonalAssistant, aP as isGoalGraphSuggestEnabled, aO as isGoalGraphEnabled, bl as planToSnapshot, V as braveSearch, a7 as createSmtpSender, a6 as createResendSender, aU as isQuitCommand, x as LiveSteeringChannel, aC as formatNextSteps, _ as classifyError, b6 as nodeToLayer, L as LAYER_DISPLAY_NAME, b5 as nodeDisplayName, ah as estimateCostUsd, ao as formatConfigListing, aN as isConfigKey, C as CONFIG_KEYS, E as ENV_VAR_FOR_CONFIG_KEY, bh as parseConfigValue, d as ConfigValueParseError, aq as formatDoctorReport, ap as formatCostSummary, as as formatGoalGraphState, aE as formatSearchResults, ax as formatMemoryHistory, aA as formatMemoryStatus, az as formatMemoryPendingOutcome, av as formatMemoryArchive, aI as formatUndoLogListing, aa as defaultExportFilename, aH as formatTranscriptMarkdown, aG as formatStatus, at as formatHelp, q as LAYER_ORDER, au as formatLayerListing, bP as withLayerChoice, w as LayerSettingError, ay as formatMemoryInjection, Y as buildWhyChain, s as LAYER_SHORT_CODE, ab as defaultMemoryExportFilename, aw as formatMemoryExport, b2 as memoryAuditLogEnabled, aB as formatMemorySummary } from "./provider-setup-ecltIdus.js";
 import { spawn } from "node:child_process";
 import { createServer, connect } from "node:net";
 import { createRequire } from "node:module";
@@ -4807,7 +4807,7 @@ async function main(argv = process.argv.slice(2)) {
     });
   }
   if (shouldLaunchTuiApp(config.tuiMode ?? "disabled", Boolean(process.stdout.isTTY), Boolean(process.stdin.isTTY))) {
-    const { runTuiApp } = await import("./tui-app-CqIQs79U.js");
+    const { runTuiApp } = await import("./tui-app-C15sFwGS.js");
     await runTuiApp();
     return;
   }
@@ -4833,4 +4833,4 @@ export {
   renderPlan as r,
   toLines as t
 };
-//# sourceMappingURL=bin-B4cq3CxQ.js.map
+//# sourceMappingURL=bin-ntOYB5dE.js.map

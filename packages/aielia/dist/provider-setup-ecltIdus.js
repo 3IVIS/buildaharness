@@ -15429,6 +15429,7 @@ const CONFIG_KEYS = [
   "ambiguityGuardMode",
   "tuiMode",
   "updateCheck",
+  "theme",
   "activeProject",
   "goalGraphMode",
   "planGraphMode",
@@ -16024,6 +16025,9 @@ function parseConfigValue(key, raw) {
     case "updateCheck":
       if (raw !== "enabled" && raw !== "disabled") throw new ConfigValueParseError('updateCheck must be "enabled" or "disabled"');
       return raw;
+    case "theme":
+      if (raw !== "system" && raw !== "dark" && raw !== "light") throw new ConfigValueParseError('theme must be "system", "dark" or "light"');
+      return raw;
     case "goalGraphMode":
       if (raw !== "enabled" && raw !== "disabled") throw new ConfigValueParseError('goalGraphMode must be "enabled" or "disabled"');
       return raw;
@@ -16605,4 +16609,4 @@ export {
   PathOutsideWorkspaceError as y,
   PersonalAssistant as z
 };
-//# sourceMappingURL=provider-setup-C0T3xqNH.js.map
+//# sourceMappingURL=provider-setup-ecltIdus.js.map

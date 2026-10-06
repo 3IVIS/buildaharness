@@ -475,6 +475,13 @@ export function App(): React.JSX.Element {
   const headerMoreRef = useRef<HTMLDivElement>(null)
   const [headerMenuOpen, setHeaderMenuOpen] = useState(false)
 
+  // 'system' (or unset) leaves data-theme off so index.css follows prefers-color-scheme.
+  useEffect(() => {
+    const root = document.documentElement
+    if (config.theme === 'dark' || config.theme === 'light') root.setAttribute('data-theme', config.theme)
+    else root.removeAttribute('data-theme')
+  }, [config.theme])
+
   // Narrow-window "⋯" menu: close on Escape or a click outside it.
   useEffect(() => {
     if (!headerMenuOpen) return

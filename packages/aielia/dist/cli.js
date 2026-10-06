@@ -1,3 +1,3 @@
 #!/usr/bin/env node
-import "./bin-B4cq3CxQ.js";
+import "./bin-ntOYB5dE.js";
 //# sourceMappingURL=cli.js.map

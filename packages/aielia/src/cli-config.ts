@@ -221,6 +221,9 @@ export function parseConfigValue(key: keyof AssistantConfig, raw: string): unkno
     case 'updateCheck':
       if (raw !== 'enabled' && raw !== 'disabled') throw new ConfigValueParseError('updateCheck must be "enabled" or "disabled"')
       return raw
+    case 'theme':
+      if (raw !== 'system' && raw !== 'dark' && raw !== 'light') throw new ConfigValueParseError('theme must be "system", "dark" or "light"')
+      return raw
     case 'goalGraphMode':
       if (raw !== 'enabled' && raw !== 'disabled') throw new ConfigValueParseError('goalGraphMode must be "enabled" or "disabled"')
       return raw
