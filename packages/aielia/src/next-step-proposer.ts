@@ -41,6 +41,8 @@ export interface SuggestedNextStepNode {
   createdAt: string
 }
 
+const MAX_THREAD_SUGGESTIONS = 3
+
 const EMPTY_SUGGESTIONS: NextStepSuggestion[] = []
 
 const NEXT_STEP_SCHEMA = {
@@ -182,7 +184,8 @@ export async function proposeNextSteps(
     onUsage,
   )
   const now = new Date().toISOString()
-  return suggestions.map((s) => ({
+  // The prompt asks for 0-3; the model is not trusted to obey, and these are persisted on the thread.
+  return suggestions.slice(0, MAX_THREAD_SUGGESTIONS).map((s) => ({
     id: crypto.randomUUID(),
     goalThreadId: thread.id,
     description: s.description,

@@ -122,6 +122,14 @@ describe('proposeNextSteps', () => {
   })
 })
 
+describe('proposeNextSteps cap', () => {
+  it('persists at most three suggestions even if the model returns more', async () => {
+    const many = Array.from({ length: 6 }, (_, i) => ({ description: `step ${i}`, confidence: 'high', rationale: 'r' }))
+    const llm = new StructuredOnlyLLMClient(JSON.stringify({ suggestions: many }))
+    expect(await proposeNextSteps(makeThread(), llm, 'enabled')).toHaveLength(3)
+  })
+})
+
 describe('proposeTurnNextSteps — options shown after a full turn', () => {
   const turn = { userMessage: 'Add a login page', reply: 'Done — I added login.tsx.' }
   const payload = JSON.stringify({
