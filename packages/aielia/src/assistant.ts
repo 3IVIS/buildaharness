@@ -21,6 +21,7 @@ import {
   type ReminderStore,
   type TokenUsage,
 } from '@buildaharness/runtime'
+import { AbortGate, gateLlmClient, raceAbort, TurnAbortedError } from './turn-abort.js'
 import { detectHomogeneousBatchList } from './batch-list-detector.js'
 import { classifyAndTraceExecutionMode } from './execution-mode.js'
 import { evaluateTurnPolicy } from './turn-policy.js'
@@ -124,6 +125,9 @@ function parsePendingIndex(selector: string): number | undefined {
   return Number.isInteger(n) && n >= 1 ? n - 1 : undefined
 }
 
+/** How long a new turn waits for a stopped turn's pending model call to come back before going ahead anyway. */
+const STOPPED_TURN_GRACE_MS = 10_000
+
 export interface TurnOptions {
   sessionId?: string
   /** M4: a scripted / piped / batch caller. The post-turn memory reviewer is skipped for it (it only runs for an interactive session). */
@@ -158,6 +162,12 @@ export interface TurnOptions {
    * flag is off.
    */
   askMode?: AskMode
+  /**
+   * Stops the turn: once it fires, no further model call starts or is kept, the transcript is left as it was before
+   * the turn, and `turn()` resolves with `status: 'cancelled'` right away. Ignored when resuming a staged action
+   * (`pendingActionId`), because that applies a write/shell/email the user already approved and must not be half-done.
+   */
+  signal?: AbortSignal
   onProgress?: (progress: AssistantProgress) => void
   /**
    * Called with each token as the model's reply streams in. On the plain chat
@@ -375,6 +385,9 @@ export interface PersonalAssistantOptions {
  */
 export class PersonalAssistant {
   private readonly llmClient: ILLMClient
+  private readonly abortGate: AbortGate = {}
+  /** A stopped turn whose in-flight model call has not come back yet. Its gate stays armed until it settles, so it cannot write the transcript late. */
+  private stoppedWork?: Promise<void>
   private model?: string
   private activeProject?: string
   private memoryBudgetChars?: number
@@ -421,7 +434,7 @@ export class PersonalAssistant {
   private readonly askClarification: AskClarificationService
 
   constructor(options: PersonalAssistantOptions) {
-    this.llmClient = options.llmClient
+    this.llmClient = gateLlmClient(options.llmClient, this.abortGate)
     this.model = options.model
     this.activeProject = options.activeProject
     this.memoryBudgetChars = options.memoryBudgetChars
@@ -609,8 +622,16 @@ export class PersonalAssistant {
       }
     }
 
+    const signal = options.pendingActionId ? undefined : options.signal
+    // A previous stopped turn may still be waiting on its model call; let it die (its gate is still armed) before this turn re-arms the gate.
+    if (this.stoppedWork) await Promise.race([this.stoppedWork, new Promise<void>((r) => setTimeout(r, STOPPED_TURN_GRACE_MS))])
+    this.abortGate.signal = signal
+    let turnWork: Promise<AssistantTurnResult> | undefined
+    let stopped = false
     try {
-      const result = await this.runTurn(userMessage, options, sessionId)
+      if (signal?.aborted) throw new TurnAbortedError()
+      turnWork = this.runTurn(userMessage, options, sessionId)
+      const result = await (signal ? raceAbort(turnWork, signal) : turnWork)
       // Every return path leaves proposerKind unset — stamp the one runTurn resolved (defaults
       // to 'posthoc'). A path that already set it explicitly (the spend-cap early return above)
       // never reaches here.
@@ -648,10 +669,23 @@ export class PersonalAssistant {
       })
       return result
     } catch (err) {
+      if (err instanceof TurnAbortedError) {
+        stopped = true
+        if (turnWork) {
+          const armed = this.abortGate.signal
+          const settled = turnWork.then(() => undefined, () => undefined).then(() => { if (this.abortGate.signal === armed) this.abortGate.signal = undefined; if (this.stoppedWork === settled) this.stoppedWork = undefined })
+          this.stoppedWork = settled
+        }
+        this.onTrace?.({ kind: 'turn_end', sessionId, status: 'cancelled' })
+        this.onDebugLog?.({ kind: 'assistant_reply', sessionId, content: '[cancelled] Stopped by user' })
+        return { status: 'cancelled', reply: null, reason: 'Stopped by user', proposerKind: this.lastProposerKind }
+      }
       const message = err instanceof Error ? err.message : String(err)
       this.onTrace?.({ kind: 'error', message })
       this.onDebugLog?.({ kind: 'assistant_reply', sessionId, content: `[threw] ${message}` })
       throw err
+    } finally {
+      if (!stopped || !turnWork) this.abortGate.signal = undefined
     }
   }
 

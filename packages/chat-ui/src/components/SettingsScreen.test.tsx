@@ -135,10 +135,23 @@ describe('SettingsScreen', () => {
     expect(onSave).toHaveBeenCalledWith({ proxyUrl: 'http://changed:1' })
   })
 
-  it('Save is disabled while a turn is in flight (busy)', () => {
-    renderSettings({ busy: true })
-    expect(screen.getByRole('button', { name: 'Save' })).toBeDisabled()
-    expect(screen.getByRole('button', { name: 'Cancel' })).toBeDisabled()
+  it('stays usable while a turn is in flight: Back/Cancel work and Save is deferred, with a note', async () => {
+    const user = userEvent.setup()
+    const { onSave, onCancel } = renderSettings({ busy: true })
+    expect(screen.getByText(/still replying/i)).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Save after reply' })).toBeEnabled()
+    await user.click(screen.getByRole('button', { name: '← Back' }))
+    await user.click(screen.getByRole('button', { name: 'Cancel' }))
+    expect(onCancel).toHaveBeenCalledTimes(2)
+    expect(onSave).not.toHaveBeenCalled()
+  })
+
+  it('shows the app version in Diagnostics only when the desktop shell provides one', () => {
+    const { unmount } = renderSettings({ appVersion: '0.1.3' })
+    expect(screen.getByText('Aielia 0.1.3')).toBeInTheDocument()
+    unmount()
+    renderSettings()
+    expect(screen.queryByText(/^Aielia \d/)).toBeNull()
   })
 
   it('saves a chosen theme', async () => {

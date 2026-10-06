@@ -153,7 +153,9 @@ describe('App — mid-task steering composer (Phase 3, hierarchical_goal_tree_an
 
     await waitFor(() => expect(screen.getByText('first message')).toBeInTheDocument())
     expect(input).toBeDisabled()
-    expect(screen.getByRole('button', { name: 'Send' })).toBeDisabled()
+    // The disabled Send is replaced by Stop while the turn runs (phase 5); nothing can be sent.
+    expect(screen.queryByRole('button', { name: 'Send' })).toBeNull()
+    expect(screen.getByRole('button', { name: 'Stop' })).toBeEnabled()
 
     deferred.release()
     await waitFor(() => expect(screen.getByText('echo: first message')).toBeInTheDocument())

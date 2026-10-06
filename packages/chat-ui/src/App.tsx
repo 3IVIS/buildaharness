@@ -391,6 +391,10 @@ async function buildAssistant(config: AssistantConfig): Promise<PersonalAssistan
   })
 }
 
+function formatElapsed(seconds: number): string {
+  return `${Math.floor(seconds / 60)}:${String(seconds % 60).padStart(2, '0')}`
+}
+
 export function App(): React.JSX.Element {
   const [entries, setEntries] = useState<ChatEntry[]>([])
   // First-load risk-gate illustration for the hosted browser trial — shown only in a plain
@@ -399,7 +403,16 @@ export function App(): React.JSX.Element {
   // and its card never collides with a real approval card. See demo-seed.ts.
   const [showDemo, setShowDemo] = useState<boolean>(() => !isTauri())
   const [input, setInput] = useState('')
+  const [appVersion, setAppVersion] = useState<string | undefined>(undefined)
   const [busy, setBusy] = useState(false)
+  // Stop: the running turn's controller (cleared when it ends). `stoppable` is false while resuming a staged action,
+  // because that applies something the user already approved and must not be half-done.
+  const turnAbortRef = useRef<AbortController | null>(null)
+  const [stoppable, setStoppable] = useState(false)
+  const [turnStartedAt, setTurnStartedAt] = useState<number | null>(null)
+  const [elapsedSeconds, setElapsedSeconds] = useState(0)
+  // Settings saved while a turn runs wait here and are applied the moment it ends (rebuilding the assistant mid-turn would pull it out from under the turn).
+  const queuedSettingsRef = useRef<Partial<AssistantConfig> | null>(null)
   const [progress, setProgress] = useState<AssistantProgress | null>(null)
   const [streamingText, setStreamingText] = useState<string | null>(null)
   const [liveToolSteps, setLiveToolSteps] = useState<AssistantToolStep[]>([])
@@ -749,6 +762,11 @@ export function App(): React.JSX.Element {
   async function handleSaveSettings(patch: Partial<AssistantConfig>): Promise<void> {
     const store = configStoreRef.current
     if (!store) return
+    if (turnAbortRef.current !== null || busy) {
+      queuedSettingsRef.current = { ...queuedSettingsRef.current, ...patch }
+      setView('chat')
+      return
+    }
     await store.save(patch)
     const persisted = await store.load()
     const resolved = resolveConfig(persisted, envOverrides)
@@ -764,6 +782,18 @@ export function App(): React.JSX.Element {
   async function handlePickWorkspaceDirectory(): Promise<string | null> {
     return invoke<string | null>('pick_workspace_directory')
   }
+
+  useEffect(() => {
+    if (!isTauri()) return
+    void import('@tauri-apps/api/app').then((m) => m.getVersion()).then(setAppVersion, () => undefined)
+  }, [])
+
+  useEffect(() => {
+    if (turnStartedAt === null) return
+    setElapsedSeconds(0)
+    const timer = setInterval(() => setElapsedSeconds(Math.floor((Date.now() - turnStartedAt) / 1000)), 1000)
+    return () => clearInterval(timer)
+  }, [turnStartedAt])
 
   useEffect(() => {
     bottomRef.current?.scrollIntoView({ behavior: 'smooth' })
@@ -800,9 +830,14 @@ export function App(): React.JSX.Element {
     setProgress(null)
     setStreamingText(null)
     setLiveToolSteps([])
+    const abort = new AbortController()
+    turnAbortRef.current = abort
+    setStoppable(!pendingActionId)
+    setTurnStartedAt(Date.now())
     const toolSteps: AssistantToolStep[] = []
     try {
       const result = await assistant.turn(message, {
+        signal: abort.signal,
         sessionId: sessionIdRef.current,
         approved,
         pendingActionId,
@@ -864,6 +899,8 @@ export function App(): React.JSX.Element {
         } else {
           setLastTurnUsage(undefined)
         }
+      } else if (result.status === 'cancelled') {
+        setEntries((prev) => [...prev, { id: newId(), kind: 'stopped' }])
       } else if (result.status === 'needs_approval') {
         setEntries((prev) => [
           ...prev,
@@ -916,10 +953,16 @@ export function App(): React.JSX.Element {
         { id: newId(), kind: 'error', content: errorMessage, retryable, retryMessage: message, retryApproved: approved, retryPendingActionId: pendingActionId },
       ])
     } finally {
+      turnAbortRef.current = null
+      setStoppable(false)
+      setTurnStartedAt(null)
       setBusy(false)
       setProgress(null)
       setStreamingText(null)
       setLiveToolSteps([])
+      const queued = queuedSettingsRef.current
+      queuedSettingsRef.current = null
+      if (queued) void handleSaveSettings(queued)
       // R1 (mid-task steering, Phase 3) + Phase 4 — assistant.turn() above now absorbs queued
       // steering messages in real time via checkCallerUpdates, re-enqueueing onto
       // steeringChannelRef anything it didn't get around to this turn (see
@@ -1117,6 +1160,7 @@ export function App(): React.JSX.Element {
         onCancel={() => setView('chat')}
         onPickWorkspaceDirectory={isTauri() ? handlePickWorkspaceDirectory : undefined}
         transcriptLength={transcriptLength}
+        appVersion={appVersion}
         memorySummary={memorySummary}
         lastTurnUsage={lastTurnUsage}
         sessionUsage={sessionUsage}
@@ -1131,6 +1175,16 @@ export function App(): React.JSX.Element {
         <span className="app__header-brand">
           <span className="app__header-title">Aielia</span>
           <span className="app__header-badge" title="Early-stage alpha software — expect rough edges and breaking changes.">Alpha</span>
+          {config.dangerouslySkipPermissions && (
+            <button
+              type="button"
+              className="app__approvals-off"
+              title="Approval prompts are turned off: writes and commands run without asking. Open Settings to change this."
+              onClick={() => void handleOpenSettings()}
+            >
+              Approvals off
+            </button>
+          )}
         </span>
         <div className="app__header-actions">
           <button type="button" aria-label="New chat" title="New chat" disabled={busy} onClick={() => void handleClearConversation()}>New chat</button>
@@ -1228,6 +1282,8 @@ export function App(): React.JSX.Element {
                 )}
                 </Fragment>
               )
+            case 'stopped':
+              return <div key={entry.id} className="app__stopped" role="status">Stopped</div>
             case 'error':
               return (
                 <ChatMessageBubble
@@ -1294,6 +1350,7 @@ export function App(): React.JSX.Element {
                 ? `${progress.planPosition.templateName ?? 'custom plan'} — step ${progress.planPosition.stepIndex} of ${progress.planPosition.stepCount} (${progress.planPosition.completionPct.toFixed(0)}%)${progress.currentNode ? ` — ${nodeDisplayName(progress.currentNode)}…` : ''}`
                 : `Step ${progress.stepsUsed} of ${progress.maxSteps}${progress.currentNode ? ` — ${nodeDisplayName(progress.currentNode)}…` : ''}`
               : 'thinking…'}
+            {` · ${formatElapsed(elapsedSeconds)}`}
           </div>
         )}
         {busy && liveToolSteps.length > 0 && (
@@ -1342,7 +1399,12 @@ export function App(): React.JSX.Element {
           rows={1}
           disabled={!goalGraphModeEnabled && busy}
         />
-        <button type="submit" disabled={(!goalGraphModeEnabled && busy) || !input.trim()}>Send</button>
+        {busy && stoppable && (
+          <button type="button" className="app__stop" aria-label="Stop" title="Stop this reply" onClick={() => turnAbortRef.current?.abort()}>Stop</button>
+        )}
+        {(!busy || !stoppable || goalGraphModeEnabled) && (
+          <button type="submit" disabled={(!goalGraphModeEnabled && busy) || !input.trim()}>Send</button>
+        )}
       </form>
       <div className="app__composer-disclaimer">Alpha software. Aielia uses AI models and can make mistakes — verify anything important.</div>
     </div>

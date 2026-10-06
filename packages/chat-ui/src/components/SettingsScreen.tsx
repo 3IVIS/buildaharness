@@ -53,6 +53,8 @@ interface Props {
   onPickWorkspaceDirectory?: () => Promise<string | null>
   /** GUI equivalents of the CLI's /status (transcript length), /memory, /cost, and /doctor — App.tsx populates these when Settings opens (see loadDiagnostics). null/undefined means "still loading", not "empty". */
   transcriptLength: number
+  /** Desktop app version (from the Tauri shell); absent in a browser tab, where no About line is shown. */
+  appVersion?: string
   memorySummary: MemorySummary | null
   lastTurnUsage?: TokenUsage
   sessionUsage?: TokenUsage
@@ -143,6 +145,7 @@ export function SettingsScreen({
   onCancel,
   onPickWorkspaceDirectory,
   transcriptLength,
+  appVersion,
   memorySummary,
   lastTurnUsage,
   sessionUsage,
@@ -200,12 +203,13 @@ export function SettingsScreen({
     if (path) set('workspaceRoot', path)
   }
 
-  const disabled = saving || busy
+  // A running turn no longer locks the screen: it can be opened, edited and left, and Save is deferred until the turn ends.
+  const disabled = saving
 
   return (
     <div className="settings">
       <div className="settings__header">
-        <button type="button" className="settings__back" onClick={onCancel} disabled={disabled}>← Back</button>
+        <button type="button" className="settings__back" onClick={onCancel}>← Back</button>
         <div className="settings__title">Settings</div>
       </div>
 
@@ -439,6 +443,7 @@ export function SettingsScreen({
 
         <section className="settings__section">
           <h2>Diagnostics</h2>
+          {appVersion && <p className="settings__info">Aielia {appVersion}</p>}
           <div className="settings__field-label">Session</div>
           <pre className="settings__diagnostics-block">{transcriptLength} message{transcriptLength === 1 ? '' : 's'} this session</pre>
 
@@ -453,13 +458,14 @@ export function SettingsScreen({
         </section>
 
         {error && <div className="settings__error">{error}</div>}
+        {busy && <p className="settings__info">Aielia is still replying. Changes are saved as soon as the reply finishes.</p>}
       </div>
 
       <div className="settings__footer">
         <button type="button" className="settings__save" onClick={() => void handleSave()} disabled={disabled}>
-          {saving ? 'Saving…' : 'Save'}
+          {saving ? 'Saving…' : busy ? 'Save after reply' : 'Save'}
         </button>
-        <button type="button" className="settings__cancel" onClick={onCancel} disabled={disabled}>Cancel</button>
+        <button type="button" className="settings__cancel" onClick={onCancel}>Cancel</button>
       </div>
     </div>
   )

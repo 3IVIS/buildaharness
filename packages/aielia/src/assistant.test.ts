@@ -1297,7 +1297,7 @@ describe('PersonalAssistant file tools', () => {
 
     // The way a UI/CLI approves: re-enter with the ID. The earlier bare "Yes" lost nothing.
     const applied = await assistant.turn('Yes, go ahead.', { approved: true, pendingActionId: staged.pendingActionId })
-    expect(applied.reply).toBe('Wrote "summary.md".')
+    expect(applied.reply).toBe('Wrote "summary.md" (1 line, 14 bytes).')
     expect(await backend.readTextFile(`${ROOT}/summary.md`)).toBe('staged content')
   })
 
@@ -1315,7 +1315,8 @@ describe('PersonalAssistant file tools', () => {
     expect(staged.reason).not.toContain('line1\nCHANGED\nline3')
 
     const applied = await assistant.turn('Update summary.md', { approved: true, pendingActionId: staged.pendingActionId })
-    expect(applied.reply).toBe('Wrote "summary.md".')
+    expect(applied.reply).toBe('Wrote "summary.md" (3 lines, 20 bytes).')
+    expect(applied.reply).not.toContain('CHANGED')
   })
 
   it('dangerouslySkipPermissions auto-applies a staged write_file with no needs_approval round trip', async () => {

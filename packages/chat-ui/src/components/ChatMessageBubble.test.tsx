@@ -89,6 +89,25 @@ describe('ChatMessageBubble — details row, code blocks, why chain', () => {
     }
   })
 
+  it('lists a finished write/command step as done and keeps a denied one as it was reported', async () => {
+    const { render, screen, fireEvent } = await import('@testing-library/react')
+    const { ChatMessageBubble } = await import('./ChatMessageBubble')
+    render(
+      <ChatMessageBubble
+        role="assistant" content="hi"
+        toolSteps={[
+          { tool: 'run_shell_command', input: { command: 'uname -a' }, summary: 'Proposing to run: uname -a' },
+          { tool: 'write_file', input: { path: 'x.md' }, summary: 'Proposing a write to x.md' },
+          { tool: 'write_file', input: { path: 'y.md' }, summary: 'Proposing a write to y.md', deniedReason: 'outside workspace' },
+        ] as never}
+      />,
+    )
+    fireEvent.click(screen.getByText('Steps (3)'))
+    expect(screen.getByText('Ran: uname -a')).toBeTruthy()
+    expect(screen.getByText('Wrote x.md')).toBeTruthy()
+    expect(screen.getByText('Proposing a write to y.md')).toBeTruthy()
+  })
+
   it('collapses a repeated layer loop in the Why? chain into ×3 and shows a legend', async () => {
     const { render, screen, fireEvent } = await import('@testing-library/react')
     const { ChatMessageBubble } = await import('./ChatMessageBubble')

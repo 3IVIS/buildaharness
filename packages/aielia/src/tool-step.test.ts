@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { stripMcpToolPrefix, summarizeToolStep } from './tool-step.js'
+import { stripMcpToolPrefix, summarizeToolStep, summarizeSettledToolStep } from './tool-step.js'
 
 describe('stripMcpToolPrefix', () => {
   it('strips an mcp__<server>__ prefix down to the bare tool name', () => {
@@ -26,5 +26,16 @@ describe('summarizeToolStep', () => {
 
   it('falls back to a generic summary for an unrecognized tool', () => {
     expect(summarizeToolStep('some_future_tool', {})).toBe('Calling some_future_tool')
+  })
+})
+
+describe('summarizeSettledToolStep', () => {
+  it('reports a finished write and command as done, not proposed', () => {
+    expect(summarizeSettledToolStep('write_file', { path: 'a.md' })).toBe('Wrote a.md')
+    expect(summarizeSettledToolStep('run_shell_command', { command: 'uname -a' })).toBe('Ran: uname -a')
+  })
+
+  it('leaves every other tool reading the same', () => {
+    expect(summarizeSettledToolStep('read_file', { path: 'a.md' })).toBe(summarizeToolStep('read_file', { path: 'a.md' }))
   })
 })

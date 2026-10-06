@@ -129,6 +129,16 @@ body {
   gap: 8px;
 }
 
+.app__approvals-off {
+  background: var(--amber-a18);
+  color: var(--amber);
+  border: 1px solid var(--amber);
+  border-radius: 999px;
+  padding: 1px 8px;
+  font-size: 11px;
+  cursor: pointer;
+}
+
 .app__header-badge {
   display: inline-block;
   font-size: 10px;
@@ -268,6 +278,19 @@ body {
 .app__typing {
   color: var(--muted);
   font-size: 13px;
+}
+
+.app__stopped {
+  align-self: flex-start;
+  color: var(--muted);
+  font-size: 12px;
+  font-style: italic;
+}
+
+.app__stop {
+  background: transparent;
+  color: var(--text);
+  border: 1px solid var(--border);
 }
 
 .app__tool-steps {
@@ -844,6 +867,27 @@ body {
   font-style: italic;
   font-size: 13.5px;
   white-space: pre-wrap;
+}
+
+.approval-card__detail {
+  margin: 8px 0 0;
+  padding: 8px 10px;
+  max-height: 260px;
+  overflow: auto;
+  background: var(--tint-2);
+  border-radius: 6px;
+  font-size: 12.5px;
+  line-height: 1.45;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+.approval-card__line--add {
+  color: var(--green);
+}
+
+.approval-card__line--del {
+  color: var(--red);
 }
 
 .approval-card__actions {

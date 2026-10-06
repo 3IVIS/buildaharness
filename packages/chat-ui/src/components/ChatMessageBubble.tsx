@@ -3,6 +3,7 @@ import ReactMarkdown, { type Components } from 'react-markdown'
 import remarkGfm from 'remark-gfm'
 import {
   buildWhyChain,
+  summarizeSettledToolStep,
   lowerConfidenceSourceLines,
   LAYER_ORDER,
   LAYER_SHORT_CODE,
@@ -264,7 +265,7 @@ export function ChatMessageBubble({ role, content, riskLevel, trace, harnessSkip
             <div className="bubble__why-detail">
               <ol className="bubble__why-steps">
                 {toolSteps.map((step, i) => (
-                  <li key={i}>{step.summary}</li>
+                  <li key={i}>{step.deniedReason ? step.summary : summarizeSettledToolStep(step.tool, step.input)}</li>
                 ))}
               </ol>
             </div>
