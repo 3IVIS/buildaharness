@@ -342,9 +342,13 @@ export async function fetchTextSafely(options: FetchTextSafelyOptions): Promise<
     try {
       response = await fetchImpl(currentUrl, {
         redirect: 'manual',
+        // @tauri-apps/plugin-http (the desktop fetch) ignores `redirect: 'manual'` and follows up to
+        // five redirects itself in Rust, which would skip the per-hop SSRF check below. Its own switch
+        // for "do not follow" is `maxRedirections: 0`; every other fetch ignores the extra property.
+        maxRedirections: 0,
         signal: controller.signal,
         headers: { 'User-Agent': FIXED_USER_AGENT },
-      })
+      } as RequestInit)
 
       if (response.status >= 300 && response.status < 400) {
         const location = response.headers.get('location')

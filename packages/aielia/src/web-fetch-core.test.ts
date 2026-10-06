@@ -103,6 +103,17 @@ describe('fetchTextSafely', () => {
     await expect(fetchTextSafely({ url: 'http://public.example/', dns, fetchImpl })).rejects.toThrow(PrivateNetworkTargetError)
   })
 
+  it('asks the fetch implementation not to follow redirects itself (the Tauri http plugin ignores redirect: manual)', async () => {
+    let seen: Record<string, unknown> | undefined
+    const fetchImpl = (async (_url: string, init?: RequestInit) => {
+      seen = init as Record<string, unknown>
+      return textResponse('hello')
+    }) as unknown as typeof fetch
+    await fetchTextSafely({ url: 'http://public.example/', dns: publicDns, fetchImpl })
+    expect(seen?.redirect).toBe('manual')
+    expect(seen?.maxRedirections).toBe(0)
+  })
+
   it('gives up after too many redirects', async () => {
     const fetchImpl = (async () => textResponse('', { status: 302, headers: { location: 'http://public.example/' } })) as typeof fetch
     await expect(fetchTextSafely({ url: 'http://public.example/', dns: publicDns, fetchImpl, maxRedirects: 2 })).rejects.toThrow('Too many redirects')
