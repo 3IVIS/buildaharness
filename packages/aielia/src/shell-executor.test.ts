@@ -157,3 +157,11 @@ describe('applyPendingAction integration with runApprovedShellCommand', () => {
     }
   })
 })
+
+describe('runApprovedShellCommand output cap', () => {
+  it('bounds a flooding command to the output cap and still reports it', async () => {
+    const result = await runApprovedShellCommand('yes | head -c 5000000', tmpdir(), { maxOutputBytes: 1000, timeoutMs: 10_000 })
+    expect(result.output.length).toBeLessThan(3000)
+    expect(result.output).toContain('(truncated)')
+  })
+})

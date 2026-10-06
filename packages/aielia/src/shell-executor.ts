@@ -102,12 +102,13 @@ export const runApprovedShellCommand: ShellCommandExecutor = async (
       }
     }, timeoutMs)
 
-    proc.stdout?.on('data', (chunk: Buffer) => {
-      output += chunk.toString('utf-8')
-    })
-    proc.stderr?.on('data', (chunk: Buffer) => {
-      output += chunk.toString('utf-8')
-    })
+    // Keep only what truncateOutput could ever return (plus a little slack for multi-byte chars):
+    // a command that floods stdout for the whole timeout must not grow this string without bound.
+    const append = (chunk: Buffer): void => {
+      if (output.length <= maxOutputBytes * 2) output += chunk.toString('utf-8')
+    }
+    proc.stdout?.on('data', append)
+    proc.stderr?.on('data', append)
     proc.on('error', (err: Error) => {
       if (settled) return
       settled = true
