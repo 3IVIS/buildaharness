@@ -103,11 +103,15 @@ export function createResendSender(options: ResendSenderOptions): SendEmail {
 }
 
 /**
- * One-line human-readable summary of a staged email, for the approval prompt and trace. Kept here
+ * Human-readable summary of a staged email, for the approval prompt and trace. Kept here
  * (not in agent-loop.ts) so the MCP server (file-tools-mcp-server.mjs) and the CLI can format the
- * same way without importing the loop.
+ * same way without importing the loop. The approver must see everything that will be sent: every
+ * recipient (Cc/Bcc included, since a hidden Bcc is a silent exfiltration channel) and the whole
+ * body, never a truncated preview.
  */
-export function formatEmailApprovalReason(message: Pick<EmailMessage, 'to' | 'subject' | 'body'>): string {
-  const preview = message.body.length > 500 ? `${message.body.slice(0, 500)}…` : message.body
-  return `Proposes sending an email:\n  To: ${message.to}\n  Subject: ${message.subject}\n\n${preview}`
+export function formatEmailApprovalReason(message: Pick<EmailMessage, 'to' | 'subject' | 'body' | 'cc' | 'bcc'>): string {
+  const recipients = [`  To: ${message.to}`]
+  if (message.cc) recipients.push(`  Cc: ${message.cc}`)
+  if (message.bcc) recipients.push(`  Bcc: ${message.bcc}`)
+  return `Proposes sending an email:\n${recipients.join('\n')}\n  Subject: ${message.subject}\n\n${message.body}`
 }

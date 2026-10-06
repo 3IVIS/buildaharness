@@ -1197,12 +1197,12 @@ export class AgentLoop {
           }
         }
         if (kind === 'email') {
-          const { to, subject, body } = payload as { to: string; subject: string; body: string }
+          const { to, subject, body, cc, bcc } = payload as { to: string; subject: string; body: string; cc?: string; bcc?: string }
           return {
             done: true,
             result: {
               kind: 'needs_approval',
-              reason: formatEmailApprovalReason({ to, subject, body }),
+              reason: formatEmailApprovalReason({ to, subject, body, cc, bcc }),
               pendingActionId: id,
               pendingActionKind: 'email',
             },
