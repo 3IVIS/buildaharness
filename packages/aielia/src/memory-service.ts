@@ -902,8 +902,13 @@ export class MemoryService {
     if (memoryBudgetedRenderEnabled()) await this.flushInjectionUsage(sessionId)
     if (newFacts.length === 0 && flaggedForPending.length === 0) return { contradictions: [], corroborations: [] }
 
-    let sessionFacts = (((await this.memory.get(`facts:${sessionId}`)) as UserFact[] | undefined) ?? []).map(migrateFact)
-    let durableFacts = (((await this.memory.get(DURABLE_FACTS_KEY)) as UserFact[] | undefined) ?? []).map(migrateFact)
+    // The pools the contradiction check compares against come from this first read; the stores that get
+    // written are re-read after the (slow) model call below, so a write another path (the post-turn reviewer,
+    // /memory confirm) made in the meantime is not overwritten by this call's stale copy.
+    const readSession = async (): Promise<UserFact[]> => (((await this.memory.get(`facts:${sessionId}`)) as UserFact[] | undefined) ?? []).map(migrateFact)
+    const readDurable = async (): Promise<UserFact[]> => (((await this.memory.get(DURABLE_FACTS_KEY)) as UserFact[] | undefined) ?? []).map(migrateFact)
+    let sessionFacts = await readSession()
+    let durableFacts = await readDurable()
     let pendingFacts = ((await this.memory.get(PENDING_CONFIRMATION_KEY)) as PendingFact[] | undefined) ?? []
     let rejectedFacts = ((await this.memory.get(REJECTED_FACTS_KEY)) as RejectedFact[] | undefined) ?? []
     // newFacts.length > 0 (guaranteed above) always changes sessionFacts; the other three stores
@@ -933,6 +938,11 @@ export class MemoryService {
     const { contradictions, corroborations } = semanticContradictionEnabled()
       ? await checkForContradictions(newBeliefs, existingBeliefs, this.llmClient, this.model(), onUsage, uncertainBeliefs, rejectedBeliefs)
       : { contradictions: [], corroborations: [] }
+
+    sessionFacts = await readSession()
+    durableFacts = await readDurable()
+    pendingFacts = ((await this.memory.get(PENDING_CONFIRMATION_KEY)) as PendingFact[] | undefined) ?? []
+    rejectedFacts = ((await this.memory.get(REJECTED_FACTS_KEY)) as RejectedFact[] | undefined) ?? []
 
     const uncertainIdIndex = new Map(uncertainBeliefs.map((b, i) => [b.id, i]))
     const rejectedIdIndex = new Map(rejectedBeliefs.map((b, i) => [b.id, i]))
@@ -984,7 +994,7 @@ export class MemoryService {
       const rIdx = rejectedIdIndex.get(cor.existingId)
       if (rIdx !== undefined) {
         const restated = rejectedPool[rIdx]
-        rejectedFacts = rejectedFacts.filter((f) => f !== restated)
+        rejectedFacts = rejectedFacts.filter((f) => !(f.text === restated.text && f.rejectedAt === restated.rejectedAt))
         pendingFacts = [
           ...pendingFacts,
           {
