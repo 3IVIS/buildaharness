@@ -1331,10 +1331,11 @@ describe('PersonalAssistant file tools', () => {
     expect(await backend.readTextFile(`${ROOT}/summary.md`)).toBe('auto-applied content')
   })
 
-  it('approving a pending write applies the exact staged content with zero additional LLM calls', async () => {
+  it('approving a pending write applies the exact staged content (never re-derived) and lets the turn continue with one more model call', async () => {
     const backend = makeFakeBackend()
     const llm = scriptedResponses([
       { content: '', toolCalls: [{ id: 'toolu_1', name: 'write_file', input: { path: 'summary.md', content: 'final content' } }] },
+      { content: 'Saved the summary.' },
     ])
     const assistant = new PersonalAssistant({ llmClient: llm, fileTools: { backend, workspaceRoot: ROOT } })
 
@@ -1345,7 +1346,9 @@ describe('PersonalAssistant file tools', () => {
 
     expect(applied.status).toBe('ok')
     expect(await backend.readTextFile(`${ROOT}/summary.md`)).toBe('final content')
-    expect(llm.calls).toBe(callsAfterStaging)
+    // The write result goes back to the model (one structured call) so the turn can go on.
+    expect(llm.calls).toBe(callsAfterStaging + 1)
+    expect(applied.reply).toBe('Saved the summary.')
   })
 
   it('declining a pending write discards it — the file still does not exist', async () => {
@@ -1627,11 +1630,10 @@ describe('PersonalAssistant send_email (F2 — the flagship "stops before it sen
 
   function emailAssistant(sendEmail: SendEmail, opts: { dangerouslySkipPermissions?: boolean } = {}) {
     const backend = makeFakeBackend()
-    // Two identical scripted turns: one for the message-gate approve-retry (which re-enters
-    // runTurn from scratch), one in case a test only drives a single tool turn.
+    // The staged call, then the model's reply once the send result is handed back to it.
     const llm = scriptedResponses([
       { content: '', toolCalls: [EMAIL_CALL] },
-      { content: '', toolCalls: [EMAIL_CALL] },
+      { content: 'Email sent to your boss.' },
     ])
     const assistant = new PersonalAssistant({
       llmClient: llm,
@@ -1669,7 +1671,7 @@ describe('PersonalAssistant send_email (F2 — the flagship "stops before it sen
     expect(sendEmail).not.toHaveBeenCalled()
   })
 
-  it('approving the staged email delivers the exact message via the injected transport, with zero extra LLM calls', async () => {
+  it('approving the staged email delivers the exact message via the injected transport; the model gets one more call to wrap up', async () => {
     const sendEmail = mockSender({ provider: 'smtp', id: 'msg-1' })
     const { assistant, llm } = emailAssistant(sendEmail)
 
@@ -1679,10 +1681,10 @@ describe('PersonalAssistant send_email (F2 — the flagship "stops before it sen
     const applied = await assistant.turn(MSG, { approved: true, pendingActionId: staged.pendingActionId })
 
     expect(applied.status).toBe('ok')
-    expect(applied.reply).toContain('boss@example.com')
+    expect(applied.reply).toContain('boss')
     expect(sendEmail).toHaveBeenCalledTimes(1)
     expect(sendEmail).toHaveBeenCalledWith({ to: 'boss@example.com', subject: 'I quit', body: 'Effective today.' })
-    expect(llm.calls).toBe(callsAfterStaging)
+    expect(llm.calls).toBe(callsAfterStaging + 1)
   })
 
   it('declining the staged email discards it — the transport is never called', async () => {
@@ -1962,11 +1964,12 @@ describe('PersonalAssistant shell tools', () => {
     expect(executeCommand).not.toHaveBeenCalled()
   })
 
-  it('approving a pending shell action executes the exact staged command with zero additional structured-call LLM calls', async () => {
+  it('approving a pending shell action executes the exact staged command, never re-derived — the output goes back to the model for exactly one more structured call', async () => {
     const executeCommand = vi.fn().mockResolvedValue({ output: 'a.txt\nb.txt\n', exitCode: 0, timedOut: false })
     const { ctx } = makeShellTools(executeCommand)
     const llm = scriptedResponses([
       { content: '', toolCalls: [{ id: 'toolu_1', name: 'run_shell_command', input: { command: 'ls -la' } }] },
+      { content: 'Two files: a.txt and b.txt.' },
     ])
     const assistant = new PersonalAssistant({ llmClient: llm, shellTools: ctx })
 
@@ -1982,9 +1985,11 @@ describe('PersonalAssistant shell tools', () => {
     expect(approved.status).toBe('ok')
     expect(executeCommand).toHaveBeenCalledTimes(1)
     expect(executeCommand.mock.calls[0][0]).toBe('ls -la')
-    // The staged command itself is never re-derived via callChatStructured (see T4 of the
-    // file-tools plan) — only the synthesis call below (callChatSync) may follow it.
-    expect(llm.calls).toBe(callsAfterStaging)
+    // The staged command itself is never re-derived (see T4 of the file-tools plan): the one
+    // structured call after approval is the model reading the command's output as its tool result.
+    expect(llm.calls).toBe(callsAfterStaging + 1)
+    expect(approved.reply).toBe('Two files: a.txt and b.txt.')
+    expect(llm.syncCalls).toBe(0)
   })
 
   it('falls back to a clean, untagged raw dump when the post-approval synthesis call fails', async () => {
@@ -2019,19 +2024,22 @@ describe('PersonalAssistant shell tools', () => {
     expect(savedReply?.content).toContain('a.txt')
   })
 
+  /** Stages a shell action the way the claude-cli MCP server does and returns the llm step that adopts it — no resumable tool loop sits behind it, so approval takes the single synthesis-call path. */
+  async function cliStagedShell(backend: FsBackend, command: string) {
+    const { id } = await stagePendingAction(backend, ROOT, { kind: 'shell', command, cwd: ROOT })
+    return { id, step: { content: '', toolCalls: [{ id: 'toolu_1', name: '__staged_action', input: { id, kind: 'shell', command, cwd: ROOT } }] } }
+  }
+
   it('synthesizes an actual answer from the real command output instead of handing back the raw dump', async () => {
     const executeCommand = vi.fn().mockResolvedValue({
       output: 'nodes-p11.test.ts\nharness-checkpoint.ts\nharness-runtime.ts\n',
       exitCode: 0,
       timedOut: false,
     })
-    const { ctx } = makeShellTools(executeCommand)
+    const { ctx, backend } = makeShellTools(executeCommand)
     const synthesizedAnswer = 'Yes — nodeExecutionOrder is threaded through harness-runtime.ts and harness-checkpoint.ts consistently, plus one test file.'
-    const llm = scriptedResponses(
-      [{ content: '', toolCalls: [{ id: 'toolu_1', name: 'run_shell_command', input: { command: 'grep -rl "nodeExecutionOrder" packages/harness/src' } }] }],
-      undefined,
-      synthesizedAnswer,
-    )
+    const cli = await cliStagedShell(backend, 'grep -rl "nodeExecutionOrder" packages/harness/src')
+    const llm = scriptedResponses([cli.step], undefined, synthesizedAnswer)
     const assistant = new PersonalAssistant({ llmClient: llm, shellTools: ctx })
 
     const staged = await assistant.turn('are these wired reasonably?', { sessionId: 'synthesis-test' })
@@ -2062,16 +2070,13 @@ describe('PersonalAssistant shell tools', () => {
       exitCode: 0,
       timedOut: false,
     })
-    const { ctx } = makeShellTools(executeCommand)
+    const { ctx, backend } = makeShellTools(executeCommand)
     // callChatSync (the synthesis call) has no leaked-tool-call recovery/retry — unlike
     // callChatStructured, a leaked reply here must fall back to the raw dump instead of ever
     // reaching the user.
     const leakedSynthesis = '<｜DSML｜tool_calls>\n<｜DSML｜invoke name="exec">\n<｜DSML｜parameter name="cmd">node scripts/gen-stats.mjs</｜DSML｜parameter>\n</｜DSML｜invoke>\n</｜DSML｜tool_calls>'
-    const llm = scriptedResponses(
-      [{ content: '', toolCalls: [{ id: 'toolu_1', name: 'run_shell_command', input: { command: 'grep -rl "nodeExecutionOrder" packages/harness/src' } }] }],
-      undefined,
-      leakedSynthesis,
-    )
+    const cli = await cliStagedShell(backend, 'grep -rl "nodeExecutionOrder" packages/harness/src')
+    const llm = scriptedResponses([cli.step], undefined, leakedSynthesis)
     const assistant = new PersonalAssistant({ llmClient: llm, shellTools: ctx })
 
     const staged = await assistant.turn('are these wired reasonably?', { sessionId: 'synthesis-leak-test' })
@@ -2086,6 +2091,151 @@ describe('PersonalAssistant shell tools', () => {
     expect(approved.reply).toContain('nodes-p11.test.ts')
     const transcript = await assistant.getTranscript('synthesis-leak-test')
     expect(transcript.at(-1)?.content).not.toContain('｜DSML｜')
+  })
+
+  it.each(['enabled', 'disabled'] as const)('continues the tool loop after an approved shell command (one-loop %s): further approvals, then a real final answer in the same turn', async (oneLoopMode) => {
+    const executeCommand = vi.fn()
+      .mockResolvedValueOnce({ output: ' M handlers.py\n', exitCode: 0, timedOut: false })
+      .mockResolvedValueOnce({ output: '-end = start + page_size\n+end = start + page_size - 1\n', exitCode: 0, timedOut: false })
+    const { ctx } = makeShellTools(executeCommand)
+    const review = 'Review: handlers.py has an off-by-one in pagination.'
+    const llm = scriptedResponses([
+      { content: 'Checking status.', toolCalls: [{ id: 'call_status', name: 'run_shell_command', input: { command: 'git status --short' } }] },
+      { content: '', toolCalls: [{ id: 'call_diff', name: 'run_shell_command', input: { command: 'git diff' } }] },
+      { content: review },
+    ])
+    const assistant = new PersonalAssistant({ llmClient: llm, shellTools: ctx, oneLoopMode })
+    const MSG = 'review my uncommitted changes'
+
+    const first = await assistant.turn(MSG, { sessionId: 'resume-loop' })
+    expect(first.pendingActionKind).toBe('shell')
+    const second = await assistant.turn(MSG, { sessionId: 'resume-loop', approved: true, pendingActionId: first.pendingActionId })
+    // The first result went back to the model, which asked for the diff: a second approval, not a dead end.
+    expect(second.status).toBe('needs_approval')
+    expect(second.reason).toContain('git diff')
+    expect(second.pendingActionId).not.toBe(first.pendingActionId)
+    const third = await assistant.turn(MSG, { sessionId: 'resume-loop', approved: true, pendingActionId: second.pendingActionId })
+
+    expect(third.status).toBe('ok')
+    expect(third.reply).toBe(review)
+    expect(executeCommand).toHaveBeenCalledTimes(2)
+    expect(llm.syncCalls).toBe(0)
+
+    // The model saw the real call it made, answered by a tool message carrying the untrusted-tagged output.
+    const afterFirst = llm.receivedMessages[1]
+    expect(afterFirst.find((m) => m.role === 'assistant' && m.toolCalls?.[0]?.id === 'call_status')).toBeTruthy()
+    const toolMsg = afterFirst.find((m) => m.role === 'tool')
+    expect(toolMsg?.toolCallId).toBe('call_status')
+    expect(toolMsg?.content).toContain('handlers.py')
+    expect(toolMsg?.content).toContain('<untrusted_external_content')
+    // ...and by the final call it had both results.
+    expect(llm.receivedMessages[2].filter((m) => m.role === 'tool').map((m) => m.toolCallId)).toEqual(['call_status', 'call_diff'])
+
+    // One user message and one assistant answer for the whole turn.
+    const transcript = await assistant.getTranscript('resume-loop')
+    expect(transcript).toEqual([{ role: 'user', content: MSG }, { role: 'assistant', content: review }])
+  })
+
+  it('a multi-step edit continues across approvals in one turn: read -> write (approve) -> write (approve) -> final answer, and the user message is logged once', async () => {
+    const backend = makeFakeBackend()
+    await backend.writeTextFile(`${ROOT}/handlers.py`, 'def a(): pass\n')
+    const executeCommand = vi.fn()
+    const logs: { kind: string; content: string }[] = []
+    const llm = scriptedResponses([
+      { content: '', toolCalls: [{ id: 'r1', name: 'read_file', input: { path: 'handlers.py' } }] },
+      { content: '', toolCalls: [{ id: 'w1', name: 'write_file', input: { path: 'rate_limit.py', content: 'LIMIT = 100\n' } }] },
+      { content: '', toolCalls: [{ id: 'w2', name: 'write_file', input: { path: 'handlers.py', content: 'from rate_limit import LIMIT\ndef a(): pass\n' } }] },
+      { content: 'Added the limiter and wired it into handlers.py.' },
+    ])
+    const assistant = new PersonalAssistant({
+      llmClient: llm,
+      fileTools: { backend, workspaceRoot: ROOT },
+      shellTools: { backend, workspaceRoot: ROOT, executeCommand },
+      onDebugLog: (e) => logs.push(e),
+    })
+    const MSG = 'add rate limiting and apply it to the handlers'
+
+    const first = await assistant.turn(MSG, { sessionId: 'multi-write' })
+    expect(first.status).toBe('needs_approval')
+    const second = await assistant.turn(MSG, { sessionId: 'multi-write', approved: true, pendingActionId: first.pendingActionId })
+    expect(second.status).toBe('needs_approval')
+    expect(await backend.readTextFile(`${ROOT}/rate_limit.py`)).toBe('LIMIT = 100\n')
+    const third = await assistant.turn(MSG, { sessionId: 'multi-write', approved: true, pendingActionId: second.pendingActionId })
+
+    expect(third.status).toBe('ok')
+    expect(third.reply).toBe('Added the limiter and wired it into handlers.py.')
+    expect(await backend.readTextFile(`${ROOT}/handlers.py`)).toContain('from rate_limit import LIMIT')
+    // The read result from before the first pause is still in the model's context at the end.
+    expect(llm.receivedMessages[3].some((m) => m.role === 'tool' && m.toolCallId === 'r1')).toBe(true)
+    expect(logs.filter((e) => e.kind === 'user_message' && e.content === MSG)).toHaveLength(1)
+    // The activity log's tool_call entry for an approved write carries the tool result after the arrow.
+    expect(logs.some((e) => e.kind === 'tool_call' && e.content.startsWith('write_file({"path":"rate_limit.py"}) →\nWrote "rate_limit.py".'))).toBe(true)
+  })
+
+  it('dangerouslySkipPermissions runs the whole approved-command loop in one turn call', async () => {
+    const executeCommand = vi.fn().mockResolvedValue({ output: 'ok\n', exitCode: 0, timedOut: false })
+    const { ctx } = makeShellTools(executeCommand)
+    const llm = scriptedResponses([
+      { content: '', toolCalls: [{ id: 'c1', name: 'run_shell_command', input: { command: 'git status' } }] },
+      { content: '', toolCalls: [{ id: 'c2', name: 'run_shell_command', input: { command: 'git diff' } }] },
+      { content: 'All reviewed.' },
+    ])
+    const assistant = new PersonalAssistant({ llmClient: llm, shellTools: ctx, dangerouslySkipPermissions: true })
+
+    const result = await assistant.turn('review it', { sessionId: 'skip-loop' })
+
+    expect(result.status).toBe('ok')
+    expect(result.reply).toBe('All reviewed.')
+    expect(executeCommand).toHaveBeenCalledTimes(2)
+    const transcript = await assistant.getTranscript('skip-loop')
+    expect(transcript.filter((m) => m.role === 'user')).toHaveLength(1)
+  })
+
+  it('declining a follow-up action in a continued loop does not claim nothing ran, and leaves no loop state behind', async () => {
+    const executeCommand = vi.fn().mockResolvedValue({ output: 'ok\n', exitCode: 0, timedOut: false })
+    const { ctx } = makeShellTools(executeCommand)
+    const memory = new InMemoryAdapter()
+    const llm = scriptedResponses([
+      { content: '', toolCalls: [{ id: 'c1', name: 'run_shell_command', input: { command: 'git status' } }] },
+      { content: '', toolCalls: [{ id: 'c2', name: 'run_shell_command', input: { command: 'git commit -am x' } }] },
+    ])
+    const assistant = new PersonalAssistant({ llmClient: llm, shellTools: ctx, memory })
+
+    const first = await assistant.turn('do it', { sessionId: 'decline-loop' })
+    const second = await assistant.turn('do it', { sessionId: 'decline-loop', approved: true, pendingActionId: first.pendingActionId })
+    const declined = await assistant.turn('do it', { sessionId: 'decline-loop', approved: false, pendingActionId: second.pendingActionId })
+
+    expect(declined.reply).toBe('Cancelled — that additional action was not run.')
+    expect(executeCommand).toHaveBeenCalledTimes(1)
+    expect(await memory.get(`loop-pending:${second.pendingActionId}`)).toBeUndefined()
+    expect(await memory.get(`loop-pending:${first.pendingActionId}`)).toBeUndefined()
+  })
+
+  it('the no-loop synthesis call sees earlier conversation and labels the output as tool output, and the debug log records the raw output', async () => {
+    const executeCommand = vi.fn().mockResolvedValue({ output: 'RAW-OUTPUT-LINE\n', exitCode: 0, timedOut: false })
+    const { ctx, backend } = makeShellTools(executeCommand)
+    const cli = await cliStagedShell(backend, 'git diff')
+    const llm = scriptedResponses([{ content: 'Earlier finding: the paging is off by one.' }, cli.step], undefined, 'SYNTHESIZED-ANSWER')
+    const logs: { kind: string; content: string }[] = []
+    const assistant = new PersonalAssistant({ llmClient: llm, shellTools: ctx, onDebugLog: (e) => logs.push(e) })
+
+    await assistant.turn('review my changes', { sessionId: 'synth-history' })
+    const staged = await assistant.turn('are you sure about that finding?', { sessionId: 'synth-history' })
+    await assistant.turn('are you sure about that finding?', { sessionId: 'synth-history', approved: true, pendingActionId: staged.pendingActionId })
+
+    const [sent] = llm.receivedSyncMessages
+    const texts = sent.map((m) => m.content)
+    expect(texts.findIndex((t) => t.includes('review my changes'))).toBeGreaterThan(0)
+    expect(texts.findIndex((t) => t.includes('Earlier finding'))).toBeGreaterThan(0)
+    const last = sent[sent.length - 1]
+    expect(last.role).toBe('user')
+    expect(last.content).toContain('tool output, not something I sent you')
+    expect(last.content).toContain('RAW-OUTPUT-LINE')
+    // The current question appears once (as the final message), not duplicated from the transcript.
+    expect(sent.filter((m) => m.content.startsWith('are you sure'))).toHaveLength(0)
+    const toolLog = logs.find((e) => e.kind === 'tool_call' && e.content.startsWith('run_shell_command'))
+    expect(toolLog?.content).toContain('RAW-OUTPUT-LINE')
+    expect(toolLog?.content).not.toContain('SYNTHESIZED-ANSWER')
   })
 
   it('flags shell output that looks like a prompt-injection attempt, without dropping it', async () => {
@@ -2150,6 +2300,7 @@ describe('PersonalAssistant shell tools', () => {
     const { ctx } = makeShellTools(executeCommand)
     const llm = scriptedResponses([
       { content: '', toolCalls: [{ id: 'toolu_1', name: 'run_shell_command', input: { command: 'ls -la' } }] },
+      { content: 'Listed.' },
       { content: '', toolCalls: [{ id: 'toolu_2', name: 'run_shell_command', input: { command: 'ls -la' } }] },
     ])
     const assistant = new PersonalAssistant({ llmClient: llm, shellTools: ctx })
@@ -2171,6 +2322,7 @@ describe('PersonalAssistant shell tools', () => {
     const { ctx } = makeShellTools(executeCommand)
     const llm = scriptedResponses([
       { content: '', toolCalls: [{ id: 'toolu_1', name: 'run_shell_command', input: { command: 'ls -la' } }] },
+      { content: 'Listed.' },
       { content: '', toolCalls: [{ id: 'toolu_2', name: 'run_shell_command', input: { command: 'ls -la /tmp' } }] },
     ])
     const assistant = new PersonalAssistant({ llmClient: llm, shellTools: ctx })

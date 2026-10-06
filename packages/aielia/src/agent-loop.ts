@@ -10,6 +10,7 @@ import type {
   MemoryAdapter,
   ILLMClient,
   ChatMessage,
+  ToolCallResult,
   TokenUsage,
   ToolDefinition,
   ReminderStore,
@@ -43,8 +44,39 @@ import { REVISION_NOTE_PREFIX, revisionContextMessage } from './reviewer-revisio
 
 export type ToolLoopResult =
   | { kind: 'final'; content: string; sources: AssistantSource[]; batchBudget?: BatchBudgetTrace }
-  | { kind: 'needs_approval'; reason: string; pendingActionId: string; pendingActionKind: 'write' | 'shell' | 'email' | 'batch' }
+  | { kind: 'needs_approval'; reason: string; pendingActionId: string; pendingActionKind: 'write' | 'shell' | 'email' | 'batch'; resume?: StagedCallResume }
   | { kind: 'escalated'; reason: string }
+
+/**
+ * Set on a needs_approval result when the pause came from a tool call this loop dispatched itself
+ * (a proxy-backend `write_file`/`run_shell_command`/`send_email` call): the exact call the model
+ * made, so the loop can be continued once the staged action resolves instead of ending the turn.
+ * Absent for a pause whose call lives inside a backend's own agentic loop (claude-cli's
+ * `__staged_action`) — there is no message history to continue from.
+ */
+export interface StagedCallResume {
+  toolCall: ToolCallResult
+  assistantContent: string
+}
+
+/**
+ * Persisted under `loop-pending:<pendingActionId>` while a flat tool loop waits on an approval, so
+ * an approved action's result can be folded back into the same conversation (see
+ * AgentLoop.resumeToolLoop). `messages` is everything sent to the model so far, system prompt
+ * included, *excluding* the assistant message holding the staged call (rebuilt on resume).
+ */
+export interface ToolLoopPendingState {
+  sessionId: string
+  userMessage: string
+  riskHint: TurnIntentClassification['riskLevel']
+  messages: ChatMessage[]
+  sources: AssistantSource[]
+  iterationsUsed: number
+  toolCall: ToolCallResult
+  assistantContent: string
+}
+
+export const toolLoopPendingKey = (pendingActionId: string): string => `loop-pending:${pendingActionId}`
 
 /**
  * R2 of the internal plan: thrown by a harness-driven proposer
@@ -489,7 +521,13 @@ export class AgentLoop {
         return { __harnessExecutionStatus: 'complete', output: step.result.content }
       }
 
-      throw new OneLoopPause(step.result, toolCtx.currentTaskId)
+      // Same persistence the flat loop does (see persistPausedLoop): the harness-driven run ends at this
+      // pause, but the approved action's result can still go back into this conversation afterwards.
+      const paused = await this.persistPausedLoop(step.result, {
+        sessionId: input.sessionId, userMessage: input.userMessage, riskHint: input.riskHint ?? 'LOW',
+        messages: input.messages, sources: input.sources, iterationsUsed: iteration,
+      })
+      throw new OneLoopPause(paused as Extract<ToolLoopResult, { kind: 'needs_approval' | 'escalated' }>, toolCtx.currentTaskId)
     }
     return proposer
   }
@@ -709,7 +747,18 @@ export class AgentLoop {
     riskHint: TurnIntentClassification['riskLevel'] = 'LOW',
     controlPlaneState?: TurnControlPlaneState,
   ): Promise<ToolLoopResult> {
-    const tools = [
+    const tools = this.flatLoopTools()
+    const messages: ChatMessage[] = [
+      { role: 'system', content: systemPrompt },
+      ...transcript,
+      { role: 'user', content: userMessage },
+    ]
+    const { result, iterationsUsed, sources } = await this.runToolIterations(messages, this.maxSteps, tools, sessionId, userMessage, onToken, onToolStep, onUsage, undefined, riskHint, controlPlaneState)
+    return this.persistPausedLoop(result, { sessionId, userMessage, riskHint, messages, sources, iterationsUsed })
+  }
+
+  private flatLoopTools(): ToolDefinition[] {
+    return [
       ...(this.fileTools ? FILE_TOOLS : []),
       ...(this.webTools ? WEB_TOOLS : []),
       ...(this.shellTools ? SHELL_TOOLS : []),
@@ -717,13 +766,61 @@ export class AgentLoop {
       ...REMINDER_TOOLS,
       ...this.recallTools(),
     ]
+  }
+
+  /**
+   * When the flat loop pauses on a staged call it dispatched itself, saves what is needed to keep
+   * going after the approval (see ToolLoopPendingState) and strips the in-memory `resume` handle
+   * from the result the caller sees. Any other result is returned untouched.
+   */
+  private async persistPausedLoop(
+    result: ToolLoopResult,
+    ctx: { sessionId: string; userMessage: string; riskHint: TurnIntentClassification['riskLevel']; messages: ChatMessage[]; sources: AssistantSource[]; iterationsUsed: number },
+  ): Promise<ToolLoopResult> {
+    if (result.kind !== 'needs_approval' || !result.resume) return result
+    const { resume, ...rest } = result
+    const state: ToolLoopPendingState = {
+      sessionId: ctx.sessionId,
+      userMessage: ctx.userMessage,
+      riskHint: ctx.riskHint,
+      messages: [...ctx.messages],
+      sources: ctx.sources,
+      iterationsUsed: ctx.iterationsUsed,
+      toolCall: resume.toolCall,
+      assistantContent: resume.assistantContent,
+    }
+    await this.memory.set(toolLoopPendingKey(rest.pendingActionId), state)
+    return rest
+  }
+
+  /**
+   * Continues a flat tool loop that paused on an approval-gated call, after that call's staged
+   * action has been resolved: `toolResultText` (the command's output, a write confirmation, ...)
+   * goes back to the model as the tool result for the exact call it made, and the loop runs on —
+   * more reads, further approvals (which pause again and persist again), then a final answer —
+   * within whatever iteration budget the turn had left.
+   */
+  async resumeToolLoop(
+    state: ToolLoopPendingState,
+    toolResultText: string,
+    onToken?: (token: string) => void,
+    onToolStep?: (step: AssistantToolStep) => void,
+    onUsage?: (usage: TokenUsage) => void,
+  ): Promise<ToolLoopResult> {
     const messages: ChatMessage[] = [
-      { role: 'system', content: systemPrompt },
-      ...transcript,
-      { role: 'user', content: userMessage },
+      ...state.messages,
+      { role: 'assistant', content: state.assistantContent, toolCalls: [state.toolCall] },
+      { role: 'tool', content: toolResultText, toolCallId: state.toolCall.id },
     ]
-    const { result } = await this.runToolIterations(messages, this.maxSteps, tools, sessionId, userMessage, onToken, onToolStep, onUsage, undefined, riskHint, controlPlaneState)
-    return result
+    const remaining = Math.max(1, this.maxSteps - state.iterationsUsed)
+    const { result, iterationsUsed, sources } = await this.runToolIterations(
+      messages, remaining, this.flatLoopTools(), state.sessionId, state.userMessage, onToken, onToolStep, onUsage,
+      undefined, state.riskHint, this.createControlPlaneState(), state.sources, true,
+    )
+    return this.persistPausedLoop(result, {
+      sessionId: state.sessionId, userMessage: state.userMessage, riskHint: state.riskHint,
+      messages, sources, iterationsUsed: state.iterationsUsed + iterationsUsed,
+    })
   }
 
   /**
@@ -757,9 +854,11 @@ export class AgentLoop {
     onToolResult?: (toolName: string, resultText: string) => 'continue' | 'stop',
     riskHint: TurnIntentClassification['riskLevel'] = 'LOW',
     controlPlaneState?: TurnControlPlaneState,
-  ): Promise<{ result: ToolLoopResult; iterationsUsed: number; deadEndStopped?: boolean }> {
-    const sources: AssistantSource[] = []
-    let dispatchedAnyToolCall = false
+    initialSources: AssistantSource[] = [],
+    initialDispatched = false,
+  ): Promise<{ result: ToolLoopResult; iterationsUsed: number; sources: AssistantSource[]; deadEndStopped?: boolean }> {
+    const sources: AssistantSource[] = [...initialSources]
+    let dispatchedAnyToolCall = initialDispatched
 
     for (let iteration = 0; iteration < maxIterations; iteration++) {
       const step = await this.runToolIterationStep(
@@ -767,7 +866,7 @@ export class AgentLoop {
         onToken, onToolStep, onUsage, onToolResult, riskHint, controlPlaneState,
       )
       if (step.done) {
-        return { result: step.result, iterationsUsed: iteration + 1, deadEndStopped: step.deadEndStopped }
+        return { result: step.result, iterationsUsed: iteration + 1, sources, deadEndStopped: step.deadEndStopped }
       }
       dispatchedAnyToolCall = step.dispatchedAnyToolCall
     }
@@ -775,6 +874,7 @@ export class AgentLoop {
     return {
       result: { kind: 'escalated', reason: `Tool loop exceeded ${maxIterations} iterations without producing a final answer.` },
       iterationsUsed: maxIterations,
+      sources,
     }
   }
 
@@ -1007,6 +1107,7 @@ export class AgentLoop {
             reason: `Proposes writing to "${result.path}":\n${formatWriteDiff(previousContent, result.content)}`,
             pendingActionId: result.id,
             pendingActionKind: 'write',
+            resume: { toolCall: writeCall, assistantContent: response.content },
           },
         }
       }
@@ -1026,6 +1127,7 @@ export class AgentLoop {
             reason: shellApprovalReason(result.command, result.cwd),
             pendingActionId: result.id,
             pendingActionKind: 'shell',
+            resume: { toolCall: shellCall, assistantContent: response.content },
           },
         }
       }
@@ -1045,6 +1147,7 @@ export class AgentLoop {
             reason: formatEmailApprovalReason(result),
             pendingActionId: result.id,
             pendingActionKind: 'email',
+            resume: { toolCall: emailCall, assistantContent: response.content },
           },
         }
       }

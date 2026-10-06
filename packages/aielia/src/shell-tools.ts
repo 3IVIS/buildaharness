@@ -71,7 +71,12 @@ export const RUN_SHELL_COMMAND_TOOL: ToolDefinition = {
   input_schema: {
     type: 'object',
     properties: {
-      command: { type: 'string', description: 'The shell command to run.' },
+      command: {
+        type: 'string',
+        description:
+          'The shell command to run. It starts in the workspace root (or `cwd`), so there is no need to `cd` first — ' +
+          'in particular never `cd` to a guessed absolute path such as /workspace, which usually does not exist.',
+      },
       cwd: {
         type: 'string',
         description: 'Working directory for the command, relative to the workspace root. Defaults to the workspace root.',

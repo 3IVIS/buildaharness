@@ -814,18 +814,15 @@ describe('approval-prompt handling', () => {
     const assistant = new PersonalAssistant({ llmClient: llm, fileTools: { backend, workspaceRoot: '/workspace' } })
     const askSelect = vi.fn().mockResolvedValue('a')
     const { cli } = await setupCli({ assistant, askSelect })
-    captureOutput()
+    const lines = captureOutput()
 
-    await cli.dispatchLine('Write a summary to one.md')
+    // The approved first write goes back to the model, which proposes the second write in the same
+    // turn: it is auto-approved from the remembered "don't ask again" — askSelect is not called
+    // again, and the write still actually applies.
+    await cli.dispatchLine('Write a summary to one.md and two.md')
+
     expect(askSelect).toHaveBeenCalledTimes(1)
     expect(await backend.readTextFile('/workspace/one.md')).toBe('first')
-
-    const lines = captureOutput()
-    await cli.dispatchLine('Write a summary to two.md')
-
-    // Second staged write_file is auto-approved from the remembered "don't ask again" — askSelect
-    // is not called again, and the write still actually applies.
-    expect(askSelect).toHaveBeenCalledTimes(1)
     expect(lines.join('\n')).toContain('auto-approved')
     expect(await backend.readTextFile('/workspace/two.md')).toBe('second')
   })

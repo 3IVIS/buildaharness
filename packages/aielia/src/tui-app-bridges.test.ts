@@ -1,5 +1,5 @@
 import { describe, it, expect, vi } from 'vitest'
-import { EventLogBridge, PromptBridge, StatusBridge } from './tui-app.js'
+import { EventLogBridge, PromptBridge, StatusBridge, formatLivenessLabel } from './tui-app.js'
 import { PLAN_LINE_PREFIX } from './cli-icons.js'
 
 // These exercise only the plain classes (no JSX ever evaluated, no Ink mounted) — like
@@ -11,7 +11,7 @@ import { PLAN_LINE_PREFIX } from './cli-icons.js'
 describe('EventLogBridge', () => {
   it('starts with an empty snapshot', () => {
     const bridge = new EventLogBridge()
-    expect(bridge.getSnapshot()).toEqual({ lines: [], progressText: '', transientText: '', waitingForOutput: false })
+    expect(bridge.getSnapshot()).toEqual({ lines: [], progressText: '', transientText: '', waitingForOutput: false, turnInFlight: false })
   })
 
   it('notifies subscribers and updates progressText on a progress event', () => {
@@ -35,7 +35,7 @@ describe('EventLogBridge', () => {
     bridge.handleEvent({ type: 'token', text: '\nAielia> ' })
     bridge.handleEvent({ type: 'token', text: 'Hi' })
     bridge.handleEvent({ type: 'token', text: ' there' })
-    expect(bridge.getSnapshot()).toEqual({ lines: [], progressText: '', transientText: '\nAielia> Hi there', waitingForOutput: false })
+    expect(bridge.getSnapshot()).toEqual({ lines: [], progressText: '', transientText: '\nAielia> Hi there', waitingForOutput: false, turnInFlight: false })
   })
 
   it('a line event with no pending transientText commits its lines directly, classified "tool" from the ⚙ prefix', () => {
@@ -77,6 +77,36 @@ describe('EventLogBridge', () => {
     expect(bridge.getSnapshot().waitingForOutput).toBe(false)
   })
 
+  it('turnInFlight stays true across events (a quiet model wait must stay visibly alive) until endTurn(), and lastActivityAt tracks the latest sign of life', () => {
+    vi.useFakeTimers()
+    try {
+      vi.setSystemTime(1_000)
+      const bridge = new EventLogBridge()
+      bridge.beginTurn()
+      expect(bridge.getSnapshot().turnInFlight).toBe(true)
+      expect(bridge.getSnapshot().lastActivityAt).toBe(1_000)
+      vi.setSystemTime(31_000)
+      bridge.handleEvent({ type: 'progress', text: '[step 1/15] Execution…' })
+      expect(bridge.getSnapshot().waitingForOutput).toBe(false)
+      expect(bridge.getSnapshot().turnInFlight).toBe(true)
+      expect(bridge.getSnapshot().lastActivityAt).toBe(31_000)
+      bridge.endTurn()
+      expect(bridge.getSnapshot().turnInFlight).toBe(false)
+      expect(bridge.getSnapshot().lastActivityAt).toBeUndefined()
+      // Events outside a turn (startup banner, steering echo) do not start one.
+      bridge.handleEvent({ type: 'progress', text: 'x' })
+      expect(bridge.getSnapshot().turnInFlight).toBe(false)
+    } finally {
+      vi.useRealTimers()
+    }
+  })
+
+  it('formatLivenessLabel shows no counter for a short pause and elapsed seconds once the wait is long', () => {
+    expect(formatLivenessLabel(500, false)).toBe('Thinking…')
+    expect(formatLivenessLabel(500, true)).toBe('Working…')
+    expect(formatLivenessLabel(42_900, true)).toBe('Working… 42s')
+  })
+
   it('merges pending transientText with a closing line event into committed lines, matching cli.ts\'s streamed-reply sequence, classified "assistant", with the "Aielia>" label (and its leading blank-line artifact) stripped from the displayed text', () => {
     const bridge = new EventLogBridge()
     bridge.handleEvent({ type: 'token', text: '\nAielia> ' })
@@ -91,6 +121,7 @@ describe('EventLogBridge', () => {
       progressText: '',
       transientText: '',
       waitingForOutput: false,
+      turnInFlight: false,
     })
   })
 
@@ -133,6 +164,7 @@ describe('EventLogBridge', () => {
       progressText: '',
       transientText: '',
       waitingForOutput: false,
+      turnInFlight: false,
     })
   })
 
