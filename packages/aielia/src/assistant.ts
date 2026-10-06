@@ -51,7 +51,7 @@ import { semanticCompactionEnabled, summarizeOlderMessages } from './semantic-co
 import { MemoryReviewer, memoryReviewerEnabled } from './memory-reviewer.js'
 import { AgentLoop, OneLoopPause, type BatchBudgetTrace, type ToolLoopResult } from './agent-loop.js'
 import type { TurnIntentClassification, FactCategory } from './turn-intent-classifier.js'
-import { ActionApprovalService } from './action-approval-service.js'
+import { ActionApprovalService, type ResumeOptions } from './action-approval-service.js'
 import { PlanService } from './plan-service.js'
 import { PlanDraftingService } from './plan-drafting-service.js'
 import { planQuestionRoutingMode, renderPlanStateBlock, renderStuckPlanNudge, shouldRoutePlanQuestion, shouldSetAsideStuckPlan, stuckPlanResumeEnabled } from './plan-question.js'
@@ -1089,7 +1089,13 @@ export class PersonalAssistant {
     // proposing identical content (and, for a shell command, no guarantee of proposing the same
     // command at all).
     if (options.pendingActionId) {
-      return this.actionApproval.resolvePendingAction(sessionId, transcriptKey, options.pendingActionId, options.approved ?? false, userMessage)
+      // Resuming an approved action continues the paused tool loop (more calls, further approvals,
+      // a final answer) — a further pause is turned into a result the same way a first one is,
+      // except the user message is already in the transcript (resumed: true).
+      return this.actionApproval.resolvePendingAction(
+        sessionId, transcriptKey, options.pendingActionId, options.approved ?? false, userMessage,
+        this.loopResumeOptions(sessionId, transcriptKey, userMessage, { onToken: options.onToken, onToolStep: options.onToolStep }),
+      )
     }
 
     // Q2 — resolving a staged needs_clarification result is a resume, not a fresh turn: the
@@ -1393,7 +1399,7 @@ export class PersonalAssistant {
           : await this.agentLoop.runToolLoop(sessionId, transcript, userMessage, systemPrompt, options.onToken, options.onToolStep, accumulateUsage, classification.riskLevel, controlPlaneState)
 
         if (loopResult.kind === 'needs_approval' || loopResult.kind === 'escalated') {
-          return this.buildToolLoopPauseResult(sessionId, transcriptKey, userMessage, loopResult, classification)
+          return this.buildToolLoopPauseResult(sessionId, transcriptKey, userMessage, loopResult, classification, undefined, undefined, { onToken: options.onToken, onToolStep: options.onToolStep })
         }
         draftReply = loopResult.content
         sources = loopResult.sources.length > 0 ? loopResult.sources : undefined
@@ -1609,7 +1615,7 @@ export class PersonalAssistant {
         // RUNNING", since it's reached only once the harness has actually started driving the
         // plan's task graph (see that method's own doc comment on why the flag-OFF call site
         // below can't supply either).
-        return this.buildToolLoopPauseResult(sessionId, transcriptKey, userMessage, err.result, classification, activePlan, err.currentTaskId)
+        return this.buildToolLoopPauseResult(sessionId, transcriptKey, userMessage, err.result, classification, activePlan, err.currentTaskId, { onToken: options.onToken, onToolStep: options.onToolStep })
       }
       throw err
     } finally {
@@ -1625,6 +1631,23 @@ export class PersonalAssistant {
     }
   }
 
+  /** What ActionApprovalService needs to continue a paused tool loop after an approval: the live callbacks, and how a further pause becomes a turn result. */
+  private loopResumeOptions(
+    sessionId: string,
+    transcriptKey: string,
+    userMessage: string,
+    live: { onToken?: (token: string) => void; onToolStep?: (step: AssistantToolStep) => void },
+    activePlan?: PlanRecord | null,
+    currentTaskId?: string,
+  ): ResumeOptions {
+    return {
+      onToken: live.onToken,
+      onToolStep: live.onToolStep,
+      handleLoopPause: (result) =>
+        this.buildToolLoopPauseResult(sessionId, transcriptKey, userMessage, result, { riskLevel: 'HIGH' }, activePlan, currentTaskId, { ...live, resumed: true }),
+    }
+  }
+
   /**
    * Shared by the flag-OFF flat/batch tool loop's own needs_approval/escalated ToolLoopResult and
    * the flag-ON harness-driven proposer's equivalent OneLoopPause (R3 of
@@ -1637,7 +1660,7 @@ export class PersonalAssistant {
     transcriptKey: string,
     userMessage: string,
     loopResult: Extract<ToolLoopResult, { kind: 'needs_approval' | 'escalated' }>,
-    classification: TurnIntentClassification,
+    classification: Pick<TurnIntentClassification, 'riskLevel'>,
     // P10: only ever supplied by the flag-ON OneLoopPause catch below, which is the only call
     // site with a real "which plan task was RUNNING" answer — the flag-OFF flat/batch loop calls
     // this before any plan task has been selected at all (see runTurn's own call site), so trust
@@ -1646,8 +1669,12 @@ export class PersonalAssistant {
     // doesn't need to thread through a value it doesn't have.
     activePlan?: PlanRecord | null,
     currentTaskId?: string,
+    live: { onToken?: (token: string) => void; onToolStep?: (step: AssistantToolStep) => void; resumed?: boolean } = {},
   ): Promise<AssistantTurnResult> {
-    await this.session.appendTranscriptMessage(sessionId, transcriptKey, { role: 'user', content: userMessage })
+    // A pause reached again while resuming an earlier one (the approved action's result went back
+    // into the loop, which then asked for another approval) belongs to a turn whose user message
+    // the first pause already recorded.
+    if (!live.resumed) await this.session.appendTranscriptMessage(sessionId, transcriptKey, { role: 'user', content: userMessage })
     if (loopResult.kind === 'needs_approval') {
       this.onDebugLog?.({ kind: 'approval_request', sessionId, content: `${loopResult.pendingActionKind} ${loopResult.pendingActionId}: ${loopResult.reason}` })
       classifyAndTraceExecutionMode(this.onTrace, { isPlanCancelBypass: false, isBatchResearch: false, isTrivial: false, requiresApproval: true })
@@ -1655,7 +1682,7 @@ export class PersonalAssistant {
       // call with `approved: true` would — resolvePendingAction is exactly that path, just
       // invoked immediately instead of waiting for the caller to resume it.
       if (this.dangerouslySkipPermissions) {
-        return this.actionApproval.resolvePendingAction(sessionId, transcriptKey, loopResult.pendingActionId, true, userMessage)
+        return this.actionApproval.resolvePendingAction(sessionId, transcriptKey, loopResult.pendingActionId, true, userMessage, this.loopResumeOptions(sessionId, transcriptKey, userMessage, live, activePlan, currentTaskId))
       }
       // INV-36 (plan mode's P10): the one narrow, per-plan opt-in exception to the same rule —
       // auto-apply only a write/shell/email action proposed while executing the specific task
@@ -1669,7 +1696,7 @@ export class PersonalAssistant {
         activePlan.tasks.some((t) => t.id === currentTaskId)
       ) {
         this.onTrace?.({ kind: 'plan_trust_auto_applied', pendingActionKind: loopResult.pendingActionKind, taskId: currentTaskId })
-        return this.actionApproval.resolvePendingAction(sessionId, transcriptKey, loopResult.pendingActionId, true, userMessage)
+        return this.actionApproval.resolvePendingAction(sessionId, transcriptKey, loopResult.pendingActionId, true, userMessage, this.loopResumeOptions(sessionId, transcriptKey, userMessage, live, activePlan, currentTaskId))
       }
       return {
         status: 'needs_approval',
