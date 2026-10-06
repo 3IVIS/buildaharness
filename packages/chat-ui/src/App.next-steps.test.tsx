@@ -54,7 +54,7 @@ describe('App — turn-end next-step options', () => {
     const { App } = await import('./App')
     const user = userEvent.setup()
     render(<App />)
-    const input = screen.getByPlaceholderText('Message the assistant…') as HTMLTextAreaElement
+    const input = screen.getByPlaceholderText('Message Aielia…') as HTMLTextAreaElement
     return { fake, user, input }
   }
 

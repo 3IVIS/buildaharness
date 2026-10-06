@@ -1307,6 +1307,164 @@ body {
 }
 
 /* R7: turn-end next-step options under the latest reply, and DONE-thread suggestions in /goals */
+/* Memory panel — same layout language as .goals-panel / .search-panel (header with back link,
+   padded body, bordered rows). Before this block existed the panel rendered with browser-default
+   buttons/select and no padding (desktop comparison report, shot 08). */
+.memory-panel {
+  display: flex;
+  flex-direction: column;
+  height: 100vh;
+  width: 100%;
+  max-width: min(1100px, 92vw);
+  margin: 0 auto;
+  padding: 0 20px 24px;
+  overflow-y: auto;
+}
+
+.memory-panel__header {
+  position: sticky;
+  top: 0;
+  z-index: 1;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 16px 0;
+  background: var(--bg);
+  border-bottom: 1px solid var(--border);
+}
+
+.memory-panel__header h2 {
+  margin: 0;
+  font-size: 16px;
+  font-weight: 700;
+}
+
+.memory-panel .memory-panel__back {
+  background: transparent;
+  border: none;
+  color: var(--text);
+  font-size: 14px;
+  padding: 0;
+}
+
+.memory-panel__message {
+  margin: 12px 0 0;
+  padding: 8px 12px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--surface);
+  font-size: 13px;
+}
+
+.memory-panel__section {
+  margin: 20px 0 0;
+}
+
+.memory-panel__section h3 {
+  margin: 0 0 10px;
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+
+.memory-panel__section p {
+  margin: 0;
+  font-size: 13px;
+  color: var(--muted);
+}
+
+.memory-panel__status {
+  margin: 0 0 14px;
+  padding: 10px 12px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--surface);
+  color: var(--muted);
+  font: 12px/1.6 ui-monospace, SFMono-Regular, Menlo, monospace;
+  white-space: pre-wrap;
+}
+
+.memory-panel__field {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin-bottom: 12px;
+  font-size: 13px;
+}
+
+.memory-panel__field select {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  color: var(--text);
+  padding: 8px 10px;
+  font-size: 13px;
+}
+
+.memory-panel__actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.memory-panel button:not(.memory-panel__back) {
+  background: transparent;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  color: var(--text);
+  font-size: 12px;
+  font-weight: 500;
+  padding: 4px 10px;
+  cursor: pointer;
+}
+
+.memory-panel button:not(.memory-panel__back):hover:not(:disabled) {
+  border-color: var(--muted);
+}
+
+.memory-panel button.memory-panel__danger {
+  color: var(--red);
+}
+
+.memory-panel button.memory-panel__danger:hover:not(:disabled) {
+  border-color: var(--red);
+}
+
+.memory-panel button:disabled {
+  opacity: 0.4;
+  cursor: default;
+}
+
+.memory-panel__list {
+  margin: 0;
+  padding: 0 0 0 22px;
+  color: var(--muted);
+  font-size: 13px;
+}
+
+.memory-panel__list li {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px 10px;
+  padding: 8px 0;
+  border-bottom: 1px solid var(--border);
+}
+
+.memory-panel__list li > span:first-child {
+  flex: 1;
+  min-width: 0;
+  color: var(--text);
+  overflow-wrap: anywhere;
+}
+
+.memory-panel__flag {
+  color: var(--amber);
+  font-size: 12px;
+}
+
 .next-steps { display: flex; flex-direction: column; gap: 6px; margin: 4px 0 10px 4px; max-width: 720px; }
 .next-steps__label { font-size: 11.5px; color: var(--muted, #6b7280); }
 .next-steps__chips { display: flex; flex-wrap: wrap; gap: 8px; }

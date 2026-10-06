@@ -7,6 +7,11 @@ interface Props {
   onCancel: () => void
 }
 
+/** Display name for a transcript role: the assistant is shown by its product name, the stored role value stays 'assistant'. */
+function roleLabel(role: string): string {
+  return role === 'assistant' ? 'Aielia' : role === 'user' ? 'You' : role
+}
+
 function shortSessionId(sessionId: string): string {
   return sessionId.length > 8 ? `${sessionId.slice(0, 8)}…` : sessionId
 }
@@ -107,12 +112,12 @@ export function SearchPanel({ search, onCancel }: Props): React.JSX.Element {
                   // spec's name-from-content algorithm, each child's own contribution is trimmed
                   // before concatenation, so "about " immediately followed by <mark>garden</mark>
                   // collapses to "aboutgarden" with no space at all.
-                  aria-label={`${hit.role} message, ${hit.at}: ${hit.content}`}
+                  aria-label={`${roleLabel(hit.role)} message, ${hit.at}: ${hit.content}`}
                 >
                   <span className="search-panel__result-meta" aria-hidden="true">
                     <span className="search-panel__result-session">{shortSessionId(hit.sessionId)}</span>{' '}
                     <span className="search-panel__result-at">{hit.at}</span>{' '}
-                    <span className="search-panel__result-role">{hit.role}</span>
+                    <span className="search-panel__result-role">{roleLabel(hit.role)}</span>
                   </span>{' '}
                   <span className="search-panel__result-snippet" aria-hidden="true">
                     {highlightMatches(hit.content.slice(0, 160), query)}

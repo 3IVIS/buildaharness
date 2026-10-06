@@ -117,7 +117,7 @@ In practice:
 
 - **macOS**: Gatekeeper blocks the app as "damaged" or "from an unidentified
   developer." Right-click → Open, or `xattr -d com.apple.quarantine
-  /Applications/buildaharness-assistant.app` once downloaded.
+  /Applications/Aielia.app` once downloaded.
 - **Windows**: SmartScreen warns on first run. "More info" → "Run anyway."
 - **Linux**: no warning — nothing to bypass.
 

@@ -138,7 +138,7 @@ export function ChatMessageBubble({ role, content, riskLevel, trace, harnessSkip
         {copied ? 'Copied' : 'Copy'}
       </button>
       <div className="bubble__role">
-        {role === 'user' ? 'You' : role === 'assistant' ? 'Assistant' : 'Error'}
+        {role === 'user' ? 'You' : role === 'assistant' ? 'Aielia' : 'Error'}
         {/* LOW is the common case — rendering nothing for it keeps the badge meaningful when it appears. */}
         {riskLevel && riskLevel !== 'LOW' && (
           <span className={`risk-badge risk-badge--${riskLevel.toLowerCase()}`}>{riskLevel}</span>

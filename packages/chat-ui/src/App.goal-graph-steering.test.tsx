@@ -83,7 +83,7 @@ describe('App — mid-task steering composer (Phase 3, hierarchical_goal_tree_an
     const user = userEvent.setup()
     render(<App />)
 
-    const input = screen.getByPlaceholderText('Message the assistant…')
+    const input = screen.getByPlaceholderText('Message Aielia…')
     await user.type(input, 'first message')
     await user.click(screen.getByRole('button', { name: 'Send' }))
 
@@ -122,7 +122,7 @@ describe('App — mid-task steering composer (Phase 3, hierarchical_goal_tree_an
     const user = userEvent.setup()
     render(<App />)
 
-    const input = screen.getByPlaceholderText('Message the assistant…')
+    const input = screen.getByPlaceholderText('Message Aielia…')
     await user.type(input, 'first message')
     await user.click(screen.getByRole('button', { name: 'Send' }))
 
@@ -147,7 +147,7 @@ describe('App — mid-task steering composer (Phase 3, hierarchical_goal_tree_an
     const user = userEvent.setup()
     render(<App />)
 
-    const input = screen.getByPlaceholderText('Message the assistant…')
+    const input = screen.getByPlaceholderText('Message Aielia…')
     await user.type(input, 'first message')
     await user.click(screen.getByRole('button', { name: 'Send' }))
 

@@ -47,7 +47,7 @@ export interface ChatBootstrap {
 /** What `ChatPage.sendMessage` waits for after clicking Send. */
 export type SettleOn = 'reply' | 'approval' | 'halt'
 
-const INPUT_PLACEHOLDER = 'Message the assistant…'
+const INPUT_PLACEHOLDER = 'Message Aielia…'
 
 export class ChatPage {
   constructor(readonly page: Page) {}

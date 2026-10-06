@@ -323,7 +323,7 @@ export function SettingsScreen({
         <section className="settings__section">
           <h2>Reasoning layers</h2>
           <p className="settings__hint">
-            Extra checks that run on top of the assistant. Each costs extra model calls when it fires; the audit found limited benefit for
+            Extra checks that run on top of Aielia. Each costs extra model calls when it fires; the audit found limited benefit for
             some. Safety layers (approvals, tool policy, verification) are always on and not listed.
           </p>
           {LAYER_SETTINGS.filter(isToggleable).map((layer) => {

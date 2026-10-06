@@ -760,7 +760,7 @@ export function App(): React.JSX.Element {
         {
           id: newId(),
           kind: 'error',
-          content: 'Assistant is still starting up — try again in a moment.',
+          content: 'Aielia is still starting up — try again in a moment.',
           retryable: true,
           retryMessage: message,
           retryApproved: approved,
@@ -877,7 +877,7 @@ export function App(): React.JSX.Element {
           },
         ])
       } else {
-        setEntries((prev) => [...prev, { id: newId(), kind: 'escalation', reason: result.reason ?? 'The assistant halted and needs more information.', pendingMessage: message }])
+        setEntries((prev) => [...prev, { id: newId(), kind: 'escalation', reason: result.reason ?? 'Aielia halted and needs more information.', pendingMessage: message }])
       }
     } catch (err) {
       // classifyError maps to friendly copy for the UI, which is often too coarse to debug
@@ -951,7 +951,7 @@ export function App(): React.JSX.Element {
     if (!request || busy) return
     const assistant = assistantRef.current
     if (!assistant) {
-      setEntries((prev) => [...prev, { id: newId(), kind: 'error', content: 'Assistant is still starting up — try again in a moment.', retryable: false, retryMessage: request, retryApproved: false }])
+      setEntries((prev) => [...prev, { id: newId(), kind: 'error', content: 'Aielia is still starting up — try again in a moment.', retryable: false, retryMessage: request, retryApproved: false }])
       return
     }
     setShowDemo(false)
@@ -1296,7 +1296,7 @@ export function App(): React.JSX.Element {
           value={input}
           onChange={handleComposerInput}
           onKeyDown={handleComposerKeyDown}
-          placeholder={planState?.mode === 'drafting' ? 'Refine the plan…' : 'Message the assistant…'}
+          placeholder={planState?.mode === 'drafting' ? 'Refine the plan…' : 'Message Aielia…'}
           rows={1}
           disabled={!goalGraphModeEnabled && busy}
         />

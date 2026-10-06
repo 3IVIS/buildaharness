@@ -61,7 +61,7 @@ export function MemoryPanel({ data, message, busy, onConfirm, onReject, onForget
   if (!data) {
     return (
       <div className="memory-panel">
-        <header className="memory-panel__header"><h2>Memory</h2><button type="button" onClick={onClose}>Back to chat</button></header>
+        <header className="memory-panel__header"><button type="button" className="memory-panel__back" aria-label="Back to chat" onClick={onClose}>← Back</button><h2>Memory</h2></header>
         <p>Loading…</p>
       </div>
     )
@@ -73,8 +73,8 @@ export function MemoryPanel({ data, message, busy, onConfirm, onReject, onForget
   return (
     <div className="memory-panel">
       <header className="memory-panel__header">
+        <button type="button" className="memory-panel__back" aria-label="Back to chat" onClick={onClose}>← Back</button>
         <h2>Memory</h2>
-        <button type="button" onClick={onClose}>Back to chat</button>
       </header>
 
       {message && <div className="memory-panel__message" role="status">{message}</div>}
@@ -105,7 +105,7 @@ export function MemoryPanel({ data, message, busy, onConfirm, onReject, onForget
                 {f.flagged && <span className="memory-panel__flag"> (flagged: reads like an instruction, review before confirming)</span>}
                 {f.previouslyRejected && <span className="memory-panel__flag"> (previously rejected, restated)</span>}
                 <button type="button" disabled={busy} aria-label={`Confirm pending ${i + 1}`} onClick={() => onConfirm(String(i + 1))}>Confirm</button>
-                <button type="button" disabled={busy} aria-label={`Reject pending ${i + 1}`} onClick={() => onReject(String(i + 1))}>Reject</button>
+                <button type="button" className="memory-panel__danger" disabled={busy} aria-label={`Reject pending ${i + 1}`} onClick={() => onReject(String(i + 1))}>Reject</button>
               </li>
             ))}
           </ol>
@@ -135,7 +135,7 @@ export function MemoryPanel({ data, message, busy, onConfirm, onReject, onForget
               <li key={`${f.text}|${f.extractedAt}`}>
                 <span>{f.text}</span>
                 <button type="button" disabled={busy} aria-label={`Forget fact ${i + 1}`} onClick={() => onForget(String(i + 1))}>Forget</button>
-                <button type="button" disabled={busy} aria-label={`Erase fact ${i + 1} permanently`} title="Forget and remove from history, so it cannot be undone" onClick={() => onForget(String(i + 1), true)}>Erase</button>
+                <button type="button" className="memory-panel__danger" disabled={busy} aria-label={`Erase fact ${i + 1} permanently`} title="Forget and remove from history, so it cannot be undone" onClick={() => onForget(String(i + 1), true)}>Erase</button>
               </li>
             ))}
           </ol>
@@ -166,7 +166,7 @@ export function MemoryPanel({ data, message, busy, onConfirm, onReject, onForget
               <li key={`${f.text}|${f.extractedAt}`}>
                 <span>{f.text}</span>
                 {i < restorable && onRestoreArchived && <button type="button" disabled={busy} aria-label={`Restore archived fact ${i + 1}`} onClick={() => onRestoreArchived(String(i + 1))}>Restore</button>}
-                <button type="button" disabled={busy} aria-label={`Erase archived fact ${i + 1}`} onClick={() => onForgetArchived(String(i + 1))}>Erase</button>
+                <button type="button" className="memory-panel__danger" disabled={busy} aria-label={`Erase archived fact ${i + 1}`} onClick={() => onForgetArchived(String(i + 1))}>Erase</button>
               </li>
             ))}
           </ol>
