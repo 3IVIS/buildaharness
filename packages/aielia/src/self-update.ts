@@ -11,7 +11,7 @@
  * exercise the whole download → verify → replace flow against a local mock HTTP server.
  */
 import { createHash } from 'node:crypto'
-import { createWriteStream, existsSync, mkdirSync, readFileSync, renameSync, chmodSync, rmSync, writeFileSync } from 'node:fs'
+import { createReadStream, createWriteStream, existsSync, mkdirSync, readFileSync, renameSync, chmodSync, rmSync, writeFileSync } from 'node:fs'
 import { homedir } from 'node:os'
 import { dirname, join } from 'node:path'
 import { Readable } from 'node:stream'
@@ -325,6 +325,9 @@ async function downloadTo(fetchFn: typeof fetch, url: string, dest: string, allo
   // that ended up served over plain http (a downgrade redirect).
   if (res.url) assertHttps(res.url, allowInsecureHttp)
   const hash = createHash('sha256')
+  // Start from nothing and refuse to write through anything already at the path (a planted symlink,
+  // or another `aielia update` mid-download): 'wx' fails instead of following/sharing it.
+  rmSync(dest, { force: true })
   await pipeline(
     Readable.fromWeb(res.body as unknown as WebReadableStream<Uint8Array>),
     async function* (source: AsyncIterable<Buffer>) {
@@ -333,8 +336,15 @@ async function downloadTo(fetchFn: typeof fetch, url: string, dest: string, allo
         yield chunk
       }
     },
-    createWriteStream(dest),
+    createWriteStream(dest, { flags: 'wx' }),
   )
+  return hash.digest('hex')
+}
+
+/** sha256 of the file as it is on disk right now — what `replaceBinary` will actually install, not what the stream carried. */
+async function sha256OfFile(path: string): Promise<string> {
+  const hash = createHash('sha256')
+  for await (const chunk of createReadStream(path)) hash.update(chunk)
   return hash.digest('hex')
 }
 
@@ -407,6 +417,9 @@ export async function runUpdateCommand(input: { dryRun?: boolean } & SelfUpdateO
     const sidecar = await fetchSidecarHash(fetchFn, asset.url, insecure)
     const expected = asset.sha256 ?? sidecar
     if (!expected) throw new Error('No checksum available for this release — refusing to install an unverified binary')
+    // Re-hash what is on disk: the streamed hash alone can't see the file being altered after it was written.
+    const onDisk = await sha256OfFile(tmp)
+    if (onDisk !== actual) throw new Error('Downloaded file changed on disk during verification — download discarded')
     if (actual !== expected) throw new Error(`Checksum mismatch (expected ${expected}, got ${actual}) — download discarded`)
     if (asset.sha256 && sidecar && sidecar !== asset.sha256) {
       throw new Error('Checksum sidecar disagrees with the release manifest — download discarded')

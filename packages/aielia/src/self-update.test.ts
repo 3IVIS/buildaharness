@@ -1,7 +1,7 @@
 import { describe, it, expect, beforeEach, afterEach } from 'vitest'
 import { createServer, type Server } from 'node:http'
 import { createHash } from 'node:crypto'
-import { mkdtempSync, writeFileSync, readFileSync, existsSync, rmSync, statSync } from 'node:fs'
+import { mkdtempSync, writeFileSync, readFileSync, existsSync, rmSync, statSync, symlinkSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import type { AddressInfo } from 'node:net'
@@ -138,6 +138,16 @@ describe('self-update against a local mock server', () => {
     expect(statSync(join(dir, 'aielia')).mode & 0o111).not.toBe(0)
     expect(existsSync(join(dir, 'aielia.update.tmp'))).toBe(false)
     expect(logs.join('\n')).toContain('0.3.1 → 0.4.0')
+  })
+
+  it('does not write through a symlink planted at the temp download path', async () => {
+    publishManifest()
+    const victim = join(dir, 'victim.txt')
+    writeFileSync(victim, 'precious')
+    symlinkSync(victim, join(dir, 'aielia.update.tmp'))
+    expect(await runUpdateCommand(opts())).toBe(0)
+    expect(readFileSync(victim, 'utf8')).toBe('precious')
+    expect(readFileSync(join(dir, 'aielia'))).toEqual(NEW_BIN)
   })
 
   it('--dry-run reports the update but downloads nothing and leaves the binary alone', async () => {
