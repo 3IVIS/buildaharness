@@ -141,13 +141,14 @@ export function replyAuditNotice(audit: ReplyAudit, actions: string[]): string |
 }
 
 /**
- * `AIELIA_REPLY_AUDIT` gate. Default ON (one extra bounded LLM call per successful turn); `0`/`false`/`off`/`no`/`disabled`
+ * `AIELIA_REPLY_AUDIT` gate. Default ON outside vitest (one extra bounded LLM call per successful turn); `0`/`false`/`off`/`no`/`disabled`
  * turns it off. Same shape as `semanticGroundingEnabled()`.
  */
 export function replyAuditEnabled(env?: Record<string, string | undefined>): boolean {
   const source = env ?? (typeof process !== 'undefined' ? process.env : {})
   const raw = String(source.AIELIA_REPLY_AUDIT ?? '').trim().toLowerCase()
-  if (raw === '') return true
+  // Under vitest the audit stays off unless asked for: scripted-LLM tests count model calls (root `vitest run` ignores the package config).
+  if (raw === '') return source.VITEST === undefined
   return !['0', 'false', 'off', 'no', 'disabled'].includes(raw)
 }
 
