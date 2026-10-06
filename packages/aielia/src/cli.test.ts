@@ -5,7 +5,7 @@ import { InMemoryAdapter } from '@buildaharness/runtime'
 import { HarnessRuntime, saveHarnessCheckpoint, type Task, type AskResponse } from '@buildaharness/harness'
 import { PersonalAssistant } from './assistant.js'
 import { createScriptedLLMClient } from './scripted-llm-client.js'
-import { runCli, type RunCliOptions, type CliInstance } from './cli.js'
+import { runCli, StartupError, type RunCliOptions, type CliInstance } from './cli.js'
 import { DEFAULT_CONFIG, type ConfigStore, type AssistantConfig } from './config.js'
 import { classifyRiskLexical } from './risk-classifier.js'
 import { PLAN_LINE_PREFIX } from './cli-icons.js'
@@ -1610,5 +1610,25 @@ describe('/plan graph', () => {
     const lines = captureOutput()
     await cli.dispatchLine('/plan graph')
     expect(lines.join('\n')).toContain('No active plan for this session')
+  })
+})
+
+describe('invalid configuration fails loudly (benchmark 10-12: process exited silently under the TUI)', () => {
+  it('runCli rejects with a StartupError naming the problem and how to fix it, instead of calling process.exit', async () => {
+    const exit = vi.spyOn(process, 'exit').mockImplementation((() => { throw new Error('process.exit must not be called') }) as never)
+    vi.spyOn(console, 'log').mockImplementation(() => {})
+    const run = runCli({
+      dataDir: '/tmp/cli-test-unused',
+      backend: makeFakeBackend(),
+      remindersFile: '/tmp/cli-test-unused/reminders/reminders.json',
+      envOverrides: {},
+      input: new PassThrough(),
+      output: new Writable({ write: (_c, _e, cb) => cb() }),
+      configStore: makeConfigStore({ enableWeb: true }),
+    })
+    await expect(run).rejects.toBeInstanceOf(StartupError)
+    await expect(run).rejects.toThrow(/enableWeb requires braveApiKey/)
+    await expect(run).rejects.toThrow(/Fix it by setting the missing value/)
+    expect(exit).not.toHaveBeenCalled()
   })
 })

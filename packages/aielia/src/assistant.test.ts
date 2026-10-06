@@ -2408,6 +2408,7 @@ describe('PersonalAssistant shell tools', () => {
       expect(count(logs, 'approval_request', /message-level gate/)).toBe(1)
       expect(count(logs, 'approval_decision', /approved message-level gate/)).toBe(1)
       expect(logs.filter((e) => e.kind === 'user_message')).toHaveLength(1)
+      expect((await assistant.getTranscript('log-2')).filter((m) => m.role === 'user' && m.content === MSG)).toHaveLength(1)
     })
 
     it('a declined message-level gate logs the decision', async () => {
@@ -2421,6 +2422,11 @@ describe('PersonalAssistant shell tools', () => {
       await assistant.turn('Send an email to my boss saying I quit.', { sessionId: 'log-3' })
       await assistant.recordDeclinedRequest('log-3', 'Send an email to my boss saying I quit.', 'needs approval')
       expect(count(logs, 'approval_decision', /declined message-level gate/)).toBe(1)
+      expect(count(logs, 'approval_request', /message-level gate/)).toBe(1)
+      expect(logs.filter((e) => e.kind === 'user_message')).toHaveLength(1)
+      const transcript = await assistant.getTranscript('log-3')
+      expect(transcript.filter((m) => m.role === 'user')).toHaveLength(1)
+      expect(transcript.filter((m) => m.role === 'assistant')).toHaveLength(1)
     })
 
     it('a chained second action surfaced after the first resolves gets its own approval_request', async () => {
