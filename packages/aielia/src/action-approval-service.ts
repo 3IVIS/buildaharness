@@ -37,6 +37,23 @@ export interface ResumeOptions {
 /** How many prior transcript messages the fallback synthesis call sees. */
 const SYNTHESIS_HISTORY_MESSAGES = 20
 
+/** One short clause for an applied action, for the turn's action record. */
+function describeAppliedAction(applied: { kind: string; path?: string; command?: string; to?: string; subject?: string; execution?: { exitCode?: number | null } }): string | undefined {
+  if (applied.kind === 'write') return `wrote ${applied.path}`
+  if (applied.kind === 'shell') return `ran \`${applied.command}\` (exit code ${applied.execution?.exitCode ?? 'n/a'})`
+  if (applied.kind === 'email') return `sent an email to ${applied.to} ("${applied.subject}")`
+  return undefined
+}
+
+/**
+ * Appended to the assistant's stored reply for a turn that carried out approved actions. Tool calls and
+ * results are not kept in the transcript, so without it a later "did you already touch X?" had only the
+ * model's prose to go on and it denied having written anything.
+ */
+export function actionRecordSuffix(actions: string[]): string {
+  return actions.length === 0 ? '' : `\n\n[Recorded by the system, not part of the reply — actions carried out this turn: ${actions.join('; ')}.]`
+}
+
 const STAGED_TOOL_NAMES = new Set(['write_file', 'run_shell_command', 'send_email'])
 
 /**
@@ -108,7 +125,7 @@ export class ActionApprovalService {
       // to just this action instead.
       const earlierActionRan = loopState?.messages.some((m) => m.role === 'assistant' && m.toolCalls?.some((c) => STAGED_TOOL_NAMES.has(c.name))) === true
       const reply = record?.chainedFrom || earlierActionRan ? 'Cancelled — that additional action was not run.' : 'Cancelled — nothing was written or run.'
-      await this.session.appendTranscriptMessage(sessionId, transcriptKey, { role: 'assistant', content: reply })
+      await this.session.appendTranscriptMessage(sessionId, transcriptKey, { role: 'assistant', content: reply + actionRecordSuffix(loopState?.actions ?? []) })
       if (record?.nextPendingActionId) {
         const chained = await this.loadChainedApproval(backend, workspaceRoot, record.nextPendingActionId, reply)
         if (chained) return chained
@@ -254,18 +271,20 @@ export class ActionApprovalService {
 
     // Hand the result back to the model inside the loop that asked for it, so the turn carries on
     // (more reads, further approvals, a real final answer) instead of ending on one command.
+    const thisAction = describeAppliedAction(applied)
+    const actionsSoFar = [...(loopState?.actions ?? []), ...(thisAction ? [thisAction] : [])]
     if (loopState && applied.kind !== 'revert') {
       let loopResult: ToolLoopResult | undefined
       try {
         const toolResult = applied.kind === 'shell' ? transcriptContent : reply
-        loopResult = await this.agentLoop.resumeToolLoop(loopState, toolResult, resume.onToken, resume.onToolStep, accumulateLocalUsage)
+        loopResult = await this.agentLoop.resumeToolLoop(loopState, toolResult, resume.onToken, resume.onToolStep, accumulateLocalUsage, actionsSoFar)
       } catch (err) {
         // The action already ran: never lose its outcome to a failed model call. Falls back to the
         // raw result already assigned above, like a failed synthesis does.
         console.error('[resume tool loop failed]', err)
       }
       if (loopResult?.kind === 'final') {
-        await this.session.appendTranscriptMessage(sessionId, transcriptKey, { role: 'assistant', content: loopResult.content })
+        await this.session.appendTranscriptMessage(sessionId, transcriptKey, { role: 'assistant', content: loopResult.content + actionRecordSuffix(actionsSoFar) })
         return { status: 'ok', reply: loopResult.content, usage, sources: loopResult.sources.length > 0 ? loopResult.sources : undefined }
       }
       if (loopResult) {
@@ -276,7 +295,8 @@ export class ActionApprovalService {
       }
     }
 
-    await this.session.appendTranscriptMessage(sessionId, transcriptKey, { role: 'assistant', content: transcriptContent })
+    const recordSuffix = applied.kind === 'shell' || loopState ? actionRecordSuffix(actionsSoFar) : ''
+    await this.session.appendTranscriptMessage(sessionId, transcriptKey, { role: 'assistant', content: transcriptContent + recordSuffix })
     if (applied.nextPendingActionId) {
       const chained = await this.loadChainedApproval(backend, workspaceRoot, applied.nextPendingActionId, reply)
       if (chained) return chained

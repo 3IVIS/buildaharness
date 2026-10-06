@@ -1326,7 +1326,16 @@ export class PersonalAssistant {
     // Set on a tool-less turn, where the reply is drafted BEFORE the harness runs: the explanations are asked for up front so the
     // draft can see them, and the harness is handed the same answer instead of asking again. undefined = not asked.
     let precomputedHypotheses: SemanticHypothesisProposal[] | null | undefined
-    const takeProposerNotes = (): string[] => [...(steeringAdapter?.takeNotes() ?? []), ...reviewNotes.splice(0), ...recoveryNotes.splice(0), ...hypothesisNotes.splice(0), ...revisionNotes.splice(0)]
+    // A steering note handed to the model is a user message in its own right: log it once and queue it for the transcript.
+    const takeSteeringNotes = (): string[] => {
+      const taken = steeringAdapter?.takeNotes() ?? []
+      for (const note of taken) {
+        this.onDebugLog?.({ kind: 'user_message', sessionId, content: note })
+        this.session.recordAbsorbedSteering(sessionId, note)
+      }
+      return taken
+    }
+    const takeProposerNotes = (): string[] => [...takeSteeringNotes(), ...reviewNotes.splice(0), ...recoveryNotes.splice(0), ...hypothesisNotes.splice(0), ...revisionNotes.splice(0)]
     // R3 of the internal plan: set only on the flag-ON, non-batch,
     // non-trivial path below — passed to harnessBridge.run() as the toolExecutors 'default' entry
     // instead of precomputing draftReply via AgentLoop.runToolLoop up front, so the harness's own

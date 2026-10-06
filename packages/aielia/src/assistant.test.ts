@@ -2061,7 +2061,8 @@ describe('PersonalAssistant shell tools', () => {
     // The model's own synthesized answer is stored plainly (it's the assistant's own words,
     // not raw untrusted content) — no tag markup needed for a future turn to read it safely.
     const transcript = await assistant.getTranscript('synthesis-test')
-    expect(transcript.at(-1)?.content).toBe(synthesizedAnswer)
+    expect(transcript.at(-1)?.content.startsWith(synthesizedAnswer)).toBe(true)
+    expect(transcript.at(-1)?.content).toContain('ran `grep -rl "nodeExecutionOrder" packages/harness/src` (exit code 0)')
   })
 
   it('falls back to the raw command dump instead of trusting a synthesis reply that leaks unparsed tool-call syntax (e.g. OpenRouter deepseek/deepseek-v4-flash-0731)', async () => {
@@ -2133,7 +2134,10 @@ describe('PersonalAssistant shell tools', () => {
 
     // One user message and one assistant answer for the whole turn.
     const transcript = await assistant.getTranscript('resume-loop')
-    expect(transcript).toEqual([{ role: 'user', content: MSG }, { role: 'assistant', content: review }])
+    expect(transcript.map((m) => m.role)).toEqual(['user', 'assistant'])
+    expect(transcript[0].content).toBe(MSG)
+    expect(transcript[1].content.startsWith(review)).toBe(true)
+    expect(transcript[1].content).toContain('ran `git status --short` (exit code 0); ran `git diff` (exit code 0)')
   })
 
   it('a multi-step edit continues across approvals in one turn: read -> write (approve) -> write (approve) -> final answer, and the user message is logged once', async () => {
@@ -2170,6 +2174,81 @@ describe('PersonalAssistant shell tools', () => {
     expect(logs.filter((e) => e.kind === 'user_message' && e.content === MSG)).toHaveLength(1)
     // The activity log's tool_call entry for an approved write carries the tool result after the arrow.
     expect(logs.some((e) => e.kind === 'tool_call' && e.content.startsWith('write_file({"path":"rate_limit.py"}) →\nWrote "rate_limit.py".'))).toBe(true)
+  })
+
+  it('a message queued mid-turn and folded into the running turn is logged and stored as its own user message, once, in order (benchmark 06)', async () => {
+    class SteerAwareLLM extends ScriptedToolLLMClient {
+      async callChatStructured(messages: ChatMessage[], tools?: ToolDefinition[], options?: ChatOptions): Promise<LLMStructuredResponse> {
+        const system = String(messages[0]?.content ?? '')
+        if (String(messages[1]?.content ?? '').includes('"currentGoal"')) return { content: '{"scopeRelation":"SAME_TASK","urgency":"IMMEDIATE"}' }
+        if (system.includes('existing goal threads')) return { content: '{"matchedGoalId":null,"ambiguous":false}' }
+        if (system.includes('propose 0-3 concrete, actionable')) return { content: '{"suggestions":[]}' }
+        return super.callChatStructured(messages, tools, options)
+      }
+    }
+    const backend = makeFakeBackend()
+    await backend.writeTextFile(`${ROOT}/auth.py`, 'x\n')
+    const scripted = [
+      { content: '', toolCalls: [{ id: 'r1', name: 'read_file', input: { path: 'auth.py' } }] },
+      { content: '', toolCalls: [{ id: 'w1', name: 'write_file', input: { path: 'auth.py', content: 'y\n' } }] },
+      { content: 'Done, auth.py only.' },
+    ]
+    let i = 0
+    const llm = new SteerAwareLLM(() => scripted[i++] as LLMStructuredResponse)
+    const logs: { kind: string; content: string }[] = []
+    const assistant = new PersonalAssistant({
+      llmClient: llm,
+      fileTools: { backend, workspaceRoot: ROOT },
+      shellTools: { backend, workspaceRoot: ROOT, executeCommand: vi.fn() },
+      onDebugLog: (e) => logs.push(e),
+    })
+    const channel = new LiveSteeringChannel()
+    const MSG = 'add a log line to every handler'
+    const STEER = 'wait, only do auth.py'
+    channel.enqueue(STEER)
+
+    const first = await assistant.turn(MSG, { sessionId: 'steer', steeringChannel: channel })
+    const final = first.status === 'needs_approval'
+      ? await assistant.turn(MSG, { sessionId: 'steer', steeringChannel: channel, approved: true, pendingActionId: first.pendingActionId })
+      : first
+    expect(final.reply).toBe('Done, auth.py only.')
+
+    // It reached the model as a note...
+    expect(llm.receivedMessages.flat().some((m) => m.role === 'user' && m.content.includes(STEER))).toBe(true)
+    // ...and is recorded exactly once everywhere, between the turn's own message and its reply.
+    expect(logs.filter((e) => e.kind === 'user_message' && e.content === STEER)).toHaveLength(1)
+    const transcript = await assistant.getTranscript('steer')
+    expect(transcript.map((m) => m.role + ':' + m.content.split('\n')[0].slice(0, 20))).toEqual([
+      'user:' + MSG.slice(0, 20),
+      'user:' + STEER.slice(0, 20),
+      'assistant:Done, auth.py only.',
+    ])
+    expect(channel.pendingCount).toBe(0)
+  })
+
+  it('the stored reply of a turn that carried out approved actions records them, so a later "did you touch X?" has something to go on (benchmark 06)', async () => {
+    const backend = makeFakeBackend()
+    const executeCommand = vi.fn().mockResolvedValue({ output: 'ok\n', exitCode: 0, timedOut: false })
+    const llm = scriptedResponses([
+      { content: '', toolCalls: [{ id: 'w1', name: 'write_file', input: { path: 'auth.py', content: 'y\n' } }] },
+      { content: '', toolCalls: [{ id: 'c1', name: 'run_shell_command', input: { command: 'python -m compileall .' } }] },
+      { content: 'Done.' },
+    ])
+    const assistant = new PersonalAssistant({
+      llmClient: llm,
+      fileTools: { backend, workspaceRoot: ROOT },
+      shellTools: { backend, workspaceRoot: ROOT, executeCommand },
+    })
+    const a = await assistant.turn('edit auth', { sessionId: 'rec' })
+    const b = await assistant.turn('edit auth', { sessionId: 'rec', approved: true, pendingActionId: a.pendingActionId })
+    const c = await assistant.turn('edit auth', { sessionId: 'rec', approved: true, pendingActionId: b.pendingActionId })
+
+    // The user sees the plain reply; the transcript the model reads next turn also names what was done.
+    expect(c.reply).toBe('Done.')
+    const last = (await assistant.getTranscript('rec')).at(-1)?.content ?? ''
+    expect(last.startsWith('Done.')).toBe(true)
+    expect(last).toContain('wrote auth.py')
+    expect(last).toContain('ran `python -m compileall .` (exit code 0)')
   })
 
   it('dangerouslySkipPermissions runs the whole approved-command loop in one turn call', async () => {

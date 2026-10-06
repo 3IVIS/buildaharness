@@ -74,6 +74,8 @@ export interface ToolLoopPendingState {
   iterationsUsed: number
   toolCall: ToolCallResult
   assistantContent: string
+  /** Approved actions already carried out earlier in this same turn (see describeAppliedAction) — recorded in the transcript with the turn's final reply so later turns know what was done. */
+  actions?: string[]
 }
 
 export const toolLoopPendingKey = (pendingActionId: string): string => `loop-pending:${pendingActionId}`
@@ -775,7 +777,7 @@ export class AgentLoop {
    */
   private async persistPausedLoop(
     result: ToolLoopResult,
-    ctx: { sessionId: string; userMessage: string; riskHint: TurnIntentClassification['riskLevel']; messages: ChatMessage[]; sources: AssistantSource[]; iterationsUsed: number },
+    ctx: { sessionId: string; userMessage: string; riskHint: TurnIntentClassification['riskLevel']; messages: ChatMessage[]; sources: AssistantSource[]; iterationsUsed: number; actions?: string[] },
   ): Promise<ToolLoopResult> {
     if (result.kind !== 'needs_approval' || !result.resume) return result
     const { resume, ...rest } = result
@@ -788,6 +790,7 @@ export class AgentLoop {
       iterationsUsed: ctx.iterationsUsed,
       toolCall: resume.toolCall,
       assistantContent: resume.assistantContent,
+      actions: ctx.actions,
     }
     await this.memory.set(toolLoopPendingKey(rest.pendingActionId), state)
     return rest
@@ -806,6 +809,7 @@ export class AgentLoop {
     onToken?: (token: string) => void,
     onToolStep?: (step: AssistantToolStep) => void,
     onUsage?: (usage: TokenUsage) => void,
+    actions: string[] | undefined = state.actions,
   ): Promise<ToolLoopResult> {
     const messages: ChatMessage[] = [
       ...state.messages,
@@ -819,7 +823,7 @@ export class AgentLoop {
     )
     return this.persistPausedLoop(result, {
       sessionId: state.sessionId, userMessage: state.userMessage, riskHint: state.riskHint,
-      messages, sources, iterationsUsed: state.iterationsUsed + iterationsUsed,
+      messages, sources, iterationsUsed: state.iterationsUsed + iterationsUsed, actions,
     })
   }
 
