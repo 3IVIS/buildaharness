@@ -535,9 +535,24 @@ describe('PersonalAssistant', () => {
       const assistant = new PersonalAssistant({ llmClient: new NextStepAwareLLMClient(forged) })
       const result = await assistant.turn('add a test', { sessionId: 'forged-1' })
       expect(result.reply).not.toContain('Recorded by the system, not part')
-      expect(result.reply).toContain('the list was removed')
+      expect(result.auditNotice).toContain('the list was removed')
       const stored = (await assistant.getTranscript('forged-1')).filter((m) => m.role === 'assistant').map((m) => m.content).join('\n')
       expect(stored).not.toContain('wrote tests/test_x.py')
+    })
+
+    it('puts the reply audit note on the result and in the log when the audit flags the reply (N1b)', async () => {
+      class AuditAwareLLM extends NextStepAwareLLMClient {
+        async callChatStructured(messages: ChatMessage[], tools?: ToolDefinition[], options?: ChatOptions): Promise<LLMStructuredResponse> {
+          if (String(messages[0]?.content).includes('You audit one reply')) return { content: '{"claimsUnrecordedWork": true, "promisesWorkNotDone": false, "unverifiedOutsideFacts": false}' }
+          return super.callChatStructured(messages, tools, options)
+        }
+      }
+      const logs: { kind: string; content: string }[] = []
+      const assistant = new PersonalAssistant({ llmClient: new AuditAwareLLM('Done, I added the type hints.'), replyAudit: true, onDebugLog: (e) => logs.push(e) })
+      const result = await assistant.turn('add type hints', { sessionId: 'audit-1' })
+      expect(result.auditNotice).toContain('did not record this turn')
+      expect(logs.some((e) => e.kind === 'note' && e.content.startsWith('reply audit:'))).toBe(true)
+      expect(result.reply).not.toContain('Note from the system')
     })
 
     it('logs the suggestions as one next_steps entry per turn, and the proposer is told which language to write in', async () => {

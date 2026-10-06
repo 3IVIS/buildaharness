@@ -1,3 +1,4 @@
+import { auditReply, replyAuditNotice, replyAuditEnabled } from './reply-audit.js'
 import { containsActionRecord, stripActionRecord, FORGED_ACTION_RECORD_NOTE } from './action-record.js'
 import { deriveConsequentialTools } from '@buildaharness/harness'
 import { TOOL_EFFECT_CLASS } from './tool-effect-class.js'
@@ -329,6 +330,8 @@ export interface PersonalAssistantOptions {
    * that never asks for suggestions makes no extra call and sees no new field (INV-43).
    */
   goalGraphSuggestMode?: GoalGraphSuggestMode
+  /** Run the reply audit (reply-audit.ts) after each successful turn; defaults to the AIELIA_REPLY_AUDIT env gate (on). */
+  replyAudit?: boolean
   /**
    * Q2 of the internal plan — global-flag control point (tier 1 of
    * INV-29) for the ask-question mechanism. Undefined (the default) falls back to
@@ -412,6 +415,9 @@ export class PersonalAssistant {
   private readonly session: AssistantSession
   private readonly agentLoop: AgentLoop
   private readonly actionApproval: ActionApprovalService
+  /** Set when the reply was already logged by the reply-ready hook this turn (see AssistantSession.replyReadyHook). */
+  private replyLoggedEarly = false
+  private readonly replyAuditOn: boolean
   private readonly planService: PlanService
   private readonly planApproval: PlanApprovalService
   private readonly planDrafting: PlanDraftingService
@@ -512,6 +518,7 @@ export class PersonalAssistant {
       this.planService, this.session, this.onTrace, this.oneLoopMode, options.layerPolicyMode ?? 'static',
     )
     this.goalGraphSuggestMode = options.goalGraphSuggestMode ?? 'disabled'
+    this.replyAuditOn = options.replyAudit ?? replyAuditEnabled()
     const goalGraphSuggestMode = this.goalGraphSuggestMode
     this.responseService = new ResponseService(
       this.memoryService, this.session, this.planService, this.onTrace, this.memory,
@@ -525,6 +532,10 @@ export class PersonalAssistant {
         ? (input, onUsage) => checkReplyGrounding(input, this.llmClient, this.model, onUsage)
         : undefined,
     )
+    this.session.replyReadyHook = (sessionId, reply) => {
+      this.replyLoggedEarly = true
+      this.onDebugLog?.({ kind: 'assistant_reply', sessionId, content: `[ok] ${stripActionRecord(reply)}` })
+    }
     this.askClarification = new AskClarificationService(this.memory, this.session, this.harnessBridge, this.responseService, this.onTrace)
 
     // Fire-and-forget, not awaited: a large pre-existing history must not delay this
@@ -598,6 +609,8 @@ export class PersonalAssistant {
     this.memoryReviewer.abort()
     const writesBefore = this.memoryService.writeCount
     this.onTrace?.({ kind: 'turn_start', sessionId, message: userMessage })
+    this.replyLoggedEarly = false
+    const actionsBefore = this.actionApproval.appliedActions.length
     // A pendingActionId call resumes a turn whose user message was already logged when it first
     // started (it only carries that message along), so logging it again duplicated every
     // approved turn's user_message in the activity log.
@@ -627,7 +640,38 @@ export class PersonalAssistant {
       // reply is the model imitating it (it claimed writes and test runs that never happened in benchmark scenarios 05 and 13).
       if (result.reply && containsActionRecord(result.reply)) {
         this.onDebugLog?.({ kind: 'note', sessionId, content: 'the reply contained a forged "Recorded by the system" action list; removed' })
-        result.reply = `${stripActionRecord(result.reply)}\n\n${FORGED_ACTION_RECORD_NOTE}`
+        result.reply = stripActionRecord(result.reply)
+        result.auditNotice = FORGED_ACTION_RECORD_NOTE
+      }
+      // Reply audit: claims of work the system did not record, promises of work not done, unverified outside facts.
+      if (this.replyAuditOn && result.status === 'ok' && result.reply && result.reply.trim() !== '') {
+        const recorded = this.actionApproval.appliedActions.slice(actionsBefore)
+        const auditUsage: TokenUsage[] = []
+        const audit = await auditReply(
+          {
+            userMessage,
+            reply: result.reply,
+            actions: recorded,
+            sourcesRead: (result.sources ?? []).map((src) => `${src.tool}: ${src.path}`),
+            lookupUnavailable: this.actionApproval.networkDenied(sessionId),
+          },
+          this.llmClient,
+          this.model,
+          (u) => auditUsage.push(u),
+        )
+        const auditNotice = replyAuditNotice(audit, recorded)
+        if (auditNotice) {
+          result.auditNotice = result.auditNotice ? `${result.auditNotice}\n${auditNotice}` : auditNotice
+          this.onDebugLog?.({ kind: 'note', sessionId, content: `reply audit: ${auditNotice}` })
+        }
+        for (const u of auditUsage) {
+          result.usage = {
+            inputTokens: (result.usage?.inputTokens ?? 0) + u.inputTokens,
+            outputTokens: (result.usage?.outputTokens ?? 0) + u.outputTokens,
+            costUsd: u.costUsd !== undefined ? (result.usage?.costUsd ?? 0) + u.costUsd : result.usage?.costUsd,
+            cachedInputTokens: u.cachedInputTokens !== undefined ? (result.usage?.cachedInputTokens ?? 0) + u.cachedInputTokens : result.usage?.cachedInputTokens,
+          }
+        }
       }
       // Every return path leaves proposerKind unset — stamp the one runTurn resolved (defaults
       // to 'posthoc'). A path that already set it explicitly (the spend-cap early return above)
@@ -641,7 +685,7 @@ export class PersonalAssistant {
       // prompt-cache hits at all (several OpenAI-compatible providers, OpenRouter included, only
       // populate usage.prompt_tokens_details.cached_tokens for some underlying models).
       const cacheNote = result.usage?.cachedInputTokens !== undefined ? ` [cached: ${result.usage.cachedInputTokens}/${result.usage.inputTokens} input tokens]` : ''
-      this.onDebugLog?.({
+      if (!this.replyLoggedEarly || result.status !== 'ok') this.onDebugLog?.({
         kind: 'assistant_reply',
         sessionId,
         content: `[${result.status}]${result.riskLevel ? ` (${result.riskLevel})` : ''}${cacheNote} ${result.reply ?? (result.questions?.length ? formatAskQuestions(result.questions) : result.reason) ?? '(no reply)'}`,

@@ -1624,7 +1624,7 @@ export async function runCli(options: RunCliOptions = {}): Promise<CliInstance> 
       // `reply` itself to the screen — see assistant.ts's findContradictionNotice doc comment.
       const contradictionNotice = result.contradictionNotice ? `\n\n${result.contradictionNotice}` : ''
       // Same treatment for the change reviewer's advisory notice (see AssistantTurnResult.reviewNotice).
-      const reviewNotice = result.reviewNotice ? `\n\n${result.reviewNotice}` : ''
+      const reviewNotice = (result.reviewNotice ? `\n\n${result.reviewNotice}` : '') + (result.auditNotice ? `\n\n${result.auditNotice}` : '')
       // R7: the turn-end next-step options, under the reply. Remembered so a bare 1/2/3 typed as
       // the very next input runs that option (see dispatchOne); any other input clears them.
       lastNextSteps = result.nextSteps && result.nextSteps.length > 0 ? result.nextSteps : undefined

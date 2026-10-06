@@ -69,6 +69,14 @@ export class ActionApprovalService {
     private readonly onDebugLog: ((entry: DebugLogEntry) => void) | undefined,
   ) {}
 
+  /** Every write, command and email carried out through an approval, in order (a turn's slice is what the system recorded for it). */
+  readonly appliedActions: string[] = []
+  /** Sessions in which a command got the network-containment refusal. */
+  private readonly networkDeniedSessions = new Set<string>()
+  networkDenied(sessionId: string): boolean {
+    return this.networkDeniedSessions.has(sessionId)
+  }
+
   /** Resumes a staged action by ID instead of re-deriving *what to run* from a second LLM call — see T4 of the file-tools plan. `userMessage` is only used to synthesize an answer from a shell command's real output (see below); the command/content actually applied always comes from the staged record, never from a fresh model call. */
   async resolvePendingAction(sessionId: string, transcriptKey: string, pendingActionId: string, approved: boolean, userMessage: string, resume: ResumeOptions = {}): Promise<AssistantTurnResult> {
     // A batch-confirmation pause (see AgentLoop.runBatchToolLoop) is staged in `this.memory`, not
@@ -189,6 +197,7 @@ export class ActionApprovalService {
       // deny-all network allowlist turned any request in this command into a local 403 —
       // confirmed live to otherwise misattribute the block to the destination server.
       if (!shellTools?.networkAllowlist?.length && commandLooksLikeNetworkRequest(applied.command)) {
+        this.networkDeniedSessions.add(sessionId)
         rawOutput +=
           '\n\n[network-containment note: outbound network access from this command is denied by default ' +
           '(no hosts on the configured allowlist) — any HTTP response code or connection failure shown above for ' +
@@ -267,6 +276,7 @@ export class ActionApprovalService {
     // Hand the result back to the model inside the loop that asked for it, so the turn carries on
     // (more reads, further approvals, a real final answer) instead of ending on one command.
     const thisAction = describeAppliedAction(applied)
+    if (thisAction) this.appliedActions.push(thisAction)
     const actionsSoFar = [...(loopState?.actions ?? []), ...(thisAction ? [thisAction] : [])]
     if (loopState && applied.kind !== 'revert') {
       let loopResult: ToolLoopResult | undefined

@@ -375,6 +375,20 @@ export class AssistantSession {
   }
   private readonly absorbedSteering = new Map<string, string[]>()
 
+  /**
+   * Called by ResponseService the moment a turn's final reply is stored, before the slower post-reply work
+   * (fact recording, goal evidence, grounding check) that still has to finish inside the turn. The assistant uses it
+   * to put the reply in the activity log right away (benchmark issue N2).
+   */
+  replyReadyHook?: (sessionId: string, reply: string) => void
+  replyReady(sessionId: string, reply: string): void {
+    try {
+      this.replyReadyHook?.(sessionId, reply)
+    } catch {
+      // logging must never break a turn
+    }
+  }
+
   async appendTranscriptMessage(
     sessionId: string,
     transcriptKey: string,
