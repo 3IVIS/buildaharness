@@ -1,4 +1,5 @@
 #!/usr/bin/env node
+import { excludeAieliaStateFromGit } from './git-exclude.js'
 import { createInterface } from 'node:readline'
 import { writeFile } from 'node:fs/promises'
 import { realpathSync } from 'node:fs'
@@ -162,6 +163,9 @@ interface BuildAssistantDeps {
 
 async function buildAssistant(config: AssistantConfig, { backend, dataDir, remindersFile }: BuildAssistantDeps): Promise<PersonalAssistant> {
   const workspaceRoot = config.workspaceRoot ?? process.cwd()
+  // Aielia's state dirs must not show up in the user's `git status` or end up in their commits. Only for the real disk
+  // backend: an injected one (tests) does not write into the working tree, and must not edit a real repo's git config.
+  if (backend === defaultBackend) excludeAieliaStateFromGit(workspaceRoot)
   const search = (query: string) => braveSearch(query, config.braveApiKey as string)
 
   // `search` above is the proxy backend's injected web_search implementation (its manual
