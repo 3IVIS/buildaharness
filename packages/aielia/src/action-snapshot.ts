@@ -237,6 +237,9 @@ interface WalkState {
   snapshot: WorkspaceSnapshot
   gitignorePatterns: RegExp[]
   fileCount: number
+  /** Canonical workspace root, when the backend can resolve symlinks — entries resolving outside it are never read. */
+  realRoot?: string
+  backend: FsBackend
 }
 
 async function walk(backend: FsBackend, dir: string, state: WalkState): Promise<void> {
@@ -246,6 +249,21 @@ async function walk(backend: FsBackend, dir: string, state: WalkState): Promise<
     if (state.snapshot.truncated) return
     const path = `${dir}/${name}`
     let info: { isDirectory: boolean; size: number } | undefined
+    // backend.stat follows symlinks, so without this a link inside the workspace pointing outside it
+    // would have its target's files read and copied into the undo log (and a link loop would be
+    // walked until ELOOP). Anything that resolves outside the workspace is skipped, never read.
+    if (state.realRoot !== undefined && state.backend.realpath) {
+      try {
+        const real = await state.backend.realpath(path)
+        if (real !== state.realRoot && !real.startsWith(`${state.realRoot}/`)) {
+          state.snapshot.skipped.push({ path, reason: 'symlink resolving outside the workspace' })
+          continue
+        }
+      } catch {
+        state.snapshot.skipped.push({ path, reason: 'could not resolve this path' })
+        continue
+      }
+    }
     try {
       // backend.stat is asserted present by the caller (snapshotWorkspaceTree bails out before
       // ever calling walk() if it's missing) — the non-null assertion here just avoids repeating
@@ -334,7 +352,15 @@ export async function snapshotWorkspaceTree(backend: FsBackend, workspaceRoot: s
     // no extra patterns, not a reason to fail the whole snapshot.
   }
 
-  await walk(backend, workspaceRoot, { snapshot, gitignorePatterns, fileCount: 0 })
+  let realRoot: string | undefined
+  if (backend.realpath) {
+    try {
+      realRoot = await backend.realpath(workspaceRoot)
+    } catch {
+      realRoot = undefined
+    }
+  }
+  await walk(backend, workspaceRoot, { snapshot, gitignorePatterns, fileCount: 0, realRoot, backend })
   return snapshot
 }
 

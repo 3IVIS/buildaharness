@@ -283,3 +283,27 @@ describe('undo-log read/write', () => {
     expect(await backend.readTextFile(`${ROOT}/.undo-log/../secret.json`)).toBeDefined()
   })
 })
+
+describe('snapshotWorkspaceTree and symlinks', () => {
+  it('does not read files reached through a symlink that leaves the workspace', async () => {
+    const { mkdtemp, mkdir, writeFile, symlink, realpath, rm } = await import('node:fs/promises')
+    const { tmpdir } = await import('node:os')
+    const { createNodeFsBackend } = await import('./node-fs-backend.js')
+    const base = await mkdtemp(`${tmpdir()}/snap-symlink-`)
+    try {
+      const ws = `${base}/ws`
+      const outside = `${base}/outside`
+      await mkdir(ws)
+      await mkdir(outside)
+      await writeFile(`${outside}/secret.txt`, 'top secret')
+      await writeFile(`${ws}/inside.txt`, 'ok')
+      await symlink(outside, `${ws}/link`)
+      await symlink(`${outside}/secret.txt`, `${ws}/secret-link.txt`)
+      const snap = await snapshotWorkspaceTree(createNodeFsBackend(), await realpath(ws))
+      expect([...snap.files.values()]).toEqual(['ok'])
+      expect(snap.skipped.some((s) => s.path.endsWith('/link'))).toBe(true)
+    } finally {
+      await rm(base, { recursive: true, force: true })
+    }
+  })
+})
