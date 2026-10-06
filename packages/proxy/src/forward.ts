@@ -15,6 +15,8 @@ export async function forwardToProvider(c: Context): Promise<Response> {
   if (!apiKey) return c.json({ error: 'api key not configured' }, 500) as Response
 
   const forwardBody = { ...body }
+  // Anthropic's Messages API rejects a request without max_tokens; fill a default rather than 400.
+  if (provider === 'anthropic' && typeof forwardBody.max_tokens !== 'number') forwardBody.max_tokens = 4096
   if (!('stream' in body)) forwardBody.stream = true
   // Strip client-supplied Authorization before forwarding
   const headers: Record<string, string> = {

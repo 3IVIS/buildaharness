@@ -184,6 +184,7 @@ describe('POST /llm/chat', () => {
     const sent = (vi.mocked(fetch).mock.calls[0][1] as RequestInit).headers as Record<string, string>
     expect(sent['x-api-key']).toBe('test-anthropic-key')
     expect(sent['Authorization']).toBeUndefined()
+    expect(JSON.parse((vi.mocked(fetch).mock.calls[0][1] as RequestInit).body as string).max_tokens).toBe(4096)
   })
 
   it('returns 400 on a malformed body and 502 when the upstream is unreachable', async () => {
