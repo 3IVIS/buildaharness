@@ -669,7 +669,7 @@ export class PersonalAssistant {
         const auditNotice = replyAuditNotice(audit, recorded)
         // One automatic correction: the reply claimed or promised work with no recorded action, or stated outside
         // facts as verified. The model gets a nudge to do the work with its tools or to say plainly that it did not.
-        const nudge = options.auditRetry ? undefined : auditRetryNudge(audit, recorded.length)
+        const nudge = options.auditRetry ? undefined : auditRetryNudge(audit, recorded)
         if (nudge) {
           this.onDebugLog?.({ kind: 'note', sessionId, content: `reply audit: ${auditNotice ?? 'flagged'} — retrying once with a nudge` })
           return await this.turn(nudge, { ...options, sessionId, auditRetry: true, approved: undefined, pendingActionId: undefined, pendingClarificationId: undefined, planApprovalId: undefined })

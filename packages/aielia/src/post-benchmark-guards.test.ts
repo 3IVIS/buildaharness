@@ -49,3 +49,16 @@ describe('out of steps (R1)', () => {
     expect(OUT_OF_STEPS_NUDGE).toContain('Do not call any tool')
   })
 })
+
+describe('audit retry nudge', () => {
+  const clean = { claimsUnrecordedWork: false, promisesWorkNotDone: false, unverifiedOutsideFacts: false, contradictsCommandOutput: false }
+  it('names what was recorded and picks the nudge by finding', async () => {
+    const { auditRetryNudge } = await import('./reply-audit.js')
+    expect(auditRetryNudge(clean, [])).toBeUndefined()
+    expect(auditRetryNudge({ ...clean, claimsUnrecordedWork: true }, ['ran `ls` (exit code 0)'])).toContain('only this was carried out this turn: ran `ls`')
+    expect(auditRetryNudge({ ...clean, claimsUnrecordedWork: true }, [])).toContain('no write or command was carried out')
+    expect(auditRetryNudge({ ...clean, promisesWorkNotDone: true }, ['wrote a.py'])).toContain('announcement of work to come')
+    expect(auditRetryNudge({ ...clean, contradictsCommandOutput: true }, [])).toContain('do not match what the command actually printed')
+    expect(auditRetryNudge({ ...clean, unverifiedOutsideFacts: true }, [])).toContain('outside sources')
+  })
+})

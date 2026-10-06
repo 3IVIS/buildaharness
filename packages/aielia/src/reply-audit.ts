@@ -130,12 +130,17 @@ export function replyAuditEnabled(env?: Record<string, string | undefined>): boo
 }
 
 /**
- * The message for the one automatic retry, or undefined when the reply needs none. A claim or promise of work with nothing
- * recorded asks for the work to be done now or the claim withdrawn; unverified outside facts ask for a corrected answer.
+ * The message for the one automatic retry, or undefined when the reply needs none. A claim or promise of work the system
+ * did not record asks for the work to be done now or the claim withdrawn; details that disagree with the command output
+ * or outside facts stated as verified ask for a corrected answer.
  */
-export function auditRetryNudge(audit: ReplyAudit, recordedCount: number): string | undefined {
-  if ((audit.claimsUnrecordedWork || audit.promisesWorkNotDone) && recordedCount === 0) {
-    return '[automatic reply check] Your last reply says you changed files, ran something, or are about to, but no write or command was carried out this turn. Do it now with your tools if it is still wanted; otherwise say plainly that you have not done it. Do not claim work you did not do.'
+export function auditRetryNudge(audit: ReplyAudit, recorded: string[]): string | undefined {
+  const what = recorded.length > 0 ? `only this was carried out this turn: ${recorded.join('; ')}` : 'no write or command was carried out this turn'
+  if (audit.claimsUnrecordedWork) {
+    return `[automatic reply check] Your last reply says you changed files or ran something, but ${what}. Do the missing work now with your tools if it is still wanted; otherwise say plainly what you have not done. Do not claim work you did not do.`
+  }
+  if (audit.promisesWorkNotDone) {
+    return `[automatic reply check] Your last reply ends on an announcement of work to come (${what}). Finish the work now with your tools if any is left, then reply with a short summary of what was done and what was not.`
   }
   if (audit.contradictsCommandOutput) {
     return '[automatic reply check] Your last reply gives details (test or file names, counts, results) that do not match what the command actually printed. Answer again using only the recorded command output, and re-run the command if you need more detail; do not invent or guess details.'
