@@ -80,7 +80,7 @@ function parseLeakedToolCallSyntax(content: string, tools?: ToolDefinition[]): T
   if (!tools || tools.length === 0) return undefined
   const validNames = new Set(tools.map((t) => t.name))
   const invokeRe = /<｜([^｜<>]{1,32})｜invoke name="([^"]+)"[^>]*>([\s\S]*?)<\/｜\1｜invoke>/g
-  const paramRe = /<｜([^｜<>]{1,32})｜parameter name="([^"]+)"[^>]*>([\s\S]*?)<\/｜\1｜parameter>/g
+  const paramRe = /<｜([^｜<>]{1,32})｜parameter name="([^"]+)"([^>]*)>([\s\S]*?)<\/｜\1｜parameter>/g
   const results: ToolCallResult[] = []
   let invokeMatch: RegExpExecArray | null
   let index = 0
@@ -91,7 +91,14 @@ function parseLeakedToolCallSyntax(content: string, tools?: ToolDefinition[]): T
     paramRe.lastIndex = 0
     let paramMatch: RegExpExecArray | null
     while ((paramMatch = paramRe.exec(body)) !== null) {
-      input[paramMatch[2]] = paramMatch[3].trim()
+      const raw = paramMatch[4].trim()
+      // DSML's own typing attribute: string="false" marks a JSON value (number, boolean, array, object);
+      // string="true" (or no attribute) is a literal string.
+      let value: unknown = raw
+      if (paramMatch[3].includes('string="false"')) {
+        try { value = JSON.parse(raw) } catch { value = raw }
+      }
+      input[paramMatch[2]] = value
     }
     results.push({ id: `leaked-tool-call-${index++}`, name, input })
   }

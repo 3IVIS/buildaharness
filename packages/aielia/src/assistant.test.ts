@@ -2251,6 +2251,40 @@ describe('PersonalAssistant shell tools', () => {
     expect(last).toContain('ran `python -m compileall .` (exit code 0)')
   })
 
+  const DSML_SAMPLE =
+    '<｜DSML｜tool_calls>\n<｜DSML｜invoke name="run_shell_command">\n' +
+    '<｜DSML｜parameter name="command" string="true">git diff --stat && echo "---" && git diff</｜DSML｜parameter>\n' +
+    '</｜DSML｜invoke>\n</｜DSML｜tool_calls>'
+
+  it.each([
+    ['output that is only markup', [DSML_SAMPLE], 'Real answer.'],
+    ['markup after some prose', ['Here is the ', 'answer.\n' + DSML_SAMPLE], 'Here is the answer.'],
+  ] as const)('never shows a model\'s raw DSML tool-call markup as the final reply after an approved command (%s)', async (_label, streamChunks, expected) => {
+    const executeCommand = vi.fn().mockResolvedValue({ output: ' M a.py\n', exitCode: 0, timedOut: false })
+    const { ctx } = makeShellTools(executeCommand)
+    const llm = scriptedResponses(
+      [
+        { content: '', toolCalls: [{ id: 'c1', name: 'run_shell_command', input: { command: 'git status --short' } }] },
+        { content: 'Real answer.' },
+      ],
+      [...streamChunks],
+    )
+    const assistant = new PersonalAssistant({ llmClient: llm, shellTools: ctx })
+    const tokens: string[] = []
+    const onToken = (t: string) => tokens.push(t)
+
+    const first = await assistant.turn('review my changes', { sessionId: 'dsml', onToken })
+    const final = await assistant.turn('review my changes', { sessionId: 'dsml', onToken, approved: true, pendingActionId: first.pendingActionId })
+
+    expect(final.status).toBe('ok')
+    expect(final.reply).not.toContain('DSML')
+    expect(final.reply).toBe(expected)
+    expect(tokens.join('')).not.toContain('DSML')
+    expect(tokens.join('')).toContain(expected)
+    const stored = (await assistant.getTranscript('dsml')).at(-1)?.content ?? ''
+    expect(stored).not.toContain('DSML')
+  })
+
   it('dangerouslySkipPermissions runs the whole approved-command loop in one turn call', async () => {
     const executeCommand = vi.fn().mockResolvedValue({ output: 'ok\n', exitCode: 0, timedOut: false })
     const { ctx } = makeShellTools(executeCommand)

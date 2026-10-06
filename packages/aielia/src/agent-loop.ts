@@ -1037,10 +1037,54 @@ export class AgentLoop {
         // backend's shape), where `messages` already carries the enriched tool-result
         // history, so re-asking here gets an equally-grounded answer, just delivered
         // token-by-token instead of all at once.
+        // The re-request carries no tools, so a model that wanted to call one (observed: deepseek's DSML
+        // markup after a resumed approval) can answer with its raw tool-call syntax. That must never reach
+        // the user: output is held back while it could still be such markup (it starts with '<'), and a
+        // streamed answer that turns out to be markup is replaced by the answer the tools-enabled call
+        // above already produced (`response.content`, checked clean at the top of this step).
         let streamed = ''
+        let held = ''
+        let released = false
+        let emitted = 0
+        const HOLD_LIMIT = 64
         for await (const token of this.llmClient.callChat(messages, { model: this.model(), onUsage })) {
           streamed += token
-          onToken(token)
+          if (released) {
+            // Emit only text that cannot be (the start of) tool-call markup: stop at a complete marker, and
+            // hold back a trailing '<...' whose tag has not closed yet.
+            const marker = UNPARSED_TOOL_CALL_PATTERN.exec(streamed)
+            let limit = marker ? marker.index : streamed.length
+            const open = streamed.lastIndexOf('<', limit - 1)
+            if (!marker && open >= emitted && !streamed.includes('>', open)) limit = open
+            if (limit > emitted) {
+              onToken(streamed.slice(emitted, limit))
+              emitted = limit
+            }
+            continue
+          }
+          held += token
+          const lead = held.trimStart()
+          // Markup is held to the end; anything else starting with '<' is let through once its tag has closed (or
+          // it is clearly not a tool-call tag), so ordinary HTML-ish answers still stream.
+          const couldBeMarkup = lead.startsWith('<') && (UNPARSED_TOOL_CALL_PATTERN.test(lead) || (!lead.includes('>') && lead.length < HOLD_LIMIT))
+          if (lead.length > 0 && !couldBeMarkup) {
+            released = true
+            onToken(held)
+            emitted = held.length
+          }
+        }
+        const markup = UNPARSED_TOOL_CALL_PATTERN.exec(streamed)
+        if (markup) {
+          if (!released) {
+            onToken(response.content)
+            return { done: true, result: { kind: 'final', content: response.content, sources } }
+          }
+          // Prose was already shown; keep it, drop the markup that follows.
+          streamed = streamed.slice(0, markup.index).trimEnd() || response.content
+        } else if (!released && held) {
+          onToken(held)
+        } else if (released && emitted < streamed.length) {
+          onToken(streamed.slice(emitted))
         }
         return { done: true, result: { kind: 'final', content: streamed, sources } }
       }
