@@ -1,3 +1,4 @@
+import { actionRecordSuffix, stripActionRecord } from './action-record.js'
 import {
   loadHarnessCheckpoint,
   deleteHarnessCheckpoint,
@@ -361,11 +362,51 @@ export class AssistantSession {
    * caught and logged, never thrown — a search-indexing problem must never be able to break an
    * ordinary turn or lose the transcript message itself.
    */
+  /**
+   * A message the user sent while a turn was running that the turn's model call already took into account
+   * (a mid-turn steering note). It belongs in the conversation as its own user message, in order: held here
+   * and written just before the next assistant message, i.e. after the running turn's own user message and
+   * before the reply it shaped. Without this the note vanished from the transcript.
+   */
+  recordAbsorbedSteering(sessionId: string, message: string): void {
+    const held = this.absorbedSteering.get(sessionId) ?? []
+    held.push(message)
+    this.absorbedSteering.set(sessionId, held)
+  }
+  private readonly absorbedSteering = new Map<string, string[]>()
+
+  /**
+   * Called by ResponseService the moment a turn's final reply is stored, before the slower post-reply work
+   * (fact recording, goal evidence, grounding check) that still has to finish inside the turn. The assistant uses it
+   * to put the reply in the activity log right away (benchmark issue N2).
+   */
+  replyReadyHook?: (sessionId: string, reply: string) => void
+  replyReady(sessionId: string, reply: string): void {
+    try {
+      this.replyReadyHook?.(sessionId, reply)
+    } catch {
+      // logging must never break a turn
+    }
+  }
+
   async appendTranscriptMessage(
     sessionId: string,
     transcriptKey: string,
-    message: { role: 'user' | 'assistant'; content: string },
+    input: { role: 'user' | 'assistant'; content: string; actionRecord?: string[] },
   ): Promise<void> {
+    // The action record is the system's, built from `actionRecord` (what really ran); a marker inside model-written
+    // text is an imitation and is dropped (see action-record.ts).
+    const message: { role: 'user' | 'assistant'; content: string } =
+      input.role === 'assistant'
+        ? { role: 'assistant', content: stripActionRecord(input.content) + actionRecordSuffix(input.actionRecord ?? []) }
+        : { role: 'user', content: input.content }
+    if (message.role === 'assistant') {
+      const held = this.absorbedSteering.get(sessionId)
+      if (held?.length) {
+        this.absorbedSteering.delete(sessionId)
+        for (const content of held) await this.appendTranscriptMessage(sessionId, transcriptKey, { role: 'user', content })
+      }
+    }
     await this.memory.set(transcriptKey, message satisfies ChatMessage, 'append')
     try {
       const counterKey = messageIndexCounterKey(sessionId)
@@ -487,6 +528,7 @@ export class AssistantSession {
    * things live outside a single harness run" section).
    */
   async clearSession(sessionId: string): Promise<void> {
+    this.absorbedSteering.delete(sessionId)
     await this.memory.delete(`transcript:${sessionId}`)
     await this.memory.delete(`facts:${sessionId}`)
     await this.memory.delete(`plan:${sessionId}`)

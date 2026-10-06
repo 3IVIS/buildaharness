@@ -73,9 +73,18 @@ export interface TuiLogState {
    * only a genuine harness event ever populates them.
    */
   waitingForOutput: boolean
+  /**
+   * True from `beginTurn()` until `endTurn()` — the whole time `dispatchLine()` is working on a turn,
+   * including the long silent stretches while a model call is in flight (after a tool read, the only
+   * thing on screen used to be a frozen `[step 1/15] Execution…` line, indistinguishable from a hang).
+   * The liveness line is driven by this, not by `waitingForOutput`, which clears on the first event.
+   */
+  turnInFlight: boolean
+  /** `Date.now()` of the turn's latest sign of life (`beginTurn()` or any handled event) — what the liveness line's elapsed counter counts from. Absent outside a turn. */
+  lastActivityAt?: number
 }
 
-const EMPTY_LOG: TuiLogState = { lines: [], progressText: '', transientText: '', waitingForOutput: false }
+const EMPTY_LOG: TuiLogState = { lines: [], progressText: '', transientText: '', waitingForOutput: false, turnInFlight: false }
 
 /** `writeToolStep`'s own indent+glyph (see cli.ts's `toolStepIcon`/cli-icons.ts) — matched after trimming so a `'line'` event's kind survives cli.ts adding/removing leading whitespace. Three possible glyphs since cli-icons.ts distinguishes a routine tool step, one that's itself proposing a state-changing action, and one `tool-policy.ts` denied before it executed — all three still classify as the same `'tool'` LineKind here, just with a different leading icon. */
 const TOOL_STEP_PREFIXES = [ICONS.toolStep, ICONS.proposalStep, ICONS.deniedStep]
@@ -126,6 +135,8 @@ export class EventLogBridge implements Store<TuiLogState> {
   private progressText = ''
   private transientText = ''
   private waitingForOutput = false
+  private turnInFlight = false
+  private lastActivityAt: number | undefined
   private snapshot: TuiLogState = EMPTY_LOG
   private listeners = new Set<() => void>()
 
@@ -139,13 +150,45 @@ export class EventLogBridge implements Store<TuiLogState> {
   getSnapshot = (): TuiLogState => this.snapshot
 
   private commit(): void {
-    this.snapshot = { lines: this.lines, progressText: this.progressText, transientText: this.transientText, waitingForOutput: this.waitingForOutput }
+    this.snapshot = {
+      lines: this.lines,
+      progressText: this.progressText,
+      transientText: this.transientText,
+      waitingForOutput: this.waitingForOutput,
+      turnInFlight: this.turnInFlight,
+      lastActivityAt: this.lastActivityAt,
+    }
     for (const listener of this.listeners) listener()
   }
 
   /** Marks the start of a turn's wait for its first output (see `TuiLogState.waitingForOutput`'s doc comment) — called by `TuiApp` right after a chat line or resolved prompt answer is submitted. */
   beginTurn(): void {
     this.waitingForOutput = true
+    this.turnInFlight = true
+    this.lastActivityAt = Date.now()
+    this.commit()
+  }
+
+  /** A resolved approval/clarification answer: output is expected again, but it says nothing about whether a turn is in flight — `TurnActivityTracker` owns that, so a prompt answer can never leave the indicator stuck on. */
+  expectOutput(): void {
+    this.waitingForOutput = true
+    this.commit()
+  }
+
+  /** Marks a turn in flight (idempotent); the elapsed counter counts from the first call. */
+  markBusy(): void {
+    if (this.turnInFlight) return
+    this.turnInFlight = true
+    this.lastActivityAt = Date.now()
+    this.commit()
+  }
+
+  /** Marks the turn finished (its `dispatchLine()` settled) — the liveness line stops. Safe to call when no turn is in flight. */
+  endTurn(): void {
+    if (!this.turnInFlight && !this.waitingForOutput) return
+    this.turnInFlight = false
+    this.waitingForOutput = false
+    this.lastActivityAt = undefined
     this.commit()
   }
 
@@ -176,6 +219,7 @@ export class EventLogBridge implements Store<TuiLogState> {
     // Any real event closes the "waiting for first output" gap — a spinner covering it makes no
     // sense once the turn has actually started producing something.
     this.waitingForOutput = false
+    if (this.turnInFlight) this.lastActivityAt = Date.now()
     if (event.type === 'progress') {
       this.progressText = event.text
       this.commit()
@@ -216,6 +260,39 @@ export class EventLogBridge implements Store<TuiLogState> {
     // user's echo (pushTurnMargin's own no-op-on-consecutive-margin guard means this and the next
     // turn's pre-echo pushTurnMargin() call collapse into the same single line, never stacking).
     if (kind === 'assistant') this.pushTurnMargin()
+  }
+}
+
+/**
+ * The one place that decides whether the liveness indicator is on. A turn is in flight while any submitted
+ * `dispatchLine()` is unsettled OR the CLI reports a turn running (covering a message that was queued mid-turn
+ * — its own dispatch resolves at once — and deferred follow-up turns, which no dispatch promise covers).
+ * Every exit funnels through `settle()`, called from `finally`s, so no completion path can leave it on.
+ */
+export class TurnActivityTracker {
+  private dispatches = 0
+  private cliBusy = false
+  constructor(private readonly eventLog: EventLogBridge) {}
+
+  /** Wraps one `dispatchLine()` call. Always settles, whether it resolves or throws. */
+  async track<T>(run: () => Promise<T>): Promise<T> {
+    this.dispatches++
+    try {
+      return await run()
+    } finally {
+      this.dispatches--
+      this.settle()
+    }
+  }
+
+  setCliBusy(busy: boolean): void {
+    this.cliBusy = busy
+    if (busy) this.eventLog.markBusy()
+    else this.settle()
+  }
+
+  private settle(): void {
+    if (this.dispatches === 0 && !this.cliBusy) this.eventLog.endTurn()
   }
 }
 
@@ -531,14 +608,26 @@ const SPINNER_FRAMES = ['⠋', '⠙', '⠹', '⠸', '⠼', '⠴', '⠦', '⠧', 
 /** How often the spinner advances a frame — fast enough to read as "alive," slow enough not to flood a redraw-on-every-frame terminal. */
 const SPINNER_INTERVAL_MS = 80
 
+/** Seconds without any new output before the liveness line starts counting — a short pause needs no number. */
+const LIVENESS_COUNTER_AFTER_S = 3
+
+/** "Thinking…" at first; once the wait is long enough to be worth noticing, "Working… 42s" — time since the turn's last sign of life. */
+export function formatLivenessLabel(elapsedMs: number, hasProgress: boolean): string {
+  const seconds = Math.max(0, Math.floor(elapsedMs / 1000))
+  if (seconds < LIVENESS_COUNTER_AFTER_S) return hasProgress ? 'Working…' : 'Thinking…'
+  return `Working… ${seconds}s`
+}
+
 /**
- * A minimal thinking/loading indicator for the gap between hitting Enter and the first real
- * output (report finding: "nothing shows... no spinner, no status line, unlike Pi/Codex") — shown
- * only while `TuiLogState.waitingForOutput` is true and cleared automatically the instant any real
- * `CaptureEvent` lands (see `EventLogBridge.handleEvent`), so it can never linger over genuine
- * progress/streamed output.
+ * The liveness indicator: shown for as long as a turn is in flight and nothing is streaming, so a
+ * working turn (a model call that takes 30-200 s after a tool read) is visibly different from a hung
+ * one — to a person and to a screen-quiet detector alike, since the spinner frame and the elapsed
+ * counter both keep changing. Replaces the former first-output-only "Thinking…" (report finding:
+ * "nothing shows... no spinner, no status line, unlike Pi/Codex"); it stays under the progress line
+ * rather than hiding when one arrives. Stops the moment the reply starts streaming, a prompt needs
+ * the user, or the turn ends (see `EventLogBridge.endTurn`).
  */
-function Spinner(): React.JSX.Element {
+function Spinner({ since, hasProgress }: { since: number | undefined; hasProgress: boolean }): React.JSX.Element {
   const [frame, setFrame] = useState(0)
   useEffect(() => {
     const id = setInterval(() => setFrame((f) => (f + 1) % SPINNER_FRAMES.length), SPINNER_INTERVAL_MS)
@@ -546,7 +635,7 @@ function Spinner(): React.JSX.Element {
   }, [])
   return (
     <Text dimColor>
-      {SPINNER_FRAMES[frame]} Thinking…
+      {SPINNER_FRAMES[frame]} {formatLivenessLabel(since === undefined ? 0 : Date.now() - since, hasProgress)}
     </Text>
   )
 }
@@ -627,7 +716,7 @@ export function TuiApp(props: TuiAppProps): React.JSX.Element {
       // rather than the bare, less legible key.
       const displayAnswer = pending?.options?.find((option) => option.key === line)?.label ?? line
       eventLog.pushEchoLine('> ', pending?.question !== undefined ? `${pending.question.trimEnd()} → ${displayAnswer}` : line)
-      eventLog.beginTurn()
+      eventLog.expectOutput()
       prompt.submit(line)
     },
     [eventLog, prompt, pending],
@@ -638,7 +727,8 @@ export function TuiApp(props: TuiAppProps): React.JSX.Element {
   }, [planGraph])
 
   const hasTransient = log.progressText.length > 0 || log.transientText.length > 0
-  const showSpinner = log.waitingForOutput && !hasTransient
+  // Alive-but-quiet: a turn is in flight, no reply is streaming, and nobody is being asked a question.
+  const showSpinner = (log.turnInFlight || log.waitingForOutput) && log.transientText.length === 0 && !pending
 
   const staticItems = graphView.mode === 'chat' ? log.lines : log.lines.slice(0, frozenLines.current)
   // One row short of the viewport on purpose: Ink treats a frame as fullscreen at height >= rows, and leaving fullscreen emits
@@ -664,13 +754,13 @@ export function TuiApp(props: TuiAppProps): React.JSX.Element {
   return (
     <Box flexDirection="column">
       <Static items={staticItems}>{(line, index) => <LogLineText key={index} line={line} width={width} />}</Static>
-      {showSpinner && <Spinner />}
       {hasTransient && (
         <Box flexDirection="column">
           {log.progressText.length > 0 && <Text dimColor>{log.progressText}</Text>}
           {log.transientText.length > 0 && <Text>{stripAssistantLabel(log.transientText)}</Text>}
         </Box>
       )}
+      {showSpinner && <Spinner since={log.lastActivityAt} hasProgress={log.progressText.length > 0} />}
       <Text dimColor>{'─'.repeat(Math.max(1, width))}</Text>
       {pending?.options ? (
         <SelectPrompt question={pending.question} options={pending.options} onSubmit={handleSubmitPrompt} />
@@ -752,6 +842,7 @@ export async function runTuiApp(options: RunTuiAppOptions = {}): Promise<void> {
   // Started before runCli() is ever called — runCli() itself prints the startup banner
   // (backend, capabilities, undo-log carryover) via plain console.log, which must land in the
   // Static scrollback like everything else, not leak to the real terminal underneath Ink's frame.
+  const activity = new TurnActivityTracker(eventLog)
   const restoreCapture = startCapture((event) => eventLog.handleEvent(event))
   // Screen-switch escapes go through the unpatched write, never the captured one (see PlanGraphBridge).
   const planGraph = new PlanGraphBridge((chunk) => void originalWrite(chunk))
@@ -762,6 +853,7 @@ export async function runTuiApp(options: RunTuiAppOptions = {}): Promise<void> {
     const inert = createInertStreams()
     instance = await runCli({
       ...options,
+      onTurnBusyChange: (busy) => activity.setCliBusy(busy),
       openPlanGraph: (nodes) => void planGraph.open(nodes),
       onPlanProgress: (tasks) => {
         if (planGraph.isOpen()) void instanceRef?.getPlanGraphNodes(tasks).then((nodes) => nodes && planGraph.update(nodes))
@@ -788,7 +880,10 @@ export async function runTuiApp(options: RunTuiAppOptions = {}): Promise<void> {
   await refreshStatus()
 
   const handleSubmitChat = (line: string): void => {
-    void instance.dispatchLine(line).then(refreshStatus)
+    void activity.track(async () => {
+      await instance.dispatchLine(line)
+      await refreshStatus()
+    })
   }
 
   let exiting = false

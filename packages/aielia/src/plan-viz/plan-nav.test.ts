@@ -71,3 +71,27 @@ describe('planNavigator', () => {
     expect(steps).toBeGreaterThan(10_000)
   })
 })
+
+describe('repeated vertical keys on a chain', () => {
+  // The site plan's shape: a single dependent at each step must be walkable with ↓ alone (and back up with ↑ alone).
+  const chain: VizNode[] = [
+    { id: 'a', label: 'a', status: 'pending', deps: [] },
+    { id: 'b', label: 'b', status: 'pending', deps: ['a'] },
+    { id: 'c', label: 'c', status: 'pending', deps: ['b'] },
+    { id: 'd', label: 'd', status: 'pending', deps: ['c'] },
+  ]
+
+  it('keeps moving down, then up, when every node has one dependent', () => {
+    const m = modelOf(chain)!
+    for (const nav of [planNavigator, referenceNavigator] as const) {
+      const model = nav === planNavigator ? m.model : m.kit
+      let s = nav.start(model, 'a')
+      const down: string[] = []
+      for (let i = 0; i < 3; i++) { s = nav.press(model, s, 'down'); down.push(s.cur) }
+      expect(down).toEqual(['b', 'c', 'd'])
+      const up: string[] = []
+      for (let i = 0; i < 3; i++) { s = nav.press(model, s, 'up'); up.push(s.cur) }
+      expect(up).toEqual(['c', 'b', 'a'])
+    }
+  })
+})

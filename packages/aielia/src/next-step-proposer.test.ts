@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest'
 import type { ChatMessage, ChatOptions, ILLMClient, LLMStructuredResponse, ToolDefinition } from '@buildaharness/runtime'
-import { proposeNextSteps, proposeTurnNextSteps, classifySuggestionPromotion } from './next-step-proposer.js'
+import { proposeNextSteps, proposeTurnNextSteps, classifySuggestionPromotion, suggestionLanguage } from './next-step-proposer.js'
 import type { GoalThread } from './goal-graph-store.js'
 
 class StructuredOnlyLLMClient implements ILLMClient {
@@ -230,5 +230,16 @@ describe('the bigger picture reaches both proposers', () => {
     expect(seen[0]).not.toContain('earlierConversation')
     expect(seen[0]).not.toContain('goalGraph')
     expect(seen[0]).not.toContain('stepsTaken')
+  })
+})
+
+describe('suggestionLanguage', () => {
+  it('names English outright for English user text', () => {
+    expect(suggestionLanguage(['run the tests again to confirm.'])).toBe('English')
+    expect(suggestionLanguage(['Ran 3 tests in 0.000s', 'fix this'])).toBe('English')
+  })
+  it('falls back to the generic instruction for other languages or too little text', () => {
+    expect(suggestionLanguage(['exécute les tests à nouveau'])).toBe("the language of the user's own messages")
+    expect(suggestionLanguage(['go'])).toBe("the language of the user's own messages")
   })
 })

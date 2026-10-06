@@ -113,6 +113,8 @@ export interface AssistantTurnResult {
   contradictionNotice?: string
   /** Set when the semantic change reviewer found the request conflicts with something the user stated earlier AND the answer could not be told so directly (a tool-less turn's draft already exists, so the proposer never reads the review note). Advisory only — the turn still completed. Mirrors `contradictionNotice`: a separate field, not folded into `reply`, because the CLI streams `reply` before the check runs. */
   reviewNotice?: string
+  /** Set when the reply audit (reply-audit.ts) found a claim of work the system did not record, a promise of work not done, or unverified facts about outside sources. Separate from `reply` for the same reason as `reviewNotice`. */
+  auditNotice?: string
   /**
    * An epistemic-honesty signal for replies that went through the harness loop (absent on the
    * triviality fast path, same "absent when unused" convention as trace/sources — a

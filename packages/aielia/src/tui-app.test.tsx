@@ -216,15 +216,71 @@ describe('TuiApp', () => {
     expect(raw).toContain('╭')
   })
 
-  it('shows a "Thinking…" spinner between submitting a chat line and the first output event, and hides it once output arrives (report finding: nothing shows in that gap today)', async () => {
-    const { eventLog, instance } = setup()
+  it('shows a "Thinking…" spinner between submitting a chat line and the first output event', async () => {
+    const { instance } = setup()
     await type(instance, 'hi')
     await key(instance, ENTER)
     await sleep()
     expect(strip(instance.lastFrame())).toContain('Thinking…')
-    eventLog.handleEvent({ type: 'progress', text: '[step 1/5] Gathering evidence…' })
+  })
+
+  it('keeps a liveness line (spinner + elapsed time) under a frozen progress line while a model call is in flight, and removes it when the turn ends', async () => {
+    vi.useFakeTimers({ toFake: ['Date'] })
+    try {
+      vi.setSystemTime(10_000)
+      const { eventLog, instance } = setup()
+      await type(instance, 'hi')
+      await key(instance, ENTER)
+      eventLog.handleEvent({ type: 'progress', text: '[step 1/15] Execution…' })
+      await sleep()
+      let frame = strip(instance.lastFrame())
+      expect(frame).toContain('[step 1/15] Execution…')
+      expect(frame).toMatch(/Working…/)
+      // 45 s of model silence later the line is still there and says how long.
+      vi.setSystemTime(55_000)
+      await sleep(120)
+      frame = strip(instance.lastFrame())
+      expect(frame).toContain('[step 1/15] Execution…')
+      expect(frame).toContain('Working… 45s')
+      eventLog.endTurn()
+      await sleep()
+      expect(strip(instance.lastFrame())).not.toContain('Working…')
+    } finally {
+      vi.useRealTimers()
+    }
+  })
+
+  it('renders nothing new once the turn has ended: identical frames, no ticker left running', async () => {
+    const { eventLog, instance } = setup()
+    await type(instance, 'hi')
+    await key(instance, ENTER)
+    eventLog.handleEvent({ type: 'progress', text: '[step 1/15] Execution…' })
+    await sleep(150)
+    const whileRunning = instance.writeCount()
+    await sleep(300)
+    expect(instance.writeCount()).toBeGreaterThan(whileRunning) // the spinner really does tick while a turn is in flight
+    eventLog.handleEvent({ type: 'line', lines: ['Aielia> done', ''], stream: 'stdout' })
+    eventLog.endTurn()
+    await sleep(100)
+    const idleFrame = instance.lastFrame()
+    const idleCount = instance.writeCount()
+    await sleep(500) // > 6 spinner intervals
+    expect(instance.writeCount()).toBe(idleCount)
+    expect(instance.lastFrame()).toBe(idleFrame)
+    expect(strip(idleFrame)).not.toMatch(/Working…|Thinking…/)
+  })
+
+  it('hides the liveness line while a reply is streaming and while an approval prompt waits for the user', async () => {
+    const { eventLog, prompt, instance } = setup()
+    await type(instance, 'hi')
+    await key(instance, ENTER)
+    eventLog.handleEvent({ type: 'token', text: '\nAielia> Hel' })
     await sleep()
-    expect(strip(instance.lastFrame())).not.toContain('Thinking…')
+    expect(strip(instance.lastFrame())).not.toMatch(/Thinking…|Working…/)
+    eventLog.handleEvent({ type: 'line', lines: ['lo', ''], stream: 'stdout' })
+    void prompt.askYesNo('Proceed? ')
+    await sleep()
+    expect(strip(instance.lastFrame())).not.toMatch(/Thinking…|Working…/)
   })
 })
 

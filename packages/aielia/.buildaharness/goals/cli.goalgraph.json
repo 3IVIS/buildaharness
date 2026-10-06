@@ -1,0 +1,64 @@
+{
+  "threads": [
+    {
+      "id": "976c2589-d14c-4d19-90b7-a7ea87aae970",
+      "status": "ACTIVE",
+      "templateName": null,
+      "successCriteria": "Nakasendo / Kiso Valley is locked as the hiking anchor with a concrete route (Magome–Tsumago–Nagiso, optional Narai/Yabuhara), day-by-day distances and post-town lodging, and rail + luggage-forwarding logistics that connect Tokyo and Kyoto without a major detour.",
+      "rationale": "Anchoring on the Nakasendo keeps the hiking on the existing Tokyo–Kyoto corridor, so it adds scenery and a cultural high point without forcing a separate side-trip — unlike alternatives such as the Kumano Kodo (far south, needs its own loop) or Kamikochi/Japan Alps (a northern detour off the main line). Structuring the plan as 'lock the segment → define days/distances → fit transport → book lodging' front-loads the decision that everything else depends on, so later booking and logistics steps don't have to be redone.",
+      "tasks": [
+        {
+          "id": "t1",
+          "description": "Lock Nakasendo / Kiso Valley as the hiking anchor and define the core route: Magome → Tsumago → Nagiso, with Narai/Yabuhara as an optional extension. Note why this beats alternatives (on Tokyo–Kyoto corridor, minimal detour).",
+          "depends_on": [],
+          "status": "PENDING",
+          "riskLevel": "LOW"
+        },
+        {
+          "id": "t2",
+          "description": "Set the number of hiking days and daily distances/stages, including where the optional extension day fits and the daily walking hours and elevation profile for each stage.",
+          "depends_on": [
+            "t1"
+          ],
+          "status": "PENDING",
+          "riskLevel": "LOW"
+        },
+        {
+          "id": "t3",
+          "description": "Choose post-town lodging (ryokan/minshuku/guesthouse) in Magome, Tsumago, and/or Nagiso, matched to the day stages, and identify booking windows for peak seasons.",
+          "depends_on": [
+            "t2"
+          ],
+          "status": "PENDING",
+          "riskLevel": "MEDIUM"
+        },
+        {
+          "id": "t4",
+          "description": "Fit the segment into the Tokyo–Kyoto route: rail access (Chuo/Shinano lines, Limited Express Shinano via Nagoya or Nagano), station-to-trailhead transfers, and luggage forwarding (takuhaibin) so bags skip the trail.",
+          "depends_on": [
+            "t2"
+          ],
+          "status": "PENDING",
+          "riskLevel": "MEDIUM"
+        },
+        {
+          "id": "t5",
+          "description": "Prepare on-trail logistics and contingencies: Nakasendo waymarker route maps, seasonal weather check, bear bells, cash for post towns, and a fallback plan if a stage is rained out.",
+          "depends_on": [
+            "t3",
+            "t4"
+          ],
+          "status": "PENDING",
+          "riskLevel": "MEDIUM"
+        }
+      ],
+      "mode": "active",
+      "executingOnPlan": false,
+      "createdAt": "2026-10-05T08:02:57.685Z",
+      "updatedAt": "2026-10-05T08:24:32.721Z"
+    }
+  ],
+  "activeThreadId": "976c2589-d14c-4d19-90b7-a7ea87aae970",
+  "createdAt": "2026-10-05T08:02:57.685Z",
+  "updatedAt": "2026-10-05T08:24:32.721Z"
+}
