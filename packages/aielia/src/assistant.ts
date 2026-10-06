@@ -434,6 +434,8 @@ export class PersonalAssistant {
   private replyLoggedEarly = false
   /** Automatic correction retries still allowed for the current user message; resumed (approval) turns share it so a retry cannot chain. */
   private auditRetryBudget = 1
+  /** Index into the action list where the current user message's actions start; an approval resume is a separate turn() call but the same user message. */
+  private userMessageActionsStart = 0
   private readonly replyAuditOn: boolean
   private readonly planService: PlanService
   private readonly planApproval: PlanApprovalService
@@ -627,8 +629,10 @@ export class PersonalAssistant {
     const writesBefore = this.memoryService.writeCount
     this.onTrace?.({ kind: 'turn_start', sessionId, message: userMessage })
     this.replyLoggedEarly = false
-    if (!options.pendingActionId && !options.auditRetry && !(options.approved === true && !options.pendingClarificationId && !options.planApprovalId)) this.auditRetryBudget = 1
-    const actionsBefore = this.actionApproval.appliedActions.length
+    if (!options.pendingActionId && !options.auditRetry && !(options.approved === true && !options.pendingClarificationId && !options.planApprovalId)) {
+      this.auditRetryBudget = 1
+      this.userMessageActionsStart = this.actionApproval.appliedActions.length
+    }
     // A pendingActionId call resumes a turn whose user message was already logged when it first
     // started (it only carries that message along), so logging it again duplicated every
     // approved turn's user_message in the activity log.
@@ -685,14 +689,14 @@ export class PersonalAssistant {
       })
       // Reply audit: claims of work the system did not record, promises of work not done, unverified outside facts.
       if (this.replyAuditOn && result.status === 'ok' && result.reply && result.reply.trim() !== '') {
-        const recorded = this.actionApproval.appliedActions.slice(actionsBefore)
+        const recorded = this.actionApproval.appliedActions.slice(this.userMessageActionsStart)
         const auditUsage: TokenUsage[] = []
         const audit = await auditReply(
           {
             userMessage,
             reply: result.reply,
             actions: recorded,
-            earlierActions: this.actionApproval.appliedActions.slice(0, actionsBefore),
+            earlierActions: this.actionApproval.appliedActions.slice(0, this.userMessageActionsStart),
             recentCommandOutputs: this.actionApproval.recentCommandOutputs,
             sourcesRead: (result.sources ?? []).map((src) => `${src.tool}: ${src.path}`),
             lookupUnavailable: this.actionApproval.networkDenied(sessionId),
