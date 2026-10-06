@@ -131,3 +131,33 @@ describe('FileSystemAdapter', () => {
     expect(elapsedMs).toBeLessThan(2000)
   })
 })
+
+describe('FileSystemAdapter key collisions and robustness', () => {
+  it('keeps two keys that sanitize to the same slug separate', async () => {
+    const adapter = new FileSystemAdapter({ backend: makeFakeBackend(), baseDir: '/data', namespace: 'ns' })
+    await adapter.set('a:b', 'first')
+    await adapter.set('a_b', 'second')
+    expect(await adapter.get('a:b')).toBe('first')
+    expect(await adapter.get('a_b')).toBe('second')
+    await adapter.delete('a:b')
+    expect(await adapter.get('a:b')).toBeUndefined()
+    expect(await adapter.get('a_b')).toBe('second')
+    await adapter.set('a_b', 'third', 'append')
+    expect(await adapter.get('a_b')).toEqual(['second', 'third'])
+  })
+
+  it('does not lose appends from overlapping set calls', async () => {
+    const adapter = new FileSystemAdapter({ backend: makeFakeBackend(), baseDir: '/data', namespace: 'ns' })
+    await Promise.all([1, 2, 3, 4].map((n) => adapter.set('list', n, 'append')))
+    expect(await adapter.get('list')).toEqual([1, 2, 3, 4])
+  })
+
+  it('search skips a corrupt file', async () => {
+    const backend = makeFakeBackend()
+    const adapter = new FileSystemAdapter({ backend, baseDir: '/data', namespace: 'ns' })
+    await adapter.set('ok', 'hello world')
+    await backend.writeTextFile('/data/ns/bad.json', '{trunc')
+    const results = await adapter.search('hello')
+    expect(results.map((r) => r.key)).toEqual(['ok'])
+  })
+})

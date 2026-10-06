@@ -76,8 +76,13 @@ export class IndexedDBAdapter implements MemoryAdapter {
 
   async set(key: string, value: unknown, mode = 'upsert'): Promise<void> {
     if (this.db) {
-      const existing = await this.db.entries.get(key)
-      await this.db.entries.put({ key, value: applyMode(existing?.value, value, mode) })
+      const db = this.db
+      // One transaction: an append is read-modify-write, and two overlapping calls (or two tabs)
+      // would otherwise each read the same array and one append would be lost.
+      await db.transaction('rw', db.entries, async () => {
+        const existing = await db.entries.get(key)
+        await db.entries.put({ key, value: applyMode(existing?.value, value, mode) })
+      })
       return
     }
     this.fallback!.set(key, applyMode(this.fallback!.get(key), value, mode))
