@@ -628,7 +628,10 @@ export class PersonalAssistant {
         const extra: TokenUsage[] = []
         const bigPicture = await this.nextStepContext(sessionId, { currentUserMessage: userMessage, sources: result.sources })
         const nextSteps = await proposeTurnNextSteps({ userMessage, reply: result.reply }, this.llmClient, this.goalGraphSuggestMode, this.model, (u) => extra.push(u), bigPicture)
-        if (nextSteps.length > 0) result.nextSteps = nextSteps
+        if (nextSteps.length > 0) {
+          result.nextSteps = nextSteps
+          this.onDebugLog?.({ kind: 'next_steps', sessionId, content: nextSteps.map((s, i) => `${i + 1}. ${s.description} [${s.confidence}]`).join('\n') })
+        }
         for (const u of extra) {
           result.usage = {
             inputTokens: (result.usage?.inputTokens ?? 0) + u.inputTokens,

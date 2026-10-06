@@ -80,7 +80,8 @@ const SYSTEM_PROMPT =
   'never stated or implied by the user (e.g. suggesting tests when none were mentioned at all); ' +
   '`low` if it is speculative or only loosely tied to the specific completed work (e.g. generic ' +
   '"consider refactoring" advice). `rationale` states in one sentence why this step follows from ' +
-  'the completed goal. Respond with JSON only: {"suggestions": [{"description": string, ' +
+  'the completed goal. Write `description` and `rationale` in the language the user\'s own messages are written in, ' +
+  'whatever language the other fields of this input happen to be in. Respond with JSON only: {"suggestions": [{"description": string, ' +
   '"confidence": "high"|"medium"|"low", "rationale": string}]}'
 
 function isSuggestion(value: unknown): value is NextStepSuggestion {

@@ -529,6 +529,25 @@ describe('PersonalAssistant', () => {
       expect(llm.nextStepCalls).toBe(1)
     })
 
+    it('logs the suggestions as one next_steps entry per turn, and the proposer is told to use the user\'s language', async () => {
+      const llm = new NextStepAwareLLMClient('It is 3pm in Tokyo.')
+      const prompts: string[] = []
+      const origStructured = llm.callChatStructured.bind(llm)
+      llm.callChatStructured = async (messages, tools, options) => {
+        if (String(messages[0]?.content).includes('propose 0-3 concrete, actionable')) prompts.push(String(messages[0]?.content))
+        return origStructured(messages, tools, options)
+      }
+      const logs: { kind: string; content: string }[] = []
+      const assistant = new PersonalAssistant({ llmClient: llm, goalGraphSuggestMode: 'enabled', onDebugLog: (e) => logs.push(e) })
+
+      await assistant.turn(fullTurn, { sessionId: 'ns-log' })
+
+      const entries = logs.filter((e) => e.kind === 'next_steps')
+      expect(entries).toHaveLength(1)
+      expect(entries[0].content).toBe('1. convert it to your timezone [high]\n2. check the time in Osaka too [medium]')
+      expect(prompts[0]).toMatch(/in the language the user's own messages are written in/)
+    })
+
     it('folds the proposer call into the turn usage', async () => {
       const llm = new NextStepAwareLLMClient('It is 3pm in Tokyo.')
       const off = await new PersonalAssistant({ llmClient: new NextStepAwareLLMClient('It is 3pm in Tokyo.') }).turn(fullTurn, { sessionId: 'ns-usage-off' })
