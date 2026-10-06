@@ -30,6 +30,13 @@ describe('BrowserConfigStore', () => {
     expect(await store.load()).toEqual({})
   })
 
+  it('a persisted value that is valid JSON but not an object falls back to {}', async () => {
+    for (const raw of ['null', '42', '[1,2]', '"x"']) {
+      localStorage.setItem('buildaharness.personal-assistant.config', raw)
+      expect(await new BrowserConfigStore().load()).toEqual({})
+    }
+  })
+
   it('a thrown localStorage.getItem is caught and load() falls back to {}', async () => {
     const store = new BrowserConfigStore()
     const spy = vi.spyOn(Storage.prototype, 'getItem').mockImplementation(() => {
