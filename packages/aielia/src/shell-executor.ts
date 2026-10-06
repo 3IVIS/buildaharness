@@ -92,6 +92,17 @@ export const runApprovedShellCommand: ShellCommandExecutor = async (
     let timedOut = false
     let settled = false
 
+    const finish = (exitCode: number | null): void => {
+      if (settled) return
+      settled = true
+      clearTimeout(timer)
+      resolvePromise({
+        output: truncateOutput(output, maxOutputBytes),
+        exitCode: timedOut ? null : exitCode,
+        timedOut,
+      })
+    }
+
     const timer = setTimeout(() => {
       timedOut = true
       try {
@@ -100,6 +111,13 @@ export const runApprovedShellCommand: ShellCommandExecutor = async (
       } catch {
         proc.kill('SIGKILL')
       }
+      // 'close' waits for every stdout/stderr pipe to end; a descendant that left the process group
+      // (setsid) keeps them open and would otherwise leave this promise pending forever.
+      setTimeout(() => {
+        proc.stdout?.destroy()
+        proc.stderr?.destroy()
+        finish(null)
+      }, 2000).unref?.()
     }, timeoutMs)
 
     // Keep only what truncateOutput could ever return (plus a little slack for multi-byte chars):
@@ -115,15 +133,6 @@ export const runApprovedShellCommand: ShellCommandExecutor = async (
       clearTimeout(timer)
       reject(err)
     })
-    proc.on('close', (exitCode: number | null) => {
-      if (settled) return
-      settled = true
-      clearTimeout(timer)
-      resolvePromise({
-        output: truncateOutput(output, maxOutputBytes),
-        exitCode: timedOut ? null : exitCode,
-        timedOut,
-      })
-    })
+    proc.on('close', (exitCode: number | null) => finish(exitCode))
   })
 }

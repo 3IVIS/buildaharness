@@ -70,6 +70,12 @@ describe('runApprovedShellCommand (real subprocess)', () => {
     expect(result.exitCode).toBeNull()
   }, 10_000)
 
+  it('still returns after the timeout when a descendant left the process group and holds the output pipes open', async () => {
+    // `setsid` puts the sleeper in its own session, out of reach of the group kill; it keeps stdout open.
+    const result = await runApprovedShellCommand('setsid sleep 4 & sleep 4', process.cwd(), { timeoutMs: 200 })
+    expect(result.timedOut).toBe(true)
+  }, 3500)
+
   it('truncates combined stdout/stderr past the byte cap', async () => {
     const result = await runApprovedShellCommand('yes x | head -c 5000', process.cwd(), { maxOutputBytes: 100 })
     expect(result.output.endsWith('(truncated)')).toBe(true)
