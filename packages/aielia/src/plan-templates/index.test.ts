@@ -110,3 +110,11 @@ describe('matchTemplateIfConfident', () => {
     expect(matchTemplateIfConfident('Help me plan and launch the new product roadmap.')).toBe('project_planning')
   })
 })
+
+describe('loadTemplate own-property lookup', () => {
+  it('does not resolve inherited Object.prototype members as templates', () => {
+    for (const name of ['constructor', 'toString', '__proto__', 'hasOwnProperty']) {
+      expect(() => loadTemplate(name)).toThrow(/Unknown plan template/)
+    }
+  })
+})

@@ -50,7 +50,10 @@ function activeTemplates(): Record<string, PlanTemplate> {
 }
 
 export function loadTemplate(name: string): PlanTemplate {
-  const template = activeTemplates()[name]
+  const all = activeTemplates()
+  // Own-property check: `name` can come from model output, and "constructor"/"toString" would
+  // otherwise resolve to an inherited Object.prototype member instead of throwing.
+  const template = Object.prototype.hasOwnProperty.call(all, name) ? all[name] : undefined
   if (!template) throw new Error(`Unknown plan template: "${name}"`)
   return template
 }
