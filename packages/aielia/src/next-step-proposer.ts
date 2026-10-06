@@ -80,9 +80,22 @@ const SYSTEM_PROMPT =
   'never stated or implied by the user (e.g. suggesting tests when none were mentioned at all); ' +
   '`low` if it is speculative or only loosely tied to the specific completed work (e.g. generic ' +
   '"consider refactoring" advice). `rationale` states in one sentence why this step follows from ' +
-  'the completed goal. Write `description` and `rationale` in the language the user\'s own messages are written in, ' +
-  'whatever language the other fields of this input happen to be in. Respond with JSON only: {"suggestions": [{"description": string, ' +
+  'the completed goal. Write `description` and `rationale` in the language named in `writeIn`. Respond with JSON only: {"suggestions": [{"description": string, ' +
   '"confidence": "high"|"medium"|"low", "rationale": string}]}'
+
+const ENGLISH_WORDS = new Set(['the', 'a', 'an', 'is', 'are', 'was', 'to', 'of', 'and', 'in', 'it', 'this', 'that', 'what', 'how', 'why', 'do', 'does', 'did', 'can', 'run', 'fix', 'add', 'for', 'with', 'my', 'me', 'you', 'please', 'any', 'there', 'now', 'again', 'ok', 'go', 'on', 'not', 'i'])
+
+/**
+ * Names the language the suggestions must be written in. The model drifted into Chinese, Spanish or French
+ * on English conversations when it was only told to "match the user's language", so English is named
+ * outright when the user's own text clearly is English (two distinct common English words); anything else
+ * keeps the generic instruction.
+ */
+export function suggestionLanguage(userTexts: string[]): string {
+  const seen = new Set<string>()
+  for (const w of userTexts.join(' ').toLowerCase().match(/[a-z']+/g) ?? []) if (ENGLISH_WORDS.has(w)) seen.add(w)
+  return seen.size >= 2 ? 'English' : "the language of the user's own messages"
+}
 
 function isSuggestion(value: unknown): value is NextStepSuggestion {
   if (typeof value !== 'object' || value === null) return false
@@ -115,6 +128,10 @@ async function generateNextStepSuggestions(
         {
           role: 'user',
           content: JSON.stringify({
+            writeIn: suggestionLanguage([
+              context.successCriteria,
+              ...(bigPicture?.conversation ?? []).filter((t) => t.role === 'user').map((t) => t.content),
+            ]),
             ...context,
             ...(bigPicture?.conversation ? { earlierConversation: bigPicture.conversation } : {}),
             ...(bigPicture?.stepsThisTurn ? { stepsTaken: bigPicture.stepsThisTurn } : {}),

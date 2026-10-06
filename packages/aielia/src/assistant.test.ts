@@ -13,6 +13,7 @@ import { listUndoLogEntries } from './action-snapshot.js'
 import { SCHOOL_DATES_BATCH_FIXTURE, fixtureUserMessage, fixtureStructuredResponses, fixtureWebSearch } from './batch-research-fixtures.js'
 import { classifyRiskLexical } from './risk-classifier.js'
 import { decompositionEnabled } from './turn-interpreter.js'
+import { suggestionLanguage } from './next-step-proposer.js'
 
 // This file predates the lexicalMode rollback (lexical-mode.ts's DEFAULT_LEXICAL_MODE) and its
 // many fixtures/dumb FakeLLMClients rely throughout on the lexical fact/negation-pair passes to
@@ -529,12 +530,16 @@ describe('PersonalAssistant', () => {
       expect(llm.nextStepCalls).toBe(1)
     })
 
-    it('logs the suggestions as one next_steps entry per turn, and the proposer is told to use the user\'s language', async () => {
+    it('logs the suggestions as one next_steps entry per turn, and the proposer is told which language to write in', async () => {
       const llm = new NextStepAwareLLMClient('It is 3pm in Tokyo.')
       const prompts: string[] = []
+      const payloads: string[] = []
       const origStructured = llm.callChatStructured.bind(llm)
       llm.callChatStructured = async (messages, tools, options) => {
-        if (String(messages[0]?.content).includes('propose 0-3 concrete, actionable')) prompts.push(String(messages[0]?.content))
+        if (String(messages[0]?.content).includes('propose 0-3 concrete, actionable')) {
+          prompts.push(String(messages[0]?.content))
+          payloads.push(String(messages[1]?.content))
+        }
         return origStructured(messages, tools, options)
       }
       const logs: { kind: string; content: string }[] = []
@@ -545,7 +550,8 @@ describe('PersonalAssistant', () => {
       const entries = logs.filter((e) => e.kind === 'next_steps')
       expect(entries).toHaveLength(1)
       expect(entries[0].content).toBe('1. convert it to your timezone [high]\n2. check the time in Osaka too [medium]')
-      expect(prompts[0]).toMatch(/in the language the user's own messages are written in/)
+      expect(prompts[0]).toMatch(/in the language named in `writeIn`/)
+      expect(JSON.parse(payloads[0]).writeIn).toBe(suggestionLanguage([fullTurn]))
     })
 
     it('folds the proposer call into the turn usage', async () => {
