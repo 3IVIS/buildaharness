@@ -98,7 +98,7 @@ export async function proposeCompetingExplanations(
         explanation: h.explanation.trim(),
         predicted_observations: asStrings(h.predicted_observations),
         ...(typeof h.separating_check === 'string' && h.separating_check.trim() ? { separating_check: h.separating_check.trim() } : {}),
-        ...(typeof h.confidence === 'number' ? { confidence: h.confidence } : {}),
+        ...(typeof h.confidence === 'number' && Number.isFinite(h.confidence) ? { confidence: Math.min(1, Math.max(0, h.confidence)) } : {}),
       })
       if (out.length === MAX_HYPOTHESES) break
     }

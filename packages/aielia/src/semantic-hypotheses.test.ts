@@ -53,6 +53,12 @@ describe('proposeCompetingExplanations', () => {
     expect(await proposeCompetingExplanations(input, client('{"hypotheses":[]}'))).toBeNull()
   })
 
+  it('clamps a model-reported confidence into [0, 1]', async () => {
+    const wild = { hypotheses: [{ explanation: 'cause a', predicted_observations: [], confidence: 7 }, { explanation: 'cause b', predicted_observations: [], confidence: -2 }] }
+    const out = await proposeCompetingExplanations(input, client(JSON.stringify(wild)))
+    expect(out?.map((h) => h.confidence)).toEqual([1, 0])
+  })
+
   it('keeps at most four, skips blank explanations, and drops non-string predictions', async () => {
     const many = { hypotheses: [...Array(6)].map((_, i) => ({ explanation: `cause ${i}`, predicted_observations: ['a', 3, ' '] })).concat([{ explanation: '  ', predicted_observations: [] }] as never) }
     const out = await proposeCompetingExplanations(input, client(JSON.stringify(many)))
