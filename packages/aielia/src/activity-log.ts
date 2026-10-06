@@ -23,10 +23,10 @@ export function createActivityLogger(filePath: string, now: () => Date = () => n
   return (entry) => {
     try {
       if (!ready) {
-        mkdirSync(dirname(filePath), { recursive: true })
+        mkdirSync(dirname(filePath), { recursive: true, mode: 0o700 })
         ready = true
       }
-      appendFileSync(filePath, JSON.stringify({ at: now().toISOString(), sessionId: entry.sessionId, kind: entry.kind, content: entry.content }) + '\n')
+      appendFileSync(filePath, JSON.stringify({ at: now().toISOString(), sessionId: entry.sessionId, kind: entry.kind, content: entry.content }) + '\n', { mode: 0o600 })
     } catch (err) {
       // A logging problem must never break a turn.
       console.error('[activity-log] could not write an entry:', err)

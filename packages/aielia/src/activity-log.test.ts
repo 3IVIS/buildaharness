@@ -1,5 +1,5 @@
 import { describe, it, expect, afterEach, vi } from 'vitest'
-import { mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
+import { mkdtempSync, readFileSync, rmSync, statSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { activityLogEnabled, createActivityLogger } from './activity-log.js'
@@ -28,6 +28,13 @@ describe('createActivityLogger', () => {
       { at: '2026-10-05T12:00:00.000Z', sessionId: 's', kind: 'user_message', content: 'hi\nthere' },
       { at: '2026-10-05T12:00:00.000Z', sessionId: 's', kind: 'tool_call', content: 'read_file({"path":"a"}) →\nbody' },
     ])
+  })
+
+  it('creates the log owner-only (it holds full tool output)', () => {
+    const dir = tmp()
+    const file = join(dir, 'sub', 'log.jsonl')
+    createActivityLogger(file)({ kind: 'note', sessionId: 's', content: 'x' })
+    expect(statSync(file).mode & 0o077).toBe(0)
   })
 
   it('never throws when the file cannot be written', () => {
