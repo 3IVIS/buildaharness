@@ -71,6 +71,8 @@ export class ActionApprovalService {
 
   /** Every write, command and email carried out through an approval, in order (a turn's slice is what the system recorded for it). */
   readonly appliedActions: string[] = []
+  /** The command and the start/end of the output of each shell command run through an approval (for the reply audit). */
+  readonly recentCommandOutputs: { command: string; output: string }[] = []
   /** Sessions in which a command got the network-containment refusal. */
   private readonly networkDeniedSessions = new Set<string>()
   networkDenied(sessionId: string): boolean {
@@ -277,6 +279,11 @@ export class ActionApprovalService {
     // (more reads, further approvals, a real final answer) instead of ending on one command.
     const thisAction = describeAppliedAction(applied)
     if (thisAction) this.appliedActions.push(thisAction)
+    if (applied.kind === 'shell' && applied.execution) {
+      const out = applied.execution.output ?? ''
+      this.recentCommandOutputs.push({ command: applied.command, output: out.length > 1600 ? `${out.slice(0, 800)}\n…\n${out.slice(-800)}` : out })
+      if (this.recentCommandOutputs.length > 6) this.recentCommandOutputs.shift()
+    }
     const actionsSoFar = [...(loopState?.actions ?? []), ...(thisAction ? [thisAction] : [])]
     if (loopState && applied.kind !== 'revert') {
       let loopResult: ToolLoopResult | undefined

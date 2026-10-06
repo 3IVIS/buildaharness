@@ -31,7 +31,7 @@ describe('reply audit', () => {
   })
   it('builds one note from the flags, and none for a clean audit', () => {
     expect(replyAuditNotice(CLEAN_AUDIT, [])).toBeUndefined()
-    const n = replyAuditNotice({ claimsUnrecordedWork: true, promisesWorkNotDone: true, unverifiedOutsideFacts: true }, ['wrote a.py'])!
+    const n = replyAuditNotice({ claimsUnrecordedWork: true, promisesWorkNotDone: true, unverifiedOutsideFacts: true, contradictsCommandOutput: true }, ['wrote a.py'])!
     expect(n).toContain('recorded: wrote a.py')
     expect(n).toContain('nothing was done this turn')
     expect(n).toContain('unverified')
