@@ -41,7 +41,10 @@ export class NodeConfigStore implements ConfigStore {
       throw err
     }
     try {
-      return JSON.parse(raw) as Partial<AssistantConfig>
+      const parsed: unknown = JSON.parse(raw)
+      // `null`, a number or an array parses fine but is not a config object; treat it like corrupt JSON.
+      if (typeof parsed !== 'object' || parsed === null || Array.isArray(parsed)) throw new Error('not an object')
+      return parsed as Partial<AssistantConfig>
     } catch {
       console.error(`Warning: ${this.path} is not valid JSON — ignoring it and falling back to defaults.`)
       return {}
@@ -58,9 +61,11 @@ export class NodeConfigStore implements ConfigStore {
   private async writePatch(patch: Partial<AssistantConfig>): Promise<void> {
     const existing = await this.load()
     const merged = { ...existing, ...patch }
-    await mkdir(dirname(this.path), { recursive: true })
+    await mkdir(dirname(this.path), { recursive: true, mode: 0o700 })
     const tempPath = `${this.path}.tmp-${process.pid}-${randomBytes(6).toString('hex')}`
-    await writeFile(tempPath, JSON.stringify(merged, null, 2), 'utf-8')
+    // The file holds API keys and the SMTP password in plain text: owner-only, never world-readable (the temp file is
+    // new on every save, so the mode always applies and the rename carries it over the old, possibly 0644, file).
+    await writeFile(tempPath, JSON.stringify(merged, null, 2), { encoding: 'utf-8', mode: 0o600 })
     await rename(tempPath, this.path)
   }
 }

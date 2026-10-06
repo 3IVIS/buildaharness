@@ -1,5 +1,5 @@
 import { describe, it, expect, afterEach } from 'vitest'
-import { mkdtemp, rm, writeFile, readFile } from 'node:fs/promises'
+import { mkdtemp, rm, writeFile, readFile, stat } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { NodeConfigStore } from './node-config-store.js'
@@ -41,6 +41,24 @@ describe('NodeConfigStore', () => {
     await store.save({ enableWeb: true, model: 'model-a' })
     await store.save({ model: undefined })
     expect(await store.load()).toEqual({ enableWeb: true })
+  })
+
+  it('writes the file owner-only (it holds API keys) and tightens a previously world-readable one', async () => {
+    const { store, path } = await makeStore()
+    await store.save({ apiKey: 'sk-secret' })
+    expect((await stat(path)).mode & 0o777).toBe(0o600)
+    await writeFile(path, '{"apiKey":"sk-old"}', { mode: 0o644 })
+    await store.save({ model: 'm' })
+    expect((await stat(path)).mode & 0o777).toBe(0o600)
+  })
+
+  it('a persisted file holding a non-object JSON value falls back to {}', async () => {
+    const { store, path } = await makeStore()
+    await store.save({ model: 'm' })
+    await writeFile(path, 'null')
+    expect(await store.load()).toEqual({})
+    await writeFile(path, '[1,2]')
+    expect(await store.load()).toEqual({})
   })
 
   it('a corrupt persisted file falls back to {} without throwing', async () => {
