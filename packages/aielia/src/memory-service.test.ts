@@ -286,10 +286,12 @@ describe('MemoryService confirm/reject', () => {
       JSON.stringify({ contradictions: [{ beliefIds: ['confirm-0', 'existing-0'], description: 'Boston and Seattle cannot both be true.' }], corroborations: [] }),
     ])
     const { service, memory } = newService(llm)
+    // `existing-0` must be a real durable Knowledge fact: the checker drops contradictions naming ids it was not given.
+    await memory.set(DURABLE_FACTS_KEY, [{ text: 'the user lives in Boston', extractedAt: '2026-01-01T00:00:00.000Z', sourceTurn: 't', durable: true, source: 'user_asserted' }])
     await service.recordFacts('s1', 'a', [statedFact({ text: 'the user lives in Seattle', confidence: 'medium', category: 'location', durable: true })])
     const outcome = await service.confirmPendingFact(0)
     expect(outcome?.conflictNotice).toContain('Boston and Seattle')
-    expect((await memory.get(DURABLE_FACTS_KEY) as UserFact[])).toHaveLength(1)
+    expect((await memory.get(DURABLE_FACTS_KEY) as UserFact[])).toHaveLength(2)
   })
 
   it('confirmPendingFact re-sources the confirmed fact to externally_verified and clears confidence (Phase 4)', async () => {
