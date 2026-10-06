@@ -171,6 +171,21 @@ describe('self-update against a local mock server', () => {
     expect(logs.join('\n')).toContain('disagrees')
   })
 
+  it('refuses a download that was redirected onto plain http', async () => {
+    const manifest = { tag: 'aielia-v0.4.0', version: '0.4.0', assets: { 'linux-x64': { url: 'https://example.test/dl/aielia-linux-x64', sha256: sha(NEW_BIN) } } }
+    const stub: typeof fetch = async (input) => {
+      const url = String(input)
+      if (url.endsWith('aielia-latest.json')) return new Response(JSON.stringify(manifest))
+      const res = new Response(NEW_BIN)
+      Object.defineProperty(res, 'url', { value: 'http://evil.test/dl/aielia-linux-x64' })
+      return res
+    }
+    const code = await runUpdateCommand(opts({ fetchFn: stub, allowInsecureHttp: false, manifestUrl: 'https://example.test/aielia-latest.json' }))
+    expect(code).toBe(1)
+    expect(readFileSync(join(dir, 'aielia'), 'utf8')).toBe('old-binary')
+    expect(logs.join('\n')).toContain('Refusing non-HTTPS URL')
+  })
+
   it('refuses cleanly with an npm pointer when not running as a SEA, without any network call', async () => {
     publishManifest()
     expect(await runUpdateCommand(opts({ isSea: false }))).toBe(1)

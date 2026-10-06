@@ -189,8 +189,15 @@ function parseGithubReleases(releases: GithubRelease[], allowInsecureHttp: boole
   return best
 }
 
-async function getJson(fetchFn: typeof fetch, url: string, headers: Record<string, string> = {}): Promise<Response> {
-  return fetchFn(url, { headers, signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS), redirect: 'follow' })
+/** `redirect: 'follow'` would silently accept an https -> http hop; refuse a response whose final URL is not https. */
+function assertFinalUrlHttps(res: Response, allowInsecureHttp: boolean): void {
+  if (res.url) assertHttps(res.url, allowInsecureHttp)
+}
+
+async function getJson(fetchFn: typeof fetch, url: string, headers: Record<string, string> = {}, allowInsecureHttp = false): Promise<Response> {
+  const res = await fetchFn(url, { headers, signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS), redirect: 'follow' })
+  assertFinalUrlHttps(res, allowInsecureHttp)
+  return res
 }
 
 /**
@@ -212,7 +219,7 @@ export async function fetchLatestRelease(
 
   let manifestError: unknown
   try {
-    const res = await getJson(fetchFn, manifestUrl)
+    const res = await getJson(fetchFn, manifestUrl, {}, insecure)
     if (res.ok) return { release: parseManifest(await res.json(), insecure) }
     manifestError = new Error(`manifest HTTP ${res.status}`)
   } catch (err) {
@@ -221,7 +228,7 @@ export async function fetchLatestRelease(
 
   const headers: Record<string, string> = { Accept: 'application/vnd.github+json' }
   if (etag) headers['If-None-Match'] = etag
-  const res = await getJson(fetchFn, apiUrl, headers)
+  const res = await getJson(fetchFn, apiUrl, headers, insecure)
   if (res.status === 304 && etag) return { notModified: true }
   if (!res.ok) {
     throw new Error(`Could not check for updates (manifest: ${(manifestError as Error)?.message ?? manifestError}; GitHub: HTTP ${res.status})`)
@@ -311,9 +318,12 @@ export function replaceBinary(execPath: string, newFile: string, platform: NodeJ
 }
 
 /** Streams `url` to `dest`, returning the lowercase hex sha256 of exactly the bytes written. */
-async function downloadTo(fetchFn: typeof fetch, url: string, dest: string): Promise<string> {
+async function downloadTo(fetchFn: typeof fetch, url: string, dest: string, allowInsecureHttp = false): Promise<string> {
   const res = await fetchFn(url, { signal: AbortSignal.timeout(DOWNLOAD_TIMEOUT_MS), redirect: 'follow' })
   if (!res.ok || !res.body) throw new Error(`Download failed: HTTP ${res.status} for ${url}`)
+  // fetch follows redirects, and the HTTPS check above only saw the first URL: refuse a response
+  // that ended up served over plain http (a downgrade redirect).
+  if (res.url) assertHttps(res.url, allowInsecureHttp)
   const hash = createHash('sha256')
   await pipeline(
     Readable.fromWeb(res.body as unknown as WebReadableStream<Uint8Array>),
@@ -328,9 +338,9 @@ async function downloadTo(fetchFn: typeof fetch, url: string, dest: string): Pro
   return hash.digest('hex')
 }
 
-async function fetchSidecarHash(fetchFn: typeof fetch, assetUrl: string): Promise<string | null> {
+async function fetchSidecarHash(fetchFn: typeof fetch, assetUrl: string, allowInsecureHttp = false): Promise<string | null> {
   try {
-    const res = await getJson(fetchFn, `${assetUrl}.sha256`)
+    const res = await getJson(fetchFn, `${assetUrl}.sha256`, {}, allowInsecureHttp)
     if (!res.ok) return null
     const m = /[0-9a-fA-F]{64}/.exec(await res.text())
     return m ? m[0].toLowerCase() : null
@@ -389,12 +399,12 @@ export async function runUpdateCommand(input: { dryRun?: boolean } & SelfUpdateO
   try {
     assertHttps(asset.url, insecure)
     log(`Downloading aielia ${release.version} (${key})…`)
-    const actual = await downloadTo(fetchFn, asset.url, tmp)
+    const actual = await downloadTo(fetchFn, asset.url, tmp, insecure)
     // Trust split: the binary comes from github.com, its hash from the manifest on myaielia.com —
     // verify against the manifest's hash so compromising one origin isn't enough. The sidecar file
     // next to the binary is only a cross-check (and the sole hash source on the GitHub-API fallback,
     // where both come from the same origin).
-    const sidecar = await fetchSidecarHash(fetchFn, asset.url)
+    const sidecar = await fetchSidecarHash(fetchFn, asset.url, insecure)
     const expected = asset.sha256 ?? sidecar
     if (!expected) throw new Error('No checksum available for this release — refusing to install an unverified binary')
     if (actual !== expected) throw new Error(`Checksum mismatch (expected ${expected}, got ${actual}) — download discarded`)
