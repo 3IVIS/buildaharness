@@ -404,3 +404,18 @@ describe('M4 wired into PersonalAssistant', () => {
     for (const p of await pendingOf(memory)) expect(p.evidence).toBeTruthy()
   })
 })
+
+describe('submitCandidate keyed supersession (audit)', () => {
+  it('an auto-mode cross-turn durable write with the same key replaces the live entry instead of accumulating', async () => {
+    const memory = new InMemoryAdapter()
+    const llm = { async *callChat() { yield '' }, async callChatSync() { return '' }, async callChatStructured() { return { content: '{}' } } }
+    const service = new MemoryService(memory, new InMemoryReminderStore(new InMemoryAdapter()), new InMemoryExperienceStore(), llm as never, () => undefined, () => '', undefined, () => 'auto')
+    const base = { sourceTurn: 't', source: 'model_inferred' as const, durable: true, confidence: 'medium' as const, origin: 'user' as const, key: 'answer_style' }
+    await service.submitCandidate('reviewer', { ...base, text: 'prefers long prose', extractedAt: '2026-01-01T00:00:00.000Z' }, 's')
+    await service.submitCandidate('reviewer', { ...base, text: 'prefers bullet points', extractedAt: '2026-01-02T00:00:00.000Z' }, 's')
+    const durable = (await memory.get('facts:durable')) as { text: string; supersedes?: string }[]
+    expect(durable.map((f) => f.text)).toEqual(['prefers bullet points'])
+    expect(durable[0].supersedes).toBe('prefers long prose')
+    expect(((await memory.get('facts:retired')) as { text: string }[]).map((f) => f.text)).toEqual(['prefers long prose'])
+  })
+})

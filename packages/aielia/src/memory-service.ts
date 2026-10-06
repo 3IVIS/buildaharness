@@ -521,6 +521,18 @@ export class MemoryService {
     const route = decision.action === 'flag' ? 'pending' : decision.action === 'session' ? 'session' : resolveWriteRoute(this.writeMode(), writer, fact)
     if (route === 'durable') {
       const durable = (((await this.memory.get(DURABLE_FACTS_KEY)) as UserFact[] | undefined) ?? []).map(migrateFact)
+      // A keyed candidate replaces the live entry with the same key (M1 supersession), exactly as the in-turn and confirm paths do.
+      const priors = fact.key && memoryBudgetedRenderEnabled() ? durable.filter((f) => f.key === fact.key && (f.project ?? '') === (fact.project ?? '')) : []
+      if (priors.length > 0) {
+        if (priors.some((p) => p.text === fact.text)) return { route, fact }
+        const retiredAt = this.clock()
+        const retired = ((await this.memory.get(RETIRED_FACTS_KEY)) as UserFact[] | undefined) ?? []
+        await this.memory.set(RETIRED_FACTS_KEY, [...retired, ...priors.map((p) => ({ ...p, retiredAt }))])
+        const replacement: UserFact = { ...fact, supersedes: priors[priors.length - 1].text }
+        const drafts: AuditDraft[] = priors.map((p, i) => ({ op: i === priors.length - 1 ? 'replace' as const : 'retire' as const, factId: factId(p), before: p, ...(i === priors.length - 1 ? { after: replacement } : {}), index: durable.indexOf(p), store: 'durable' as const, writer, turn: sessionId }))
+        await this.commitDurable([...durable.filter((f) => !priors.includes(f)), replacement], drafts)
+        return { route, fact: replacement }
+      }
       await this.commitDurable([...durable, fact], [{ op: 'add', factId: factId(fact), after: fact, store: 'durable', writer, turn: sessionId }])
     } else if (route === 'pending') {
       const pending = ((await this.memory.get(PENDING_CONFIRMATION_KEY)) as PendingFact[] | undefined) ?? []
