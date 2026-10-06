@@ -2285,6 +2285,145 @@ describe('PersonalAssistant shell tools', () => {
     expect(stored).not.toContain('DSML')
   })
 
+  describe.each(['enabled', 'disabled'] as const)('an empty final reply after an approved write is never shown or stored (one-loop %s)', (oneLoopMode) => {
+    function build(responses: LLMStructuredResponse[], streamChunks?: string[]) {
+      const backend = makeFakeBackend()
+      const logs: { kind: string; content: string }[] = []
+      const llm = scriptedResponses(responses, streamChunks)
+      const assistant = new PersonalAssistant({ llmClient: llm, fileTools: { backend, workspaceRoot: ROOT }, oneLoopMode, onDebugLog: (e) => logs.push(e) })
+      return { assistant, llm, logs }
+    }
+    const write = (id: string, path: string): LLMStructuredResponse => ({ content: '', toolCalls: [{ id, name: 'write_file', input: { path, content: 'x\n' } }] })
+
+    async function runTwoWrites(assistant: PersonalAssistant, sessionId: string) {
+      const MSG = 'fix the issues'
+      const a = await assistant.turn(MSG, { sessionId })
+      const b = await assistant.turn(MSG, { sessionId, approved: true, pendingActionId: a.pendingActionId })
+      return assistant.turn(MSG, { sessionId, approved: true, pendingActionId: b.pendingActionId })
+    }
+
+    it('retries once with a nudge and uses the model\'s real summary', async () => {
+      const { assistant, llm, logs } = build([write('w1', 'a.py'), write('w2', 'b.py'), { content: '   ' }, { content: 'Fixed a.py and b.py.' }])
+      const final = await runTwoWrites(assistant, 'empty-1')
+
+      expect(final.reply).toBe('Fixed a.py and b.py.')
+      const nudged = llm.receivedMessages.at(-1) ?? []
+      expect(nudged.at(-1)?.role).toBe('user')
+      expect(nudged.at(-1)?.content).toMatch(/was empty/)
+      expect(logs.some((e) => e.kind === 'note' && /retrying once/.test(e.content))).toBe(true)
+      expect((await assistant.getTranscript('empty-1')).at(-1)?.content.startsWith('Fixed a.py and b.py.')).toBe(true)
+    })
+
+    it('after two empty replies builds a fallback from the recorded actions, and says so in the log', async () => {
+      const { assistant, logs } = build([write('w1', 'a.py'), write('w2', 'b.py'), { content: '' }, { content: '' }])
+      const final = await runTwoWrites(assistant, 'empty-2')
+
+      expect(final.status).toBe('ok')
+      expect(final.reply?.trim()).not.toBe('')
+      expect(final.reply).toContain('wrote a.py')
+      expect(final.reply).toContain('wrote b.py')
+      expect(logs.some((e) => e.kind === 'note' && /fallback/.test(e.content))).toBe(true)
+      const stored = (await assistant.getTranscript('empty-2')).filter((m) => m.role === 'assistant')
+      expect(stored.every((m) => m.content.trim() !== '')).toBe(true)
+    })
+
+    it('an empty streamed re-ask falls back to the answer the preceding call produced', async () => {
+      const { assistant } = build([write('w1', 'a.py'), { content: 'All done.' }], [''])
+      const tokens: string[] = []
+      const onToken = (t: string) => tokens.push(t)
+      const a = await assistant.turn('fix', { sessionId: 'empty-3', onToken })
+      const final = await assistant.turn('fix', { sessionId: 'empty-3', onToken, approved: true, pendingActionId: a.pendingActionId })
+
+      expect(final.reply).toBe('All done.')
+      expect(tokens.join('')).toContain('All done.')
+    })
+  })
+
+  describe('activity log: every approval gate produces approval_request, approval_decision and tool_call exactly once (benchmark 01 gaps)', () => {
+    const count = (logs: { kind: string; content: string }[], kind: string, re: RegExp) => logs.filter((e) => e.kind === kind && re.test(e.content)).length
+
+    it('write and shell gates in one turn: approved write, declined shell', async () => {
+      const backend = makeFakeBackend()
+      const logs: { kind: string; content: string }[] = []
+      const llm = scriptedResponses([
+        { content: '', toolCalls: [{ id: 'w', name: 'write_file', input: { path: 'a.py', content: 'x\n' } }] },
+        { content: '', toolCalls: [{ id: 's', name: 'run_shell_command', input: { command: 'rm -rf build' } }] },
+      ])
+      const executeCommand = vi.fn()
+      const assistant = new PersonalAssistant({
+        llmClient: llm,
+        fileTools: { backend, workspaceRoot: ROOT },
+        shellTools: { backend, workspaceRoot: ROOT, executeCommand },
+        onDebugLog: (e) => logs.push(e),
+      })
+      const MSG = 'clean up'
+      const first = await assistant.turn(MSG, { sessionId: 'log-1' })
+      const second = await assistant.turn(MSG, { sessionId: 'log-1', approved: true, pendingActionId: first.pendingActionId })
+      await assistant.turn(MSG, { sessionId: 'log-1', approved: false, pendingActionId: second.pendingActionId })
+
+      expect(count(logs, 'approval_request', /^write /)).toBe(1)
+      expect(count(logs, 'approval_request', /^shell /)).toBe(1)
+      expect(count(logs, 'approval_decision', /^approved /)).toBe(1)
+      expect(count(logs, 'approval_decision', /^declined /)).toBe(1)
+      expect(count(logs, 'tool_call', /^write_file\(/)).toBe(1)
+      expect(count(logs, 'tool_call', /declined/)).toBe(1)
+      expect(logs.filter((e) => e.kind === 'user_message')).toHaveLength(1)
+      expect(executeCommand).not.toHaveBeenCalled()
+    })
+
+    it('a message-level gate is logged as a request and a decision (approved), and the message once', async () => {
+      const backend = makeFakeBackend()
+      const logs: { kind: string; content: string }[] = []
+      const llm = scriptedResponses([{ content: 'Sent.' }])
+      const assistant = new PersonalAssistant({
+        llmClient: llm,
+        actionTools: { backend, workspaceRoot: ROOT, sendEmail: vi.fn() },
+        onDebugLog: (e) => logs.push(e),
+      })
+      const MSG = 'Send an email to my boss saying I quit.'
+      const gated = await assistant.turn(MSG, { sessionId: 'log-2' })
+      expect(gated.status).toBe('needs_approval')
+      expect(gated.pendingActionId).toBeUndefined()
+      await assistant.turn(MSG, { sessionId: 'log-2', approved: true })
+
+      expect(count(logs, 'approval_request', /message-level gate/)).toBe(1)
+      expect(count(logs, 'approval_decision', /approved message-level gate/)).toBe(1)
+      expect(logs.filter((e) => e.kind === 'user_message')).toHaveLength(1)
+    })
+
+    it('a declined message-level gate logs the decision', async () => {
+      const backend = makeFakeBackend()
+      const logs: { kind: string; content: string }[] = []
+      const assistant = new PersonalAssistant({
+        llmClient: scriptedResponses([]),
+        actionTools: { backend, workspaceRoot: ROOT, sendEmail: vi.fn() },
+        onDebugLog: (e) => logs.push(e),
+      })
+      await assistant.turn('Send an email to my boss saying I quit.', { sessionId: 'log-3' })
+      await assistant.recordDeclinedRequest('log-3', 'Send an email to my boss saying I quit.', 'needs approval')
+      expect(count(logs, 'approval_decision', /declined message-level gate/)).toBe(1)
+    })
+
+    it('a chained second action surfaced after the first resolves gets its own approval_request', async () => {
+      const backend = makeFakeBackend()
+      const logs: { kind: string; content: string }[] = []
+      const { id: writeId } = await stagePendingAction(backend, ROOT, { kind: 'write', path: 'todo.txt', content: 'buy milk' })
+      const { id: shellId } = await stagePendingAction(backend, ROOT, { kind: 'shell', command: 'ls', cwd: ROOT })
+      const writeRecord = await loadPendingAction(backend, ROOT, writeId)
+      await backend.writeTextFile(`${ROOT}/.pending-actions/${writeId}.json`, JSON.stringify({ ...writeRecord, nextPendingActionId: shellId }))
+      const assistant = new PersonalAssistant({
+        llmClient: scriptedResponses([]),
+        fileTools: { backend, workspaceRoot: ROOT },
+        shellTools: { backend, workspaceRoot: ROOT, executeCommand: vi.fn() },
+        onDebugLog: (e) => logs.push(e),
+      })
+      const next = await assistant.turn('x', { approved: true, pendingActionId: writeId })
+      expect(next.pendingActionId).toBe(shellId)
+      expect(count(logs, 'approval_decision', new RegExp(`approved ${writeId}`))).toBe(1)
+      expect(count(logs, 'approval_request', new RegExp(`^shell ${shellId}`))).toBe(1)
+    })
+  })
+
   it('dangerouslySkipPermissions runs the whole approved-command loop in one turn call', async () => {
     const executeCommand = vi.fn().mockResolvedValue({ output: 'ok\n', exitCode: 0, timedOut: false })
     const { ctx } = makeShellTools(executeCommand)

@@ -84,6 +84,7 @@ export class ActionApprovalService {
     // "neither configured" guard below, which is specific to write/shell staged actions.
     const batchState = (await this.memory.get(`batch-pending:${pendingActionId}`)) as BatchPendingState | undefined
     if (batchState) {
+      this.onDebugLog?.({ kind: 'approval_decision', sessionId, content: `${approved ? 'approved' : 'declined'} ${pendingActionId}` })
       return this.resolvePendingBatchConfirmation(transcriptKey, pendingActionId, approved, batchState)
     }
 
@@ -127,7 +128,7 @@ export class ActionApprovalService {
       const reply = record?.chainedFrom || earlierActionRan ? 'Cancelled — that additional action was not run.' : 'Cancelled — nothing was written or run.'
       await this.session.appendTranscriptMessage(sessionId, transcriptKey, { role: 'assistant', content: reply + actionRecordSuffix(loopState?.actions ?? []) })
       if (record?.nextPendingActionId) {
-        const chained = await this.loadChainedApproval(backend, workspaceRoot, record.nextPendingActionId, reply)
+        const chained = await this.loadChainedApproval(sessionId, backend, workspaceRoot, record.nextPendingActionId, reply)
         if (chained) return chained
       }
       return { status: 'ok', reply }
@@ -298,7 +299,7 @@ export class ActionApprovalService {
     const recordSuffix = applied.kind === 'shell' || loopState ? actionRecordSuffix(actionsSoFar) : ''
     await this.session.appendTranscriptMessage(sessionId, transcriptKey, { role: 'assistant', content: transcriptContent + recordSuffix })
     if (applied.nextPendingActionId) {
-      const chained = await this.loadChainedApproval(backend, workspaceRoot, applied.nextPendingActionId, reply)
+      const chained = await this.loadChainedApproval(sessionId, backend, workspaceRoot, applied.nextPendingActionId, reply)
       if (chained) return chained
     }
     return { status: 'ok', reply, usage }
@@ -329,6 +330,7 @@ export class ActionApprovalService {
    * turn, just stop chaining and fall back to the caller's own `status: 'ok'`.
    */
   private async loadChainedApproval(
+    sessionId: string,
     backend: FsBackend,
     workspaceRoot: string,
     nextPendingActionId: string,
@@ -346,6 +348,7 @@ export class ActionApprovalService {
       reason = `${previousOutcome}\n\nNext, it also proposes sending an email:\n  To: ${next.to}\n  Subject: ${next.subject}\n\n${previewContent(next.body)}`
     }
     if (!reason) return undefined
+    this.onDebugLog?.({ kind: 'approval_request', sessionId, content: `${next.kind} ${next.id}: ${reason}` })
     return {
       status: 'needs_approval',
       reply: null,

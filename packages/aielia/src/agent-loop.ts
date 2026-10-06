@@ -78,6 +78,21 @@ export interface ToolLoopPendingState {
   actions?: string[]
 }
 
+/** Sent when the model returns an empty final answer, before the one retry. */
+export const EMPTY_REPLY_NUDGE =
+  'Your last reply was empty. Reply now with your final answer to the user in plain text: summarize what you did and what you found. Do not call a tool unless something is still unfinished.'
+
+/**
+ * The reply used when the model returns nothing twice in a row: built only from what is on record, so the user
+ * never gets an empty message. `actions` is the turn's list of carried-out approved actions (see describeAppliedAction).
+ */
+export function fallbackFinalReply(actions: string[] | undefined): string {
+  if (actions && actions.length > 0) {
+    return `I carried out the following, but could not produce a written summary: ${actions.join('; ')}. Ask me for details on any of them and I will go through it.`
+  }
+  return 'I could not produce an answer to that — the model returned an empty reply twice. Please try again or rephrase.'
+}
+
 export const toolLoopPendingKey = (pendingActionId: string): string => `loop-pending:${pendingActionId}`
 
 /**
@@ -487,6 +502,8 @@ export class AgentLoop {
         return { __harnessExecutionStatus: 'continue' }
       }
 
+      if (step.result.kind === 'final') step.result = this.withFallbackReply(step.result, undefined, input.onToken) as typeof step.result
+
       if (step.result.kind === 'final' && weighSources && !sourcesWeighed) {
         // Under claude-cli the tool loop runs inside the subprocess, so no source note can be spliced in
         // before the answer exists; the sources are weighed after it instead, and an answer that leaned on a
@@ -759,6 +776,14 @@ export class AgentLoop {
     return this.persistPausedLoop(result, { sessionId, userMessage, riskHint, messages, sources, iterationsUsed })
   }
 
+  /** Replaces an empty final answer (the model returned nothing twice) with fallbackFinalReply, shown through onToken like any answer. */
+  private withFallbackReply(result: ToolLoopResult, actions: string[] | undefined, onToken?: (token: string) => void): ToolLoopResult {
+    if (result.kind !== 'final' || result.content.trim() !== '') return result
+    const content = fallbackFinalReply(actions)
+    onToken?.(content)
+    return { ...result, content }
+  }
+
   private flatLoopTools(): ToolDefinition[] {
     return [
       ...(this.fileTools ? FILE_TOOLS : []),
@@ -819,7 +844,7 @@ export class AgentLoop {
     const remaining = Math.max(1, this.maxSteps - state.iterationsUsed)
     const { result, iterationsUsed, sources } = await this.runToolIterations(
       messages, remaining, this.flatLoopTools(), state.sessionId, state.userMessage, onToken, onToolStep, onUsage,
-      undefined, state.riskHint, this.createControlPlaneState(), state.sources, true,
+      undefined, state.riskHint, this.createControlPlaneState(), state.sources, true, actions,
     )
     return this.persistPausedLoop(result, {
       sessionId: state.sessionId, userMessage: state.userMessage, riskHint: state.riskHint,
@@ -860,6 +885,7 @@ export class AgentLoop {
     controlPlaneState?: TurnControlPlaneState,
     initialSources: AssistantSource[] = [],
     initialDispatched = false,
+    actions?: string[],
   ): Promise<{ result: ToolLoopResult; iterationsUsed: number; sources: AssistantSource[]; deadEndStopped?: boolean }> {
     const sources: AssistantSource[] = [...initialSources]
     let dispatchedAnyToolCall = initialDispatched
@@ -870,7 +896,8 @@ export class AgentLoop {
         onToken, onToolStep, onUsage, onToolResult, riskHint, controlPlaneState,
       )
       if (step.done) {
-        return { result: step.result, iterationsUsed: iteration + 1, sources, deadEndStopped: step.deadEndStopped }
+        const result = this.withFallbackReply(step.result, actions, onToken)
+        return { result, iterationsUsed: iteration + 1, sources, deadEndStopped: step.deadEndStopped }
       }
       dispatchedAnyToolCall = step.dispatchedAnyToolCall
     }
@@ -1002,6 +1029,18 @@ export class AgentLoop {
       })
 
       if (!response.toolCalls || response.toolCalls.length === 0) {
+        if (response.content.trim() === '') {
+          // An empty (or reasoning-only) completion is not an answer. Ask once more with a nudge; a second empty
+          // one ends the loop with an empty final, which the caller replaces with a fallback (fallbackFinalReply).
+          const last = messages[messages.length - 1]
+          if (last?.role === 'user' && last.content === EMPTY_REPLY_NUDGE) {
+            this.onDebugLog?.({ kind: 'note', sessionId, content: 'the model returned an empty final reply again after a nudge; using a fallback reply' })
+            return { done: true, result: { kind: 'final', content: '', sources } }
+          }
+          this.onDebugLog?.({ kind: 'note', sessionId, content: 'the model returned an empty final reply; retrying once with a nudge' })
+          messages.push({ role: 'user', content: EMPTY_REPLY_NUDGE })
+          return { done: false, dispatchedAnyToolCall }
+        }
         if (looksLikeUnparsedToolCall(response.content)) {
           // Never show this to the user as if it were a real answer — nudge the model to
           // either call a tool properly or answer in plain text, and retry. Bounded by the
@@ -1072,6 +1111,12 @@ export class AgentLoop {
             onToken(held)
             emitted = held.length
           }
+        }
+        if (streamed.trim() === '') {
+          // The streamed re-ask came back empty; the tools-enabled call above already produced a real answer.
+          this.onDebugLog?.({ kind: 'note', sessionId, content: 'the streamed final answer was empty; using the answer from the preceding call' })
+          onToken(response.content)
+          return { done: true, result: { kind: 'final', content: response.content, sources } }
         }
         const markup = UNPARSED_TOOL_CALL_PATTERN.exec(streamed)
         if (markup) {

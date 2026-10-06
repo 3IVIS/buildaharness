@@ -9,12 +9,15 @@
  * `approval_decision` is how that was resolved ('approved' or 'declined'); the executed result of an
  * approved action is the separate `tool_call` entry, so a log reader can reconstruct the whole exchange.
  *
+ * `note` records a robustness action the loop took on its own (an empty final answer retried, or replaced by a
+ * deterministic fallback), so a log reader can see why a reply is not what the model first returned.
+ *
  * Split into its own file so both assistant.ts (user_message/assistant_reply kinds, emitted from
  * `turn()`) and agent-loop.ts (tool_call kind, emitted from the ReAct loop) can depend on it
  * without either owning the other.
  */
 export interface DebugLogEntry {
-  kind: 'user_message' | 'assistant_reply' | 'tool_call' | 'approval_request' | 'approval_decision'
+  kind: 'user_message' | 'assistant_reply' | 'tool_call' | 'approval_request' | 'approval_decision' | 'note'
   sessionId: string
   content: string
 }

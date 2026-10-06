@@ -595,7 +595,10 @@ export class PersonalAssistant {
     // A pendingActionId call resumes a turn whose user message was already logged when it first
     // started (it only carries that message along), so logging it again duplicated every
     // approved turn's user_message in the activity log.
-    if (!options.pendingActionId) this.onDebugLog?.({ kind: 'user_message', sessionId, content: userMessage })
+    // A message-level approval re-runs the same message with approved: true; that is likewise not a new user message.
+    const isMessageGateRetry = options.approved === true && !options.pendingActionId && !options.pendingClarificationId && !options.planApprovalId
+    if (!options.pendingActionId && !isMessageGateRetry) this.onDebugLog?.({ kind: 'user_message', sessionId, content: userMessage })
+    if (isMessageGateRetry) this.onDebugLog?.({ kind: 'approval_decision', sessionId, content: 'approved message-level gate' })
 
     // Pre-turn only, never mid-turn — a turn already in flight always finishes (see
     // spend-cap.ts's checkSpendCap doc comment). A pendingActionId call is a continuation of a
@@ -692,6 +695,7 @@ export class PersonalAssistant {
    * comment for the full reasoning.
    */
   async recordDeclinedRequest(sessionId: string, userMessage: string, reason: string): Promise<void> {
+    this.onDebugLog?.({ kind: 'approval_decision', sessionId, content: 'declined message-level gate' })
     return this.session.recordDeclinedRequest(sessionId, userMessage, reason)
   }
 
@@ -1198,6 +1202,7 @@ export class PersonalAssistant {
     }
 
     if (interpretation.kind === 'needs_approval') {
+      this.onDebugLog?.({ kind: 'approval_request', sessionId, content: `message-level gate (${interpretation.result.riskLevel ?? 'HIGH'}): ${interpretation.result.reason ?? ''}` })
       classifyAndTraceExecutionMode(this.onTrace, { isPlanCancelBypass: false, isBatchResearch: false, isTrivial: false, requiresApproval: true })
       return interpretation.result
     }
