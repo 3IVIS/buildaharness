@@ -84,6 +84,7 @@ export interface PlanDraftSeed {
  */
 interface PlanAskPendingState {
   questions: AskQuestion[]
+  sessionId?: string
 }
 
 /**
@@ -130,6 +131,18 @@ export class PlanDraftingService {
     return `plan-ask-pending:${id}`
   }
 
+  /** Points at the one nested question a session's draft currently has staged, so cancelling the draft (or staging a newer question) can drop it. */
+  private planAskSessionKey(sessionId: string): string {
+    return `plan-ask-session:${sessionId}`
+  }
+
+  private async dropStagedAsk(sessionId: string): Promise<void> {
+    if (!this.memory) return
+    const id = (await this.memory.get(this.planAskSessionKey(sessionId))) as string | undefined
+    if (id) await this.memory.delete(this.planAskPendingKey(id))
+    await this.memory.delete(this.planAskSessionKey(sessionId))
+  }
+
   /** Peeked by `assistant.ts`'s runTurn before it decides whether a `pendingClarificationId` belongs to this nested-ask side channel (P8) or AskClarificationService's harness-resume path (Q2) — the two staging stores are otherwise independent, so an opaque ID has no other way to say which one it came from. */
   async isPendingAsk(id: string): Promise<boolean> {
     if (!this.memory) return false
@@ -155,6 +168,11 @@ export class PlanDraftingService {
     if (!staged) {
       return { status: 'ok', reply: 'That question is no longer pending — nothing to resolve.' }
     }
+    // A nested question belongs to the session whose draft raised it (and dies with that draft, see
+    // cancelDrafting), so another session's id must not fold an answer into this one's plan.
+    if (staged.sessionId !== undefined && staged.sessionId !== sessionId) {
+      return { status: 'ok', reply: 'That question is no longer pending — nothing to resolve.' }
+    }
     if (!response) {
       return { status: 'needs_clarification', reply: null, reason: 'No answer was provided.', pendingClarificationId: pendingAskId, questions: staged.questions, riskLevel: 'LOW' }
     }
@@ -166,6 +184,7 @@ export class PlanDraftingService {
     }
 
     await this.memory!.delete(this.planAskPendingKey(pendingAskId))
+    await this.memory!.delete(this.planAskSessionKey(sessionId))
     const answerText = formatAskResponse(staged.questions, response)
     // No `seed` — draftTurn reloads the running `PlanRecord` (still `mode: 'drafting'`, exactly
     // as it was when the question was staged) and revises it with the answer as `userMessage`,
@@ -342,7 +361,9 @@ export class PlanDraftingService {
   private async stageNestedAsk(sessionId: string, transcriptKey: string, userMessage: string, question: AskQuestion): Promise<AssistantTurnResult> {
     const questions = makeQuestionsBatch([question])
     const id = crypto.randomUUID()
-    await this.memory!.set(this.planAskPendingKey(id), { questions } satisfies PlanAskPendingState)
+    await this.dropStagedAsk(sessionId)
+    await this.memory!.set(this.planAskPendingKey(id), { questions, sessionId } satisfies PlanAskPendingState)
+    await this.memory!.set(this.planAskSessionKey(sessionId), id)
     await this.session.appendTranscriptMessage(sessionId, transcriptKey, { role: 'user', content: userMessage })
     this.onTrace?.({ kind: 'escalation', reason: `plan_ask: ${question.question}` })
     return { status: 'needs_clarification', reply: null, riskLevel: 'LOW', pendingClarificationId: id, questions }
@@ -356,6 +377,7 @@ export class PlanDraftingService {
     if (existing && (existing.mode === 'drafting' || existing.mode === 'awaiting_approval')) {
       await this.planService.abandonPlan(sessionId, existing)
     }
+    await this.dropStagedAsk(sessionId)
     await this.session.exitPlanMode(sessionId, threadId)
     const reply = 'Stopped drafting — the plan was discarded. Nothing was run.'
     await this.session.appendTranscriptMessage(sessionId, transcriptKey, { role: 'user', content: userMessage })

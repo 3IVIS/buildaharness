@@ -1,6 +1,7 @@
 import { describe, it, expect, vi, beforeAll, afterAll } from 'vitest'
 import type { ChatMessage, ChatOptions, ILLMClient, LLMStructuredResponse, ToolDefinition, FsBackend } from '@buildaharness/runtime'
 import type { AskResponse } from '@buildaharness/harness'
+import { InMemoryAdapter } from '@buildaharness/runtime'
 import { PersonalAssistant } from './assistant.js'
 
 // This file tests the 'plan-mode' lexical family, which is off by default (lexical/lexical-mode.ts), so it
@@ -394,6 +395,23 @@ describe('plan mode (P8) — nesting: plan mode can ask a question', () => {
     const resolved = await assistant.turn('', { sessionId, pendingClarificationId: asked.pendingClarificationId, clarificationAnswer: badResponse })
     expect(resolved.status).toBe('needs_clarification')
     expect(llm.calls).toBe(1)
+  })
+
+  it('an answer arriving after the draft was cancelled does not resurrect a drafting record', async () => {
+    const llm = new NestedAskDraftLLMClient()
+    const memory = new InMemoryAdapter()
+    const assistant = new PersonalAssistant({ llmClient: llm, memory })
+    const sessionId = 'nested-ask-after-cancel'
+    await assistant.enterPlanMode(sessionId)
+    const asked = await assistant.turn('Plan a product launch.', { sessionId })
+    await assistant.turn('cancel plan', { sessionId })
+    const callsBefore = llm.calls
+
+    const response: AskResponse = { answers: [{ questionId: 'framework-choice', kind: 'selected', selectedLabels: ['React'] }] }
+    const resolved = await assistant.turn('', { sessionId, pendingClarificationId: asked.pendingClarificationId, clarificationAnswer: response })
+    expect(resolved.reply).toMatch(/no longer pending/i)
+    expect(llm.calls).toBe(callsBefore)
+    expect(((await memory.get(`plan:${sessionId}`)) as { mode: string } | undefined)?.mode).not.toBe('drafting')
   })
 
   it('a stale/unknown pendingClarificationId resolves to a no-op ok, not an error', async () => {
