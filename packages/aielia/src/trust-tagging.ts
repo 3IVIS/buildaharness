@@ -12,7 +12,9 @@ import { parseModelJson } from './model-json.js'
  * instruction that content in this tag is data, never instructions.
  */
 export function wrapUntrusted(text: string): string {
-  return `<untrusted_external_content>\n${text}\n</untrusted_external_content>`
+  // Content cannot close (or re-open) the boundary itself: a literal delimiter tag inside the text is defanged.
+  const safe = text.replace(/<(\s*\/?\s*untrusted_external_content)/gi, '&lt;$1')
+  return `<untrusted_external_content>\n${safe}\n</untrusted_external_content>`
 }
 
 // A speed bump, not real defense — regex-based, will miss paraphrased attempts
