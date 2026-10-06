@@ -457,6 +457,32 @@ describe('mid-task steering — LiveSteeringChannel routing (Phase 3, hierarchic
     expect((output.match(/Noted\./g) ?? []).length).toBe(2)
   })
 
+  it('onTurnBusyChange reports busy for the turn and for a deferred follow-up turn, idle at the end, and never for a slash command', async () => {
+    const llm = new DeferredReplyLLMClient()
+    const busy: boolean[] = []
+    const { cli } = await setupCli({
+      assistant: new PersonalAssistant({ llmClient: llm }),
+      envOverrides: { goalGraphMode: 'enabled' },
+      onTurnBusyChange: (b: boolean) => busy.push(b),
+    })
+    captureOutput()
+
+    await cli.dispatchLine('/status')
+    expect(busy).toEqual([])
+
+    const first = cli.dispatchLine('first message')
+    await flushAsync()
+    expect(busy).toEqual([true])
+    await cli.dispatchLine('second message') // queued mid-turn
+    llm.release()
+    await first
+    await cli.dispatchLine('/status')
+    await flushAsync()
+
+    // true,false for the first turn, then true,false for the queued message run as its own turn.
+    expect(busy).toEqual([true, false, true, false])
+  })
+
   it('goalGraphMode enabled: a slash command sent while a turn is running still keeps dispatchQueue\'s strict serialization (never steered) — /config race-avoidance still holds', async () => {
     const llm = new DeferredReplyLLMClient()
     const { cli, configStore } = await setupCli({ assistant: new PersonalAssistant({ llmClient: llm }), envOverrides: { goalGraphMode: 'enabled' } })

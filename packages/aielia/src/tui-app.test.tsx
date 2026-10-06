@@ -250,6 +250,26 @@ describe('TuiApp', () => {
     }
   })
 
+  it('renders nothing new once the turn has ended: identical frames, no ticker left running', async () => {
+    const { eventLog, instance } = setup()
+    await type(instance, 'hi')
+    await key(instance, ENTER)
+    eventLog.handleEvent({ type: 'progress', text: '[step 1/15] Execution…' })
+    await sleep(150)
+    const whileRunning = instance.writeCount()
+    await sleep(300)
+    expect(instance.writeCount()).toBeGreaterThan(whileRunning) // the spinner really does tick while a turn is in flight
+    eventLog.handleEvent({ type: 'line', lines: ['Aielia> done', ''], stream: 'stdout' })
+    eventLog.endTurn()
+    await sleep(100)
+    const idleFrame = instance.lastFrame()
+    const idleCount = instance.writeCount()
+    await sleep(500) // > 6 spinner intervals
+    expect(instance.writeCount()).toBe(idleCount)
+    expect(instance.lastFrame()).toBe(idleFrame)
+    expect(strip(idleFrame)).not.toMatch(/Working…|Thinking…/)
+  })
+
   it('hides the liveness line while a reply is streaming and while an approval prompt waits for the user', async () => {
     const { eventLog, prompt, instance } = setup()
     await type(instance, 'hi')

@@ -244,6 +244,12 @@ export interface RunCliOptions {
   openPlanGraph?: (nodes: VizNode[]) => void
   /** Live per-task statuses from a running turn, forwarded for the open plan graph pane. */
   onPlanProgress?: (tasks: { id: string; status: TaskStatus }[]) => void
+  /**
+   * Called with true when a conversational turn starts being worked on and false when it has finished (in a
+   * `finally`, so also after an error) — including turns run as deferred follow-ups, which no `dispatchLine()`
+   * promise covers. The TUI's liveness indicator follows this rather than guessing from output events.
+   */
+  onTurnBusyChange?: (busy: boolean) => void
   dataDir?: string
   configStore?: ConfigStore
   backend?: FsBackend
@@ -1944,10 +1950,12 @@ export async function runCli(options: RunCliOptions = {}): Promise<CliInstance> 
       return
     }
     turnInProgress = true
+    options.onTurnBusyChange?.(true)
     try {
       await handleTurn(message)
     } finally {
       turnInProgress = false
+      options.onTurnBusyChange?.(false)
       // Phase 4: assistant.turn() above now absorbs queued steering messages in real time via
       // checkCallerUpdates (goal-graph-reconcile.ts), and re-enqueues onto steeringChannel
       // anything it didn't get around to this turn (a trivial turn that skipped harnessBridge.run

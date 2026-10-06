@@ -1,5 +1,5 @@
 import { describe, it, expect, vi } from 'vitest'
-import { EventLogBridge, PromptBridge, StatusBridge, formatLivenessLabel } from './tui-app.js'
+import { EventLogBridge, PromptBridge, StatusBridge, TurnActivityTracker, formatLivenessLabel } from './tui-app.js'
 import { PLAN_LINE_PREFIX } from './cli-icons.js'
 
 // These exercise only the plain classes (no JSX ever evaluated, no Ink mounted) — like
@@ -282,5 +282,64 @@ describe('StatusBridge', () => {
     bridge.set(['Plan mode: active', 'session: $0.42 / $5.00'])
     expect(listener).toHaveBeenCalledTimes(1)
     expect(bridge.getSnapshot()).toEqual(['Plan mode: active', 'session: $0.42 / $5.00'])
+  })
+})
+
+describe('TurnActivityTracker (the liveness indicator can never stay on once nothing is running — benchmark 05 stuck "Working… 438s")', () => {
+  const flush = () => new Promise<void>((r) => setTimeout(r, 0))
+
+  function setup() {
+    const log = new EventLogBridge()
+    return { log, tracker: new TurnActivityTracker(log), on: () => log.getSnapshot().turnInFlight }
+  }
+
+  it('is off after a plain turn, and after a turn whose dispatch throws', async () => {
+    const { log, tracker, on } = setup()
+    log.beginTurn()
+    await tracker.track(async () => { expect(on()).toBe(true) })
+    expect(on()).toBe(false)
+    log.beginTurn()
+    await expect(tracker.track(async () => { throw new Error('boom') })).rejects.toThrow('boom')
+    expect(on()).toBe(false)
+  })
+
+  it('an approval answer given mid-turn does not leave it on after the turn ends', async () => {
+    const { log, tracker, on } = setup()
+    log.beginTurn()
+    await tracker.track(async () => {
+      log.handleEvent({ type: 'line', lines: ['[needs approval — write] x'], stream: 'stdout' })
+      log.expectOutput() // the user answered the prompt
+      expect(on()).toBe(true)
+      log.handleEvent({ type: 'line', lines: ['Done.'], stream: 'stdout' })
+    })
+    expect(on()).toBe(false)
+    expect(log.getSnapshot().waitingForOutput).toBe(false)
+  })
+
+  it('a message queued mid-turn (its own dispatch resolves at once) neither switches it off early nor leaves it on', async () => {
+    const { log, tracker, on } = setup()
+    let finishTurn!: () => void
+    log.beginTurn()
+    tracker.setCliBusy(true)
+    const running = tracker.track(() => new Promise<void>((r) => { finishTurn = r }))
+    log.beginTurn()
+    await tracker.track(async () => {}) // queued: returns immediately
+    expect(on()).toBe(true)
+    finishTurn()
+    await running
+    // The CLI then runs the queued message as a follow-up turn that no dispatch promise covers.
+    tracker.setCliBusy(false)
+    tracker.setCliBusy(true)
+    await flush()
+    expect(on()).toBe(true)
+    tracker.setCliBusy(false)
+    expect(on()).toBe(false)
+  })
+
+  it('a slash command (the CLI never reports busy) is off as soon as its dispatch settles', async () => {
+    const { log, tracker, on } = setup()
+    log.beginTurn()
+    await tracker.track(async () => {})
+    expect(on()).toBe(false)
   })
 })

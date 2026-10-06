@@ -169,6 +169,20 @@ export class EventLogBridge implements Store<TuiLogState> {
     this.commit()
   }
 
+  /** A resolved approval/clarification answer: output is expected again, but it says nothing about whether a turn is in flight — `TurnActivityTracker` owns that, so a prompt answer can never leave the indicator stuck on. */
+  expectOutput(): void {
+    this.waitingForOutput = true
+    this.commit()
+  }
+
+  /** Marks a turn in flight (idempotent); the elapsed counter counts from the first call. */
+  markBusy(): void {
+    if (this.turnInFlight) return
+    this.turnInFlight = true
+    this.lastActivityAt = Date.now()
+    this.commit()
+  }
+
   /** Marks the turn finished (its `dispatchLine()` settled) — the liveness line stops. Safe to call when no turn is in flight. */
   endTurn(): void {
     if (!this.turnInFlight && !this.waitingForOutput) return
@@ -246,6 +260,39 @@ export class EventLogBridge implements Store<TuiLogState> {
     // user's echo (pushTurnMargin's own no-op-on-consecutive-margin guard means this and the next
     // turn's pre-echo pushTurnMargin() call collapse into the same single line, never stacking).
     if (kind === 'assistant') this.pushTurnMargin()
+  }
+}
+
+/**
+ * The one place that decides whether the liveness indicator is on. A turn is in flight while any submitted
+ * `dispatchLine()` is unsettled OR the CLI reports a turn running (covering a message that was queued mid-turn
+ * — its own dispatch resolves at once — and deferred follow-up turns, which no dispatch promise covers).
+ * Every exit funnels through `settle()`, called from `finally`s, so no completion path can leave it on.
+ */
+export class TurnActivityTracker {
+  private dispatches = 0
+  private cliBusy = false
+  constructor(private readonly eventLog: EventLogBridge) {}
+
+  /** Wraps one `dispatchLine()` call. Always settles, whether it resolves or throws. */
+  async track<T>(run: () => Promise<T>): Promise<T> {
+    this.dispatches++
+    try {
+      return await run()
+    } finally {
+      this.dispatches--
+      this.settle()
+    }
+  }
+
+  setCliBusy(busy: boolean): void {
+    this.cliBusy = busy
+    if (busy) this.eventLog.markBusy()
+    else this.settle()
+  }
+
+  private settle(): void {
+    if (this.dispatches === 0 && !this.cliBusy) this.eventLog.endTurn()
   }
 }
 
@@ -669,7 +716,7 @@ export function TuiApp(props: TuiAppProps): React.JSX.Element {
       // rather than the bare, less legible key.
       const displayAnswer = pending?.options?.find((option) => option.key === line)?.label ?? line
       eventLog.pushEchoLine('> ', pending?.question !== undefined ? `${pending.question.trimEnd()} → ${displayAnswer}` : line)
-      eventLog.beginTurn()
+      eventLog.expectOutput()
       prompt.submit(line)
     },
     [eventLog, prompt, pending],
@@ -795,6 +842,7 @@ export async function runTuiApp(options: RunTuiAppOptions = {}): Promise<void> {
   // Started before runCli() is ever called — runCli() itself prints the startup banner
   // (backend, capabilities, undo-log carryover) via plain console.log, which must land in the
   // Static scrollback like everything else, not leak to the real terminal underneath Ink's frame.
+  const activity = new TurnActivityTracker(eventLog)
   const restoreCapture = startCapture((event) => eventLog.handleEvent(event))
   // Screen-switch escapes go through the unpatched write, never the captured one (see PlanGraphBridge).
   const planGraph = new PlanGraphBridge((chunk) => void originalWrite(chunk))
@@ -805,6 +853,7 @@ export async function runTuiApp(options: RunTuiAppOptions = {}): Promise<void> {
     const inert = createInertStreams()
     instance = await runCli({
       ...options,
+      onTurnBusyChange: (busy) => activity.setCliBusy(busy),
       openPlanGraph: (nodes) => void planGraph.open(nodes),
       onPlanProgress: (tasks) => {
         if (planGraph.isOpen()) void instanceRef?.getPlanGraphNodes(tasks).then((nodes) => nodes && planGraph.update(nodes))
@@ -831,7 +880,10 @@ export async function runTuiApp(options: RunTuiAppOptions = {}): Promise<void> {
   await refreshStatus()
 
   const handleSubmitChat = (line: string): void => {
-    void instance.dispatchLine(line).then(refreshStatus).finally(() => eventLog.endTurn())
+    void activity.track(async () => {
+      await instance.dispatchLine(line)
+      await refreshStatus()
+    })
   }
 
   let exiting = false
