@@ -8,6 +8,14 @@ describe('resolveConfig', () => {
     expect(overriddenKeys.size).toBe(0)
   })
 
+  it('ignores unknown keys, including a "__proto__" key from a hand-edited file', () => {
+    const persisted = JSON.parse('{"__proto__": {"apiKey": "stolen"}, "bogus": 1, "enableWeb": false}')
+    const { config } = resolveConfig(persisted)
+    expect(Object.getPrototypeOf(config)).toBe(Object.prototype)
+    expect(config.apiKey).toBeUndefined()
+    expect('bogus' in config).toBe(false)
+  })
+
   it('persisted values win over defaults', () => {
     const { config } = resolveConfig({ enableWeb: true, braveApiKey: 'k' })
     expect(config.enableWeb).toBe(true)
