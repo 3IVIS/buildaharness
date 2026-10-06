@@ -21,6 +21,7 @@ export class FlowState {
   }
 
   set(key: string, value: unknown): void {
+    if (key === '__proto__') return
     const fieldDef = this.schema?.properties?.[key]
     if (fieldDef) {
       this._validateType(key, value, fieldDef.type)
@@ -30,6 +31,8 @@ export class FlowState {
 
   patch(partial: Record<string, unknown>): void {
     for (const [key, value] of Object.entries(partial)) {
+      // A JSON-parsed model output can carry an own "__proto__" key; assigning it would swap this.data's prototype.
+      if (key === '__proto__') continue
       this.data[key] = value
     }
   }

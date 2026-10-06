@@ -44,6 +44,7 @@ export async function hitlBreakpointExecutor(node: Node, state: FlowState, conte
   context.eventBus.emit({ type: 'flow:paused', nodeId: node.id, prompt: resolvedPrompt, resumeSchema })
 
   let payload: unknown
+  let timer: ReturnType<typeof setTimeout> | undefined
 
   try {
     if (node.timeout_seconds) {
@@ -51,7 +52,7 @@ export async function hitlBreakpointExecutor(node: Node, state: FlowState, conte
       const onTimeout = node.on_timeout ?? 'raise'
 
       const timeoutPromise = new Promise<null>((resolve, reject) =>
-        setTimeout(() => {
+        timer = setTimeout(() => {
           if (onTimeout === 'skip') resolve(null)
           else reject(new HITLTimeoutError({ nodeId: node.id, timeoutSeconds: node.timeout_seconds! }))
         }, timeoutMs)
@@ -62,6 +63,7 @@ export async function hitlBreakpointExecutor(node: Node, state: FlowState, conte
       payload = await resumePromise
     }
   } finally {
+    if (timer !== undefined) clearTimeout(timer)
     context.hitlResolvers.delete(node.id)
     await context.hitlPersistStore.delete(`${node.id}:state`)
   }
