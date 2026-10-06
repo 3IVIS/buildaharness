@@ -2012,6 +2012,7 @@ export async function runCli(options: RunCliOptions = {}): Promise<CliInstance> 
   function routeMessage(message: string): Promise<void> {
     if (isGoalGraphEnabled(config.goalGraphMode) && turnInProgress && !isKnownCommand(message)) {
       steeringChannel.enqueue(message)
+      assistant.logQueuedMessage('cli', message)
       console.log('\n[queued — the current turn is still running; this will be taken into account once it finishes]\n')
       return Promise.resolve()
     }

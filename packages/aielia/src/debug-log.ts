@@ -19,7 +19,7 @@
  * without either owning the other.
  */
 export interface DebugLogEntry {
-  kind: 'user_message' | 'assistant_reply' | 'tool_call' | 'approval_request' | 'approval_decision' | 'note' | 'next_steps'
+  kind: 'user_message' | 'user_message_queued' | 'assistant_reply' | 'tool_call' | 'approval_request' | 'approval_decision' | 'note' | 'next_steps'
   sessionId: string
   content: string
 }

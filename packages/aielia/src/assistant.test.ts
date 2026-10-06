@@ -2390,6 +2390,13 @@ describe('PersonalAssistant shell tools', () => {
       expect(executeCommand).not.toHaveBeenCalled()
     })
 
+    it('a message queued mid-turn is logged at receipt as user_message_queued', () => {
+      const logs: { kind: string; sessionId: string; content: string }[] = []
+      const assistant = new PersonalAssistant({ llmClient: scriptedResponses([]), onDebugLog: (e) => logs.push(e) })
+      assistant.logQueuedMessage('log-q', 'and also the diff')
+      expect(logs).toEqual([{ kind: 'user_message_queued', sessionId: 'log-q', content: 'and also the diff' }])
+    })
+
     it('a message-level gate is logged as a request and a decision (approved), and the message once', async () => {
       const backend = makeFakeBackend()
       const logs: { kind: string; content: string }[] = []

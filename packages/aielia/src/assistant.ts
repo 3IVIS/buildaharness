@@ -578,6 +578,11 @@ export class PersonalAssistant {
     }
   }
 
+  /** Logs a message that arrived while a turn was running, at receipt time (its `user_message` is only logged when it is processed). */
+  logQueuedMessage(sessionId: string, message: string): void {
+    this.onDebugLog?.({ kind: 'user_message_queued', sessionId, content: message })
+  }
+
   /**
    * Thin wrapper around runTurn(): emits turn_start/turn_end/error trace events
    * around the actual logic, so every one of runTurn's return paths gets a
