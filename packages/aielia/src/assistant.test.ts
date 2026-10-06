@@ -2120,6 +2120,42 @@ describe('PersonalAssistant shell tools', () => {
     expect(transcript).toEqual([{ role: 'user', content: MSG }, { role: 'assistant', content: review }])
   })
 
+  it('a multi-step edit continues across approvals in one turn: read -> write (approve) -> write (approve) -> final answer, and the user message is logged once', async () => {
+    const backend = makeFakeBackend()
+    await backend.writeTextFile(`${ROOT}/handlers.py`, 'def a(): pass\n')
+    const executeCommand = vi.fn()
+    const logs: { kind: string; content: string }[] = []
+    const llm = scriptedResponses([
+      { content: '', toolCalls: [{ id: 'r1', name: 'read_file', input: { path: 'handlers.py' } }] },
+      { content: '', toolCalls: [{ id: 'w1', name: 'write_file', input: { path: 'rate_limit.py', content: 'LIMIT = 100\n' } }] },
+      { content: '', toolCalls: [{ id: 'w2', name: 'write_file', input: { path: 'handlers.py', content: 'from rate_limit import LIMIT\ndef a(): pass\n' } }] },
+      { content: 'Added the limiter and wired it into handlers.py.' },
+    ])
+    const assistant = new PersonalAssistant({
+      llmClient: llm,
+      fileTools: { backend, workspaceRoot: ROOT },
+      shellTools: { backend, workspaceRoot: ROOT, executeCommand },
+      onDebugLog: (e) => logs.push(e),
+    })
+    const MSG = 'add rate limiting and apply it to the handlers'
+
+    const first = await assistant.turn(MSG, { sessionId: 'multi-write' })
+    expect(first.status).toBe('needs_approval')
+    const second = await assistant.turn(MSG, { sessionId: 'multi-write', approved: true, pendingActionId: first.pendingActionId })
+    expect(second.status).toBe('needs_approval')
+    expect(await backend.readTextFile(`${ROOT}/rate_limit.py`)).toBe('LIMIT = 100\n')
+    const third = await assistant.turn(MSG, { sessionId: 'multi-write', approved: true, pendingActionId: second.pendingActionId })
+
+    expect(third.status).toBe('ok')
+    expect(third.reply).toBe('Added the limiter and wired it into handlers.py.')
+    expect(await backend.readTextFile(`${ROOT}/handlers.py`)).toContain('from rate_limit import LIMIT')
+    // The read result from before the first pause is still in the model's context at the end.
+    expect(llm.receivedMessages[3].some((m) => m.role === 'tool' && m.toolCallId === 'r1')).toBe(true)
+    expect(logs.filter((e) => e.kind === 'user_message' && e.content === MSG)).toHaveLength(1)
+    // The activity log's tool_call entry for an approved write carries the tool result after the arrow.
+    expect(logs.some((e) => e.kind === 'tool_call' && e.content.startsWith('write_file({"path":"rate_limit.py"}) →\nWrote "rate_limit.py".'))).toBe(true)
+  })
+
   it('dangerouslySkipPermissions runs the whole approved-command loop in one turn call', async () => {
     const executeCommand = vi.fn().mockResolvedValue({ output: 'ok\n', exitCode: 0, timedOut: false })
     const { ctx } = makeShellTools(executeCommand)

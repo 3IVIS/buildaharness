@@ -592,7 +592,8 @@ export class PersonalAssistant {
     this.memoryReviewer.abort()
     const writesBefore = this.memoryService.writeCount
     this.onTrace?.({ kind: 'turn_start', sessionId, message: userMessage })
-    this.onDebugLog?.({ kind: 'user_message', sessionId, content: userMessage })
+    // An approval resume replays the original message; it was already logged when the turn started.
+    if (!options.pendingActionId) this.onDebugLog?.({ kind: 'user_message', sessionId, content: userMessage })
 
     // Pre-turn only, never mid-turn — a turn already in flight always finishes (see
     // spend-cap.ts's checkSpendCap doc comment). A pendingActionId call is a continuation of a
