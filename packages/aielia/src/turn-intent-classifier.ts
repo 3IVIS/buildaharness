@@ -492,8 +492,31 @@ function isDecomposedTaskSpec(value: unknown): value is DecomposedTaskSpec {
  * harness's tracked task graph, not which content actually gets produced.
  */
 function sanitizeDependsOn(tasks: DecomposedTaskSpec[]): DecomposedTaskSpec[] {
-  const knownIds = new Set(tasks.map((t) => t.id))
-  return tasks.map((t) => (t.depends_on.every((d) => knownIds.has(d)) ? t : { ...t, depends_on: t.depends_on.filter((d) => knownIds.has(d)) }))
+  // A repeated id would make the graph ambiguous: keep the first, drop the rest.
+  const seen = new Set<string>()
+  const unique = tasks.filter((t) => (seen.has(t.id) ? false : (seen.add(t.id), true)))
+  // Dangling references and self-references both crash the harness's graph check.
+  const cleaned = unique.map((t) => {
+    const deps = [...new Set(t.depends_on.filter((d) => seen.has(d) && d !== t.id))]
+    return deps.length === t.depends_on.length ? t : { ...t, depends_on: deps }
+  })
+  // A dependency cycle (a model slip) would throw GraphCycleError deep inside the run. Fall back to the listed
+  // order, which the prompt defines as the intended sequence.
+  return hasDependencyCycle(cleaned) ? cleaned.map((t, i) => ({ ...t, depends_on: i === 0 ? [] : [cleaned[i - 1].id] })) : cleaned
+}
+
+function hasDependencyCycle(tasks: DecomposedTaskSpec[]): boolean {
+  const byId = new Map(tasks.map((t) => [t.id, t]))
+  const state = new Map<string, 1 | 2>()
+  const visit = (id: string): boolean => {
+    if (state.get(id) === 2) return false
+    if (state.get(id) === 1) return true
+    state.set(id, 1)
+    for (const d of byId.get(id)?.depends_on ?? []) if (visit(d)) return true
+    state.set(id, 2)
+    return false
+  }
+  return tasks.some((t) => visit(t.id))
 }
 
 function parseTurnIntent(content: string, context: TurnIntentContext): TurnIntentClassification | null {
@@ -508,7 +531,8 @@ function parseTurnIntent(content: string, context: TurnIntentContext): TurnInten
 
   const riskReason = typeof parsed.riskReason === 'string' && parsed.riskReason.trim() ? parsed.riskReason : `LLM classified this as ${parsed.riskLevel} risk.`
   const decomposedTasksRaw = Array.isArray(parsed.decomposedTasks) ? parsed.decomposedTasks.filter(isDecomposedTaskSpec) : []
-  const decomposedTasks = decomposedTasksRaw.length > 1 ? sanitizeDependsOn(decomposedTasksRaw) : null
+  const decomposedTasksSanitized = decomposedTasksRaw.length > 1 ? sanitizeDependsOn(decomposedTasksRaw) : null
+  const decomposedTasks = decomposedTasksSanitized && decomposedTasksSanitized.length > 1 ? decomposedTasksSanitized : null
 
   const isTrivial = parsed.riskLevel === 'LOW' && parsed.isTrivial
   const isBulkReminderRequest = parsed.isReminderRequest && parsed.isBulkReminderRequest
