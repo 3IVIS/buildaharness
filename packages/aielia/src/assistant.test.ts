@@ -550,6 +550,8 @@ describe('PersonalAssistant', () => {
       const entries = logs.filter((e) => e.kind === 'next_steps')
       expect(entries).toHaveLength(1)
       expect(entries[0].content).toBe('1. convert it to your timezone [high]\n2. check the time in Osaka too [medium]')
+      // the reply is logged before the slow next-step call, so a stopped process still has it
+      expect(logs.findIndex((e) => e.kind === 'assistant_reply')).toBeLessThan(logs.findIndex((e) => e.kind === 'next_steps'))
       expect(prompts[0]).toMatch(/in the language named in `writeIn`/)
       expect(JSON.parse(payloads[0]).writeIn).toBe(suggestionLanguage([fullTurn]))
     })

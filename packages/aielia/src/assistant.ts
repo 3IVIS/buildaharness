@@ -626,6 +626,19 @@ export class PersonalAssistant {
       // to 'posthoc'). A path that already set it explicitly (the spend-cap early return above)
       // never reaches here.
       result.proposerKind = this.lastProposerKind
+      // Logged before the next-step proposal (one more LLM call, up to a couple of minutes): a reply that is already
+      // on screen must not be missing from the activity log because the process ended while that call was in flight.
+      // cachedInputTokens is included here (not just in the usage/cost UI) specifically so it's
+      // visible in the same terminal log stream as every other debug-log line — the only way to
+      // confirm, from a real live response, whether a given backend/model is actually reporting
+      // prompt-cache hits at all (several OpenAI-compatible providers, OpenRouter included, only
+      // populate usage.prompt_tokens_details.cached_tokens for some underlying models).
+      const cacheNote = result.usage?.cachedInputTokens !== undefined ? ` [cached: ${result.usage.cachedInputTokens}/${result.usage.inputTokens} input tokens]` : ''
+      this.onDebugLog?.({
+        kind: 'assistant_reply',
+        sessionId,
+        content: `[${result.status}]${result.riskLevel ? ` (${result.riskLevel})` : ''}${cacheNote} ${result.reply ?? (result.questions?.length ? formatAskQuestions(result.questions) : result.reason) ?? '(no reply)'}`,
+      })
       // R7: after a full turn (ok, and not the triviality fast path), propose next steps for the
       // user. Best-effort — proposeTurnNextSteps never throws — and its one LLM call is folded into
       // this turn's usage/spend like every other call the turn made.
@@ -649,17 +662,6 @@ export class PersonalAssistant {
       if (result.status === 'ok') await this.session.recordSpend(sessionId, result.usage)
       if (result.status === 'ok' && !options.pendingActionId) this.maybeStartMemoryReview(sessionId, result, this.memoryService.writeCount !== writesBefore, options)
       this.onTrace?.({ kind: 'turn_end', sessionId, status: result.status })
-      // cachedInputTokens is included here (not just in the usage/cost UI) specifically so it's
-      // visible in the same terminal log stream as every other debug-log line — the only way to
-      // confirm, from a real live response, whether a given backend/model is actually reporting
-      // prompt-cache hits at all (several OpenAI-compatible providers, OpenRouter included, only
-      // populate usage.prompt_tokens_details.cached_tokens for some underlying models).
-      const cacheNote = result.usage?.cachedInputTokens !== undefined ? ` [cached: ${result.usage.cachedInputTokens}/${result.usage.inputTokens} input tokens]` : ''
-      this.onDebugLog?.({
-        kind: 'assistant_reply',
-        sessionId,
-        content: `[${result.status}]${result.riskLevel ? ` (${result.riskLevel})` : ''}${cacheNote} ${result.reply ?? (result.questions?.length ? formatAskQuestions(result.questions) : result.reason) ?? '(no reply)'}`,
-      })
       return result
     } catch (err) {
       const message = err instanceof Error ? err.message : String(err)
