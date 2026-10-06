@@ -184,6 +184,17 @@ describe('LLMClient', () => {
       expect(body.stream).toBe(true)
     })
 
+    it('reshapes system messages to the top-level system field for claude models', async () => {
+      const mockFetch = vi.fn().mockResolvedValue(new Response(makeSSEStream(['data: [DONE]']), { status: 200 }))
+      vi.stubGlobal('fetch', mockFetch)
+      for await (const _ of client.callChat([{ role: 'system', content: 'be brief' }, { role: 'user', content: 'hi' }], { model: 'claude-opus-5' })) {
+        // consume
+      }
+      const body = JSON.parse(mockFetch.mock.calls[0][1].body as string)
+      expect(body.system).toBe('be brief')
+      expect(body.messages).toEqual([{ role: 'user', content: 'hi' }])
+    })
+
     it('uses the default model when none is specified', async () => {
       const mockFetch = vi.fn().mockResolvedValue(
         new Response(makeSSEStream(['data: [DONE]']), {

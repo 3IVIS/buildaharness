@@ -184,6 +184,18 @@ describe('OpenAICompatibleLLMClient', () => {
       expect(result.toolCalls).toEqual([{ id: 'call_1', name: 'read_file', input: {} }])
     })
 
+    it('degrades to an empty input object when tool_call arguments parse to a non-object', async () => {
+      mockFetchJson({
+        choices: [{ message: { content: null, tool_calls: [
+          { id: 'a', type: 'function', function: { name: 'x', arguments: 'null' } },
+          { id: 'b', type: 'function', function: { name: 'y', arguments: '[1]' } },
+        ] } }],
+      })
+      const client = new OpenAICompatibleLLMClient({ apiKey: API_KEY, baseUrl: OPENAI_BASE_URL, defaultModel: 'gpt-4o-mini' })
+      const result = await client.callChatStructured([{ role: 'user', content: 'hi' }])
+      expect(result.toolCalls?.map((c) => c.input)).toEqual([{}, {}])
+    })
+
     it('recovers a real tool call from a leaked DSML-style pseudo-tool-call block when the invoked name matches a registered tool', async () => {
       mockFetchJson({
         choices: [{

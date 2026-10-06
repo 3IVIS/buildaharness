@@ -53,7 +53,9 @@ function parseToolCalls(toolCalls: unknown): ToolCallResult[] | undefined {
     // call still gets reported (with an empty input) rather than the whole response failing.
     let input: Record<string, unknown> = {}
     try {
-      input = JSON.parse(tc.function?.arguments ?? '{}')
+      const parsed: unknown = JSON.parse(tc.function?.arguments ?? '{}')
+      // Valid JSON that isn't an object (null, a string, an array) would crash consumers that index into input.
+      input = parsed !== null && typeof parsed === 'object' && !Array.isArray(parsed) ? (parsed as Record<string, unknown>) : {}
     } catch {
       input = {}
     }
@@ -204,6 +206,7 @@ export class OpenAICompatibleLLMClient implements ILLMClient {
       }
     }
 
+    try {
     while (true) {
       const { done, value } = await reader.read()
       if (done) break
@@ -228,6 +231,9 @@ export class OpenAICompatibleLLMClient implements ILLMClient {
           // skip malformed chunks
         }
       }
+    }
+    } finally {
+      await reader.cancel().catch(() => {})
     }
     reportUsage()
   }
