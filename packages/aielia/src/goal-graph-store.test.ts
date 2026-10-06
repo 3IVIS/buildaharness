@@ -181,6 +181,15 @@ describe('loadGoalGraphRecord / saveGoalGraphRecord', () => {
     expect(await memory.get('goalgraph:session-1')).toEqual(edited)
   })
 
+  it('gives sessions whose ids sanitise to the same text separate files', async () => {
+    const memory = new InMemoryAdapter()
+    const fsPersistence = makeFsPersistence()
+    await saveGoalGraphRecord(memory, 'a/b', makeGoalGraphRecord(), fsPersistence)
+    await saveGoalGraphRecord(memory, 'a_b', { ...makeGoalGraphRecord(), activeThreadId: null }, fsPersistence)
+    expect(fsPersistence.backend.files.size).toBe(2)
+    expect((await loadGoalGraphRecord(new InMemoryAdapter(), 'a/b', fsPersistence))?.activeThreadId).not.toBeNull()
+  })
+
   it('keys goal graphs by session, not globally', async () => {
     const memory = new InMemoryAdapter()
     await saveGoalGraphRecord(memory, 'session-1', makeGoalGraphRecord())
