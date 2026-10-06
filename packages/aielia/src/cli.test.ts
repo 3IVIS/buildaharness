@@ -1722,4 +1722,21 @@ describe('audit fixes: command lookup, picked next steps, closed input, reset sa
     expect(output).toContain('safe text')
     expect(/[\u001b\u0007\u009b]/.test(output)).toBe(false)
   })
+
+  it('/export keeps a path containing spaces whole', async () => {
+    const { mkdtemp, readFile, rm } = await import('node:fs/promises')
+    const { tmpdir } = await import('node:os')
+    const { join } = await import('node:path')
+    const dir = await mkdtemp(join(tmpdir(), 'cli-export-'))
+    try {
+      const assistant = new PersonalAssistant({ llmClient: new FakeLLMClient() })
+      vi.spyOn(assistant, 'getTranscript').mockResolvedValue([{ role: 'user', content: 'hi' }, { role: 'assistant', content: 'hello' }])
+      const { cli } = await setupCli({ assistant })
+      captureOutput()
+      await cli.dispatchLine(`/export ${join(dir, 'my transcript.md')}`)
+      expect(await readFile(join(dir, 'my transcript.md'), 'utf-8')).toContain('hello')
+    } finally {
+      await rm(dir, { recursive: true, force: true })
+    }
+  })
 })

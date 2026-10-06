@@ -895,7 +895,8 @@ export async function runCli(options: RunCliOptions = {}): Promise<CliInstance> 
       console.log('\nNothing to export yet.\n')
       return
     }
-    const filename = resolvePath(process.cwd(), args[0] ?? defaultExportFilename())
+    // The whole remainder is the path: a name with spaces must not be cut at the first one.
+    const filename = resolvePath(process.cwd(), args.length > 0 ? args.join(' ') : defaultExportFilename())
     try {
       await writeFile(filename, formatTranscriptMarkdown(transcript), 'utf-8')
       console.log(`\n✓ Exported ${transcript.length} message${transcript.length === 1 ? '' : 's'} to ${filename}\n`)
@@ -994,7 +995,7 @@ export async function runCli(options: RunCliOptions = {}): Promise<CliInstance> 
    */
   async function handleMemoryExport(args: string[]): Promise<void> {
     const data = await assistant.exportMemory('cli')
-    const filename = resolvePath(process.cwd(), args[0] ?? defaultMemoryExportFilename())
+    const filename = resolvePath(process.cwd(), args.length > 0 ? args.join(' ') : defaultMemoryExportFilename())
     try {
       await writeFile(filename, formatMemoryExport(data), 'utf-8')
       console.log(`\n✓ Exported learned memory to ${filename}\n`)
