@@ -1426,6 +1426,37 @@ describe('PersonalAssistant file tools', () => {
     expect(applied.reply).toBe('Saved the summary.')
   })
 
+  it('shows the reply audit every action of the user message, even when approvals split it over several turn() calls', async () => {
+    const backend = makeFakeBackend()
+    const inner = scriptedResponses([
+      { content: '', toolCalls: [{ id: 'toolu_1', name: 'write_file', input: { path: 'a.md', content: 'A' } }] },
+      { content: '', toolCalls: [{ id: 'toolu_2', name: 'write_file', input: { path: 'b.md', content: 'B' } }] },
+      { content: 'Wrote both files.' },
+    ])
+    const payloads: { actions: string[]; earlierActions: string[] }[] = []
+    const llm: ILLMClient = {
+      callChat: () => inner.callChat(),
+      callChatSync: (m, o) => inner.callChatSync(m, o),
+      callChatStructured: async (messages, tools, options) => {
+        if (String(messages[0]?.content).includes('You audit one reply')) {
+          payloads.push(JSON.parse(String(messages[1]?.content)))
+          return { content: '{"claimsUnrecordedWork": false, "promisesWorkNotDone": false, "unverifiedOutsideFacts": false, "contradictsCommandOutput": false}' }
+        }
+        return inner.callChatStructured(messages, tools, options)
+      },
+    }
+    const assistant = new PersonalAssistant({ llmClient: llm, fileTools: { backend, workspaceRoot: ROOT }, replyAudit: true })
+
+    const first = await assistant.turn('Write a.md and b.md')
+    const second = await assistant.turn('Write a.md and b.md', { approved: true, pendingActionId: first.pendingActionId })
+    const done = await assistant.turn('Write a.md and b.md', { approved: true, pendingActionId: second.pendingActionId })
+
+    expect(done.status).toBe('ok')
+    expect(payloads).toHaveLength(1)
+    expect(payloads[0].actions).toEqual(['wrote a.md', 'wrote b.md'])
+    expect(payloads[0].earlierActions).toEqual([])
+  })
+
   it('declining a pending write discards it — the file still does not exist', async () => {
     const backend = makeFakeBackend()
     const llm = scriptedResponses([
