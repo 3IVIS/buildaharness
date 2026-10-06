@@ -83,6 +83,23 @@ const SYSTEM_PROMPT =
   'the completed goal. Respond with JSON only: {"suggestions": [{"description": string, ' +
   '"confidence": "high"|"medium"|"low", "rationale": string}]}'
 
+/**
+ * Appended for turn-end options only. Each option is a message the user could send as-is, so
+ * meta-instructions ("reply to the assistant with...") are not options; and when the reply itself
+ * asks the user to choose among enumerated options, those options are the suggestions (the user
+ * clicks instead of retyping). Options an earlier turn proposed are only offered again when this
+ * turn's reply makes them relevant, so chips do not carry stale suggestions forward.
+ */
+const TURN_END_ADDENDUM =
+  ' These are shown as clickable options under the assistant\'s latest reply, and picking one puts its ' +
+  '`description` in the user\'s message box. So write each `description` as the message the user would ' +
+  'send, in first person or as a direct request (e.g. "Compare the second and third options"), never ' +
+  'an instruction about what to say ("Reply to the assistant with...") and never advice for the user. ' +
+  'If the latest reply ends by asking the user to choose among enumerated options or angles, return ' +
+  'those options (one per suggestion, `high` confidence) instead of anything else. Base the options ' +
+  'on the latest reply: do not repeat a goal\'s earlier `openSuggestions` unless this reply makes ' +
+  'them relevant again.'
+
 function isSuggestion(value: unknown): value is NextStepSuggestion {
   if (typeof value !== 'object' || value === null) return false
   const v = value as Record<string, unknown>
@@ -106,11 +123,12 @@ async function generateNextStepSuggestions(
   llmClient: ILLMClient,
   model?: string,
   onUsage?: (usage: TokenUsage) => void,
+  turnEnd = false,
 ): Promise<NextStepSuggestion[]> {
   try {
     const response = await llmClient.callChatStructured(
       [
-        { role: 'system', content: SYSTEM_PROMPT },
+        { role: 'system', content: turnEnd ? SYSTEM_PROMPT + TURN_END_ADDENDUM : SYSTEM_PROMPT },
         {
           role: 'user',
           content: JSON.stringify({
@@ -203,6 +221,7 @@ export async function proposeTurnNextSteps(
     llmClient,
     model,
     onUsage,
+    true,
   )
   return [...suggestions].sort((a, b) => CONFIDENCE_ORDER[a.confidence] - CONFIDENCE_ORDER[b.confidence]).slice(0, 3)
 }

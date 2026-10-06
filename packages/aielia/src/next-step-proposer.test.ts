@@ -165,6 +165,22 @@ describe('proposeTurnNextSteps — options shown after a full turn', () => {
     expect(seen[0]).toContain('I added login.tsx')
   })
 
+  it('turn-end call tells the model to write sendable messages and to surface enumerated options; the thread call does not', async () => {
+    const systems: string[] = []
+    const llm = new StructuredOnlyLLMClient(JSON.stringify({ suggestions: [] }))
+    const orig = llm.callChatStructured.bind(llm)
+    llm.callChatStructured = async (m, t, o) => {
+      systems.push(String(m[0].content))
+      return orig(m, t, o)
+    }
+    await proposeTurnNextSteps(turn, llm, 'enabled')
+    expect(systems[0]).toContain('Reply to the assistant with')
+    expect(systems[0]).toContain('enumerated options')
+    const thread = { id: 't', status: 'DONE', successCriteria: 'c', rationale: 'r', tasks: [] } as unknown as GoalThread
+    await proposeNextSteps(thread, llm, 'enabled')
+    expect(systems[1]).not.toContain('enumerated options')
+  })
+
   it('falls back to [] on an LLM error or malformed output, never throwing', async () => {
     expect(await proposeTurnNextSteps(turn, new ThrowingLLMClient(), 'enabled')).toEqual([])
     expect(await proposeTurnNextSteps(turn, new StructuredOnlyLLMClient('not json'), 'enabled')).toEqual([])
