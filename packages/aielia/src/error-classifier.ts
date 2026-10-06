@@ -13,6 +13,11 @@ interface ErrorPattern {
 const hasCode = (err: unknown, code: string): boolean =>
   typeof err === 'object' && err !== null && (err as { code?: unknown }).code === code
 
+const isNonSpawnSyscall = (err: unknown): boolean => {
+  const syscall = (err as { syscall?: unknown }).syscall
+  return typeof syscall === 'string' && !syscall.startsWith('spawn')
+}
+
 const hasName = (err: unknown, name: string): boolean =>
   err instanceof Error && err.name === name
 
@@ -23,7 +28,9 @@ const messageIncludes = (err: unknown, needle: string): boolean =>
 const ERROR_PATTERNS: ErrorPattern[] = [
   {
     // node:child_process ENOENT — the `claude` binary isn't on PATH / CLAUDE_PATH is wrong.
-    test: (err) => hasCode(err, 'ENOENT'),
+    // A filesystem ENOENT (open/stat/scandir on a memory or checkpoint file) carries a non-spawn `syscall`
+    // and is not a missing binary; only a spawn failure (or one with no syscall to tell) means that.
+    test: (err) => hasCode(err, 'ENOENT') && !isNonSpawnSyscall(err),
     classify: () => ({
       message: "Couldn't find the Claude CLI. Check that `claude` is on your PATH, or set CLAUDE_PATH.",
       retryable: false,
