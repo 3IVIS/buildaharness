@@ -555,6 +555,29 @@ describe('PersonalAssistant', () => {
       expect(result.reply).not.toContain('Note from the system')
     })
 
+    it('retries once with a nudge when the audit flags unrecorded work, and returns the corrected turn (N1b)', async () => {
+      let audits = 0
+      const replies = ['Done, I changed the file.', 'I did not change anything; no write was made.']
+      class RetryLLM extends FakeLLMClient {
+        async callChatStructured(messages: ChatMessage[], tools?: ToolDefinition[], options?: ChatOptions): Promise<LLMStructuredResponse> {
+          if (String(messages[0]?.content).includes('You audit one reply')) {
+            audits++
+            return { content: audits === 1 ? '{"claimsUnrecordedWork": true, "promisesWorkNotDone": false, "unverifiedOutsideFacts": false}' : '{"claimsUnrecordedWork": false, "promisesWorkNotDone": false, "unverifiedOutsideFacts": false}' }
+          }
+          return super.callChatStructured(messages, tools, options)
+        }
+        async callChatSync(): Promise<string> { return replies.shift() ?? '' }
+        async *callChat(): AsyncIterable<string> { yield replies.shift() ?? '' }
+      }
+      const logs: { kind: string; content: string }[] = []
+      const assistant = new PersonalAssistant({ llmClient: new RetryLLM(), replyAudit: true, onDebugLog: (e) => logs.push(e) })
+      const result = await assistant.turn('change the file', { sessionId: 'audit-retry' })
+      expect(audits).toBe(2)
+      expect(logs.filter((e) => e.kind === 'user_message')).toHaveLength(1)
+      expect(logs.some((e) => e.kind === 'note' && e.content.includes('retrying once with a nudge'))).toBe(true)
+      expect(result.auditNotice).toBeUndefined()
+    })
+
     it('logs the suggestions as one next_steps entry per turn, and the proposer is told which language to write in', async () => {
       const llm = new NextStepAwareLLMClient('It is 3pm in Tokyo.')
       const prompts: string[] = []

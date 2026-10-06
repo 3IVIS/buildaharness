@@ -1,4 +1,4 @@
-import { auditReply, replyAuditNotice, replyAuditEnabled } from './reply-audit.js'
+import { auditReply, replyAuditNotice, replyAuditEnabled, auditRetryNudge } from './reply-audit.js'
 import { containsActionRecord, stripActionRecord, FORGED_ACTION_RECORD_NOTE } from './action-record.js'
 import { deriveConsequentialTools } from '@buildaharness/harness'
 import { TOOL_EFFECT_CLASS } from './tool-effect-class.js'
@@ -128,6 +128,8 @@ function parsePendingIndex(selector: string): number | undefined {
 
 export interface TurnOptions {
   sessionId?: string
+  /** Internal: this turn is the one-time correction the reply audit asked for; it is not a user message and is never retried again. */
+  auditRetry?: boolean
   /** M4: a scripted / piped / batch caller. The post-turn memory reviewer is skipped for it (it only runs for an interactive session). */
   nonInteractive?: boolean
   approved?: boolean
@@ -616,7 +618,7 @@ export class PersonalAssistant {
     // approved turn's user_message in the activity log.
     // A message-level approval re-runs the same message with approved: true; that is likewise not a new user message.
     const isMessageGateRetry = options.approved === true && !options.pendingActionId && !options.pendingClarificationId && !options.planApprovalId
-    if (!options.pendingActionId && !isMessageGateRetry) this.onDebugLog?.({ kind: 'user_message', sessionId, content: userMessage })
+    if (!options.pendingActionId && !isMessageGateRetry && !options.auditRetry) this.onDebugLog?.({ kind: 'user_message', sessionId, content: userMessage })
     if (isMessageGateRetry) this.onDebugLog?.({ kind: 'approval_decision', sessionId, content: 'approved message-level gate' })
 
     // Pre-turn only, never mid-turn — a turn already in flight always finishes (see
@@ -660,6 +662,13 @@ export class PersonalAssistant {
           (u) => auditUsage.push(u),
         )
         const auditNotice = replyAuditNotice(audit, recorded)
+        // One automatic correction: the reply claimed or promised work with no recorded action, or stated outside
+        // facts as verified. The model gets a nudge to do the work with its tools or to say plainly that it did not.
+        const nudge = options.auditRetry ? undefined : auditRetryNudge(audit, recorded.length)
+        if (nudge) {
+          this.onDebugLog?.({ kind: 'note', sessionId, content: `reply audit: ${auditNotice ?? 'flagged'} — retrying once with a nudge` })
+          return await this.turn(nudge, { ...options, sessionId, auditRetry: true, approved: undefined, pendingActionId: undefined, pendingClarificationId: undefined, planApprovalId: undefined })
+        }
         if (auditNotice) {
           result.auditNotice = result.auditNotice ? `${result.auditNotice}\n${auditNotice}` : auditNotice
           this.onDebugLog?.({ kind: 'note', sessionId, content: `reply audit: ${auditNotice}` })

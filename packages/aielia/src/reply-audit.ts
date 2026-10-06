@@ -109,3 +109,17 @@ export function replyAuditEnabled(env?: Record<string, string | undefined>): boo
   if (raw === '') return true
   return !['0', 'false', 'off', 'no', 'disabled'].includes(raw)
 }
+
+/**
+ * The message for the one automatic retry, or undefined when the reply needs none. A claim or promise of work with nothing
+ * recorded asks for the work to be done now or the claim withdrawn; unverified outside facts ask for a corrected answer.
+ */
+export function auditRetryNudge(audit: ReplyAudit, recordedCount: number): string | undefined {
+  if ((audit.claimsUnrecordedWork || audit.promisesWorkNotDone) && recordedCount === 0) {
+    return '[automatic reply check] Your last reply says you changed files, ran something, or are about to, but no write or command was carried out this turn. Do it now with your tools if it is still wanted; otherwise say plainly that you have not done it. Do not claim work you did not do.'
+  }
+  if (audit.unverifiedOutsideFacts) {
+    return '[automatic reply check] Your last reply states facts about outside sources (changelogs, release notes, registries, web pages) that you did not read this turn. Answer again: say which parts you could not verify and how the user can check them; do not present them as established.'
+  }
+  return undefined
+}
