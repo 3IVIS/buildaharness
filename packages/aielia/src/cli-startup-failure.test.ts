@@ -1,16 +1,18 @@
 import { describe, it, expect } from 'vitest'
 import { spawnSync } from 'node:child_process'
-import { mkdtempSync, mkdirSync, writeFileSync, rmSync } from 'node:fs'
+import { mkdtempSync, mkdirSync, writeFileSync, rmSync, existsSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join, resolve, dirname } from 'node:path'
 import { fileURLToPath } from 'node:url'
 
 const here = dirname(fileURLToPath(import.meta.url))
 const tsx = resolve(here, '../../../node_modules/.bin/tsx')
+// The real process imports the built @buildaharness/runtime; CI jobs that run the tests before the build step do not have it.
+const runtimeBuilt = existsSync(resolve(here, '../../runtime/dist/index.js'))
 
 // Real process: an invalid persisted config (enableWeb without a Brave key) must print its reason on stderr and exit 1.
 describe('aielia process with an invalid persisted config', () => {
-  it('prints the reason on stderr and exits non-zero (REPL mode)', () => {
+  it.skipIf(!runtimeBuilt)('prints the reason on stderr and exits non-zero (REPL mode)', () => {
     const home = mkdtempSync(join(tmpdir(), 'aielia-badcfg-'))
     try {
       const dir = join(home, '.buildaharness', 'personal-assistant')
