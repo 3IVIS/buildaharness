@@ -1,6 +1,6 @@
 import { describe, it, expect, vi } from 'vitest'
 import type { FsBackend } from '@buildaharness/runtime'
-import { executeShellTool, commandMayLeaveWorkspace, type ShellStagingContext } from './shell-tools.js'
+import { executeShellTool, commandMayLeaveWorkspace, RUN_SHELL_COMMAND_TOOL, type ShellStagingContext } from './shell-tools.js'
 import { PathOutsideWorkspaceError, loadPendingAction, discardPendingAction } from './file-tools.js'
 
 /** In-memory FsBackend, standing in for a real disk — mirrors file-tools.test.ts's fake. */
@@ -130,5 +130,13 @@ describe('discardPendingAction (kind: shell)', () => {
     await discardPendingAction(backend, ROOT, staged.id)
 
     expect(await loadPendingAction(backend, ROOT, staged.id)).toBeUndefined()
+  })
+})
+
+describe('run_shell_command tool description', () => {
+  it('tells the model where a command starts, so it does not cd to a guessed absolute path (benchmark logs: `cd /workspace && ...` proposals failed with "no such directory")', () => {
+    const props = RUN_SHELL_COMMAND_TOOL.input_schema.properties as Record<string, { description: string }>
+    expect(props.command.description).toMatch(/starts in the workspace root/)
+    expect(props.command.description).toMatch(/never `cd` to a guessed absolute path/)
   })
 })
