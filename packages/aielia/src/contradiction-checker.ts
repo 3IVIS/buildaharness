@@ -271,7 +271,8 @@ const SYSTEM_PROMPT =
 // screen regardless of model compliance.
 function stripBeliefIds(description: string, knownIds: string[]): string {
   let sanitized = description
-  for (const id of knownIds) {
+  for (const id of [...knownIds].sort((a, b) => b.length - a.length)) {
+    if (!id) continue
     sanitized = sanitized.split(id).join('')
   }
   return sanitized.replace(/\s{2,}/g, ' ').trim()
@@ -356,7 +357,11 @@ export async function checkForContradictions(
       contradictions?: ExternalContradictionInput[]
       corroborations?: { existingId?: unknown; newId?: unknown }[]
     }
-    const contradictions = Array.isArray(parsed.contradictions) ? parsed.contradictions : []
+    // A malformed entry (no description, ids not an array, a null) must not sink the whole reply, and an id the model
+    // invented must not reach the harness or the caller's dedupe signature.
+    const contradictions = (Array.isArray(parsed.contradictions) ? parsed.contradictions : []).filter(
+      (c): c is ExternalContradictionInput => typeof c === 'object' && c !== null && typeof c.description === 'string' && Array.isArray(c.beliefIds),
+    )
     const rawCorroborations = Array.isArray(parsed.corroborations) ? parsed.corroborations : []
     const knownIds = [...newBeliefs, ...existingBeliefs, ...uncertainFacts, ...rejectedFacts].map((b) => b.id)
     const knownIdSet = new Set(knownIds)
@@ -370,8 +375,8 @@ export async function checkForContradictions(
       contradictions: contradictions.map((c) => {
         const { severity, ...rest } = c
         const graded = withSeverity && severity === 'HIGH' ? { severity } : {}
-        return { ...rest, ...graded, description: stripBeliefIds(c.description, knownIds) }
-      }),
+        return { ...rest, ...graded, beliefIds: c.beliefIds.filter((id) => typeof id === 'string' && knownIdSet.has(id)), description: stripBeliefIds(c.description, knownIds) }
+      }).filter((c) => c.beliefIds.length >= 2),
       corroborations,
     }
   } catch {

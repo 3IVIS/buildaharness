@@ -247,6 +247,27 @@ class ThrowingLLMClient implements ILLMClient {
 }
 
 describe('checkForContradictions', () => {
+  it('drops malformed entries and invented belief ids instead of discarding the whole reply', async () => {
+    const llm = new StructuredOnlyLLMClient(
+      JSON.stringify({
+        contradictions: [
+          null,
+          { beliefIds: 'b1', description: 'ids not an array' },
+          { beliefIds: ['b1', 'b2'] },
+          { beliefIds: ['b1', 'ghost'], description: 'only one real id' },
+          { beliefIds: ['b1', 'b2', 'ghost'], description: 'you live in Boston and Austin' },
+        ],
+        corroborations: [],
+      }),
+    )
+    const result = await checkForContradictions(
+      [{ id: 'b2', statement: 'the user lives in Austin' }],
+      [{ id: 'b1', statement: 'the user lives in Boston' }],
+      llm,
+    )
+    expect(result.contradictions).toEqual([{ beliefIds: ['b1', 'b2'], description: 'you live in Boston and Austin' }])
+  })
+
   it('returns [] without calling the LLM when there are no new beliefs', async () => {
     const llm = new StructuredOnlyLLMClient('{"contradictions":[]}')
     const result = await checkForContradictions([], [{ id: 'b1', statement: 'the user lives in Boston' }], llm)
