@@ -54,6 +54,15 @@ describe('AskClarificationService.resolvePendingClarification in hand-off mode',
     expect(bridge.discardPausedRun).not.toHaveBeenCalled()
   })
 
+  it('a staged batch does not resolve from a different session', async () => {
+    const { service, bridge, memory } = fakes()
+    const id = await stage(service)
+    const out = await service.resolvePendingClarification('other-session', 'transcript:other', id, answer, true, true)
+    expect(out).toMatchObject({ status: 'ok', reply: expect.stringMatching(/no longer pending/i) })
+    expect(bridge.discardPausedRun).not.toHaveBeenCalled()
+    expect(await memory.get(`ask-pending:${id}`)).toBeDefined() // untouched, still resolvable by its own session
+  })
+
   it('outside hand-off mode (flat loop) the paused run is resumed as before', async () => {
     const { service, bridge } = fakes()
     const id = await stage(service)

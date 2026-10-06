@@ -124,7 +124,9 @@ export class AskClarificationService {
     handOffToOrdinaryTurn = false,
   ): Promise<AssistantTurnResult | { fallThrough: true; answerText: string }> {
     const staged = (await this.memory.get(this.pendingKey(pendingClarificationId))) as AskClarificationPendingState | undefined
-    if (!staged) {
+    // A staged batch resolves only inside the session that staged it: it carries that session's
+    // active plan, facts and draft reply, which must not be resumed under a different session.
+    if (!staged || staged.sessionId !== sessionId) {
       return { status: 'ok', reply: 'That question is no longer pending — nothing to resolve.' }
     }
 
