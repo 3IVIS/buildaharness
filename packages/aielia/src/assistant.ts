@@ -419,6 +419,8 @@ export class PersonalAssistant {
   private readonly actionApproval: ActionApprovalService
   /** Set when the reply was already logged by the reply-ready hook this turn (see AssistantSession.replyReadyHook). */
   private replyLoggedEarly = false
+  /** Automatic correction retries still allowed for the current user message; resumed (approval) turns share it so a retry cannot chain. */
+  private auditRetryBudget = 1
   private readonly replyAuditOn: boolean
   private readonly planService: PlanService
   private readonly planApproval: PlanApprovalService
@@ -612,6 +614,7 @@ export class PersonalAssistant {
     const writesBefore = this.memoryService.writeCount
     this.onTrace?.({ kind: 'turn_start', sessionId, message: userMessage })
     this.replyLoggedEarly = false
+    if (!options.pendingActionId && !options.auditRetry && !(options.approved === true && !options.pendingClarificationId && !options.planApprovalId)) this.auditRetryBudget = 1
     const actionsBefore = this.actionApproval.appliedActions.length
     // A pendingActionId call resumes a turn whose user message was already logged when it first
     // started (it only carries that message along), so logging it again duplicated every
@@ -667,10 +670,12 @@ export class PersonalAssistant {
         // and delivers none of it.
         if (isDanglingAnnouncement(result.reply)) audit.promisesWorkNotDone = true
         const auditNotice = replyAuditNotice(audit, recorded)
+        if (!auditNotice) this.onDebugLog?.({ kind: 'note', sessionId, content: `reply audit: clean (recorded ${recorded.length} action(s), ${this.actionApproval.recentCommandOutputs.length} command output(s) checked)` })
         // One automatic correction: the reply claimed or promised work with no recorded action, or stated outside
         // facts as verified. The model gets a nudge to do the work with its tools or to say plainly that it did not.
-        const nudge = options.auditRetry ? undefined : auditRetryNudge(audit, recorded)
+        const nudge = options.auditRetry || this.auditRetryBudget <= 0 ? undefined : auditRetryNudge(audit, recorded)
         if (nudge) {
+          this.auditRetryBudget--
           this.onDebugLog?.({ kind: 'note', sessionId, content: `reply audit: ${auditNotice ?? 'flagged'} — retrying once with a nudge` })
           return await this.turn(nudge, { ...options, sessionId, auditRetry: true, approved: undefined, pendingActionId: undefined, pendingClarificationId: undefined, planApprovalId: undefined })
         }

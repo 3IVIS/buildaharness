@@ -281,7 +281,7 @@ export class ActionApprovalService {
     if (thisAction) this.appliedActions.push(thisAction)
     if (applied.kind === 'shell' && applied.execution) {
       const out = applied.execution.output ?? ''
-      this.recentCommandOutputs.push({ command: applied.command, output: out.length > 1600 ? `${out.slice(0, 800)}\n…\n${out.slice(-800)}` : out })
+      this.recentCommandOutputs.push({ command: applied.command, output: out.length > 8000 ? `${out.slice(0, 4000)}\n[… middle of the output not shown …]\n${out.slice(-4000)}` : out })
       if (this.recentCommandOutputs.length > 6) this.recentCommandOutputs.shift()
     }
     const actionsSoFar = [...(loopState?.actions ?? []), ...(thisAction ? [thisAction] : [])]
