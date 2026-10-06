@@ -7,6 +7,7 @@ import {
   buildShellUndoLogEntry,
   recordUndoLogEntry,
   loadUndoLogEntry,
+  deleteUndoLogEntry,
   listUndoLogEntries,
   UNDO_LOG_MAX_ENTRIES,
   UNDO_SNAPSHOT_MAX_FILE_BYTES,
@@ -270,5 +271,15 @@ describe('undo-log read/write', () => {
     expect(remaining.some((e) => e.id === entries[0].id)).toBe(false)
     // The most recently recorded entry must survive the prune.
     expect(remaining.some((e) => e.id === entries[entries.length - 1].id)).toBe(true)
+  })
+
+  it('rejects an id that would climb out of .undo-log/ (path traversal via /undo-action <id>)', async () => {
+    const backend = makeFakeBackend()
+    const entry = makeWriteEntry()
+    // A file sitting where `${ROOT}/.undo-log/../secret.json` points.
+    await backend.writeTextFile(`${ROOT}/.undo-log/../secret.json`, JSON.stringify(entry))
+    expect(await loadUndoLogEntry(backend, ROOT, '../secret')).toBeUndefined()
+    await deleteUndoLogEntry(backend, ROOT, '../secret')
+    expect(await backend.readTextFile(`${ROOT}/.undo-log/../secret.json`)).toBeDefined()
   })
 })

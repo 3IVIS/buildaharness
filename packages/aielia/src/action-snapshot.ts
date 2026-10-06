@@ -98,7 +98,13 @@ function undoLogDir(workspaceRoot: string): string {
   return `${workspaceRoot}/${UNDO_LOG_DIR}`
 }
 
+/** Undo-log ids are UUIDs minted by this module; `/undo-action <id>` passes user text, so anything that could climb out of `.undo-log/` is rejected. */
+function isSafeUndoLogId(id: string): boolean {
+  return /^[A-Za-z0-9_-]+$/.test(id)
+}
+
 function undoLogPath(workspaceRoot: string, id: string): string {
+  if (!isSafeUndoLogId(id)) throw new Error(`Invalid undo-log entry id "${id}"`)
   return `${undoLogDir(workspaceRoot)}/${id}.json`
 }
 
@@ -114,6 +120,7 @@ export async function recordUndoLogEntry(backend: FsBackend, workspaceRoot: stri
 }
 
 export async function loadUndoLogEntry(backend: FsBackend, workspaceRoot: string, id: string): Promise<UndoLogEntry | undefined> {
+  if (!isSafeUndoLogId(id)) return undefined
   const raw = await backend.readTextFile(undoLogPath(workspaceRoot, id))
   return raw === undefined ? undefined : (JSON.parse(raw) as UndoLogEntry)
 }
@@ -137,6 +144,7 @@ export async function listUndoLogEntries(backend: FsBackend, workspaceRoot: stri
 }
 
 export async function deleteUndoLogEntry(backend: FsBackend, workspaceRoot: string, id: string): Promise<void> {
+  if (!isSafeUndoLogId(id)) return
   await backend.removeFile(undoLogPath(workspaceRoot, id))
 }
 
