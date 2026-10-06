@@ -1,4 +1,5 @@
 import type { GoalGraphState, GoalThreadView, GoalThreadVisibility } from '@buildaharness/aielia'
+import { formatTimestamp } from '../format-timestamp'
 
 interface Props {
   /** Bound to assistant.getGoalGraphState(sessionId) — see App.tsx's handleOpenGoals. `null` means "still loading", distinct from an empty (but loaded) graph. */
@@ -6,10 +7,11 @@ interface Props {
   onCancel: () => void
 }
 
+/** Empty label = not shown: 'done' repeats the DONE status badge and 'freshly_computed' is the unremarkable default. */
 const VISIBILITY_LABEL: Record<GoalThreadVisibility, string> = {
   suggested_not_committed: 'Suggested, not committed',
-  done: 'Done',
-  freshly_computed: 'Freshly computed',
+  done: '',
+  freshly_computed: '',
   carried_over: 'Carried over',
 }
 
@@ -28,9 +30,13 @@ function ThreadRow({ thread }: { thread: GoalThreadView }): React.JSX.Element {
   return (
     <li className="goals-panel__thread">
       <div className="goals-panel__thread-header">
-        <span className="goals-panel__status" data-status={thread.status}>{thread.status}</span>
-        {thread.isActive && <span className="goals-panel__active-badge">ACTIVE</span>}
-        <span className="goals-panel__visibility" data-visibility={thread.visibility}>{VISIBILITY_LABEL[thread.visibility]}</span>
+        {/* One status badge: ACTIVE for the active thread (else its own status), so the same word never shows twice. */}
+        {thread.isActive
+          ? <span className="goals-panel__active-badge">ACTIVE</span>
+          : <span className="goals-panel__status" data-status={thread.status}>{thread.status}</span>}
+        {VISIBILITY_LABEL[thread.visibility] && (
+          <span className="goals-panel__visibility" data-visibility={thread.visibility}>{VISIBILITY_LABEL[thread.visibility]}</span>
+        )}
       </div>
       <div className="goals-panel__success-criteria">{thread.successCriteria}</div>
       {thread.suggestions && thread.suggestions.length > 0 && (
@@ -49,7 +55,7 @@ function ThreadRow({ thread }: { thread: GoalThreadView }): React.JSX.Element {
             {thread.relationToSiblings} sibling{thread.siblingIds && thread.siblingIds.length > 1 ? 's' : ''}
           </span>
         )}
-        <span className="goals-panel__updated-at">updated {thread.updatedAt}</span>
+        <span className="goals-panel__updated-at">updated {formatTimestamp(thread.updatedAt)}</span>
       </div>
     </li>
   )

@@ -30,7 +30,7 @@ function installSeam(fact: { text: string; confidence: 'high' | 'medium' }): voi
 const replies = (): number => document.querySelectorAll('.bubble__content--markdown').length
 
 async function send(user: ReturnType<typeof userEvent.setup>, message: string): Promise<void> {
-  const input = await screen.findByPlaceholderText('Message the assistant…')
+  const input = await screen.findByPlaceholderText('Message Aielia…')
   const before = replies()
   await user.clear(input)
   await user.type(input, message)
@@ -120,7 +120,7 @@ describe('App: Memory panel (M6)', () => {
     installSeam({ text: 'irrelevant fact for mode test', confidence: 'medium' })
     const user = userEvent.setup()
     render(<App />)
-    await screen.findByPlaceholderText('Message the assistant…')
+    await screen.findByPlaceholderText('Message Aielia…')
     await user.click(screen.getByRole('button', { name: 'Memory' }))
     const select = await screen.findByLabelText('Memory write mode')
     await waitFor(() => expect(select).toHaveValue('staged'))

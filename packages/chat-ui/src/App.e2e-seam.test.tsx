@@ -38,7 +38,7 @@ function installSeam(): void {
 async function sendAndReadReply(message: string): Promise<{ kind: string; reply: string }> {
   const user = userEvent.setup()
   const { container } = render(<App />)
-  const input = await screen.findByPlaceholderText('Message the assistant…')
+  const input = await screen.findByPlaceholderText('Message Aielia…')
 
   // The assistant is built in an async mount effect; a send before it resolves lands a
   // retryable "still starting up" error entry. Send, then retry via that button if it appears.

@@ -140,7 +140,7 @@ describe('App', () => {
     const user = userEvent.setup()
     render(<App />)
 
-    const input = screen.getByPlaceholderText('Message the assistant…')
+    const input = screen.getByPlaceholderText('Message Aielia…')
     await user.type(input, 'hello there')
     await user.click(screen.getByRole('button', { name: 'Send' }))
 
@@ -152,7 +152,7 @@ describe('App', () => {
     const user = userEvent.setup()
     render(<App />)
 
-    const input = screen.getByPlaceholderText('Message the assistant…')
+    const input = screen.getByPlaceholderText('Message Aielia…')
     await user.type(input, 'hello there{Enter}')
 
     expect(screen.getByText('hello there')).toBeInTheDocument()
@@ -164,7 +164,7 @@ describe('App', () => {
     const user = userEvent.setup()
     render(<App />)
 
-    const input = screen.getByPlaceholderText('Message the assistant…')
+    const input = screen.getByPlaceholderText('Message Aielia…')
     await user.type(input, 'line one{Shift>}{Enter}{/Shift}line two')
 
     // Not sent yet — Shift+Enter must not trigger a submit.
@@ -182,7 +182,7 @@ describe('App', () => {
     const user = userEvent.setup()
     render(<App />)
 
-    const input = screen.getByPlaceholderText('Message the assistant…')
+    const input = screen.getByPlaceholderText('Message Aielia…')
     await user.type(input, 'needs approval please')
     await user.click(screen.getByRole('button', { name: 'Send' }))
 
@@ -198,7 +198,7 @@ describe('App', () => {
       const user = userEvent.setup()
       render(<App />)
 
-      await user.type(screen.getByPlaceholderText('Message the assistant…'), 'run this staged action')
+      await user.type(screen.getByPlaceholderText('Message Aielia…'), 'run this staged action')
       await user.click(screen.getByRole('button', { name: 'Send' }))
 
       // pendingActionKind: 'batch' on this pause — the card must label it accordingly, not
@@ -217,7 +217,7 @@ describe('App', () => {
       const user = userEvent.setup()
       render(<App />)
 
-      await user.type(screen.getByPlaceholderText('Message the assistant…'), 'run this staged action')
+      await user.type(screen.getByPlaceholderText('Message Aielia…'), 'run this staged action')
       await user.click(screen.getByRole('button', { name: 'Send' }))
 
       await waitFor(() => expect(screen.getByText('Needs approval — batch research')).toBeInTheDocument())
@@ -236,7 +236,7 @@ describe('App', () => {
       const user = userEvent.setup()
       render(<App />)
 
-      await user.type(screen.getByPlaceholderText('Message the assistant…'), 'needs clarification please')
+      await user.type(screen.getByPlaceholderText('Message Aielia…'), 'needs clarification please')
       await user.click(screen.getByRole('button', { name: 'Send' }))
 
       await waitFor(() => expect(screen.getByTestId('ask-question-card')).toBeInTheDocument())
@@ -259,7 +259,7 @@ describe('App', () => {
       const user = userEvent.setup()
       render(<App />)
 
-      await user.type(screen.getByPlaceholderText('Message the assistant…'), 'needs clarification please')
+      await user.type(screen.getByPlaceholderText('Message Aielia…'), 'needs clarification please')
       await user.click(screen.getByRole('button', { name: 'Send' }))
 
       await waitFor(() => expect(screen.getByTestId('ask-question-card')).toBeInTheDocument())
@@ -287,7 +287,7 @@ describe('App', () => {
     await user.type(proxyInput, 'http://saved-proxy:9')
     await user.click(screen.getByRole('button', { name: 'Save' }))
 
-    await waitFor(() => expect(screen.getByPlaceholderText('Message the assistant…')).toBeInTheDocument())
+    await waitFor(() => expect(screen.getByPlaceholderText('Message Aielia…')).toBeInTheDocument())
     expect(JSON.parse(localStorage.getItem('buildaharness.personal-assistant.config') ?? '{}')).toMatchObject({
       proxyUrl: 'http://saved-proxy:9',
     })
@@ -299,16 +299,16 @@ describe('App', () => {
     render(<App />)
 
     expect(await screen.findByText('Welcome to Aielia 👋')).toBeInTheDocument()
-    expect(screen.queryByPlaceholderText('Message the assistant…')).toBeNull()
+    expect(screen.queryByPlaceholderText('Message Aielia…')).toBeNull()
     await user.click(screen.getByRole('button', { name: /OpenRouter/ }))
     await user.click(screen.getByRole('button', { name: /Back/ }))
     await user.click(screen.getByRole('button', { name: 'Set up later' }))
-    expect(await screen.findByPlaceholderText('Message the assistant…')).toBeInTheDocument()
+    expect(await screen.findByPlaceholderText('Message Aielia…')).toBeInTheDocument()
   })
 
   it('skips the setup wizard when a backend is already persisted', async () => {
     render(<App />)
-    expect(await screen.findByPlaceholderText('Message the assistant…')).toBeInTheDocument()
+    expect(await screen.findByPlaceholderText('Message Aielia…')).toBeInTheDocument()
     expect(screen.queryByText('Welcome to Aielia 👋')).toBeNull()
   })
 
@@ -319,7 +319,7 @@ describe('App', () => {
     await user.click(screen.getByRole('button', { name: 'Settings' }))
     await user.click(screen.getByRole('button', { name: 'Cancel' }))
 
-    expect(screen.getByPlaceholderText('Message the assistant…')).toBeInTheDocument()
+    expect(screen.getByPlaceholderText('Message Aielia…')).toBeInTheDocument()
     expect(JSON.parse(localStorage.getItem('buildaharness.personal-assistant.config') ?? '{}')).toEqual({ llmBackend: 'proxy' })
   })
 
@@ -327,7 +327,7 @@ describe('App', () => {
     const user = userEvent.setup()
     render(<App />)
 
-    await user.type(screen.getByPlaceholderText('Message the assistant…'), 'hello there')
+    await user.type(screen.getByPlaceholderText('Message Aielia…'), 'hello there')
     await user.click(screen.getByRole('button', { name: 'Send' }))
     await waitFor(() => expect(screen.getByText('echo: hello there')).toBeInTheDocument())
 
@@ -344,7 +344,7 @@ describe('App', () => {
     const clickSpy = vi.spyOn(HTMLAnchorElement.prototype, 'click').mockImplementation(() => {})
     render(<App />)
 
-    await user.type(screen.getByPlaceholderText('Message the assistant…'), 'hello there')
+    await user.type(screen.getByPlaceholderText('Message Aielia…'), 'hello there')
     await user.click(screen.getByRole('button', { name: 'Send' }))
     await waitFor(() => expect(screen.getByText('echo: hello there')).toBeInTheDocument())
 
@@ -364,7 +364,7 @@ describe('App', () => {
     const user = userEvent.setup()
     render(<App />)
 
-    await user.type(screen.getByPlaceholderText('Message the assistant…'), 'first message')
+    await user.type(screen.getByPlaceholderText('Message Aielia…'), 'first message')
     await user.click(screen.getByRole('button', { name: 'Send' }))
     await waitFor(() => expect(screen.getByText('echo: first message')).toBeInTheDocument())
 
@@ -397,7 +397,7 @@ describe('App', () => {
       render(<App />)
       await screen.findAllByText('Send an email to my boss saying I quit.')
 
-      await user.type(screen.getByPlaceholderText('Message the assistant…'), 'hello there')
+      await user.type(screen.getByPlaceholderText('Message Aielia…'), 'hello there')
       await user.click(screen.getByRole('button', { name: 'Send' }))
 
       await waitFor(() => expect(screen.getByText('echo: hello there')).toBeInTheDocument())
@@ -409,13 +409,13 @@ describe('App', () => {
     const user = userEvent.setup()
     render(<App />)
 
-    await user.type(screen.getByPlaceholderText('Message the assistant…'), 'hello there')
+    await user.type(screen.getByPlaceholderText('Message Aielia…'), 'hello there')
     await user.click(screen.getByRole('button', { name: 'Send' }))
     await waitFor(() => expect(screen.getByText('echo: hello there')).toBeInTheDocument())
 
     await user.click(screen.getByRole('button', { name: 'Settings' }))
 
-    await waitFor(() => expect(screen.getByText(/10 in \/ 5 out tokens/)).toBeInTheDocument())
+    await waitFor(() => expect(screen.getAllByText(/10 in \/ 5 out tokens/).length).toBeGreaterThan(0))
     expect(screen.getByText(/2 messages this session/)).toBeInTheDocument()
     expect(screen.getByText(/proxy reachable/)).toBeInTheDocument()
   })
@@ -557,7 +557,7 @@ describe('App', () => {
       await user.click(screen.getByRole('button', { name: 'Search' }))
       await user.click(screen.getByRole('button', { name: '← Back' }))
 
-      expect(screen.getByPlaceholderText('Message the assistant…')).toBeInTheDocument()
+      expect(screen.getByPlaceholderText('Message Aielia…')).toBeInTheDocument()
     })
   })
 })

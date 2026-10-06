@@ -43,6 +43,7 @@ export type ChatEntry =
       pendingActionId?: string
       pendingActionKind?: AssistantTurnResult['pendingActionKind']
     }
+  | { id: string; kind: 'stopped' }
   | {
       id: string
       kind: 'escalation'

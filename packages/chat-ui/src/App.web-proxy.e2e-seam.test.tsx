@@ -72,7 +72,7 @@ function installSeam(): void {
 async function sendAndReadReply(message: string): Promise<string> {
   const user = userEvent.setup()
   const { container } = render(<App />)
-  const input = await screen.findByPlaceholderText('Message the assistant…')
+  const input = await screen.findByPlaceholderText('Message Aielia…')
 
   await user.type(input, message)
   await user.click(screen.getByRole('button', { name: 'Send' }))

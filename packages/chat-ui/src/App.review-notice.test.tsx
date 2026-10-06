@@ -47,7 +47,7 @@ describe('App — turn notices (change review, contradiction)', () => {
     const { App } = await import('./App')
     const user = userEvent.setup()
     render(<App />)
-    await user.type(screen.getByPlaceholderText('Message the assistant…'), 'plan the offsite catering')
+    await user.type(screen.getByPlaceholderText('Message Aielia…'), 'plan the offsite catering')
     await user.click(screen.getByRole('button', { name: 'Send' }))
   }
 

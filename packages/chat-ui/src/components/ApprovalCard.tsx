@@ -16,7 +16,19 @@ interface Props {
 
 const KIND_LABELS: Record<string, string> = { write: 'write', shell: 'shell command', email: 'send email', batch: 'batch research', revert: 'revert' }
 
+/** A staged action's reason is "<headline>\n<detail>": the headline names the action, the detail is the exact content (new-file text or a numbered diff), the command's cwd, or an email's fields. */
+function splitReason(reason: string): { headline: string; detail: string | null } {
+  const newline = reason.indexOf('\n')
+  if (newline === -1) return { headline: reason, detail: null }
+  const detail = reason.slice(newline + 1).replace(/\s+$/, '')
+  return { headline: reason.slice(0, newline), detail: detail === '' ? null : detail }
+}
+
+// Numbered diff rows from formatWriteDiff look like "  12 +added" / "  12 -removed".
+const DIFF_ROW = /^\s*\d+ ([+-])/
+
 export function ApprovalCard({ pendingMessage, reason, riskLevel, pendingActionKind, resolution, illustrative, onApprove, onDeny }: Props): React.JSX.Element {
+  const { headline, detail } = splitReason(reason)
   const label = pendingActionKind ? KIND_LABELS[pendingActionKind] : riskLevel
   return (
     <div className="approval-card">
@@ -24,7 +36,15 @@ export function ApprovalCard({ pendingMessage, reason, riskLevel, pendingActionK
         Needs approval{label ? ` — ${label}` : ''}
       </div>
       <blockquote className="approval-card__pending">{pendingMessage}</blockquote>
-      <div className="approval-card__reason">{reason}</div>
+      <div className="approval-card__reason">{headline}</div>
+      {detail !== null && (
+        <pre className="approval-card__detail" aria-label="Exact change">
+          {detail.split('\n').map((line, i) => {
+            const sign = DIFF_ROW.exec(line)?.[1]
+            return <span key={i} className={sign === '+' ? 'approval-card__line--add' : sign === '-' ? 'approval-card__line--del' : undefined}>{line}{'\n'}</span>
+          })}
+        </pre>
+      )}
       {illustrative ? (
         <div className="approval-card__resolution">
           This is a sample. Add a model in Settings (⚙) and send your own message — a real

@@ -137,13 +137,20 @@ export class ActionApprovalService {
       return { status: 'ok', reply }
     }
 
+    let shellDurationMs: number | undefined
     const applied = await applyPendingAction(backend, workspaceRoot, pendingActionId, {
       executeShell: shellTools
-        ? (command, cwd) =>
-            shellTools.executeCommand(command, cwd, {
-              timeoutMs: shellTools.timeoutMs,
-              networkAllowlist: shellTools.networkAllowlist,
-            })
+        ? async (command, cwd) => {
+            const startedAt = Date.now()
+            try {
+              return await shellTools.executeCommand(command, cwd, {
+                timeoutMs: shellTools.timeoutMs,
+                networkAllowlist: shellTools.networkAllowlist,
+              })
+            } finally {
+              shellDurationMs = Date.now() - startedAt
+            }
+          }
         : undefined,
       sendEmail: actionTools?.sendEmail,
     })
@@ -168,7 +175,9 @@ export class ActionApprovalService {
       // No diff here — it was already shown once, at the pre-approval preview (the decision
       // point that actually matters), a few lines up in the same scrollback. Repeating it here
       // duplicated content the reader had already reviewed and approved seconds earlier.
-      reply = `Wrote "${applied.path}".`
+      const lineCount = applied.content === '' ? 0 : applied.content.replace(/\n$/, '').split('\n').length
+      const byteCount = new TextEncoder().encode(applied.content).length
+      reply = `Wrote "${applied.path}" (${lineCount} line${lineCount === 1 ? '' : 's'}, ${byteCount} byte${byteCount === 1 ? '' : 's'}).`
       transcriptContent = reply
     } else if (applied.kind === 'revert') {
       const parts: string[] = []
@@ -210,7 +219,7 @@ export class ActionApprovalService {
       const body = injection.flagged
         ? `[Warning: this content contains instruction-like text and may be an injection attempt — ${injection.reason}]\n${rawOutput}`
         : rawOutput
-      const statusLine = `Ran \`${applied.command}\` (exit code ${applied.execution.exitCode ?? 'n/a'}${applied.execution.timedOut ? ', timed out' : ''}):`
+      const statusLine = `Ran \`${applied.command}\` (exit code ${applied.execution.exitCode ?? 'n/a'}${applied.execution.timedOut ? ', timed out' : ''}${shellDurationMs !== undefined ? `, ${formatDuration(shellDurationMs)}` : ''}):`
 
       // Fallback shape if synthesis below fails or returns nothing — same clean-reply/
       // tagged-transcript split as a write confirmation would otherwise skip needing.
@@ -447,4 +456,8 @@ export class ActionApprovalService {
     }
     return { status: 'ok', reply, usage, harnessSkipped: true, trace }
   }
+}
+
+function formatDuration(ms: number): string {
+  return ms < 1000 ? `${ms} ms` : `${(ms / 1000).toFixed(1)} s`
 }

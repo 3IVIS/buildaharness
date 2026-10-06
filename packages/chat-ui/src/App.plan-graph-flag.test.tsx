@@ -64,7 +64,7 @@ describe('App: planGraphMode flag', () => {
   it('flag off (the default): no Plan graph button, no panel, and the plan is never queried', async () => {
     const getPlanGraph = vi.fn(async () => PLAN)
     await mountApp(getPlanGraph)
-    await screen.findByPlaceholderText('Message the assistant…')
+    await screen.findByPlaceholderText('Message Aielia…')
     await waitFor(() => expect(screen.queryByRole('button', { name: 'Plan graph' })).toBeNull())
     expect(screen.queryByTestId('plan-viz-panel')).toBeNull()
     expect(getPlanGraph).not.toHaveBeenCalled()
@@ -84,7 +84,7 @@ describe('App: planGraphMode flag', () => {
     vi.resetModules()
     const getPlanGraph = vi.fn(async () => null)
     await mountApp(getPlanGraph)
-    await screen.findByPlaceholderText('Message the assistant…')
+    await screen.findByPlaceholderText('Message Aielia…')
     await waitFor(() => expect(getPlanGraph).toHaveBeenCalled())
     expect(screen.queryByRole('button', { name: 'Plan graph' })).toBeNull()
   })
