@@ -1,3 +1,4 @@
+import { actionRecordSuffix, stripActionRecord } from './action-record.js'
 import {
   loadHarnessCheckpoint,
   deleteHarnessCheckpoint,
@@ -377,8 +378,14 @@ export class AssistantSession {
   async appendTranscriptMessage(
     sessionId: string,
     transcriptKey: string,
-    message: { role: 'user' | 'assistant'; content: string },
+    input: { role: 'user' | 'assistant'; content: string; actionRecord?: string[] },
   ): Promise<void> {
+    // The action record is the system's, built from `actionRecord` (what really ran); a marker inside model-written
+    // text is an imitation and is dropped (see action-record.ts).
+    const message: { role: 'user' | 'assistant'; content: string } =
+      input.role === 'assistant'
+        ? { role: 'assistant', content: stripActionRecord(input.content) + actionRecordSuffix(input.actionRecord ?? []) }
+        : { role: 'user', content: input.content }
     if (message.role === 'assistant') {
       const held = this.absorbedSteering.get(sessionId)
       if (held?.length) {

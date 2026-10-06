@@ -49,7 +49,7 @@ export function commandMayLeaveWorkspace(command: string): boolean {
  * this synthesis call, so this deterministic check is required in addition to it.
  */
 export function commandLooksLikeNetworkRequest(command: string): boolean {
-  return /\b(curl|wget)\b|https?:\/\//i.test(command)
+  return /\b(curl|wget)\b|https?:\/\/|\b(npm|pnpm|yarn)\s+(view|show|info|install|i|add|update|outdated|search|ping)\b|\bpip3?\s+(install|download)\b/i.test(command)
 }
 
 export const RUN_SHELL_COMMAND_TOOL: ToolDefinition = {

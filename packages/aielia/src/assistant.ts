@@ -1,3 +1,4 @@
+import { containsActionRecord, stripActionRecord, FORGED_ACTION_RECORD_NOTE } from './action-record.js'
 import { deriveConsequentialTools } from '@buildaharness/harness'
 import { TOOL_EFFECT_CLASS } from './tool-effect-class.js'
 import { resolveEscalationPlan, injectionDetectionEnabled, resolveOptInPlan, optInLayerEnabled } from './layer-policy-wiring.js'
@@ -622,6 +623,12 @@ export class PersonalAssistant {
 
     try {
       const result = await this.runTurn(userMessage, options, sessionId)
+      // The system's own action record goes into the stored transcript only, never into the reply that is shown. A marker in the
+      // reply is the model imitating it (it claimed writes and test runs that never happened in benchmark scenarios 05 and 13).
+      if (result.reply && containsActionRecord(result.reply)) {
+        this.onDebugLog?.({ kind: 'note', sessionId, content: 'the reply contained a forged "Recorded by the system" action list; removed' })
+        result.reply = `${stripActionRecord(result.reply)}\n\n${FORGED_ACTION_RECORD_NOTE}`
+      }
       // Every return path leaves proposerKind unset — stamp the one runTurn resolved (defaults
       // to 'posthoc'). A path that already set it explicitly (the spend-cap early return above)
       // never reaches here.
