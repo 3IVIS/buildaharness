@@ -84,7 +84,8 @@ describe('PlanGraphPane', () => {
     expect(await selectAfter([']'])).not.toBe(await selectAfter([]))
     expect(await selectAfter([']', '['])).toBe(await selectAfter([DOWN, UP]))
     expect(await selectAfter([']', ']', '['])).toBe(await selectAfter([DOWN, DOWN, UP]))
-  })
+    // Eight mounts plus ~20 key presses: under a parallel full-suite run this exceeded the default 5 s timeout (the only failure was a timeout, never a wrong selection).
+  }, 30_000)
 
   it('scrolls the detail drawer with j/k and PgUp/PgDn, clamped, and starts at the top for another node', async () => {
     const PGUP = '\x1b[5~'

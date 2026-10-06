@@ -11,8 +11,9 @@ import type { ActionToolsContext } from './action-tools.js'
 import { wrapUntrusted, detectInjectionLikelyWithLLM } from './trust-tagging.js'
 import type { AssistantTurnResult } from './assistant-types.js'
 import type { AssistantSession } from './assistant-session.js'
-import type { AgentLoop, BatchPendingState } from './agent-loop.js'
-import { buildBatchBudgetTrace, looksLikeUnparsedToolCall } from './agent-loop.js'
+import type { AgentLoop, BatchPendingState, ToolLoopPendingState, ToolLoopResult } from './agent-loop.js'
+import { buildBatchBudgetTrace, looksLikeUnparsedToolCall, toolLoopPendingKey } from './agent-loop.js'
+import type { AssistantToolStep } from './tool-step.js'
 import type { AssistantTrace } from './assistant-types.js'
 import { classifyAndTraceExecutionMode } from './execution-mode.js'
 import type { TraceEvent } from './trace-events.js'
@@ -20,6 +21,33 @@ import { SYNTHESIS_SYSTEM_PROMPT } from './system-prompt.js'
 import type { DebugLogEntry } from './debug-log.js'
 import { readCurrentFileContent } from './file-tools.js'
 import { formatWriteDiff, previewContent } from './diff-format.js'
+
+/**
+ * Optional hooks for resuming a staged action that a flat tool loop paused on (see
+ * AgentLoop.resumeToolLoop): the live token/tool-step callbacks of the turn being resumed, and how
+ * to turn a *further* pause (another approval, or an escalation) into the turn result — the caller
+ * owns that because auto-approve modes live there, not here.
+ */
+export interface ResumeOptions {
+  onToken?: (token: string) => void
+  onToolStep?: (step: AssistantToolStep) => void
+  handleLoopPause?: (result: Extract<ToolLoopResult, { kind: 'needs_approval' | 'escalated' }>) => Promise<AssistantTurnResult>
+}
+
+/** How many prior transcript messages the fallback synthesis call sees. */
+const SYNTHESIS_HISTORY_MESSAGES = 20
+
+/** One short clause for an applied action, for the turn's action record. */
+function describeAppliedAction(applied: { kind: string; path?: string; command?: string; to?: string; subject?: string; execution?: { exitCode?: number | null } }): string | undefined {
+  if (applied.kind === 'write') return `wrote ${applied.path}`
+  if (applied.kind === 'shell') return `ran \`${applied.command}\` (exit code ${applied.execution?.exitCode ?? 'n/a'})`
+  if (applied.kind === 'email') return `sent an email to ${applied.to} ("${applied.subject}")`
+  return undefined
+}
+
+export { actionRecordSuffix } from './action-record.js'
+
+const STAGED_TOOL_NAMES = new Set(['write_file', 'run_shell_command', 'send_email'])
 
 /**
  * Owns the "approval-by-ID" pattern: a staged write/shell/revert/batch-research action resolved
@@ -42,13 +70,14 @@ export class ActionApprovalService {
   ) {}
 
   /** Resumes a staged action by ID instead of re-deriving *what to run* from a second LLM call — see T4 of the file-tools plan. `userMessage` is only used to synthesize an answer from a shell command's real output (see below); the command/content actually applied always comes from the staged record, never from a fresh model call. */
-  async resolvePendingAction(sessionId: string, transcriptKey: string, pendingActionId: string, approved: boolean, userMessage: string): Promise<AssistantTurnResult> {
+  async resolvePendingAction(sessionId: string, transcriptKey: string, pendingActionId: string, approved: boolean, userMessage: string, resume: ResumeOptions = {}): Promise<AssistantTurnResult> {
     // A batch-confirmation pause (see AgentLoop.runBatchToolLoop) is staged in `this.memory`, not
     // under a file/shell workspace backend — check for it first so a webTools-only assistant (no
     // fileTools/shellTools configured at all) can still resume/decline one without hitting the
     // "neither configured" guard below, which is specific to write/shell staged actions.
     const batchState = (await this.memory.get(`batch-pending:${pendingActionId}`)) as BatchPendingState | undefined
     if (batchState) {
+      this.onDebugLog?.({ kind: 'approval_decision', sessionId, content: `${approved ? 'approved' : 'declined'} ${pendingActionId}` })
       return this.resolvePendingBatchConfirmation(transcriptKey, pendingActionId, approved, batchState)
     }
 
@@ -63,6 +92,13 @@ export class ActionApprovalService {
     if (!backend || !workspaceRoot) {
       throw new Error('turn() received pendingActionId but none of fileTools/shellTools/actionTools are configured')
     }
+
+    this.onDebugLog?.({ kind: 'approval_decision', sessionId, content: `${approved ? 'approved' : 'declined'} ${pendingActionId}` })
+
+    // Present only when a flat tool loop paused on this action (AgentLoop.persistPausedLoop). Taken
+    // out of memory up front: it is single-use whichever way the action resolves.
+    const loopState = (await this.memory.get(toolLoopPendingKey(pendingActionId))) as ToolLoopPendingState | undefined
+    if (loopState) await this.memory.delete(toolLoopPendingKey(pendingActionId))
 
     if (!approved) {
       // write_file/run_shell_command proposals already have the user's originating request
@@ -81,10 +117,11 @@ export class ActionApprovalService {
       // action in the same chain already ran (see PendingActionRecord.chainedFrom's doc comment)
       // — claiming "nothing was written or run" in that case is simply false, so scope the claim
       // to just this action instead.
-      const reply = record?.chainedFrom ? 'Cancelled — that additional action was not run.' : 'Cancelled — nothing was written or run.'
-      await this.session.appendTranscriptMessage(sessionId, transcriptKey, { role: 'assistant', content: reply })
+      const earlierActionRan = loopState?.messages.some((m) => m.role === 'assistant' && m.toolCalls?.some((c) => STAGED_TOOL_NAMES.has(c.name))) === true
+      const reply = record?.chainedFrom || earlierActionRan ? 'Cancelled — that additional action was not run.' : 'Cancelled — nothing was written or run.'
+      await this.session.appendTranscriptMessage(sessionId, transcriptKey, { role: 'assistant', content: reply, actionRecord: loopState?.actions ?? [] })
       if (record?.nextPendingActionId) {
-        const chained = await this.loadChainedApproval(backend, workspaceRoot, record.nextPendingActionId, reply)
+        const chained = await this.loadChainedApproval(sessionId, backend, workspaceRoot, record.nextPendingActionId, reply)
         if (chained) return chained
       }
       return { status: 'ok', reply }
@@ -103,6 +140,10 @@ export class ActionApprovalService {
 
     let reply: string
     let transcriptContent: string
+    // What the action itself produced, before any model call interprets it — what the debug log
+    // records as the tool result and what a continuing tool loop is handed. Differs from `reply`
+    // only for a shell command, whose reply may be a synthesized answer.
+    let rawResult: string | undefined
     // Set by the shell branch's injection check and/or synthesis call below — absent for a
     // write confirmation or a cancelled action, same "absent when unused" convention elsewhere.
     let usage: TokenUsage | undefined
@@ -151,7 +192,8 @@ export class ActionApprovalService {
         rawOutput +=
           '\n\n[network-containment note: outbound network access from this command is denied by default ' +
           '(no hosts on the configured allowlist) — any HTTP response code or connection failure shown above for ' +
-          'an external host came from this local restriction, not from the destination itself.]'
+          'an external host came from this local restriction, not from the destination itself. If the task needs live information ' +
+          'from the network, tell the user you could not look it up; do not answer from memory as if it had been verified, and do not cite this command as the source of any fact.]'
       }
       const injection = await detectInjectionLikelyWithLLM(rawOutput, this.llmClient, this.model(), accumulateLocalUsage)
       const body = injection.flagged
@@ -163,6 +205,7 @@ export class ActionApprovalService {
       // tagged-transcript split as a write confirmation would otherwise skip needing.
       reply = `${statusLine}\n${body}`
       transcriptContent = `${statusLine}\n${wrapUntrusted(body)}`
+      rawResult = reply
 
       // Synthesize an actual answer from the real output instead of just handing back the
       // raw dump — a bare command's stdout often can't answer what was actually asked (e.g.
@@ -170,28 +213,39 @@ export class ActionApprovalService {
       // one real LLM call T4's "no second call" reasoning was about avoiding for *re-deriving
       // the staged action* — that reasoning doesn't apply here, since the command/content
       // itself is never re-derived, only interpreted after the fact.
-      try {
-        const synthesized = await this.llmClient.callChatSync(
-          [
-            { role: 'system', content: SYNTHESIS_SYSTEM_PROMPT },
-            { role: 'user', content: `My request: "${userMessage}"\n\n${statusLine}\n${wrapUntrusted(body)}` },
-          ],
-          { model: this.model(), onUsage: accumulateLocalUsage },
-        )
-        // callChatSync has none of callChatStructured's leaked-tool-call recovery/retry
-        // machinery (openai-compatible-client.ts's parseLeakedToolCallSyntax, agent-loop.ts's
-        // own retry guard) — a model that leaks its native tool-call syntax as plain text here
-        // (observed live: deepseek/deepseek-v4-flash-0731, wanting to call a tool that doesn't
-        // exist in this no-tools synthesis call at all) would otherwise be trusted verbatim as
-        // the user-facing reply. Falls back to the raw dump already assigned above, exactly like
-        // an empty/failed synthesis already does.
-        if (synthesized.trim() && !looksLikeUnparsedToolCall(synthesized)) {
-          reply = synthesized
-          transcriptContent = synthesized
+      //
+      // Skipped when the originating tool loop is going to continue (loopState, below): the model
+      // reads the result as its own tool result there and decides what to do next.
+      if (!loopState) {
+        try {
+          // Earlier turns come first, so a follow-up question's answer is grounded in the same
+          // conversation the user is having (without them this call saw only the current message —
+          // "there are no earlier findings"). The command output is framed as what it is: the
+          // assistant's own tool output, not something the user attached.
+          const history = await this.recentHistory(transcriptKey, userMessage)
+          const synthesized = await this.llmClient.callChatSync(
+            [
+              { role: 'system', content: SYNTHESIS_SYSTEM_PROMPT },
+              ...history,
+              { role: 'user', content: `My request: "${userMessage}"\n\n[Output of the command you ran on my behalf just now — tool output, not something I sent you:]\n${statusLine}\n${wrapUntrusted(body)}` },
+            ],
+            { model: this.model(), onUsage: accumulateLocalUsage },
+          )
+          // callChatSync has none of callChatStructured's leaked-tool-call recovery/retry
+          // machinery (openai-compatible-client.ts's parseLeakedToolCallSyntax, agent-loop.ts's
+          // own retry guard) — a model that leaks its native tool-call syntax as plain text here
+          // (observed live: deepseek/deepseek-v4-flash-0731, wanting to call a tool that doesn't
+          // exist in this no-tools synthesis call at all) would otherwise be trusted verbatim as
+          // the user-facing reply. Falls back to the raw dump already assigned above, exactly like
+          // an empty/failed synthesis already does.
+          if (synthesized.trim() && !looksLikeUnparsedToolCall(synthesized)) {
+            reply = synthesized
+            transcriptContent = synthesized
+          }
+        } catch {
+          // Falls back to the raw dump already assigned above — a broken synthesis call must
+          // never mean no reply at all.
         }
-      } catch {
-        // Falls back to the raw dump already assigned above — a broken synthesis call must
-        // never mean no reply at all.
       }
     }
 
@@ -207,14 +261,52 @@ export class ActionApprovalService {
       : applied.kind === 'revert' ? `undo_action({"id":"${applied.revertedEntryId}"})`
       : applied.kind === 'email' ? `send_email({"to":"${applied.to}","subject":"${applied.subject}"})`
       : `run_shell_command({"command":"${applied.command}","cwd":"${applied.cwd}"})`
-    this.onDebugLog?.({ kind: 'tool_call', sessionId, content: `${toolCallDescription} →\n${reply.slice(0, 4000)}${reply.length > 4000 ? `\n… (truncated, ${reply.length} chars total)` : ''}` })
+    const loggedResult = rawResult ?? reply
+    this.onDebugLog?.({ kind: 'tool_call', sessionId, content: `${toolCallDescription} →\n${loggedResult.slice(0, 4000)}${loggedResult.length > 4000 ? `\n… (truncated, ${loggedResult.length} chars total)` : ''}` })
 
-    await this.session.appendTranscriptMessage(sessionId, transcriptKey, { role: 'assistant', content: transcriptContent })
+    // Hand the result back to the model inside the loop that asked for it, so the turn carries on
+    // (more reads, further approvals, a real final answer) instead of ending on one command.
+    const thisAction = describeAppliedAction(applied)
+    const actionsSoFar = [...(loopState?.actions ?? []), ...(thisAction ? [thisAction] : [])]
+    if (loopState && applied.kind !== 'revert') {
+      let loopResult: ToolLoopResult | undefined
+      try {
+        const toolResult = applied.kind === 'shell' ? transcriptContent : reply
+        loopResult = await this.agentLoop.resumeToolLoop(loopState, toolResult, resume.onToken, resume.onToolStep, accumulateLocalUsage, actionsSoFar)
+      } catch (err) {
+        // The action already ran: never lose its outcome to a failed model call. Falls back to the
+        // raw result already assigned above, like a failed synthesis does.
+        console.error('[resume tool loop failed]', err)
+      }
+      if (loopResult?.kind === 'final') {
+        await this.session.appendTranscriptMessage(sessionId, transcriptKey, { role: 'assistant', content: loopResult.content, actionRecord: actionsSoFar })
+        return { status: 'ok', reply: loopResult.content, usage, sources: loopResult.sources.length > 0 ? loopResult.sources : undefined }
+      }
+      if (loopResult) {
+        if (resume.handleLoopPause) return resume.handleLoopPause(loopResult)
+        return loopResult.kind === 'needs_approval'
+          ? { status: 'needs_approval', reply: null, reason: loopResult.reason, riskLevel: 'HIGH', pendingActionId: loopResult.pendingActionId, pendingActionKind: loopResult.pendingActionKind }
+          : { status: 'escalated', reply: null, reason: loopResult.reason, riskLevel: 'HIGH' }
+      }
+    }
+
+    await this.session.appendTranscriptMessage(sessionId, transcriptKey, { role: 'assistant', content: transcriptContent, actionRecord: applied.kind === 'shell' || loopState ? actionsSoFar : [] })
     if (applied.nextPendingActionId) {
-      const chained = await this.loadChainedApproval(backend, workspaceRoot, applied.nextPendingActionId, reply)
+      const chained = await this.loadChainedApproval(sessionId, backend, workspaceRoot, applied.nextPendingActionId, reply)
       if (chained) return chained
     }
     return { status: 'ok', reply, usage }
+  }
+
+  /** The conversation before the current user message, for the no-tools synthesis call. The current message was already appended to the transcript when the turn paused, so it is dropped here. */
+  private async recentHistory(transcriptKey: string, userMessage: string): Promise<{ role: 'user' | 'assistant'; content: string }[]> {
+    const transcript = ((await this.memory.get(transcriptKey)) as { role: string; content: string }[] | undefined) ?? []
+    const prior = [...transcript]
+    const last = prior[prior.length - 1]
+    if (last?.role === 'user' && last.content === userMessage) prior.pop()
+    return prior
+      .filter((m): m is { role: 'user' | 'assistant'; content: string } => m.role === 'user' || m.role === 'assistant')
+      .slice(-SYNTHESIS_HISTORY_MESSAGES)
   }
 
   /**
@@ -231,6 +323,7 @@ export class ActionApprovalService {
    * turn, just stop chaining and fall back to the caller's own `status: 'ok'`.
    */
   private async loadChainedApproval(
+    sessionId: string,
     backend: FsBackend,
     workspaceRoot: string,
     nextPendingActionId: string,
@@ -248,6 +341,7 @@ export class ActionApprovalService {
       reason = `${previousOutcome}\n\nNext, it also proposes sending an email:\n  To: ${next.to}\n  Subject: ${next.subject}\n\n${previewContent(next.body)}`
     }
     if (!reason) return undefined
+    this.onDebugLog?.({ kind: 'approval_request', sessionId, content: `${next.kind} ${next.id}: ${reason}` })
     return {
       status: 'needs_approval',
       reply: null,

@@ -74,6 +74,8 @@ export interface TestInkInstance {
   lastFrame: () => string | undefined
   /** See `TestStdout.fullOutput`'s doc comment — needed to assert on `<Static>` content. */
   fullOutput: () => string
+  /** How many writes (frames and control sequences) the render has produced so far — constant while the UI is idle. */
+  writeCount: () => number
   rerender: (tree: ReactElement) => void
   unmount: () => void
 }
@@ -94,6 +96,7 @@ export function renderInk(tree: ReactElement): TestInkInstance {
     stdin,
     lastFrame: stdout.lastFrame,
     fullOutput: stdout.fullOutput,
+    writeCount: () => stdout.frames.length,
     rerender: instance.rerender,
     unmount: instance.unmount,
   }

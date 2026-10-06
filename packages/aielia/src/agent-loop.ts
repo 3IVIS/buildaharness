@@ -10,6 +10,7 @@ import type {
   MemoryAdapter,
   ILLMClient,
   ChatMessage,
+  ToolCallResult,
   TokenUsage,
   ToolDefinition,
   ReminderStore,
@@ -43,8 +44,66 @@ import { REVISION_NOTE_PREFIX, revisionContextMessage } from './reviewer-revisio
 
 export type ToolLoopResult =
   | { kind: 'final'; content: string; sources: AssistantSource[]; batchBudget?: BatchBudgetTrace }
-  | { kind: 'needs_approval'; reason: string; pendingActionId: string; pendingActionKind: 'write' | 'shell' | 'email' | 'batch' }
+  | { kind: 'needs_approval'; reason: string; pendingActionId: string; pendingActionKind: 'write' | 'shell' | 'email' | 'batch'; resume?: StagedCallResume }
   | { kind: 'escalated'; reason: string }
+
+/**
+ * Set on a needs_approval result when the pause came from a tool call this loop dispatched itself
+ * (a proxy-backend `write_file`/`run_shell_command`/`send_email` call): the exact call the model
+ * made, so the loop can be continued once the staged action resolves instead of ending the turn.
+ * Absent for a pause whose call lives inside a backend's own agentic loop (claude-cli's
+ * `__staged_action`) — there is no message history to continue from.
+ */
+export interface StagedCallResume {
+  toolCall: ToolCallResult
+  assistantContent: string
+}
+
+/**
+ * Persisted under `loop-pending:<pendingActionId>` while a flat tool loop waits on an approval, so
+ * an approved action's result can be folded back into the same conversation (see
+ * AgentLoop.resumeToolLoop). `messages` is everything sent to the model so far, system prompt
+ * included, *excluding* the assistant message holding the staged call (rebuilt on resume).
+ */
+export interface ToolLoopPendingState {
+  sessionId: string
+  userMessage: string
+  riskHint: TurnIntentClassification['riskLevel']
+  messages: ChatMessage[]
+  sources: AssistantSource[]
+  iterationsUsed: number
+  toolCall: ToolCallResult
+  assistantContent: string
+  /** Approved actions already carried out earlier in this same turn (see describeAppliedAction) — recorded in the transcript with the turn's final reply so later turns know what was done. */
+  actions?: string[]
+}
+
+/** Sent when the model returns an empty final answer, before the one retry. */
+export const EMPTY_REPLY_NUDGE =
+  'Your last reply was empty. Reply now with your final answer to the user in plain text: summarize what you did and what you found. Do not call a tool unless something is still unfinished.'
+
+/**
+ * The reply used when the model returns nothing twice in a row: built only from what is on record, so the user
+ * never gets an empty message. `actions` is the turn's list of carried-out approved actions (see describeAppliedAction).
+ */
+export function fallbackFinalReply(actions: string[] | undefined): string {
+  if (actions && actions.length > 0) {
+    return `I carried out the following, but could not produce a written summary: ${actions.join('; ')}. Ask me for details on any of them and I will go through it.`
+  }
+  return 'I could not produce an answer to that — the model returned an empty reply twice. Please try again or rephrase.'
+}
+
+/**
+ * A final reply that only announces the next step ("Alright, let me verify the final state of the diff:") and then ends.
+ * After approved actions it tells the user nothing about what changed, so it is replaced like an empty reply (benchmark
+ * scenario 03). Short and ending in a colon or an ellipsis; a real summary is longer or ends in a sentence.
+ */
+export function isDanglingAnnouncement(text: string): boolean {
+  const t = text.trim()
+  return t.length > 0 && t.length <= 200 && /[:…]$|\.\.\.$/.test(t)
+}
+
+export const toolLoopPendingKey = (pendingActionId: string): string => `loop-pending:${pendingActionId}`
 
 /**
  * R2 of the internal plan: thrown by a harness-driven proposer
@@ -453,6 +512,8 @@ export class AgentLoop {
         return { __harnessExecutionStatus: 'continue' }
       }
 
+      if (step.result.kind === 'final') step.result = this.withFallbackReply(step.result, undefined, input.onToken) as typeof step.result
+
       if (step.result.kind === 'final' && weighSources && !sourcesWeighed) {
         // Under claude-cli the tool loop runs inside the subprocess, so no source note can be spliced in
         // before the answer exists; the sources are weighed after it instead, and an answer that leaned on a
@@ -489,7 +550,13 @@ export class AgentLoop {
         return { __harnessExecutionStatus: 'complete', output: step.result.content }
       }
 
-      throw new OneLoopPause(step.result, toolCtx.currentTaskId)
+      // Same persistence the flat loop does (see persistPausedLoop): the harness-driven run ends at this
+      // pause, but the approved action's result can still go back into this conversation afterwards.
+      const paused = await this.persistPausedLoop(step.result, {
+        sessionId: input.sessionId, userMessage: input.userMessage, riskHint: input.riskHint ?? 'LOW',
+        messages: input.messages, sources: input.sources, iterationsUsed: iteration,
+      })
+      throw new OneLoopPause(paused as Extract<ToolLoopResult, { kind: 'needs_approval' | 'escalated' }>, toolCtx.currentTaskId)
     }
     return proposer
   }
@@ -709,7 +776,27 @@ export class AgentLoop {
     riskHint: TurnIntentClassification['riskLevel'] = 'LOW',
     controlPlaneState?: TurnControlPlaneState,
   ): Promise<ToolLoopResult> {
-    const tools = [
+    const tools = this.flatLoopTools()
+    const messages: ChatMessage[] = [
+      { role: 'system', content: systemPrompt },
+      ...transcript,
+      { role: 'user', content: userMessage },
+    ]
+    const { result, iterationsUsed, sources } = await this.runToolIterations(messages, this.maxSteps, tools, sessionId, userMessage, onToken, onToolStep, onUsage, undefined, riskHint, controlPlaneState)
+    return this.persistPausedLoop(result, { sessionId, userMessage, riskHint, messages, sources, iterationsUsed })
+  }
+
+  /** Replaces an empty final answer (the model returned nothing twice) with fallbackFinalReply, shown through onToken like any answer. */
+  private withFallbackReply(result: ToolLoopResult, actions: string[] | undefined, onToken?: (token: string) => void): ToolLoopResult {
+    if (result.kind !== 'final') return result
+    if (result.content.trim() !== '' && !(actions && actions.length > 0 && isDanglingAnnouncement(result.content))) return result
+    const content = fallbackFinalReply(actions)
+    onToken?.(content)
+    return { ...result, content }
+  }
+
+  private flatLoopTools(): ToolDefinition[] {
+    return [
       ...(this.fileTools ? FILE_TOOLS : []),
       ...(this.webTools ? WEB_TOOLS : []),
       ...(this.shellTools ? SHELL_TOOLS : []),
@@ -717,13 +804,63 @@ export class AgentLoop {
       ...REMINDER_TOOLS,
       ...this.recallTools(),
     ]
+  }
+
+  /**
+   * When the flat loop pauses on a staged call it dispatched itself, saves what is needed to keep
+   * going after the approval (see ToolLoopPendingState) and strips the in-memory `resume` handle
+   * from the result the caller sees. Any other result is returned untouched.
+   */
+  private async persistPausedLoop(
+    result: ToolLoopResult,
+    ctx: { sessionId: string; userMessage: string; riskHint: TurnIntentClassification['riskLevel']; messages: ChatMessage[]; sources: AssistantSource[]; iterationsUsed: number; actions?: string[] },
+  ): Promise<ToolLoopResult> {
+    if (result.kind !== 'needs_approval' || !result.resume) return result
+    const { resume, ...rest } = result
+    const state: ToolLoopPendingState = {
+      sessionId: ctx.sessionId,
+      userMessage: ctx.userMessage,
+      riskHint: ctx.riskHint,
+      messages: [...ctx.messages],
+      sources: ctx.sources,
+      iterationsUsed: ctx.iterationsUsed,
+      toolCall: resume.toolCall,
+      assistantContent: resume.assistantContent,
+      actions: ctx.actions,
+    }
+    await this.memory.set(toolLoopPendingKey(rest.pendingActionId), state)
+    return rest
+  }
+
+  /**
+   * Continues a flat tool loop that paused on an approval-gated call, after that call's staged
+   * action has been resolved: `toolResultText` (the command's output, a write confirmation, ...)
+   * goes back to the model as the tool result for the exact call it made, and the loop runs on —
+   * more reads, further approvals (which pause again and persist again), then a final answer —
+   * within whatever iteration budget the turn had left.
+   */
+  async resumeToolLoop(
+    state: ToolLoopPendingState,
+    toolResultText: string,
+    onToken?: (token: string) => void,
+    onToolStep?: (step: AssistantToolStep) => void,
+    onUsage?: (usage: TokenUsage) => void,
+    actions: string[] | undefined = state.actions,
+  ): Promise<ToolLoopResult> {
     const messages: ChatMessage[] = [
-      { role: 'system', content: systemPrompt },
-      ...transcript,
-      { role: 'user', content: userMessage },
+      ...state.messages,
+      { role: 'assistant', content: state.assistantContent, toolCalls: [state.toolCall] },
+      { role: 'tool', content: toolResultText, toolCallId: state.toolCall.id },
     ]
-    const { result } = await this.runToolIterations(messages, this.maxSteps, tools, sessionId, userMessage, onToken, onToolStep, onUsage, undefined, riskHint, controlPlaneState)
-    return result
+    const remaining = Math.max(1, this.maxSteps - state.iterationsUsed)
+    const { result, iterationsUsed, sources } = await this.runToolIterations(
+      messages, remaining, this.flatLoopTools(), state.sessionId, state.userMessage, onToken, onToolStep, onUsage,
+      undefined, state.riskHint, this.createControlPlaneState(), state.sources, true, actions,
+    )
+    return this.persistPausedLoop(result, {
+      sessionId: state.sessionId, userMessage: state.userMessage, riskHint: state.riskHint,
+      messages, sources, iterationsUsed: state.iterationsUsed + iterationsUsed, actions,
+    })
   }
 
   /**
@@ -757,9 +894,12 @@ export class AgentLoop {
     onToolResult?: (toolName: string, resultText: string) => 'continue' | 'stop',
     riskHint: TurnIntentClassification['riskLevel'] = 'LOW',
     controlPlaneState?: TurnControlPlaneState,
-  ): Promise<{ result: ToolLoopResult; iterationsUsed: number; deadEndStopped?: boolean }> {
-    const sources: AssistantSource[] = []
-    let dispatchedAnyToolCall = false
+    initialSources: AssistantSource[] = [],
+    initialDispatched = false,
+    actions?: string[],
+  ): Promise<{ result: ToolLoopResult; iterationsUsed: number; sources: AssistantSource[]; deadEndStopped?: boolean }> {
+    const sources: AssistantSource[] = [...initialSources]
+    let dispatchedAnyToolCall = initialDispatched
 
     for (let iteration = 0; iteration < maxIterations; iteration++) {
       const step = await this.runToolIterationStep(
@@ -767,7 +907,8 @@ export class AgentLoop {
         onToken, onToolStep, onUsage, onToolResult, riskHint, controlPlaneState,
       )
       if (step.done) {
-        return { result: step.result, iterationsUsed: iteration + 1, deadEndStopped: step.deadEndStopped }
+        const result = this.withFallbackReply(step.result, actions, onToken)
+        return { result, iterationsUsed: iteration + 1, sources, deadEndStopped: step.deadEndStopped }
       }
       dispatchedAnyToolCall = step.dispatchedAnyToolCall
     }
@@ -775,6 +916,7 @@ export class AgentLoop {
     return {
       result: { kind: 'escalated', reason: `Tool loop exceeded ${maxIterations} iterations without producing a final answer.` },
       iterationsUsed: maxIterations,
+      sources,
     }
   }
 
@@ -898,6 +1040,18 @@ export class AgentLoop {
       })
 
       if (!response.toolCalls || response.toolCalls.length === 0) {
+        if (response.content.trim() === '') {
+          // An empty (or reasoning-only) completion is not an answer. Ask once more with a nudge; a second empty
+          // one ends the loop with an empty final, which the caller replaces with a fallback (fallbackFinalReply).
+          const last = messages[messages.length - 1]
+          if (last?.role === 'user' && last.content === EMPTY_REPLY_NUDGE) {
+            this.onDebugLog?.({ kind: 'note', sessionId, content: 'the model returned an empty final reply again after a nudge; using a fallback reply' })
+            return { done: true, result: { kind: 'final', content: '', sources } }
+          }
+          this.onDebugLog?.({ kind: 'note', sessionId, content: 'the model returned an empty final reply; retrying once with a nudge' })
+          messages.push({ role: 'user', content: EMPTY_REPLY_NUDGE })
+          return { done: false, dispatchedAnyToolCall }
+        }
         if (looksLikeUnparsedToolCall(response.content)) {
           // Never show this to the user as if it were a real answer — nudge the model to
           // either call a tool properly or answer in plain text, and retry. Bounded by the
@@ -933,10 +1087,60 @@ export class AgentLoop {
         // backend's shape), where `messages` already carries the enriched tool-result
         // history, so re-asking here gets an equally-grounded answer, just delivered
         // token-by-token instead of all at once.
+        // The re-request carries no tools, so a model that wanted to call one (observed: deepseek's DSML
+        // markup after a resumed approval) can answer with its raw tool-call syntax. That must never reach
+        // the user: output is held back while it could still be such markup (it starts with '<'), and a
+        // streamed answer that turns out to be markup is replaced by the answer the tools-enabled call
+        // above already produced (`response.content`, checked clean at the top of this step).
         let streamed = ''
+        let held = ''
+        let released = false
+        let emitted = 0
+        const HOLD_LIMIT = 64
         for await (const token of this.llmClient.callChat(messages, { model: this.model(), onUsage })) {
           streamed += token
-          onToken(token)
+          if (released) {
+            // Emit only text that cannot be (the start of) tool-call markup: stop at a complete marker, and
+            // hold back a trailing '<...' whose tag has not closed yet.
+            const marker = UNPARSED_TOOL_CALL_PATTERN.exec(streamed)
+            let limit = marker ? marker.index : streamed.length
+            const open = streamed.lastIndexOf('<', limit - 1)
+            if (!marker && open >= emitted && !streamed.includes('>', open)) limit = open
+            if (limit > emitted) {
+              onToken(streamed.slice(emitted, limit))
+              emitted = limit
+            }
+            continue
+          }
+          held += token
+          const lead = held.trimStart()
+          // Markup is held to the end; anything else starting with '<' is let through once its tag has closed (or
+          // it is clearly not a tool-call tag), so ordinary HTML-ish answers still stream.
+          const couldBeMarkup = lead.startsWith('<') && (UNPARSED_TOOL_CALL_PATTERN.test(lead) || (!lead.includes('>') && lead.length < HOLD_LIMIT))
+          if (lead.length > 0 && !couldBeMarkup) {
+            released = true
+            onToken(held)
+            emitted = held.length
+          }
+        }
+        if (streamed.trim() === '') {
+          // The streamed re-ask came back empty; the tools-enabled call above already produced a real answer.
+          this.onDebugLog?.({ kind: 'note', sessionId, content: 'the streamed final answer was empty; using the answer from the preceding call' })
+          onToken(response.content)
+          return { done: true, result: { kind: 'final', content: response.content, sources } }
+        }
+        const markup = UNPARSED_TOOL_CALL_PATTERN.exec(streamed)
+        if (markup) {
+          if (!released) {
+            onToken(response.content)
+            return { done: true, result: { kind: 'final', content: response.content, sources } }
+          }
+          // Prose was already shown; keep it, drop the markup that follows.
+          streamed = streamed.slice(0, markup.index).trimEnd() || response.content
+        } else if (!released && held) {
+          onToken(held)
+        } else if (released && emitted < streamed.length) {
+          onToken(streamed.slice(emitted))
         }
         return { done: true, result: { kind: 'final', content: streamed, sources } }
       }
@@ -1007,6 +1211,7 @@ export class AgentLoop {
             reason: `Proposes writing to "${result.path}":\n${formatWriteDiff(previousContent, result.content)}`,
             pendingActionId: result.id,
             pendingActionKind: 'write',
+            resume: { toolCall: writeCall, assistantContent: response.content },
           },
         }
       }
@@ -1026,6 +1231,7 @@ export class AgentLoop {
             reason: shellApprovalReason(result.command, result.cwd),
             pendingActionId: result.id,
             pendingActionKind: 'shell',
+            resume: { toolCall: shellCall, assistantContent: response.content },
           },
         }
       }
@@ -1045,6 +1251,7 @@ export class AgentLoop {
             reason: formatEmailApprovalReason(result),
             pendingActionId: result.id,
             pendingActionKind: 'email',
+            resume: { toolCall: emailCall, assistantContent: response.content },
           },
         }
       }
