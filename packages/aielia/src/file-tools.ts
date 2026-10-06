@@ -277,6 +277,9 @@ function pendingActionsDir(workspaceRoot: string): string {
 }
 
 function pendingActionPath(workspaceRoot: string, id: string): string {
+  // An id is only ever a UUID minted by stagePendingAction; reject anything that could climb out of
+  // `.pending-actions/` (e.g. "../../x") before it is used to read or delete a file.
+  if (!/^[A-Za-z0-9_-]+$/.test(id)) throw new Error(`Invalid pending action id "${id}"`)
   return `${pendingActionsDir(workspaceRoot)}/${id}.json`
 }
 

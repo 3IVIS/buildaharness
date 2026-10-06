@@ -535,3 +535,12 @@ describe('readCurrentFileContent', () => {
     await expect(readCurrentFileContent(backend, ROOT, '../outside.txt')).rejects.toThrow(PathOutsideWorkspaceError)
   })
 })
+
+describe('pending action id validation', () => {
+  it('rejects an id that would climb out of .pending-actions', async () => {
+    const backend = makeFakeBackend()
+    await expect(loadPendingAction(backend, ROOT, '../../evil')).rejects.toThrow(/Invalid pending action id/)
+    await expect(applyPendingAction(backend, ROOT, '../x')).rejects.toThrow(/Invalid pending action id/)
+    await expect(discardPendingAction(backend, ROOT, '../x')).rejects.toThrow(/Invalid pending action id/)
+  })
+})
