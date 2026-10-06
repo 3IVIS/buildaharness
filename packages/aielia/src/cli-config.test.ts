@@ -221,6 +221,12 @@ describe('formatConfigListing', () => {
     expect(listing).not.toContain('sk-ant-super-secret')
   })
 
+  it('masks the email credentials (resendApiKey, smtpPass) too', () => {
+    const listing = formatConfigListing({ ...DEFAULT_CONFIG, resendApiKey: 're_secret_value', smtpPass: 'smtp-secret-pass' }, new Set())
+    expect(listing).not.toContain('re_secret_value')
+    expect(listing).not.toContain('smtp-secret-pass')
+  })
+
   it('shows "(not set)" for an absent optional field', () => {
     const listing = formatConfigListing(DEFAULT_CONFIG, new Set())
     expect(listing).toMatch(/model\s+\(not set\)/)

@@ -22,7 +22,7 @@ import { resolveMemoryWriteMode, MEMORY_WRITE_MODES } from './memory-governance.
 export { CONFIG_KEYS }
 
 /** Never printed in full by formatConfigValue — /config shows these masked regardless of value. */
-export const SECRET_CONFIG_KEYS: ReadonlySet<keyof AssistantConfig> = new Set(['authToken', 'apiKey', 'braveApiKey'])
+export const SECRET_CONFIG_KEYS: ReadonlySet<keyof AssistantConfig> = new Set(['authToken', 'apiKey', 'braveApiKey', 'resendApiKey', 'smtpPass'])
 
 /** Which env var, if any, can pin a given key — shown next to a value in /config's listing when that var is set. */
 export const ENV_VAR_FOR_CONFIG_KEY: Partial<Record<keyof AssistantConfig, string>> = {
