@@ -33,6 +33,9 @@ const MODEL_PLACEHOLDER: Record<AssistantConfig['llmBackend'], string> = {
 /** The three backends where the user pastes in their own provider key — see config.ts's AssistantConfig.apiKey doc comment for the trust-boundary tradeoff this implies. */
 const DIRECT_API_BACKENDS: ReadonlySet<AssistantConfig['llmBackend']> = new Set(['anthropic', 'openai', 'openrouter'])
 
+/** Shell command timeout used when `shellTimeoutMs` is unset (matches the plan's documented 30 s default). */
+const DEFAULT_SHELL_TIMEOUT_MS = 30_000
+
 interface Props {
   config: AssistantConfig
   overriddenKeys: ReadonlySet<keyof AssistantConfig>
@@ -247,9 +250,8 @@ export function SettingsScreen({
                 />
               </FieldRow>
               {isDesktop ? (
-                <p className="settings__warning">
-                  Stored in your OS keychain (Keychain on macOS, Secret Service on Linux, DPAPI-protected on
-                  Windows) — not in the plaintext settings file the other fields on this screen use.
+                <p className="settings__info">
+                  Stored in your OS keychain, not in the plaintext settings file.
                 </p>
               ) : (
                 <p className="settings__warning">
@@ -260,7 +262,7 @@ export function SettingsScreen({
                 </p>
               )}
               {isDesktop && apiKeyMigrationNotice && (
-                <p className="settings__warning">
+                <p className="settings__info">
                   Your previously saved API key has been moved into your OS keychain — it no longer lives in the
                   plaintext settings file.
                 </p>
@@ -329,17 +331,31 @@ export function SettingsScreen({
 
         <section className="settings__section">
           <h2>Shell</h2>
-          <FieldRow label="Enable shell commands (approval-gated)">
+          <FieldRow label="Enable shell commands">
             <input type="checkbox" checked={form.enableShell} disabled={disabled} onChange={(e) => set('enableShell', e.target.checked)} />
           </FieldRow>
+          <p className="settings__info">
+            {form.dangerouslySkipPermissions
+              ? 'Approvals are off (see Advanced) — commands run without asking first.'
+              : 'Each command asks for your approval before it runs.'}
+          </p>
           {form.enableShell && (
-            <FieldRow label="Timeout (ms)">
+            <FieldRow label="Timeout (milliseconds)">
               <input
                 type="number"
-                value={form.shellTimeoutMs ?? ''}
+                min={1}
+                step={1000}
+                value={form.shellTimeoutMs ?? DEFAULT_SHELL_TIMEOUT_MS}
                 disabled={disabled}
-                onChange={(e) => set('shellTimeoutMs', e.target.value ? Number(e.target.value) : undefined)}
+                onChange={(e) => {
+                  const n = Number(e.target.value)
+                  set('shellTimeoutMs', e.target.value && Number.isFinite(n) && n > 0 ? n : undefined)
+                }}
               />
+              <span className="settings__hint-inline">
+                {(form.shellTimeoutMs ?? DEFAULT_SHELL_TIMEOUT_MS) / 1000} s
+                {form.shellTimeoutMs === undefined ? ' (default)' : ''}
+              </span>
             </FieldRow>
           )}
         </section>
@@ -427,7 +443,7 @@ export function SettingsScreen({
         <button type="button" className="settings__save" onClick={() => void handleSave()} disabled={disabled}>
           {saving ? 'Saving…' : 'Save'}
         </button>
-        <button type="button" onClick={onCancel} disabled={disabled}>Cancel</button>
+        <button type="button" className="settings__cancel" onClick={onCancel} disabled={disabled}>Cancel</button>
       </div>
     </div>
   )

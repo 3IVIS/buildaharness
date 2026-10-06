@@ -84,6 +84,12 @@ describe('SettingsScreen', () => {
     expect(screen.getByText('Workspace')).toBeInTheDocument()
   })
 
+  it('shows the 30 s default shell timeout and a truthful approval-mode line', () => {
+    renderSettings({ config: { ...DEFAULT_CONFIG, enableShell: true, shellTimeoutMs: undefined, dangerouslySkipPermissions: false } })
+    expect(screen.getByDisplayValue('30000')).toBeInTheDocument()
+    expect(screen.getByText(/Each command asks for your approval/)).toBeInTheDocument()
+  })
+
   it('shows the plaintext warning (not the keychain one) for apiKey on the browser path', () => {
     renderSettings({ isDesktop: false, config: { ...DEFAULT_CONFIG, llmBackend: 'anthropic' } })
     expect(screen.getByText(/Stored in plain text on this device, not an OS keychain/)).toBeInTheDocument()
