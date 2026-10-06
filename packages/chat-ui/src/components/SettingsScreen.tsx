@@ -4,8 +4,6 @@ import {
   ConfigValidationError,
   CONFIG_KEYS,
   formatMemorySummary,
-  formatCostSummary,
-  formatDoctorReport,
   LAYER_SETTINGS,
   isToggleable,
   type AssistantConfig,
@@ -74,6 +72,63 @@ function FieldRow({ label, pinnedBy, children }: { label: string; pinnedBy?: str
   )
 }
 
+
+function usageTokens(u: TokenUsage): string {
+  return `${u.inputTokens.toLocaleString()} in / ${u.outputTokens.toLocaleString()} out tokens`
+}
+
+function usageCost(u: TokenUsage): string {
+  return u.costUsd !== undefined ? `~$${u.costUsd.toFixed(4)}` : '—'
+}
+
+/** Usage as a small table (tokens + estimated cost per row); the footnote and empty-state wording match formatCostSummary's so Settings and /cost never disagree. */
+function UsageTable({ lastTurn, session, backend }: { lastTurn?: TokenUsage; session: TokenUsage; backend: AssistantConfig['llmBackend'] }): React.JSX.Element {
+  if (!lastTurn && session.inputTokens === 0 && session.outputTokens === 0) {
+    return <div className="settings__diagnostics-block">No usage yet this session.</div>
+  }
+  const rows: Array<[string, TokenUsage]> = []
+  if (lastTurn) rows.push(['Last turn', lastTurn])
+  rows.push(['This session', session])
+  return (
+    <>
+      <table className="settings__usage-table">
+        <thead>
+          <tr><th scope="col">&nbsp;</th><th scope="col">Tokens</th><th scope="col">Cost</th></tr>
+        </thead>
+        <tbody>
+          {rows.map(([label, u]) => (
+            <tr key={label}>
+              <th scope="row">{label}</th>
+              <td>{usageTokens(u)}</td>
+              <td>{usageCost(u)}</td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+      {(backend === 'claude-cli' || session.costUsd !== undefined) && (
+        <div className="settings__hint">
+          {backend === 'claude-cli'
+            ? 'Cost is real usage from your Claude Code session — may read $0 on a Pro/Max subscription.'
+            : 'Cost is an approximate estimate from a static pricing table, not real billing data.'}
+        </div>
+      )}
+    </>
+  )
+}
+
+function HealthList({ checks }: { checks: DoctorCheck[] | null }): React.JSX.Element {
+  if (!checks) return <div className="settings__diagnostics-block">Checking…</div>
+  return (
+    <ul className="settings__health-list">
+      {checks.map((c) => (
+        <li key={c.label} className={c.ok ? 'settings__health--ok' : 'settings__health--fail'}>
+          <span className="settings__health-icon" aria-label={c.ok ? 'OK' : 'Failed'}>{c.ok ? '✓' : '✗'}</span>
+          <span>{c.label}{!c.ok && c.detail ? ` — ${c.detail}` : ''}</span>
+        </li>
+      ))}
+    </ul>
+  )
+}
 export function SettingsScreen({
   config,
   overriddenKeys,
@@ -359,16 +414,10 @@ export function SettingsScreen({
           <pre className="settings__diagnostics-block">{memorySummary ? formatMemorySummary(memorySummary) : 'Loading…'}</pre>
 
           <div className="settings__field-label">Usage</div>
-          <pre className="settings__diagnostics-block">
-            {formatCostSummary({
-              lastTurn: lastTurnUsage,
-              session: sessionUsage ?? { inputTokens: 0, outputTokens: 0 },
-              backend: config.llmBackend,
-            })}
-          </pre>
+          <UsageTable lastTurn={lastTurnUsage} session={sessionUsage ?? { inputTokens: 0, outputTokens: 0 }} backend={config.llmBackend} />
 
           <div className="settings__field-label">Health</div>
-          <pre className="settings__diagnostics-block">{healthChecks ? formatDoctorReport(healthChecks) : 'Checking…'}</pre>
+          <HealthList checks={healthChecks} />
         </section>
 
         {error && <div className="settings__error">{error}</div>}

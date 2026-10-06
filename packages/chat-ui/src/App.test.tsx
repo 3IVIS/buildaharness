@@ -415,7 +415,7 @@ describe('App', () => {
 
     await user.click(screen.getByRole('button', { name: 'Settings' }))
 
-    await waitFor(() => expect(screen.getByText(/10 in \/ 5 out tokens/)).toBeInTheDocument())
+    await waitFor(() => expect(screen.getAllByText(/10 in \/ 5 out tokens/).length).toBeGreaterThan(0))
     expect(screen.getByText(/2 messages this session/)).toBeInTheDocument()
     expect(screen.getByText(/proxy reachable/)).toBeInTheDocument()
   })

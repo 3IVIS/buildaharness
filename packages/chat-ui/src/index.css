@@ -1677,3 +1677,45 @@ body {
 .app__plan-graph-link, .bubble__plan-graph-link, .plan-approval-card__graph-link {
   background: none; border: 0; padding: 0; color: inherit; text-decoration: underline; cursor: pointer; font-size: 12.5px;
 }
+
+/* Diagnostics: usage table and health list (replace the monospace dumps) */
+.settings__usage-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 12.5px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+}
+.settings__usage-table th,
+.settings__usage-table td {
+  text-align: left;
+  padding: 6px 10px;
+  font-weight: 400;
+  border-bottom: 1px solid var(--border);
+}
+.settings__usage-table thead th,
+.settings__usage-table tbody th {
+  color: var(--muted);
+  font-weight: 600;
+}
+.settings__usage-table tbody tr:last-child > * { border-bottom: 0; }
+
+.settings__health-list {
+  list-style: none;
+  margin: 0;
+  padding: 4px 10px;
+  font-size: 12.5px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+}
+.settings__health-list li { display: flex; gap: 8px; padding: 4px 0; }
+.settings__health-icon { font-weight: 700; }
+.settings__health--ok .settings__health-icon { color: #2e9e5b; }
+.settings__health--fail .settings__health-icon { color: #d64545; }
+
+.search-panel__result-role {
+  font-weight: 600;
+  color: var(--text);
+}

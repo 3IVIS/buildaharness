@@ -272,7 +272,7 @@ describe('SettingsScreen', () => {
         lastTurnUsage: { inputTokens: 100, outputTokens: 50 },
         sessionUsage: { inputTokens: 100, outputTokens: 50 },
       })
-      expect(screen.getByText(/100 in \/ 50 out tokens/)).toBeInTheDocument()
+      expect(screen.getAllByText(/100 in \/ 50 out tokens/)).toHaveLength(2)
     })
   })
 

@@ -1,5 +1,6 @@
 import { useState } from 'react'
 import type { TranscriptSearchHit } from '@buildaharness/aielia'
+import { formatTimestamp } from '../format-timestamp'
 
 interface Props {
   /** Bound to assistant.searchTranscript — cross-session by design, same as the CLI's /search (see assistant.ts's doc comment on searchTranscript). */
@@ -12,8 +13,15 @@ function roleLabel(role: string): string {
   return role === 'assistant' ? 'Aielia' : role === 'user' ? 'You' : role
 }
 
-function shortSessionId(sessionId: string): string {
-  return sessionId.length > 8 ? `${sessionId.slice(0, 8)}…` : sessionId
+/** Drops markdown syntax (table pipes and separator rows, bold/italic markers, backticks, heading hashes) so snippets read as plain text. */
+function stripMarkdown(text: string): string {
+  return text
+    .replace(/^\s*\|?[\s:|-]*-{3,}[\s:|-]*\|?\s*$/gm, ' ')
+    .replace(/\|/g, ' ')
+    .replace(/(\*\*|__|`)/g, '')
+    .replace(/^#{1,6}\s+/gm, '')
+    .replace(/\s+/g, ' ')
+    .trim()
 }
 
 function escapeRegExp(term: string): string {
@@ -98,11 +106,15 @@ export function SearchPanel({ search, onCancel }: Props): React.JSX.Element {
 
         {hits !== null && hits.length > 0 && (
           <ul className="search-panel__results">
-            {hits.map((hit, i) => (
+            {hits.map((hit, i) => {
+              const content = stripMarkdown(hit.content)
+              const when = formatTimestamp(hit.at)
+              return (
               <li key={i} className="search-panel__result">
                 <button
                   type="button"
                   className="search-panel__result-row"
+                  title={`Session ${hit.sessionId}`}
                   onClick={() => setExpandedIndex((prev) => (prev === i ? null : i))}
                   aria-expanded={expandedIndex === i}
                   // Explicit, plain-text accessible name — the <mark> highlighting inside is
@@ -112,22 +124,22 @@ export function SearchPanel({ search, onCancel }: Props): React.JSX.Element {
                   // spec's name-from-content algorithm, each child's own contribution is trimmed
                   // before concatenation, so "about " immediately followed by <mark>garden</mark>
                   // collapses to "aboutgarden" with no space at all.
-                  aria-label={`${roleLabel(hit.role)} message, ${hit.at}: ${hit.content}`}
+                  aria-label={`${roleLabel(hit.role)} message, ${when}: ${content}`}
                 >
                   <span className="search-panel__result-meta" aria-hidden="true">
-                    <span className="search-panel__result-session">{shortSessionId(hit.sessionId)}</span>{' '}
-                    <span className="search-panel__result-at">{hit.at}</span>{' '}
-                    <span className="search-panel__result-role">{roleLabel(hit.role)}</span>
+                    <span className="search-panel__result-role" data-role={hit.role}>{roleLabel(hit.role)}</span>{' '}
+                    <span className="search-panel__result-at">{when}</span>
                   </span>{' '}
                   <span className="search-panel__result-snippet" aria-hidden="true">
-                    {highlightMatches(hit.content.slice(0, 160), query)}
+                    {highlightMatches(content.slice(0, 160), query)}
                   </span>
                 </button>
                 {expandedIndex === i && (
-                  <div className="search-panel__result-detail">{highlightMatches(hit.content, query)}</div>
+                  <div className="search-panel__result-detail">{highlightMatches(content, query)}</div>
                 )}
               </li>
-            ))}
+              )
+            })}
           </ul>
         )}
       </div>
