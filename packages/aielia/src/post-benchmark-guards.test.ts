@@ -42,3 +42,10 @@ describe('network-looking commands (O1)', () => {
     expect(commandLooksLikeNetworkRequest('python3 -m unittest discover')).toBe(false)
   })
 })
+
+describe('out of steps (R1)', () => {
+  it('has a nudge that asks for a plain-text summary without tools', async () => {
+    const { OUT_OF_STEPS_NUDGE } = await import('./agent-loop.js')
+    expect(OUT_OF_STEPS_NUDGE).toContain('Do not call any tool')
+  })
+})

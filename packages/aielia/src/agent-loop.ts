@@ -82,6 +82,10 @@ export interface ToolLoopPendingState {
 export const EMPTY_REPLY_NUDGE =
   'Your last reply was empty. Reply now with your final answer to the user in plain text: summarize what you did and what you found. Do not call a tool unless something is still unfinished.'
 
+/** Sent when a turn used all its tool steps, before the one tool-less summary call. */
+export const OUT_OF_STEPS_NUDGE =
+  'You have used all the tool steps available for this turn. Reply now in plain text: say what you did, what worked, and what is still unfinished. Do not call any tool.'
+
 /**
  * The reply used when the model returns nothing twice in a row: built only from what is on record, so the user
  * never gets an empty message. `actions` is the turn's list of carried-out approved actions (see describeAppliedAction).
@@ -786,6 +790,23 @@ export class AgentLoop {
     return this.persistPausedLoop(result, { sessionId, userMessage, riskHint, messages, sources, iterationsUsed })
   }
 
+  /** One last model call without tools after the step budget ran out; undefined if it fails or returns nothing. */
+  private async summarizeWhenOutOfSteps(messages: ChatMessage[], onToken?: (token: string) => void, onUsage?: (usage: TokenUsage) => void): Promise<string | undefined> {
+    try {
+      const response = await this.llmClient.callChatStructured(
+        [...messages, { role: 'user', content: OUT_OF_STEPS_NUDGE }],
+        undefined,
+        { model: this.model(), onUsage },
+      )
+      const text = response.content.trim()
+      if (text === '') return undefined
+      onToken?.(text)
+      return text
+    } catch {
+      return undefined
+    }
+  }
+
   /** Replaces an empty final answer (the model returned nothing twice) with fallbackFinalReply, shown through onToken like any answer. */
   private withFallbackReply(result: ToolLoopResult, actions: string[] | undefined, onToken?: (token: string) => void): ToolLoopResult {
     if (result.kind !== 'final') return result
@@ -913,6 +934,12 @@ export class AgentLoop {
       dispatchedAnyToolCall = step.dispatchedAnyToolCall
     }
 
+    // Out of steps (benchmark scenario 15: after many approved writes and test runs the user got only "Tool loop exceeded 1
+    // iterations"). The flat loop makes one last call without tools so the user gets what was done and what is unfinished.
+    if (!onToolResult) {
+      const summary = await this.summarizeWhenOutOfSteps(messages, onToken, onUsage)
+      if (summary) return { result: { kind: 'final', content: summary, sources }, iterationsUsed: maxIterations, sources }
+    }
     return {
       result: { kind: 'escalated', reason: `Tool loop exceeded ${maxIterations} iterations without producing a final answer.` },
       iterationsUsed: maxIterations,

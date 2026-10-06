@@ -51,7 +51,7 @@ import { episodicDigestEnabled, type SessionDigest } from './episodic-digest.js'
 import { recallPointerBlock, storeDigestReader } from './recall-tool.js'
 import { semanticCompactionEnabled, summarizeOlderMessages } from './semantic-compaction.js'
 import { MemoryReviewer, memoryReviewerEnabled } from './memory-reviewer.js'
-import { AgentLoop, OneLoopPause, type BatchBudgetTrace, type ToolLoopResult } from './agent-loop.js'
+import { AgentLoop, OneLoopPause, isDanglingAnnouncement, type BatchBudgetTrace, type ToolLoopResult } from './agent-loop.js'
 import type { TurnIntentClassification, FactCategory } from './turn-intent-classifier.js'
 import { ActionApprovalService, type ResumeOptions } from './action-approval-service.js'
 import { PlanService } from './plan-service.js'
@@ -662,6 +662,9 @@ export class PersonalAssistant {
           this.model,
           (u) => auditUsage.push(u),
         )
+        // Structural backstop for the model's judgement: a short reply that ends on a colon or ellipsis announces more
+        // and delivers none of it.
+        if (isDanglingAnnouncement(result.reply)) audit.promisesWorkNotDone = true
         const auditNotice = replyAuditNotice(audit, recorded)
         // One automatic correction: the reply claimed or promised work with no recorded action, or stated outside
         // facts as verified. The model gets a nudge to do the work with its tools or to say plainly that it did not.

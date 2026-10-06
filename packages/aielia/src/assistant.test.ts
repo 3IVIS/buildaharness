@@ -1842,6 +1842,17 @@ describe('PersonalAssistant web + reminder tools', () => {
     expect(result.reason).toBe('Tool loop exceeded 3 iterations without producing a final answer.')
   })
 
+  it('asks for a plain-text summary once the step budget is used up instead of escalating (R1)', async () => {
+    const malformed = { content: '<tool_call>web_search<arg_key>query</arg_key><arg_value>x</arg_value></tool_call>' }
+    const llm = scriptedResponses([malformed, malformed, { content: 'I ran out of steps. Nothing was changed; the search never produced a usable result.' }])
+    const assistant = new PersonalAssistant({ llmClient: llm, webTools: { search: async () => [] }, maxSteps: 2 })
+
+    const result = await assistant.turn('What are the closest primary schools?')
+
+    expect(result.status).toBe('ok')
+    expect(result.reply).toContain('I ran out of steps')
+  })
+
   it('wraps a fetch_url result as untrusted external content before it reaches the model, and records it as a source', async () => {
     const llm = scriptedResponses([
       { content: '', toolCalls: [{ id: 'toolu_1', name: 'fetch_url', input: { url: 'https://example.com' } }] },
