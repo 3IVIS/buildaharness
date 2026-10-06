@@ -290,6 +290,38 @@ describe('plan mode (P2) — mandatory whole-plan approval gate', () => {
     expect(resumed.status).toBe('ok')
   })
 
+  it('an unrecognised planDecision string does not activate the plan (fail closed)', async () => {
+    const llm = new ScriptedPlanLLMClient([{ tasks: THREE_LOW_RISK_TASKS, readyForApproval: true }])
+    const assistant = new PersonalAssistant({ llmClient: llm })
+    const sessionId = 'garbage-decision-session'
+    await assistant.enterPlanMode(sessionId)
+    const staged = await assistant.turn('Approve it.', { sessionId })
+
+    const result = await assistant.turn('go', { sessionId, planApprovalId: staged.planApprovalId, planDecision: 'yolo' as never })
+    expect(result.status).toBe('needs_plan_approval')
+    expect(result.reason).toMatch(/unrecognised/i)
+  })
+
+  it('a bad edit later in the list does not leave earlier cancels persisted', async () => {
+    const llm = new ScriptedPlanLLMClient([{ tasks: THREE_LOW_RISK_TASKS, readyForApproval: true }])
+    const memory = new InMemoryAdapter()
+    const assistant = new PersonalAssistant({ llmClient: llm, memory })
+    const sessionId = 'partial-edit-session'
+    await assistant.enterPlanMode(sessionId)
+    const staged = await assistant.turn('Approve it.', { sessionId })
+
+    const failed = await assistant.turn('go', {
+      sessionId,
+      planApprovalId: staged.planApprovalId,
+      planDecision: 'approve_with_edits',
+      planEdits: { cancelTaskIds: ['t1'], editedTasks: [{ id: 'nope', description: 'x' }] },
+    })
+    expect(failed.status).toBe('needs_plan_approval')
+    const record = await loadPlanRecord(memory, sessionId)
+    expect(record?.mode).toBe('awaiting_approval')
+    expect(record?.tasks.find((t) => t.id === 't1')?.cancelled).toBeUndefined()
+  })
+
   it('a plan already staged for approval rejects further drafting input instead of silently starting a new draft', async () => {
     const llm = new ScriptedPlanLLMClient([{ tasks: THREE_LOW_RISK_TASKS, readyForApproval: true }])
     const assistant = new PersonalAssistant({ llmClient: llm })

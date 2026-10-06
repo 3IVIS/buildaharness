@@ -106,6 +106,19 @@ export class PlanApprovalService {
       }
     }
 
+    // Only the four known decisions resolve a staged plan. `decision` arrives from outside the
+    // type system (CLI/desktop IPC/JSON), and an unrecognised truthy value used to fall through
+    // to the activation path below, i.e. any garbage string approved the plan.
+    if (decision !== 'decline' && decision !== 'approve' && decision !== 'approve_trusted' && decision !== 'approve_with_edits') {
+      return {
+        status: 'needs_plan_approval',
+        reply: null,
+        reason: `Unrecognised decision: ${String(decision).slice(0, 40)}.`,
+        planApprovalId,
+        planApproval: snapshotOf(staged),
+      }
+    }
+
     if (decision === 'decline') {
       await this.planService.abandonPlan(sessionId, staged)
       await this.session.exitPlanMode(sessionId, threadId)
@@ -115,6 +128,15 @@ export class PlanApprovalService {
     try {
       let working = staged
       if (decision === 'approve_with_edits' && edits) {
+        // Validate every edit before writing any: a bad id halfway through used to leave the
+        // earlier cancels/edits already persisted while the reply claimed nothing was applied.
+        for (const taskId of edits.cancelTaskIds ?? []) {
+          if (!staged.tasks.some((t) => t.id === taskId)) throw new Error(`Unknown task id: ${taskId}`)
+        }
+        for (const edit of edits.editedTasks ?? []) {
+          if (!staged.tasks.some((t) => t.id === edit.id)) throw new Error(`Unknown task id: ${edit.id}`)
+          if (typeof edit.description !== 'string' || edit.description.trim() === '') throw new Error(`Empty description for task ${edit.id}`)
+        }
         for (const taskId of edits.cancelTaskIds ?? []) {
           if (!working.tasks.some((t) => t.id === taskId)) throw new Error(`Unknown task id: ${taskId}`)
           working = await this.planService.cancelPlanTask(sessionId, working, taskId)
