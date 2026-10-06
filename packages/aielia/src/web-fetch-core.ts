@@ -64,17 +64,48 @@ function isPrivateIPv4(ip: string): boolean {
   if (a === 172 && b >= 16 && b <= 31) return true // RFC1918
   if (a === 192 && b === 168) return true // RFC1918
   if (a === 169 && b === 254) return true // link-local, includes the 169.254.169.254 cloud metadata endpoint
+  if (a === 100 && b >= 64 && b <= 127) return true // carrier-grade NAT (100.64.0.0/10), also used for some cloud-internal services
+  if (a === 198 && (b === 18 || b === 19)) return true // benchmarking (198.18.0.0/15)
+  if (a >= 224) return true // multicast, reserved, broadcast
   if (a === 0) return true // "this network"
   return false
 }
 
+/** Expands an IPv6 literal (without brackets/zone) into its eight 16-bit groups, or null if it is not a valid IPv6 address. */
+function ipv6Groups(ip: string): number[] | null {
+  let text = ip
+  const v4 = /(\d+\.\d+\.\d+\.\d+)$/.exec(text)
+  if (v4) {
+    const octets = v4[1].split('.').map(Number)
+    if (octets.some((o) => o > 255)) return null
+    text = `${text.slice(0, -v4[1].length)}${((octets[0] << 8) | octets[1]).toString(16)}:${((octets[2] << 8) | octets[3]).toString(16)}`
+  }
+  const halves = text.split('::')
+  if (halves.length > 2) return null
+  const head = halves[0] === '' ? [] : halves[0].split(':')
+  const tail = halves.length === 2 && halves[1] !== '' ? halves[1].split(':') : []
+  const missing = 8 - head.length - tail.length
+  if (halves.length === 1 ? missing !== 0 : missing < 1) return null
+  const groups = [...head, ...Array<string>(halves.length === 2 ? missing : 0).fill('0'), ...tail].map((g) => parseInt(g, 16))
+  if (groups.length !== 8 || groups.some((g) => Number.isNaN(g) || g < 0 || g > 0xffff)) return null
+  return groups
+}
+
 function isPrivateIPv6(ip: string): boolean {
-  const normalized = ip.toLowerCase()
-  if (normalized === '::1' || normalized === '::') return true
-  if (normalized.startsWith('fe80:')) return true // link-local
-  if (normalized.startsWith('fc') || normalized.startsWith('fd')) return true // unique local, fc00::/7
-  const mapped = /^::ffff:(\d+\.\d+\.\d+\.\d+)$/.exec(normalized)
-  if (mapped) return isPrivateIPv4(mapped[1])
+  const normalized = ip.toLowerCase().split('%')[0]
+  const groups = ipv6Groups(normalized)
+  // Unparseable: refuse rather than guess.
+  if (!groups) return true
+  const embeddedV4 = `${groups[6] >> 8}.${groups[6] & 0xff}.${groups[7] >> 8}.${groups[7] & 0xff}`
+  const firstFiveZero = groups.slice(0, 5).every((g) => g === 0)
+  if (firstFiveZero && groups[5] === 0 && groups[6] === 0 && (groups[7] === 0 || groups[7] === 1)) return true // :: and ::1
+  // IPv4-mapped (::ffff:a.b.c.d, which URL parsing serialises as ::ffff:7f00:1), IPv4-compatible (::a.b.c.d)
+  // and NAT64 (64:ff9b::a.b.c.d) addresses carry an IPv4 target: judge that target.
+  if (firstFiveZero && (groups[5] === 0xffff || groups[5] === 0)) return isPrivateIPv4(embeddedV4)
+  if (groups[0] === 0x64 && groups[1] === 0xff9b && groups.slice(2, 6).every((g) => g === 0)) return isPrivateIPv4(embeddedV4)
+  if ((groups[0] & 0xffc0) === 0xfe80) return true // link-local, fe80::/10
+  if ((groups[0] & 0xfe00) === 0xfc00) return true // unique local, fc00::/7
+  if ((groups[0] & 0xff00) === 0xff00) return true // multicast
   return false
 }
 
@@ -211,7 +242,19 @@ function concatUint8Arrays(chunks: Uint8Array[]): Uint8Array {
   return merged
 }
 
-async function readCappedBody(response: Response, maxBytes: number): Promise<{ bytes: Uint8Array; truncated: boolean }> {
+function readOrAbort(reader: ReadableStreamDefaultReader<Uint8Array>, signal?: AbortSignal): Promise<ReadableStreamReadResult<Uint8Array>> {
+  if (!signal) return reader.read()
+  return new Promise((resolve, reject) => {
+    const onAbort = (): void => reject(new Error('aborted'))
+    signal.addEventListener('abort', onAbort, { once: true })
+    reader.read().then(
+      (r) => { signal.removeEventListener('abort', onAbort); resolve(r) },
+      (e) => { signal.removeEventListener('abort', onAbort); reject(e) },
+    )
+  })
+}
+
+async function readCappedBody(response: Response, maxBytes: number, signal?: AbortSignal): Promise<{ bytes: Uint8Array; truncated: boolean }> {
   const body = response.body
   if (!body) {
     const text = await response.text()
@@ -226,7 +269,9 @@ async function readCappedBody(response: Response, maxBytes: number): Promise<{ b
   let truncated = false
   try {
     while (true) {
-      const { done, value } = await reader.read()
+      // A fetch implementation that ignores the abort signal must not be able to stall the read.
+      if (signal?.aborted) throw new Error('aborted')
+      const { done, value } = await readOrAbort(reader, signal)
       if (done) break
       if (!value || value.byteLength === 0) continue
       total += value.byteLength
@@ -239,7 +284,9 @@ async function readCappedBody(response: Response, maxBytes: number): Promise<{ b
       chunks.push(value)
     }
   } finally {
+    // Cancel on truncation AND on an abort/error thrown mid-read, so the connection is released.
     if (truncated) await reader.cancel().catch(() => {})
+    else void reader.cancel().catch(() => {})
   }
   return { bytes: concatUint8Arrays(chunks), truncated }
 }
@@ -285,30 +332,36 @@ export async function fetchTextSafely(options: FetchTextSafelyOptions): Promise<
   for (let redirect = 0; redirect <= maxRedirects; redirect++) {
     await assertPublicHttpUrl(currentUrl, options.dns)
 
+    // One timer covers the headers AND the body read: a server that sends headers and then drips
+    // (or stalls) the body would otherwise hold this call open forever.
     const controller = new AbortController()
     const timer = setTimeout(() => controller.abort(), timeoutMs)
     let response: Response
+    let bytes: Uint8Array
+    let byteTruncated: boolean
     try {
       response = await fetchImpl(currentUrl, {
         redirect: 'manual',
         signal: controller.signal,
         headers: { 'User-Agent': FIXED_USER_AGENT },
       })
+
+      if (response.status >= 300 && response.status < 400) {
+        const location = response.headers.get('location')
+        // The redirect body is never read; release the connection.
+        await response.body?.cancel().catch(() => {})
+        if (!location) throw new Error(`Redirect response from "${currentUrl}" had no Location header`)
+        currentUrl = new URL(location, currentUrl).toString()
+        continue
+      }
+
+      ;({ bytes, truncated: byteTruncated } = await readCappedBody(response, maxBytes, controller.signal))
     } catch (err) {
       if (controller.signal.aborted) throw new Error(`Timed out fetching "${currentUrl}" after ${timeoutMs}ms`)
       throw err
     } finally {
       clearTimeout(timer)
     }
-
-    if (response.status >= 300 && response.status < 400) {
-      const location = response.headers.get('location')
-      if (!location) throw new Error(`Redirect response from "${currentUrl}" had no Location header`)
-      currentUrl = new URL(location, currentUrl).toString()
-      continue
-    }
-
-    const { bytes, truncated: byteTruncated } = await readCappedBody(response, maxBytes)
     const headerContentType = response.headers.get('content-type') ?? ''
     const headerAllowed = headerContentType !== '' && matchesContentTypeAllowlist(headerContentType, allowedContentTypes)
     if (!headerAllowed && looksBinary(bytes)) {
