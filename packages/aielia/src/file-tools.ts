@@ -411,11 +411,15 @@ export async function applyPendingAction(
   if (!options.executeShell) {
     throw new Error(`Cannot apply a staged shell action ("${id}") — no executeShell callback was provided`)
   }
+  // Same defense in depth as the write branch: the cwd was validated when the command was staged, but a
+  // record is a plain file on disk, so re-validate before anything is spawned in it.
+  const resolvedCwd = resolveInWorkspace(workspaceRoot, record.cwd)
+  await assertRealPathInWorkspace(backend, workspaceRoot, resolvedCwd)
   // A shell command's effects aren't scoped to one known path the way a write's are — snapshot
   // the whole tree before and after, so the diff (whatever it turns out to be) can still be
   // reverted later. See action-snapshot.ts's snapshotWorkspaceTree/buildShellUndoLogEntry.
   const before = await snapshotWorkspaceTree(backend, workspaceRoot)
-  const execution = await options.executeShell(record.command, record.cwd)
+  const execution = await options.executeShell(record.command, resolvedCwd)
   const after = await snapshotWorkspaceTree(backend, workspaceRoot)
   const undoEntry = buildShellUndoLogEntry(id, record.command, before, after)
   await recordUndoLogEntry(backend, workspaceRoot, undoEntry)

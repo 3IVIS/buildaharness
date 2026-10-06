@@ -255,6 +255,15 @@ describe('pending-action staging', () => {
     await expect(applyPendingAction(backend, ROOT, id)).rejects.toThrow(/executeShell/)
   })
 
+  it('applyPendingAction re-validates a staged shell cwd and refuses one outside the workspace', async () => {
+    const backend = makeFakeBackend()
+    const { id } = await stagePendingAction(backend, ROOT, { kind: 'shell', command: 'echo hi', cwd: '/etc' })
+    const executeShell = vi.fn().mockResolvedValue({ output: '', exitCode: 0, timedOut: false })
+
+    await expect(applyPendingAction(backend, ROOT, id, { executeShell })).rejects.toThrow(/outside the workspace/)
+    expect(executeShell).not.toHaveBeenCalled()
+  })
+
   it('applyPendingAction invokes the injected executeShell callback for kind: shell and deletes the staging record', async () => {
     const backend = makeFakeBackend()
     const { id } = await stagePendingAction(backend, ROOT, { kind: 'shell', command: 'echo hi', cwd: ROOT })
