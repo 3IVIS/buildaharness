@@ -59,16 +59,29 @@ function isPrivateIPv4(ip: string): boolean {
   if (a === 192 && b === 168) return true
   if (a === 169 && b === 254) return true
   if (a === 0) return true
+  if (a === 100 && b >= 64 && b <= 127) return true // CGNAT 100.64/10 (includes some cloud metadata endpoints)
+  if (a === 192 && b === 0 && parts[2] === 0) return true // 192.0.0.0/24
+  if (a === 198 && (b === 18 || b === 19)) return true // benchmarking 198.18/15
+  if (a >= 224) return true // multicast + reserved + broadcast
   return false
 }
 
 function isPrivateIPv6(ip: string): boolean {
   const normalized = ip.toLowerCase()
   if (normalized === '::1' || normalized === '::') return true
-  if (normalized.startsWith('fe80:')) return true
+  if (/^fe[89ab]/.test(normalized)) return true // fe80::/10 link-local
+  if (/^fe[c-f]/.test(normalized)) return true // fec0::/10 site-local (deprecated)
   if (normalized.startsWith('fc') || normalized.startsWith('fd')) return true
+  if (normalized.startsWith('ff')) return true // multicast
   const mapped = /^::ffff:(\d+\.\d+\.\d+\.\d+)$/.exec(normalized)
   if (mapped) return isPrivateIPv4(mapped[1])
+  // IPv4-mapped / NAT64 / IPv4-compatible in hex form, e.g. ::ffff:7f00:1, 64:ff9b::7f00:1, ::7f00:1
+  const hex = /^(?:::ffff:|64:ff9b::|::)([0-9a-f]{1,4}):([0-9a-f]{1,4})$/.exec(normalized)
+  if (hex) {
+    const hi = parseInt(hex[1], 16)
+    const lo = parseInt(hex[2], 16)
+    return isPrivateIPv4(`${hi >> 8}.${hi & 255}.${lo >> 8}.${lo & 255}`)
+  }
   return false
 }
 
