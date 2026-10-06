@@ -1928,6 +1928,22 @@ describe('PersonalAssistant shell tools', () => {
     expect(toolCallLogs.some((e) => e.content.includes('run_shell_command') && e.content.includes('a.txt'))).toBe(true)
   })
 
+  it('logs the user message once per approved turn, not again when the staged action resumes', async () => {
+    const executeCommand = vi.fn().mockResolvedValue({ output: 'a.txt\nb.txt\n', exitCode: 0, timedOut: false })
+    const { ctx } = makeShellTools(executeCommand)
+    const llm = scriptedResponses([
+      { content: '', toolCalls: [{ id: 'toolu_1', name: 'run_shell_command', input: { command: 'ls -la' } }] },
+    ])
+    const onDebugLog = vi.fn()
+    const assistant = new PersonalAssistant({ llmClient: llm, shellTools: ctx, onDebugLog })
+
+    const staged = await assistant.turn('List the files here')
+    await assistant.turn('List the files here', { approved: true, pendingActionId: staged.pendingActionId })
+
+    const userLogs = onDebugLog.mock.calls.map((c) => c[0]).filter((e) => e.kind === 'user_message')
+    expect(userLogs).toHaveLength(1)
+  })
+
   it('logs a declined staged run_shell_command to onDebugLog too', async () => {
     const executeCommand = vi.fn().mockResolvedValue({ output: 'a.txt\nb.txt\n', exitCode: 0, timedOut: false })
     const { ctx } = makeShellTools(executeCommand)

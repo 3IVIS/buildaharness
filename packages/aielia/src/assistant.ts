@@ -592,7 +592,10 @@ export class PersonalAssistant {
     this.memoryReviewer.abort()
     const writesBefore = this.memoryService.writeCount
     this.onTrace?.({ kind: 'turn_start', sessionId, message: userMessage })
-    this.onDebugLog?.({ kind: 'user_message', sessionId, content: userMessage })
+    // A pendingActionId call resumes a turn whose user message was already logged when it first
+    // started (it only carries that message along), so logging it again duplicated every
+    // approved turn's user_message in the activity log.
+    if (!options.pendingActionId) this.onDebugLog?.({ kind: 'user_message', sessionId, content: userMessage })
 
     // Pre-turn only, never mid-turn — a turn already in flight always finishes (see
     // spend-cap.ts's checkSpendCap doc comment). A pendingActionId call is a continuation of a
