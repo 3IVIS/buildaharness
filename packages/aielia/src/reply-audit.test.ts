@@ -19,7 +19,7 @@ describe('reply audit', () => {
   it('passes what the system recorded to the model and reads the three flags', async () => {
     const llm = new AuditLLM('{"claimsUnrecordedWork": true, "promisesWorkNotDone": false, "unverifiedOutsideFacts": false}')
     const audit = await auditReply({ ...base, actions: ['wrote a.py'], lookupUnavailable: true }, llm)
-    expect(audit).toEqual({ claimsUnrecordedWork: true, promisesWorkNotDone: false, unverifiedOutsideFacts: false })
+    expect(audit).toEqual({ claimsUnrecordedWork: true, promisesWorkNotDone: false, unverifiedOutsideFacts: false, contradictsCommandOutput: false })
     const payload = JSON.parse(String(llm.seen[0][1].content))
     expect(payload.actions).toEqual(['wrote a.py'])
     expect(payload.lookupUnavailable).toBe(true)
