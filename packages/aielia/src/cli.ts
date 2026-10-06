@@ -40,8 +40,8 @@ import { braveSearch } from './web-search-provider.js'
 import { resolveConfig, validateConfig, ConfigValidationError, type AssistantConfig, type ConfigStore } from './config.js'
 import { NodeConfigStore } from './node-config-store.js'
 import { applyLayerSettings, formatLayerListing, sanitizeLayerChoices, withLayerChoice, LayerSettingError } from './layer-settings.js'
-import { isConfigKey, envOverridesFromProcessEnv, parseConfigValue, ConfigValueParseError, formatConfigListing, ENV_VAR_FOR_CONFIG_KEY, CONFIG_KEYS } from './cli-config.js'
-import { formatHelp, isQuitCommand, formatStatus, formatTranscriptMarkdown, defaultExportFilename, formatMemorySummary, formatMemoryExport, defaultMemoryExportFilename, formatSearchResults, formatGoalGraphState, formatNextSteps, formatCostSummary, formatDoctorReport, formatUndoLogListing, formatMemoryPendingOutcome, formatMemoryHistory, formatMemoryArchive, formatMemoryInjection, formatMemoryStatus } from './cli-session.js'
+import { isConfigKey, findInvalidNumericSettings, envOverridesFromProcessEnv, parseConfigValue, ConfigValueParseError, formatConfigListing, ENV_VAR_FOR_CONFIG_KEY, CONFIG_KEYS } from './cli-config.js'
+import { stripTerminalControls, formatHelp, isQuitCommand, formatStatus, formatTranscriptMarkdown, defaultExportFilename, formatMemorySummary, formatMemoryExport, defaultMemoryExportFilename, formatSearchResults, formatGoalGraphState, formatNextSteps, formatCostSummary, formatDoctorReport, formatUndoLogListing, formatMemoryPendingOutcome, formatMemoryHistory, formatMemoryArchive, formatMemoryInjection, formatMemoryStatus } from './cli-session.js'
 import { estimateCostUsd } from './model-pricing.js'
 import { formatSpendCapStatus } from './spend-cap.js'
 import { checkProxyHealth, checkClaudeCli, checkWorkspaceRoot, checkDataDirWritable, checkMemoryHealth } from './doctor-checks.js'
@@ -361,6 +361,8 @@ export async function runCli(options: RunCliOptions = {}): Promise<CliInstance> 
 
   try {
     validateConfig({}, config)
+    const numericProblems = findInvalidNumericSettings(config)
+    if (numericProblems.length > 0) throw new ConfigValidationError(numericProblems.join(' '))
   } catch (err) {
     if (!(err instanceof ConfigValidationError)) throw err
     // Thrown, not printed + process.exit()ed here: under the Ink TUI console/stderr are captured into the (never rendered)
@@ -535,7 +537,7 @@ export async function runCli(options: RunCliOptions = {}): Promise<CliInstance> 
       ]),
       `Success criteria: ${lastPlanStatus.successCriteria}`,
     ]
-    console.log(`\n${lines.join('\n')}\n`)
+    console.log(stripTerminalControls(`\n${lines.join('\n')}\n`))
   }
 
   /**
@@ -559,7 +561,7 @@ export async function runCli(options: RunCliOptions = {}): Promise<CliInstance> 
     // existing assistant-reply markdown path (markdown-line.tsx) instead of printing literal
     // '##'/'- [ ]' characters, the same gap the underlying report flagged for the legacy
     // (DEFAULT_PLAN_MODE) prose path specifically.
-    console.log(`Aielia> ${result.reply ?? '(no reply)'}\n`)
+    console.log(stripTerminalControls(`Aielia> ${result.reply ?? '(no reply)'}\n`))
     if (result.usage) lastTurnUsage = withCostEstimate(result.usage)
   }
 
@@ -591,7 +593,7 @@ export async function runCli(options: RunCliOptions = {}): Promise<CliInstance> 
         ? ['Review notes:', ...snapshot.reviewNotes.map((note) => `  - ${note}`)]
         : []),
     ]
-    console.log(`\n${lines.join('\n')}\n`)
+    console.log(stripTerminalControls(`\n${lines.join('\n')}\n`))
   }
 
   /**
@@ -968,7 +970,7 @@ export async function runCli(options: RunCliOptions = {}): Promise<CliInstance> 
       return
     }
 
-    console.log(`\n[needs approval — revert] ${staged.reason}`)
+    console.log(stripTerminalControls(`\n[needs approval — revert] ${staged.reason}`))
     const confirmed = await askYesNo('Apply this revert? (y/N) ')
     lastTrace = undefined
     lastNoTraceReason = `No harness trace — the last turn was a staged revert that was ${confirmed ? 'approved' : 'declined'} before the harness ran.`
@@ -1187,9 +1189,9 @@ export async function runCli(options: RunCliOptions = {}): Promise<CliInstance> 
     // proposal line ("Reading X") a viewer already saw a moment earlier stays on screen and this
     // second line closes the loop instead of replacing it.
     if (step.deniedReason) {
-      console.log(`  ${ICONS.deniedStep} Denied: ${step.summary} — ${step.deniedReason}`)
+      console.log(stripTerminalControls(`  ${ICONS.deniedStep} Denied: ${step.summary} — ${step.deniedReason}`))
     } else {
-      console.log(`  ${toolStepIcon(step.tool)} ${step.summary}`)
+      console.log(stripTerminalControls(`  ${toolStepIcon(step.tool)} ${step.summary}`))
     }
     lastTurnToolSteps.push(step)
   }
@@ -1230,19 +1232,19 @@ export async function runCli(options: RunCliOptions = {}): Promise<CliInstance> 
     const options = orderedAskOptions(question)
     const allowFreeText = question.allowFreeText !== false
     console.log('')
-    if (question.header) console.log(`[${question.header}]`)
+    if (question.header) console.log(stripTerminalControls(`[${question.header}]`))
     if (total > 1) console.log(`Question ${index + 1} of ${total}`)
-    console.log(question.question)
+    console.log(stripTerminalControls(question.question))
     options.forEach((option, i) => {
       const n = i + 1
       const picked = draft.selectedLabels.includes(option.label) ? '✓' : ' '
       const recommended = option.recommended ? ' (recommended)' : ''
-      console.log(`  [${picked}] ${n}) ${option.label}${recommended}`)
-      if (option.description) console.log(`        ${option.description}`)
-      if (option.preview) console.log(`        preview: ${option.preview}`)
+      console.log(stripTerminalControls(`  [${picked}] ${n}) ${option.label}${recommended}`))
+      if (option.description) console.log(stripTerminalControls(`        ${option.description}`))
+      if (option.preview) console.log(stripTerminalControls(`        preview: ${option.preview}`))
     })
-    if (draft.editText) console.log(`  note: ${draft.editText}`)
-    if (draft.freeText) console.log(`  other: ${draft.freeText}`)
+    if (draft.editText) console.log(stripTerminalControls(`  note: ${draft.editText}`))
+    if (draft.freeText) console.log(stripTerminalControls(`  other: ${draft.freeText}`))
     const commands = [
       options.length > 0 ? (question.allowMultiple ? '<n>/t<n> toggle option' : '<n> select option') : undefined,
       options.length > 0 ? 'e<n> add a note to a selected option' : undefined,
@@ -1270,7 +1272,7 @@ export async function runCli(options: RunCliOptions = {}): Promise<CliInstance> 
       // escalation copy rather than entering a loop with nothing to ask.
       lastTrace = undefined
       lastNoTraceReason = `No harness trace — the last turn needed clarification (${result.reason ?? 'no further detail'}) but had no answerable questions.`
-      console.log(`\n[needs clarification] ${result.reason ?? 'This request needs clarification.'}\n`)
+      console.log(stripTerminalControls(`\n[needs clarification] ${result.reason ?? 'This request needs clarification.'}\n`))
       return
     }
 
@@ -1279,8 +1281,8 @@ export async function runCli(options: RunCliOptions = {}): Promise<CliInstance> 
     // the plain-text escalation copy instead of blocking on a readline read of closed stdin.
     if (nonInteractiveApprovalMode === 'decline') {
       console.log(`\n[non-interactive mode: auto-declining — ASSISTANT_NON_INTERACTIVE_APPROVAL=decline]`)
-      console.log(`\n[needs clarification] ${result.reason ?? 'This request needs clarification.'}`)
-      for (const q of questions) console.log(`  - ${q.question}`)
+      console.log(stripTerminalControls(`\n[needs clarification] ${result.reason ?? 'This request needs clarification.'}`))
+      for (const q of questions) console.log(stripTerminalControls(`  - ${q.question}`))
       console.log('')
       lastTrace = undefined
       lastNoTraceReason = 'No harness trace — the last turn needed clarification and was auto-declined (non-interactive mode) before the harness resumed.'
@@ -1297,6 +1299,13 @@ export async function runCli(options: RunCliOptions = {}): Promise<CliInstance> 
       printClarificationQuestion(question, draft, index, questions.length)
       const token = (await askLine('clarify> ')).trim()
       const lower = token.toLowerCase()
+      // The input stream is gone (EOF / Ctrl+D): every further read would come back blank forever, so stop asking.
+      if (inputUnavailable) {
+        console.log('\n[no input available — leaving the clarification unanswered]\n')
+        lastTrace = undefined
+        lastNoTraceReason = 'No harness trace — the last turn needed clarification and input closed before it was answered.'
+        return
+      }
 
       if (lower === 's' || lower === 'submit') {
         const answers = questions.map((q) => clarificationDraftToAnswer(q.id, drafts.get(q.id)!))
@@ -1392,7 +1401,7 @@ export async function runCli(options: RunCliOptions = {}): Promise<CliInstance> 
         process.stdout.write('\nAielia> ')
         streamedAnyTokens = true
       }
-      process.stdout.write(token)
+      process.stdout.write(stripTerminalControls(token))
     }
 
     try {
@@ -1460,7 +1469,7 @@ export async function runCli(options: RunCliOptions = {}): Promise<CliInstance> 
               : result.pendingActionKind === 'batch'
                 ? 'Continue?'
                 : 'Apply this write?'
-        console.log(`\n[needs approval — ${kindLabel}] ${result.reason}`)
+        console.log(stripTerminalControls(`\n[needs approval — ${kindLabel}] ${result.reason}`))
         let confirmed: boolean
         if (result.pendingActionKind && rememberedActionKinds.has(result.pendingActionKind)) {
           console.log(`["don't ask again" active this session for ${kindLabel} — auto-approved]`)
@@ -1477,7 +1486,7 @@ export async function runCli(options: RunCliOptions = {}): Promise<CliInstance> 
       }
 
       if (result.status === 'needs_approval') {
-        console.log(`\n[needs approval — ${result.riskLevel}] ${result.reason}`)
+        console.log(stripTerminalControls(`\n[needs approval — ${result.riskLevel}] ${result.reason}`))
         console.log(`  "${message}"`)
         let confirmed: boolean
         if (result.riskLevel && rememberedRiskLevels.has(result.riskLevel)) {
@@ -1565,7 +1574,7 @@ export async function runCli(options: RunCliOptions = {}): Promise<CliInstance> 
       if (result.status === 'escalated') {
         lastTrace = undefined
         lastNoTraceReason = `No harness trace — the last turn escalated (${result.reason}) before completing.`
-        console.log(`\n[escalated] ${result.reason}\n`)
+        console.log(stripTerminalControls(`\n[escalated] ${result.reason}\n`))
         return
       }
 
@@ -1634,16 +1643,16 @@ export async function runCli(options: RunCliOptions = {}): Promise<CliInstance> 
         // onToken only ever saw draftReply, not a Phase 4.1 pausedNote appended afterward (see
         // AssistantTurnResult.pausedNote's doc comment), so that part still needs printing here.
         const pausedNoteText = result.pausedNote ? `\n\n${result.pausedNote}` : ''
-        process.stdout.write(`${pausedNoteText}${riskSuffix}${sourcesHint}${planHint}${contradictionNotice}${reviewNotice}${nextStepsBlock}\n\n`)
+        process.stdout.write(stripTerminalControls(`${pausedNoteText}${riskSuffix}${sourcesHint}${planHint}${contradictionNotice}${reviewNotice}${nextStepsBlock}\n\n`))
       } else {
-        console.log(`\nAielia>${riskSuffix} ${result.reply}${sourcesHint}${planHint}${contradictionNotice}${reviewNotice}${nextStepsBlock}\n`)
+        console.log(stripTerminalControls(`\nAielia>${riskSuffix} ${result.reply}${sourcesHint}${planHint}${contradictionNotice}${reviewNotice}${nextStepsBlock}\n`))
       }
     } catch (err) {
       // Mirrors chat-ui's error bubble: a failed turn (e.g. proxy down) shouldn't
       // crash the REPL via an unhandled rejection — just report it and keep going.
       clearProgress()
       const { message: errorMessage, retryable } = classifyError(err, config.llmBackend)
-      console.log(`\n[error] ${errorMessage}${retryable ? ' Type the message again to retry.' : ''}\n`)
+      console.log(stripTerminalControls(`\n[error] ${errorMessage}${retryable ? ' Type the message again to retry.' : ''}\n`))
     }
   }
 
@@ -1687,6 +1696,7 @@ export async function runCli(options: RunCliOptions = {}): Promise<CliInstance> 
    * for the read-failure case, just resolving to an empty string (an unrecognized/ignored answer,
    * see printClarificationQuestion's callers) instead of askYesNo's "treat as declined" boolean.
    */
+  let inputUnavailable = false
   function askLine(question: string): Promise<string> {
     // Test-only seam — same shape as askYesNo's own.
     if (options.askLine) return options.askLine(question)
@@ -1694,6 +1704,7 @@ export async function runCli(options: RunCliOptions = {}): Promise<CliInstance> 
       try {
         rl.question(question, (answer) => resolve(answer.trim()))
       } catch {
+        inputUnavailable = true
         console.log(`\n[could not read a response — treating as blank]`)
         resolve('')
       }
@@ -1804,6 +1815,17 @@ export async function runCli(options: RunCliOptions = {}): Promise<CliInstance> 
       // requests) — /config set is left as-is (a single, explicit, intentional value the user
       // just typed, not a broad "wipe back to defaults" that's easy to trigger without meaning to
       // reset something specific).
+      // The reset must not leave a configuration that cannot start (e.g. dropping the apiKey of an API backend): the
+      // next launch would refuse to run at all, and /config could no longer be used to repair it.
+      const remaining: Partial<AssistantConfig> = { ...(await configStore.load()) }
+      for (const k of key ? [key] : CONFIG_KEYS) delete remaining[k as keyof AssistantConfig]
+      try {
+        validateConfig({}, resolveConfig(remaining, envOverrides).config)
+      } catch (err) {
+        if (!(err instanceof ConfigValidationError)) throw err
+        console.log(`\n✗ Not reset: ${err.message}\n`)
+        return
+      }
       const target = key ? `"${key}"` : 'ALL settings'
       const confirmed = await askYesNo(`\nReset ${target} to default? This takes effect immediately. (y/N) `)
       if (!confirmed) {
@@ -1953,7 +1975,10 @@ export async function runCli(options: RunCliOptions = {}): Promise<CliInstance> 
       message = pick.description
     }
     const [token, ...args] = message.split(/\s+/)
-    const handler = commands[token]
+    // An own-property lookup: `commands['constructor']` / `['toString']` would otherwise resolve to an inherited
+    // function, swallowing a message that merely starts with such a word. A picked next-step option is model-written
+    // text: it is always sent as an ordinary message, never run as a slash command.
+    const handler = !pick && Object.hasOwn(commands, token) ? commands[token] : undefined
     if (handler) {
       await handler(args)
       return
@@ -1999,7 +2024,7 @@ export async function runCli(options: RunCliOptions = {}): Promise<CliInstance> 
 
   function isKnownCommand(message: string): boolean {
     const [token] = message.split(/\s+/)
-    return token in commands || isQuitCommand(message)
+    return Object.hasOwn(commands, token) || isQuitCommand(message)
   }
 
   /**

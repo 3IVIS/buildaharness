@@ -15,6 +15,21 @@ import { certaintyLabel, type UserFact } from './fact-extraction.js'
  * (reading live state, calling these, doing actual file I/O) on top of these functions.
  */
 
+// Complete escape sequences first (so no stray "[31m" is left behind), then any remaining control character
+// except \n and \t, the C1 range (8-bit CSI/OSC introducers) and bidi override characters.
+const ESCAPE_SEQUENCE = /\u001b\][^\u0007\u001b]*(?:\u0007|\u001b\\)?|\u001b\[[0-?]*[ -/]*[@-~]|\u001b[@-Z\\-_]|\u001b/g
+const UNSAFE_CHARS = /[\u0000-\u0008\u000b-\u001f\u007f-\u009f\u061c\u200b-\u200f\u202a-\u202e\u2066-\u2069\ufeff]/g
+
+/**
+ * Text that came from the model, a tool result, a file or a web page must not reach the terminal raw: an
+ * embedded escape sequence can clear the screen, rewrite earlier lines (hiding what an approval prompt is
+ * really asking), set the window title or write the clipboard (OSC 52). Newlines and tabs survive; everything
+ * that could drive the terminal is removed. Plain text is returned unchanged.
+ */
+export function stripTerminalControls(text: string): string {
+  return text.replace(ESCAPE_SEQUENCE, '').replace(UNSAFE_CHARS, '')
+}
+
 export interface CliCommandHelp {
   command: string
   description: string

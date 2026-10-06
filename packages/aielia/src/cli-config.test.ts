@@ -7,6 +7,7 @@ import { DEFAULT_PLAN_GRAPH_MODE } from './plan-graph-flag.js'
 import { DEFAULT_GOAL_GRAPH_SUGGEST_MODE } from './goal-graph-suggest-flag.js'
 import {
   isConfigKey,
+  findInvalidNumericSettings,
   envOverridesFromProcessEnv,
   parseConfigValue,
   ConfigValueParseError,
@@ -205,6 +206,21 @@ describe('parseConfigValue', () => {
     expect(() => parseConfigValue('sessionCallLimit', 'abc')).toThrow(ConfigValueParseError)
     expect(() => parseConfigValue('sessionCallLimit', '0')).toThrow(ConfigValueParseError)
     expect(() => parseConfigValue('sessionCallLimit', '2.5')).toThrow(ConfigValueParseError)
+  })
+})
+
+describe('findInvalidNumericSettings', () => {
+  it('flags a NaN spending ceiling from a malformed env var instead of letting it disable the cap', () => {
+    const { config } = { config: { ...DEFAULT_CONFIG, ...envOverridesFromProcessEnv({ ASSISTANT_SESSION_COST_LIMIT_USD: 'abc', ASSISTANT_SESSION_CALL_LIMIT: '' }) } }
+    const problems = findInvalidNumericSettings(config)
+    expect(problems.join(' ')).toContain('sessionCostLimitUsd')
+    expect(problems.join(' ')).toContain('ASSISTANT_SESSION_COST_LIMIT_USD')
+    expect(problems.join(' ')).toContain('sessionCallLimit')
+  })
+
+  it('accepts unset and positive values', () => {
+    expect(findInvalidNumericSettings(DEFAULT_CONFIG)).toEqual([])
+    expect(findInvalidNumericSettings({ ...DEFAULT_CONFIG, sessionCostLimitUsd: 2.5, shellTimeoutMs: 1000 })).toEqual([])
   })
 })
 

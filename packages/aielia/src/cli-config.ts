@@ -153,6 +153,27 @@ export function envOverridesFromProcessEnv(env: NodeJS.ProcessEnv): Partial<Assi
   return overrides
 }
 
+/**
+ * Numeric settings that must be positive, finite numbers. An environment variable is parsed with a bare
+ * `Number(...)`, so `ASSISTANT_SESSION_COST_LIMIT_USD=abc` arrives as NaN — and every `spent >= NaN` check is
+ * false, which silently turns a spending ceiling OFF. Returns the problems found (empty when all are fine) so
+ * startup can refuse a broken limit instead of running unguarded.
+ */
+const POSITIVE_NUMERIC_KEYS = ['sessionCostLimitUsd', 'sessionCallLimit', 'shellTimeoutMs', 'memoryBudgetChars', 'smtpPort'] as const
+
+export function findInvalidNumericSettings(config: AssistantConfig): string[] {
+  const problems: string[] = []
+  for (const key of POSITIVE_NUMERIC_KEYS) {
+    const value = config[key]
+    if (value === undefined) continue
+    if (typeof value !== 'number' || !Number.isFinite(value) || value <= 0) {
+      const envVar = ENV_VAR_FOR_CONFIG_KEY[key]
+      problems.push(`${key} must be a positive number (got ${JSON.stringify(value)})${envVar ? `; check ${envVar}` : ''}.`)
+    }
+  }
+  return problems
+}
+
 /** Thrown by parseConfigValue on a value that doesn't fit the target key's type — cli.ts reports .message and leaves the config unchanged. */
 export class ConfigValueParseError extends Error {}
 
