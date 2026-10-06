@@ -7,6 +7,17 @@ import { excludeAieliaStateFromGit } from './git-exclude.js'
 import { createNodeFsBackend } from './node-fs-backend.js'
 import { stagePendingAction, applyPendingAction } from './file-tools.js'
 
+/**
+ * Git exports GIT_DIR / GIT_WORK_TREE / GIT_INDEX_FILE into hooks (pre-push runs the whole suite), and every git child inherits
+ * them: `git init` in a temp dir then rewrote the real repo's core.bare/user.* and the `init` commit landed on the real branch.
+ * Run git with all GIT_* variables stripped so these temp repos can never touch the repository running the tests.
+ */
+function cleanGitEnv(): NodeJS.ProcessEnv {
+  return Object.fromEntries(Object.entries(process.env).filter(([k]) => !k.startsWith('GIT_')))
+}
+const runGit = (cwd: string, args: string[], opts: { encoding?: 'utf8' } = {}) =>
+  execFileSync('git', args, { cwd, stdio: 'pipe', env: cleanGitEnv(), ...opts })
+
 const dirs: string[] = []
 afterEach(() => {
   while (dirs.length) rmSync(dirs.pop()!, { recursive: true, force: true })
@@ -15,7 +26,7 @@ afterEach(() => {
 function tempRepo(): string {
   const dir = mkdtempSync(join(tmpdir(), 'aielia-git-'))
   dirs.push(dir)
-  const git = (...args: string[]) => execFileSync('git', args, { cwd: dir, stdio: 'pipe' })
+  const git = (...args: string[]) => runGit(dir, args)
   git('init', '-q')
   git('config', 'user.email', 't@example.com')
   git('config', 'user.name', 't')
@@ -25,7 +36,7 @@ function tempRepo(): string {
   git('commit', '-q', '-m', 'init')
   return dir
 }
-const status = (dir: string) => execFileSync('git', ['status', '--porcelain'], { cwd: dir, encoding: 'utf8' })
+const status = (dir: string) => runGit(dir, ['status', '--porcelain'], { encoding: 'utf8' })
 
 describe('excludeAieliaStateFromGit (benchmark 08/09/14: Aielia state showed up in git status)', () => {
   it('after a staged write is approved, git status shows no Aielia directories and the user .gitignore is untouched', async () => {
@@ -67,11 +78,11 @@ describe('excludeAieliaStateFromGit (benchmark 08/09/14: Aielia state showed up 
     const wt = mkdtempSync(join(tmpdir(), 'aielia-wt-'))
     dirs.push(wt)
     rmSync(wt, { recursive: true, force: true })
-    execFileSync('git', ['worktree', 'add', '-q', '-b', 'wt', wt], { cwd: dir, stdio: 'pipe' })
+    runGit(dir, ['worktree', 'add', '-q', '-b', 'wt', wt])
     expect(excludeAieliaStateFromGit(wt)).toEqual([]) // shared exclude file already has them
     mkdirSync(join(wt, '.undo-log'))
     writeFileSync(join(wt, '.undo-log', 'e.json'), '{}')
-    expect(execFileSync('git', ['status', '--porcelain'], { cwd: wt, encoding: 'utf8' })).toBe('')
+    expect(runGit(wt, ['status', '--porcelain'], { encoding: 'utf8' })).toBe('')
   })
 
   it('leaves a non-git directory untouched', () => {
