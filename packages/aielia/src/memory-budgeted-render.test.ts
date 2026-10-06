@@ -169,3 +169,15 @@ describe('M1 budgeted render', () => {
     expect(migrateFact(old).durable).toBe(true)
   })
 })
+
+describe('keyed supersession by a session-only candidate (audit)', () => {
+  it('a non-durable or low-confidence keyed guess never retires the durable fact with that key', async () => {
+    const { service, memory } = makeService()
+    await service.recordFacts('s', 'hi', [stated('the user lives in Austin', 'home_city')])
+    await service.recordFacts('s', 'hi', [{ text: 'the user is visiting Berlin today', durable: false, confidence: 'high', category: 'location', key: 'home_city' }])
+    await service.recordFacts('s', 'hi', [{ text: 'the user maybe lives in Oslo', durable: true, confidence: 'low', category: 'location', key: 'home_city' }])
+    const durable = (await memory.get(DURABLE_FACTS_KEY)) as UserFact[]
+    expect(durable.map((f) => f.text)).toEqual(['the user lives in Austin'])
+    expect(await memory.get(RETIRED_FACTS_KEY)).toBeUndefined()
+  })
+})

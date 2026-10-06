@@ -1016,7 +1016,9 @@ export class MemoryService {
         const priorLive = [...durableFacts, ...sessionFacts].filter(sameKey)
         // Restating the same value is a no-op, not a new entry.
         if (priorLive.some((f) => f.text === fact.text)) continue
-        if (priorLive.length > 0) {
+        // Only a candidate that is itself headed for the durable store may replace anything: a session-only
+        // (non-durable or low-confidence) guess must never destroy a durable entry with the same key.
+        if (priorLive.length > 0 && route === 'durable') {
           const retiredAt = this.clock()
           const seen = new Set<string>()
           for (const old of priorLive) {
