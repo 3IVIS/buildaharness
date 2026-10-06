@@ -75,12 +75,29 @@ export class ActionApprovalService {
   readonly recentCommandOutputs: { command: string; output: string }[] = []
   /** Sessions in which a command got the network-containment refusal. */
   private readonly networkDeniedSessions = new Set<string>()
+  /** Pending-action ids currently being resolved (see resolvePendingAction). */
+  private readonly inFlightResolutions = new Set<string>()
   networkDenied(sessionId: string): boolean {
     return this.networkDeniedSessions.has(sessionId)
   }
 
   /** Resumes a staged action by ID instead of re-deriving *what to run* from a second LLM call — see T4 of the file-tools plan. `userMessage` is only used to synthesize an answer from a shell command's real output (see below); the command/content actually applied always comes from the staged record, never from a fresh model call. */
   async resolvePendingAction(sessionId: string, transcriptKey: string, pendingActionId: string, approved: boolean, userMessage: string, resume: ResumeOptions = {}): Promise<AssistantTurnResult> {
+    // A staged action is removed only after it has been applied, so two overlapping approvals of
+    // the same id (a double click, a retried request) would both load the record and both apply it —
+    // running a command or sending an email twice. Refuse the second while the first is in flight.
+    if (this.inFlightResolutions.has(pendingActionId)) {
+      throw new Error(`Pending action "${pendingActionId}" is already being resolved`)
+    }
+    this.inFlightResolutions.add(pendingActionId)
+    try {
+      return await this.resolvePendingActionOnce(sessionId, transcriptKey, pendingActionId, approved, userMessage, resume)
+    } finally {
+      this.inFlightResolutions.delete(pendingActionId)
+    }
+  }
+
+  private async resolvePendingActionOnce(sessionId: string, transcriptKey: string, pendingActionId: string, approved: boolean, userMessage: string, resume: ResumeOptions): Promise<AssistantTurnResult> {
     // A batch-confirmation pause (see AgentLoop.runBatchToolLoop) is staged in `this.memory`, not
     // under a file/shell workspace backend — check for it first so a webTools-only assistant (no
     // fileTools/shellTools configured at all) can still resume/decline one without hitting the
@@ -137,16 +154,25 @@ export class ActionApprovalService {
       return { status: 'ok', reply }
     }
 
-    const applied = await applyPendingAction(backend, workspaceRoot, pendingActionId, {
-      executeShell: shellTools
-        ? (command, cwd) =>
-            shellTools.executeCommand(command, cwd, {
-              timeoutMs: shellTools.timeoutMs,
-              networkAllowlist: shellTools.networkAllowlist,
-            })
-        : undefined,
-      sendEmail: actionTools?.sendEmail,
-    })
+    let applied: Awaited<ReturnType<typeof applyPendingAction>>
+    try {
+      applied = await applyPendingAction(backend, workspaceRoot, pendingActionId, {
+        executeShell: shellTools
+          ? (command, cwd) =>
+              shellTools.executeCommand(command, cwd, {
+                timeoutMs: shellTools.timeoutMs,
+                networkAllowlist: shellTools.networkAllowlist,
+              })
+          : undefined,
+        sendEmail: actionTools?.sendEmail,
+      })
+    } catch (err) {
+      // The staged record survives a failed apply (e.g. an email transport error) so the user can
+      // approve it again — the paused tool loop it belongs to has to survive with it, or the retry
+      // would run the action but could no longer continue the turn.
+      if (loopState) await this.memory.set(toolLoopPendingKey(pendingActionId), loopState)
+      throw err
+    }
 
     let reply: string
     let transcriptContent: string
