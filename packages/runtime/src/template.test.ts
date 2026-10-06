@@ -39,3 +39,12 @@ describe('resolveTemplate', () => {
     expect(resolveTemplate('{{x}} {{$.state.x}}', state)).toBe('val val')
   })
 })
+
+describe('resolveTemplate prototype safety', () => {
+  it('does not resolve prototype-chain members', async () => {
+    const { FlowState } = await import('./state')
+    const { resolveTemplate } = await import('./template')
+    const state = new FlowState({} as never)
+    expect(resolveTemplate('{{constructor.name}} {{__proto__}}', state)).toBe('{{constructor.name}} {{__proto__}}')
+  })
+})
