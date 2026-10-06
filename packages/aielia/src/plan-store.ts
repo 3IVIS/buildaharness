@@ -203,6 +203,17 @@ async function writePlanFiles(fsPersistence: PlanFsPersistence, sessionId: strin
   }
 }
 
+function hasPlanShape(value: unknown): boolean {
+  if (typeof value !== 'object' || value === null) return false
+  const v = value as Record<string, unknown>
+  if (!Array.isArray(v.tasks)) return false
+  return v.tasks.every((t) => {
+    if (typeof t !== 'object' || t === null) return false
+    const task = t as Record<string, unknown>
+    return typeof task.id === 'string' && typeof task.description === 'string' && Array.isArray(task.depends_on) && typeof task.status === 'string'
+  })
+}
+
 /**
  * Reads back the fs-persisted plan JSON, if any. Returns `undefined` (not `null`) when there's
  * nothing to prefer over Dexie — no fs configured, no file yet (a session that predates P5 or
@@ -215,7 +226,15 @@ async function readPlanFile(fsPersistence: PlanFsPersistence | undefined, sessio
     const { json } = planFilePaths(fsPersistence.workspaceRoot, sessionId)
     const raw = await fsPersistence.backend.readTextFile(json)
     if (raw === undefined) return undefined
-    return migratePlanRecord(JSON.parse(raw) as PlanRecord | LegacyPlanRecordShape)
+    const parsed: unknown = JSON.parse(raw)
+    // The file is hand-editable, so a syntactically valid but wrong-shaped document ({}, a list of
+    // strings, tasks without ids) must fall back to the Dexie record rather than crash every later
+    // `plan.tasks.map(...)`.
+    if (!hasPlanShape(parsed)) {
+      console.error(`plan-store: plan file for session ${sessionId} has an invalid shape; ignoring it`)
+      return undefined
+    }
+    return migratePlanRecord(parsed as PlanRecord | LegacyPlanRecordShape)
   } catch (err) {
     console.error(`plan-store: reading plan file for session ${sessionId} failed:`, err)
     return undefined

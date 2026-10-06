@@ -640,6 +640,19 @@ describe('P5 file-backed plan persistence', () => {
     expect(((await memory.get('plan:session-1')) as PlanRecord).tasks.map((t) => t.id)).toEqual(['t1', 't2'])
   })
 
+  it('a wrong-shaped hand-edited plan file is ignored in favour of the stored record instead of crashing later', async () => {
+    const memory = new InMemoryAdapter()
+    const fs = makeFsPersistence()
+    const plan = createPlanRecord(makePlan())
+    await savePlan(memory, 'session-1', plan, fs)
+    const path = '/workspace/.buildaharness/plans/session-1.plan.json'
+    for (const bad of ['{}', '[]', 'null', '{"tasks":[{"id":1}]}']) {
+      fs.backend.files.set(path, bad)
+      const reloaded = await loadPlanRecord(memory, 'session-1', fs)
+      expect(reloaded?.tasks.map((t) => t.id)).toEqual(plan.tasks.map((t) => t.id))
+    }
+  })
+
   it('INV-33: a fs write that fails mid-sequence (rename never lands) leaves the old file+Dexie pair consistent, reconciled on next load', async () => {
     const memory = new InMemoryAdapter()
     const fs = makeFsPersistence()
