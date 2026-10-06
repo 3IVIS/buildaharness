@@ -278,3 +278,21 @@ describe('TuiInput — prompt mode', () => {
     expect(strip(instance.lastFrame())).not.toContain('yes')
   })
 })
+
+describe('TuiInput draft vs. a question that appears', () => {
+  it('drops a half-typed chat draft when a prompt appears, so Enter cannot submit it as the answer', async () => {
+    const onSubmitPrompt = vi.fn()
+    const onSubmitChat = vi.fn()
+    const instance = render(<TuiInput onSubmitChat={onSubmitChat} onSubmitPrompt={onSubmitPrompt} columns={40} />)
+    await sleep(10)
+    await type(instance, 'yesterday I')
+    instance.rerender(<TuiInput promptLabel="Run this command?" onSubmitChat={onSubmitChat} onSubmitPrompt={onSubmitPrompt} columns={40} />)
+    await sleep(20)
+    await key(instance, ENTER)
+    expect(onSubmitPrompt).not.toHaveBeenCalled()
+    await type(instance, 'n')
+    await key(instance, ENTER)
+    expect(onSubmitPrompt).toHaveBeenCalledWith('n')
+  })
+})
+
