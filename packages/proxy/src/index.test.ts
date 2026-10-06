@@ -181,6 +181,20 @@ describe('POST /llm/chat', () => {
     })
     expect(res.status).toBe(200)
     expect(res.headers.get('Content-Type')).toBe('text/event-stream')
+    const sent = (vi.mocked(fetch).mock.calls[0][1] as RequestInit).headers as Record<string, string>
+    expect(sent['x-api-key']).toBe('test-anthropic-key')
+    expect(sent['Authorization']).toBeUndefined()
+  })
+
+  it('returns 400 on a malformed body and 502 when the upstream is unreachable', async () => {
+    process.env.ANTHROPIC_API_KEY = 'k'
+    const token = await getAuthToken()
+    const headers = { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` }
+    const bad = await app.request('/llm/chat', { method: 'POST', headers, body: '{nope' })
+    expect(bad.status).toBe(400)
+    vi.stubGlobal('fetch', vi.fn().mockRejectedValue(new Error('down')))
+    const res = await app.request('/llm/chat', { method: 'POST', headers, body: JSON.stringify({ model: 'claude-x', messages: [] }) })
+    expect(res.status).toBe(502)
   })
 })
 
