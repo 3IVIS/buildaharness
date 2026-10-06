@@ -111,10 +111,16 @@ export class PathOutsideWorkspaceError extends Error {
   }
 }
 
+// Mirrors file-tools.ts's normalizePath: splits on both `/` and `\`, and treats a Windows drive-letter
+// prefix as absolute — otherwise a backslash-style `..\..\x` is one opaque segment here that never
+// pops, yet the real OS resolves it as a traversal.
 function normalizePath(path) {
-  const absolute = path.startsWith('/')
+  const driveMatch = /^([A-Za-z]:)[\\/]/.exec(path)
+  const absolute = driveMatch !== null || path.startsWith('/') || path.startsWith('\\')
+  const prefix = driveMatch ? driveMatch[1] : ''
+  const rest = driveMatch ? path.slice(driveMatch[0].length) : path
   const segments = []
-  for (const part of path.split('/')) {
+  for (const part of rest.split(/[\\/]/)) {
     if (part === '' || part === '.') continue
     if (part === '..') {
       if (segments.length > 0 && segments[segments.length - 1] !== '..') segments.pop()
@@ -123,12 +129,13 @@ function normalizePath(path) {
       segments.push(part)
     }
   }
-  return (absolute ? '/' : '') + segments.join('/')
+  return prefix + (absolute ? '/' : '') + segments.join('/')
 }
 
 export function resolveInWorkspace(workspaceRoot, requestedPath) {
   const root = normalizePath(workspaceRoot)
-  const combined = requestedPath.startsWith('/') ? requestedPath : `${root}/${requestedPath}`
+  const requestedIsAbsolute = /^[A-Za-z]:[\\/]/.test(requestedPath) || requestedPath.startsWith('/') || requestedPath.startsWith('\\')
+  const combined = requestedIsAbsolute ? requestedPath : `${root}/${requestedPath}`
   const resolved = normalizePath(combined)
   if (resolved !== root && !resolved.startsWith(`${root}/`)) {
     throw new PathOutsideWorkspaceError(requestedPath)
@@ -427,17 +434,46 @@ function isPrivateIPv4(ip) {
   if (a === 172 && b >= 16 && b <= 31) return true // RFC1918
   if (a === 192 && b === 168) return true // RFC1918
   if (a === 169 && b === 254) return true // link-local, includes the 169.254.169.254 cloud metadata endpoint
+  if (a === 100 && b >= 64 && b <= 127) return true // carrier-grade NAT
+  if (a === 198 && (b === 18 || b === 19)) return true // benchmarking
+  if (a >= 224) return true // multicast, reserved, broadcast
   if (a === 0) return true // "this network"
   return false
 }
 
+// Same logic as web-fetch-core.ts's ipv6Groups/isPrivateIPv6 (kept in sync by hand, see file header).
+// Notably URL parsing serialises `[::ffff:127.0.0.1]` as `::ffff:7f00:1`, which the old dotted-quad-only
+// regex never matched — a literal-IP fetch of a mapped loopback address got through.
+function ipv6Groups(ip) {
+  let text = ip
+  const v4 = /(\d+\.\d+\.\d+\.\d+)$/.exec(text)
+  if (v4) {
+    const octets = v4[1].split('.').map(Number)
+    if (octets.some((o) => o > 255)) return null
+    text = `${text.slice(0, -v4[1].length)}${((octets[0] << 8) | octets[1]).toString(16)}:${((octets[2] << 8) | octets[3]).toString(16)}`
+  }
+  const halves = text.split('::')
+  if (halves.length > 2) return null
+  const head = halves[0] === '' ? [] : halves[0].split(':')
+  const tail = halves.length === 2 && halves[1] !== '' ? halves[1].split(':') : []
+  const missing = 8 - head.length - tail.length
+  if (halves.length === 1 ? missing !== 0 : missing < 1) return null
+  const groups = [...head, ...Array(halves.length === 2 ? missing : 0).fill('0'), ...tail].map((g) => parseInt(g, 16))
+  if (groups.length !== 8 || groups.some((g) => Number.isNaN(g) || g < 0 || g > 0xffff)) return null
+  return groups
+}
+
 function isPrivateIPv6(ip) {
-  const normalized = ip.toLowerCase()
-  if (normalized === '::1' || normalized === '::') return true
-  if (normalized.startsWith('fe80:')) return true // link-local
-  if (normalized.startsWith('fc') || normalized.startsWith('fd')) return true // unique local, fc00::/7
-  const mapped = /^::ffff:(\d+\.\d+\.\d+\.\d+)$/.exec(normalized)
-  if (mapped) return isPrivateIPv4(mapped[1])
+  const groups = ipv6Groups(ip.toLowerCase().split('%')[0])
+  if (!groups) return true // unparseable: refuse rather than guess
+  const embeddedV4 = `${groups[6] >> 8}.${groups[6] & 0xff}.${groups[7] >> 8}.${groups[7] & 0xff}`
+  const firstFiveZero = groups.slice(0, 5).every((g) => g === 0)
+  if (firstFiveZero && groups[5] === 0 && groups[6] === 0 && (groups[7] === 0 || groups[7] === 1)) return true // :: and ::1
+  if (firstFiveZero && (groups[5] === 0xffff || groups[5] === 0)) return isPrivateIPv4(embeddedV4) // mapped / compatible
+  if (groups[0] === 0x64 && groups[1] === 0xff9b && groups.slice(2, 6).every((g) => g === 0)) return isPrivateIPv4(embeddedV4) // NAT64
+  if ((groups[0] & 0xffc0) === 0xfe80) return true // link-local fe80::/10
+  if ((groups[0] & 0xfe00) === 0xfc00) return true // unique local fc00::/7
+  if ((groups[0] & 0xff00) === 0xff00) return true // multicast
   return false
 }
 
@@ -455,6 +491,13 @@ export async function assertPublicHttpUrl(url) {
   }
   if (parsed.protocol !== 'http:' && parsed.protocol !== 'https:') {
     throw new PrivateNetworkTargetError(url, `unsupported scheme "${parsed.protocol}"`)
+  }
+
+  if (parsed.username || parsed.password) {
+    throw new PrivateNetworkTargetError(url, 'credentials in the URL are not allowed')
+  }
+  if (parsed.port && parsed.port !== '80' && parsed.port !== '443') {
+    throw new PrivateNetworkTargetError(url, `port "${parsed.port}" is not allowed (only 80/443)`)
   }
 
   const hostname = stripBrackets(parsed.hostname)
@@ -495,22 +538,72 @@ function truncateFetchedText(text) {
   return `${text.slice(0, MAX_FETCH_CHARS)}\n\n[... truncated at ${MAX_FETCH_CHARS} characters; the page is longer than shown here ...]`
 }
 
+const FETCH_TIMEOUT_MS = 10_000
+// Streamed-read ceiling (a lying/absent Content-Length must not force an unbounded download); mirrors
+// web-fetch-core.ts's DEFAULT_MAX_FETCH_BYTES.
+const MAX_FETCH_BYTES = 4 * MAX_FETCH_CHARS
+
+async function readCappedText(response, signal) {
+  const reader = response.body?.getReader()
+  if (!reader) return (await response.text()).slice(0, MAX_FETCH_BYTES)
+  const chunks = []
+  let total = 0
+  try {
+    while (total < MAX_FETCH_BYTES) {
+      if (signal.aborted) throw new Error('aborted')
+      const { done, value } = await new Promise((resolve, reject) => {
+        const onAbort = () => reject(new Error('aborted'))
+        signal.addEventListener('abort', onAbort, { once: true })
+        reader.read().then(
+          (r) => { signal.removeEventListener('abort', onAbort); resolve(r) },
+          (e) => { signal.removeEventListener('abort', onAbort); reject(e) },
+        )
+      })
+      if (done) break
+      chunks.push(value)
+      total += value.byteLength
+    }
+  } finally {
+    void reader.cancel().catch(() => {})
+  }
+  const merged = new Uint8Array(Math.min(total, MAX_FETCH_BYTES))
+  let offset = 0
+  for (const chunk of chunks) {
+    const room = merged.length - offset
+    if (room <= 0) break
+    merged.set(chunk.subarray(0, room), offset)
+    offset += Math.min(chunk.length, room)
+  }
+  return new TextDecoder('utf-8', { fatal: false }).decode(merged)
+}
+
 export async function fetchUrlSafely(url) {
   let currentUrl = url
   for (let redirect = 0; redirect <= MAX_REDIRECTS; redirect++) {
     await assertPublicHttpUrl(currentUrl)
-    const response = await fetch(currentUrl, { redirect: 'manual' })
-    if (response.status >= 300 && response.status < 400) {
-      const location = response.headers.get('location')
-      if (!location) throw new Error(`Redirect response from "${currentUrl}" had no Location header`)
-      currentUrl = new URL(location, currentUrl).toString()
-      continue
+    // One timer bounds the headers and the body read, as in web-fetch-core.ts.
+    const controller = new AbortController()
+    const timer = setTimeout(() => controller.abort(), FETCH_TIMEOUT_MS)
+    try {
+      const response = await fetch(currentUrl, { redirect: 'manual', signal: controller.signal })
+      if (response.status >= 300 && response.status < 400) {
+        const location = response.headers.get('location')
+        await response.body?.cancel().catch(() => {})
+        if (!location) throw new Error(`Redirect response from "${currentUrl}" had no Location header`)
+        currentUrl = new URL(location, currentUrl).toString()
+        continue
+      }
+      const body = await readCappedText(response, controller.signal)
+      // Same rule as web-tools.ts's fetchUrlSafely: a 5xx is a server fault, not page content — an error the model and the
+      // parent's ControlState can see (a 4xx page stays content).
+      if (response.status >= 500) throw new Error(`HTTP ${response.status} from ${url}: ${body.slice(0, 200).trim()}`)
+      return truncateFetchedText(body)
+    } catch (err) {
+      if (controller.signal.aborted) throw new Error(`Timed out fetching "${currentUrl}" after ${FETCH_TIMEOUT_MS}ms`)
+      throw err
+    } finally {
+      clearTimeout(timer)
     }
-    const body = await response.text()
-    // Same rule as web-tools.ts's fetchUrlSafely: a 5xx is a server fault, not page content — an error the model and the
-    // parent's ControlState can see (a 4xx page stays content).
-    if (response.status >= 500) throw new Error(`HTTP ${response.status} from ${url}: ${body.slice(0, 200).trim()}`)
-    return truncateFetchedText(body)
   }
   throw new Error(`Too many redirects while fetching "${url}"`)
 }

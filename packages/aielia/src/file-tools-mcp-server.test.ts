@@ -1,7 +1,7 @@
 import { describe, it, expect, afterEach } from 'vitest'
 import { createServer, type Server } from 'node:net'
 // @ts-expect-error — plain ESM script, no .d.ts; it's import-safe (see its entry-point guard).
-import { formatWebSearchResults, wrapUntrusted, requestToolGate, reportToolResult, requestToolExecution, fetchUrlSafely, detectInjectionLikely } from './file-tools-mcp-server.mjs'
+import { formatWebSearchResults, wrapUntrusted, requestToolGate, reportToolResult, requestToolExecution, fetchUrlSafely, detectInjectionLikely, assertPublicHttpUrl, resolveInWorkspace } from './file-tools-mcp-server.mjs'
 
 /**
  * F3 (adoption plan): the claude-cli backend's MCP server gained web_search. The tool
@@ -146,12 +146,37 @@ describe('file-tools-mcp-server requestToolGate (Phase D0)', () => {
       await expect(fetchUrlSafely('https://93.184.216.34/health')).rejects.toThrow('HTTP 503 from https://93.184.216.34/health: Service Unavailable')
     })
 
+    it('caps the downloaded body instead of buffering an unbounded response', async () => {
+      respond('a'.repeat(500_000), 200)
+      const text = await fetchUrlSafely('https://93.184.216.34/big')
+      expect(text.length).toBeLessThan(20_000)
+      expect(text).toContain('truncated')
+    })
+
+    it('rejects loopback/metadata targets written as hex-form IPv4-mapped IPv6 literals', async () => {
+      for (const target of ['http://[::ffff:127.0.0.1]/', 'http://[::ffff:169.254.169.254]/latest', 'http://[::127.0.0.1]/', 'http://[fe90::1]/', 'http://[64:ff9b::7f00:1]/', 'http://100.64.0.1/']) {
+        await expect(assertPublicHttpUrl(target)).rejects.toThrow(/private\/loopback\/link-local/)
+      }
+    })
+
+    it('rejects credentials and non-80/443 ports', async () => {
+      await expect(assertPublicHttpUrl('http://user:pw@93.184.216.34/')).rejects.toThrow(/credentials/)
+      await expect(assertPublicHttpUrl('http://93.184.216.34:6379/')).rejects.toThrow(/port/)
+    })
+
     it('a 4xx page stays content and a 200 is unchanged', async () => {
       respond('Not Found', 404)
       expect(await fetchUrlSafely('https://93.184.216.34/missing')).toBe('Not Found')
       respond('hello', 200)
       expect(await fetchUrlSafely('https://93.184.216.34/ok')).toBe('hello')
     })
+  })
+
+  it('resolveInWorkspace treats backslash traversal and drive-letter paths as the escapes they are', () => {
+    expect(() => resolveInWorkspace('/ws', '..\\..\\etc\\passwd')).toThrow(/outside the workspace/)
+    expect(() => resolveInWorkspace('/ws', 'sub\\..\\..\\x')).toThrow(/outside the workspace/)
+    expect(() => resolveInWorkspace('/ws', 'C:\\Windows\\x')).toThrow(/outside the workspace/)
+    expect(resolveInWorkspace('/ws', 'a\\b.txt')).toBe('/ws/a/b.txt')
   })
 
   it('requestToolExecution returns the parent text, undefined when declined/unreachable, and throws the parent error', async () => {
