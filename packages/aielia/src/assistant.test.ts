@@ -562,7 +562,7 @@ describe('PersonalAssistant', () => {
         async callChatStructured(messages: ChatMessage[], tools?: ToolDefinition[], options?: ChatOptions): Promise<LLMStructuredResponse> {
           if (String(messages[0]?.content).includes('You audit one reply')) {
             audits++
-            return { content: audits === 1 ? '{"claimsUnrecordedWork": true, "promisesWorkNotDone": false, "unverifiedOutsideFacts": false}' : '{"claimsUnrecordedWork": false, "promisesWorkNotDone": false, "unverifiedOutsideFacts": false}' }
+            return { content: audits <= 2 ? '{"claimsUnrecordedWork": true, "promisesWorkNotDone": false, "unverifiedOutsideFacts": false}' : '{"claimsUnrecordedWork": false, "promisesWorkNotDone": false, "unverifiedOutsideFacts": false}' }
           }
           return super.callChatStructured(messages, tools, options)
         }
@@ -572,7 +572,7 @@ describe('PersonalAssistant', () => {
       const logs: { kind: string; content: string }[] = []
       const assistant = new PersonalAssistant({ llmClient: new RetryLLM(), replyAudit: true, onDebugLog: (e) => logs.push(e) })
       const result = await assistant.turn('change the file', { sessionId: 'audit-retry' })
-      expect(audits).toBe(2)
+      expect(audits).toBe(3) // the flag, its confirmation, then the clean retry turn
       expect(logs.filter((e) => e.kind === 'user_message')).toHaveLength(1)
       expect(logs.some((e) => e.kind === 'note' && e.content.includes('retrying once with a nudge'))).toBe(true)
       expect(result.auditNotice).toBeUndefined()
