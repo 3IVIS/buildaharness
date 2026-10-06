@@ -307,3 +307,18 @@ describe('snapshotWorkspaceTree and symlinks', () => {
     }
   })
 })
+
+describe('snapshotWorkspaceTree .gitignore handling', () => {
+  it('ignores a pathological wildcard pattern instead of hanging on a long file name', async () => {
+    const backend = makeFakeBackend()
+    const name = `${'a'.repeat(200)}.txt`
+    await backend.writeTextFile(`${ROOT}/.gitignore`, `${'*a'.repeat(30)}*b\nignored.log\n`)
+    await backend.writeTextFile(`${ROOT}/${name}`, 'x')
+    await backend.writeTextFile(`${ROOT}/ignored.log`, 'y')
+    const started = Date.now()
+    const snap = await snapshotWorkspaceTree(backend, ROOT)
+    expect(Date.now() - started).toBeLessThan(2000)
+    expect(snap.files.has(`${ROOT}/${name}`)).toBe(true)
+    expect(snap.files.has(`${ROOT}/ignored.log`)).toBe(false)
+  })
+})

@@ -204,8 +204,12 @@ export interface WorkspaceSnapshot {
   excludedDirSignatures: Map<string, string>
 }
 
+/** A pattern with more wildcards than this is dropped: `*a*a*a*…b` compiles to a regex that backtracks catastrophically, and the .gitignore may come from an untrusted checkout. */
+const MAX_GITIGNORE_WILDCARDS = 4
+
 function gitignoreLineToRegex(pattern: string): RegExp {
   const escaped = pattern
+    .replace(/\*{2,}/g, '*')
     .replace(/[.+^${}()|[\]\\]/g, '\\$&')
     .replace(/\*/g, '.*')
     .replace(/\?/g, '.')
@@ -226,6 +230,7 @@ function parseGitignore(content: string): RegExp[] {
     .filter((line) => line.length > 0 && !line.startsWith('#') && !line.startsWith('!'))
     .map((line) => line.replace(/^\/+/, '').replace(/\/+$/, ''))
     .filter((line) => line.length > 0)
+    .filter((line) => (line.match(/[*?]/g)?.length ?? 0) <= MAX_GITIGNORE_WILDCARDS)
     .map(gitignoreLineToRegex)
 }
 
