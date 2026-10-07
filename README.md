@@ -2,7 +2,9 @@
 
 # Aielia · Build A Harness
 
-**Aielia: an everyday AI assistant you can hand real work to — built with Build A Harness, the open-source harness and visual canvas that make AI agents reliable.**
+**Build a harness around your agent — the open-source control layer that makes AI agents reliable.**
+
+**Aielia, the everyday AI assistant you can hand real work to, is built with it.**
 
 [![License](https://img.shields.io/badge/License-Apache%202.0-blue.svg)](https://opensource.org/licenses/Apache-2.0)
 [![Version](https://img.shields.io/badge/version-v0.8.0-brightgreen.svg)](https://github.com/3IVIS/buildaharness/releases)
