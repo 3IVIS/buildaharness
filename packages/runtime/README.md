@@ -127,7 +127,10 @@ key (used by the `anthropic` / OpenAI-compatible backends in chat-ui and the
 CLI): `AnthropicLLMClient({ apiKey })` and
 `OpenAICompatibleLLMClient({ apiKey, baseUrl, defaultModel, extraHeaders? })`,
 with `OPENAI_BASE_URL` / `OPENROUTER_BASE_URL` and the matching default-model
-constants exported.
+constants exported. `LLMClient`, `AnthropicLLMClient` and
+`OpenAICompatibleLLMClient` all accept an optional `fetchImpl` (default: the global
+`fetch`); the desktop app passes `@tauri-apps/plugin-http`'s, because its webview CSP
+blocks the global `fetch` to remote hosts.
 
 ```ts
 import { LLMClient } from '@buildaharness/runtime'
