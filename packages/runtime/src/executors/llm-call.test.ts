@@ -110,4 +110,21 @@ describe('LLMCallExecutor', () => {
     const result = await llmCallExecutor(makeNode({ output_key: 'my_key' }), stateWith({}), ctx)
     expect(result.stateUpdate['my_key']).toBe('response text')
   })
+
+  it('structured output that is JSON null or an array with required fields throws a clear TypeError', async () => {
+    const schema = { type: 'object', required: ['a'] }
+    for (const raw of ['null', '[1,2]', '5']) {
+      const ctx = createExecutionContext({ llmClient: mockLLMClient([raw]) })
+      await expect(
+        llmCallExecutor(makeNode({ structured_output: { schema } } as Partial<LlmCallNode>), new FlowState(), ctx),
+      ).rejects.toThrow(/must be a JSON object/)
+    }
+  })
+
+  it('a top-level JSON array is stored under llm_output, not spread into index keys', async () => {
+    const ctx = createExecutionContext({ llmClient: mockLLMClient(['[1,2]']) })
+    const node = makeNode({ output_key: undefined, structured_output: { schema: { type: 'array' } } } as Partial<LlmCallNode>)
+    const out = await llmCallExecutor(node, new FlowState(), ctx)
+    expect(out.stateUpdate).toEqual({ llm_output: [1, 2] })
+  })
 })

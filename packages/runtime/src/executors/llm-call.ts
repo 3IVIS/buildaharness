@@ -49,7 +49,11 @@ export async function llmCallExecutor(
     }
     // Basic structural validation — check required fields if schema has them
     const schema = node.structured_output.schema as Record<string, unknown>
+    const isObject = typeof outputValue === 'object' && outputValue !== null && !Array.isArray(outputValue)
     if (schema.required && Array.isArray(schema.required)) {
+      if (!isObject) {
+        throw new TypeError(`llm_call node "${node.id}" structured output must be a JSON object`)
+      }
       for (const field of schema.required as string[]) {
         if ((outputValue as Record<string, unknown>)[field] === undefined) {
           throw new TypeError(`llm_call node "${node.id}" structured output missing required field "${field}"`)
@@ -59,7 +63,7 @@ export async function llmCallExecutor(
   }
 
   let stateUpdate: Record<string, unknown>
-  if (!node.output_key && node.structured_output?.schema && typeof outputValue === 'object' && outputValue !== null) {
+  if (!node.output_key && node.structured_output?.schema && typeof outputValue === 'object' && outputValue !== null && !Array.isArray(outputValue)) {
     stateUpdate = outputValue as Record<string, unknown>
   } else {
     const outputKey = node.output_key ?? 'llm_output'
