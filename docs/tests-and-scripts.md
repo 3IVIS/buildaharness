@@ -7,19 +7,24 @@ Complete reference for the buildaharness test suites and helper scripts.
 ## Running the tests
 
 ```bash
-# Frontend — Vitest (schema + canvas store + harness package, no server needed)
+# Frontend — Vitest (root run covers src/ and every packages/* workspace, no server needed)
 npm test
 
-# Adapter — main integration suite (470 tests, SQLite in-memory, no server needed)
+# A single workspace
+npm run test:aielia      # also test:canvas, test:runtime, test:react, test:harness, test:chat-ui
+npm test --workspace=packages/proxy
+
+# Adapter — full suite (1764 tests, SQLite in-memory, no server needed)
 pytest adapter/tests/ -v
 
-# Adapter — harness unit tests (P0–P11, all infrastructure-free)
-PYTHONPATH=adapter python3.12 -m pytest adapter/tests/test_harness_p*.py adapter/tests/test_harness_process_concepts.py adapter/tests/test_harness_primitives.py -v --noconftest
+# Adapter — harness phase unit tests (P0–P10 + process concepts + primitives, 521 tests, infrastructure-free)
+# (drop --noconftest for test_harness_p0.py: three of its tests use the conftest `client` fixture)
+PYTHONPATH=adapter python3.12 -m pytest adapter/tests/test_harness_p*.py adapter/tests/test_harness_process_concepts.py adapter/tests/test_harness_primitives.py -v
 
-# Adapter — harness integration + E2E + invariants (111 tests, all infrastructure-free)
+# Adapter — harness integration + E2E + invariants (126 tests, all infrastructure-free)
 PYTHONPATH=adapter python3.12 -m pytest adapter/tests/test_harness_integration_*.py adapter/tests/test_harness_e2e.py adapter/tests/test_harness_invariants.py -v --noconftest
 
-# Adapter — harness benchmarks (50 runs per operation)
+# Adapter — harness benchmarks (50 runs per operation; not part of the pytest suite)
 PYTHONPATH=adapter python3.12 adapter/tests/benchmark_harness.py
 
 # Single file
@@ -27,13 +32,13 @@ pytest adapter/tests/test_maf_adapter.py -v
 pytest adapter/tests/test_debate_agent_a2a_flow.py -v
 ```
 
-No running stack is required for any of the above. The adapter tests use an in-memory SQLite database and mock all LLM/external calls. All harness tests are infrastructure-free (no Postgres, no LLM calls).
+No running stack is required for any of the above. The adapter tests use an in-memory SQLite database and mock all LLM/external calls. All harness tests are infrastructure-free (no Postgres, no LLM calls). Current totals are tracked in [`stats.md`](./stats.md) (generated; do not hand-edit).
 
 ---
 
 ## Adapter — integration tests (`adapter/tests/`)
 
-470 tests total. All run without Docker, Postgres, or real LLM keys.
+1764 tests across `adapter/tests/` in total (the harness suites below account for 1018 of them, agent memory for about 210). All run without Docker, Postgres, or real LLM keys. The tables below list the main files rather than every one; per-file counts are from `pytest --collect-only`.
 
 ### API and infrastructure tests
 
@@ -68,7 +73,7 @@ No running stack is required for any of the above. The adapter tests use an in-m
 
 | File | Tests | What it covers |
 |---|---|---|
-| `test_maf_adapter.py` | 42 | MS Agent Framework adapter — all 14 node types, `agent_debate → AgentGroupChat`, `agent_role → ChatCompletionAgent`, `hitl_breakpoint → _HitlPause`, `parallel_fork/join → asyncio.gather`, condition routing, `POST /compile?runtime=microsoft_agent_framework`, HITL resume, `NODE_SUPPORT_MATRIX` |
+| `test_maf_adapter.py` | 42 | MS Agent Framework adapter — all node types (14 execution + 13 harness), `agent_debate → AgentGroupChat`, `agent_role → ChatCompletionAgent`, `hitl_breakpoint → _HitlPause`, `parallel_fork/join → asyncio.gather`, condition routing, `POST /compile?runtime=microsoft_agent_framework`, HITL resume, `NODE_SUPPORT_MATRIX` |
 | `test_mastra_runner.py` | 11 | Mastra sidecar integration — `/runtimes` reports mastra executable, `POST /run?runtime=mastra` creates a job, background task drives job to `done`/`error`, sidecar-unreachable error path |
 
 ### Example flow end-to-end tests
@@ -98,25 +103,29 @@ Each flow test class (`TestLangGraphCompile`, `TestMAFCompile`, `TestCrewAICompi
 
 ## Adapter — harness tests (`adapter/tests/test_harness_*.py`)
 
-470 tests in the harness suite. All infrastructure-free — no Postgres, no LLM keys, no running services. All tests use `--noconftest` to run without the SQLite fixture from `conftest.py`.
+1018 tests across `adapter/tests/test_harness_*.py`. All infrastructure-free — no Postgres, no LLM keys, no running services. Most files also run with `--noconftest` (skipping the SQLite fixtures in `conftest.py`); a handful (for example three tests in `test_harness_p0.py` and some in `test_harness_q3_ask_question.py`) use the conftest `client` fixture and need it.
 
 ### Phase unit tests
 
 | File | Tests | What it covers |
 |---|---|---|
-| `test_harness_p0.py` | 29 | Foundation: `WorldModel`, `generation_id`, staleness tracking, `CallerState`, `OutputContract` stubs, `HarnessRunState` |
-| `test_harness_p1.py` | 26 | Evidence: `Evidence`, `EvidenceStore`, tool reliability envelopes, `ToolAvailabilityManifest`, hypothesis generation (4 sources), elimination policy, diversity enforcement |
-| `test_harness_p2.py` | 18 | World Model ops: `integrate_evidence`, `BeliefDepGraph`, belief propagation, contradiction detection (pairwise / temporal / abstraction), resolution policy, staleness sweep |
-| `test_harness_p3.py` | 20 | Diagnostics: 10 normalised sub-dimensions, `resolve_control_state` 5-tier, deadlock detection, `select_best_action`, `run_one_iteration` |
-| `test_harness_p4.py` | 13 | Planning: `TaskGraph`, 6-state task status, `ConflictProbabilityCache`, `parallel_merge`, `reconcile_parallel_branches` |
-| `test_harness_p5.py` | 45 | Execution: risk estimation, VOI gating, `verify` (9 layers), `review_gate` (5 dimensions), `execute`, `ReversibilityStrategy`, `contract_shadow_check` |
-| `test_harness_p6.py` | 18 | Recovery: `StrategyState`, `FailureModeLibrary`, `cannot_make_progress` (4 stall proxies), `diagnose_and_replan`, `compress_memory`, `check_max_steps` |
+| `test_harness_p0.py` | 35 | Foundation: `WorldModel`, `generation_id`, staleness tracking, `CallerState`, `OutputContract` stubs, `HarnessRunState` |
+| `test_harness_p1.py` | 28 | Evidence: `Evidence`, `EvidenceStore`, tool reliability envelopes, `ToolAvailabilityManifest`, hypothesis generation (4 sources), elimination policy, diversity enforcement |
+| `test_harness_p2.py` | 30 | World Model ops: `integrate_evidence`, `BeliefDepGraph`, belief propagation, contradiction detection (pairwise / temporal / abstraction), resolution policy, staleness sweep |
+| `test_harness_p3.py` | 31 | Diagnostics: 10 normalised sub-dimensions, `resolve_control_state` 5-tier, deadlock detection, `select_best_action`, `run_one_iteration` |
+| `test_harness_p4.py` | 14 | Planning: `TaskGraph`, 6-state task status, `ConflictProbabilityCache`, `parallel_merge`, `reconcile_parallel_branches` |
+| `test_harness_p5.py` | 48 | Execution: risk estimation, VOI gating, `verify` (9 layers), `review_gate` (5 dimensions), `execute`, `ReversibilityStrategy`, `contract_shadow_check` |
+| `test_harness_p6.py` | 27 | Recovery: `StrategyState`, `FailureModeLibrary`, `cannot_make_progress` (4 stall proxies), `diagnose_and_replan`, `compress_memory`, `check_max_steps` |
 | `test_harness_p7.py` | 9 | Caller updates & escalation: `UpdateChannel`, `check_external_updates`, `apply_constraint_change_propagation`, `escalate`, `await_clarification` |
-| `test_harness_p8.py` | 16 | Experience store: `warm_start`, `update_experience_store`, softmax strategy weights, no-op path when `experience_store.available = False` |
-| `test_harness_p9.py` | 15 | Reviewer pass: `seed_adversarial_prior`, `compute_causal_proximity`, `reviewer_pass` (10-step), adversarial prior discarded after use (INV-09), `completion_check_final`, `validate_output_contract` |
+| `test_harness_p8.py` | 24 | Experience store: `warm_start`, `update_experience_store`, softmax strategy weights, no-op path when `experience_store.available = False` |
+| `test_harness_p9.py` | 18 | Reviewer pass: `seed_adversarial_prior`, `compute_causal_proximity`, `reviewer_pass` (10-step), adversarial prior discarded after use (INV-09), `completion_check_final`, `validate_output_contract` |
 | `test_harness_p10.py` | 30 | Canvas node compilers: all 9 harness node types — schema validation + `exec()` correctness, `HARNESS_NODE_COMPILERS` dispatch table |
 | `test_harness_process_concepts.py` | 38 | Process concepts: `ProcessConcept`, `ProcessRegistry`, `seed_task_graph`, `load_process`, `get_current_step`, `complete_step`, idempotency (INV-PC-05), hard error on missing concept (INV-PC-04) |
-| `test_harness_primitives.py` | 83 | G-series primitives: `TurnContextBootstrap` (G-2), `FeedbackPreferenceExtractor` (G-3), `MultiSourceDiversityReducer` (G-4), `TaxonomyClassifier` (G-5), `SessionCloseFactory` (G-6) |
+| `test_harness_primitives.py` | 69 | G-series primitives: `TurnContextBootstrap` (G-2), `FeedbackPreferenceExtractor` (G-3), `MultiSourceDiversityReducer` (G-4), `TaxonomyClassifier` (G-5), `SessionCloseFactory` (G-6) |
+
+### Later harness test files (not covered by the table above)
+
+Beyond the phase files, `adapter/tests/` also holds per-feature harness suites: `test_harness_supervisor_s0/s1/s3/s4/s6/s8.py` (Trajectory Supervisor), `test_harness_q{0,1,3,4,7}_ask_question.py` (ask-question mechanism), `test_harness_runtime.py`, `test_harness_checkpoint.py`, `test_harness_execution_boundary.py` (bounded subprocess checks), `test_harness_verification.py`, `test_harness_provenance.py`, `test_harness_conformance_gate.py`, `test_harness_ts_parity.py` / `test_harness_ts_state_shapes.py` (Python/TypeScript shape parity), `test_harness_retry_system_errors.py`, `test_harness_semantic_hypotheses.py`, `test_harness_lexical_default_off.py`, and others. The agent-memory twin has `test_agent_memory_*.py` and `test_memory_api.py`; `test_capability_manifest.py` covers the per-adapter capability grades.
 
 ### Integration, E2E, and invariant tests
 
@@ -127,13 +136,13 @@ Each flow test class (`TestLangGraphCompile`, `TestMAFCompile`, `TestCrewAICompi
 | `test_harness_integration_MA.py` | 16 | Mastra adapter: same 4 checks (TypeScript stubs) |
 | `test_harness_integration_MAF.py` | 16 | MS Agent Framework adapter: same 4 checks |
 | `test_harness_e2e.py` | 32 | 8 scenarios × 4 frameworks: happy path, BLOCKED escalation, recovery cycle, warm-start, parallel branch merge, context compression, reviewer re-entry, max_steps budget |
-| `test_harness_invariants.py` | 18 | INV-01 through INV-10 as permanent CI gate — black-box observable-behaviour assertions; includes multi-case tests for INV-03, INV-04, INV-05, INV-06, INV-10 and three plan-level invariant tests |
+| `test_harness_invariants.py` | 30 | INV-01 through INV-10 as permanent CI gate — black-box observable-behaviour assertions; includes multi-case tests for INV-03, INV-04, INV-05, INV-06, INV-10 and three plan-level invariant tests |
 
 INV-11 through INV-18 (added by the harness-consolidation plan, ADR-003) live in their own per-phase test files instead of `test_harness_invariants.py`: `test_harness_c2.py` / `nodes-c2.test.ts` (INV-12), `turn-policy.test.ts` (INV-14), `harness-runtime-suspend.test.ts` (INV-15), `memory-tiers.test.ts` (INV-16), `test_harness_h.py` / `nodes-h.test.ts` (INV-17), `test_harness_i.py` / `nodes-i.test.ts` (INV-18). INV-11 (`Diagnostics.provenance`) lives in `test_harness_c2.py` / `nodes-c2.test.ts` plus a pair in `test_harness_invariants.py`; INV-13 (TS/Python resolver conformance as an invariant) is `scripts/harness-conformance/compare.mjs` plus `test_harness_conformance_gate.py` / `conformance-gate.test.ts`. See `docs/architecture.md` for each invariant's statement.
 
 ### Performance benchmarks
 
-`adapter/tests/benchmark_harness.py` — 50-run benchmarks with `time.perf_counter()`. Results as of P11:
+`adapter/tests/benchmark_harness.py` — 50-run benchmarks with `time.perf_counter()`. Results as measured at P11 (a point-in-time run; re-run the script for current figures):
 
 | Operation | Mean (ms) | Target | Status |
 |---|---|---|---|
@@ -145,9 +154,9 @@ Harness adds negligible overhead relative to any LLM inference call. See `docs/h
 
 ---
 
-## Frontend tests (`src/spec/schema.test.ts`, `packages/canvas/src/store/create.test.ts`)
+## Frontend tests
 
-Run with `npm test` (Vitest).
+Run with `npm test` (Vitest). The root run aggregates `src/` and every `packages/*` workspace (a few Ink-based Aielia TUI tests are excluded there and run under `npm run test:aielia`); the current count is in [`stats.md`](./stats.md). Two representative files:
 
 | File | What it covers |
 |---|---|
@@ -164,22 +173,22 @@ All scripts run from the project root. Credentials are read from `.env` unless o
 
 | Script | Purpose |
 |---|---|
-| `setup-env.sh` | First-time and repair setup — generates secrets, writes `.env` and `.env.local`, optionally creates the Python venv. Safe to re-run: existing real values are never overwritten. |
-| `check-env.sh` | Validates all required secrets are set in `.env` (correct format and length). Exits 1 if any check fails. |
-| `reset-volumes.sh` | Stops all containers and wipes the Postgres, Redis, and Clickhouse data volumes. Use when Postgres rejects a password after a secret rotation. **All data in those volumes is lost.** |
-| `setup-ollama.sh` | Tests all four adapters end-to-end against a local Ollama server using `flows/06-ollama-simple-flow.json`. Supports `RUNTIME=langgraph` to target a single adapter and `TEST_EMAIL` / `TEST_PASSWORD` for non-interactive CI use. |
+| `setup-env.sh` | First-time and repair setup — generates secrets, writes `.env` and `.env.local`, optionally creates the Python venv (`adapter/.venv`). Safe to re-run: existing real values are never overwritten. |
+| `check-env.sh` | Validates required secrets in `.env` (set, not a placeholder, correct format and length), `.env.local` and `.env.bak` consistency. Exits 1 if any check fails; only warns about a missing LLM key, empty `MASTRA_RUNNER_API_KEY` or empty `EXTRA_CALLABLE_MODULES`. |
+| `reset-volumes.sh` | Stops all containers and wipes the Postgres, Redis, and ClickHouse data volumes (not MinIO or Qdrant). Use when Postgres rejects a password after a secret rotation. **All data in those volumes is lost.** |
+| `setup-ollama.sh` | Tests all four adapters end-to-end against a local Ollama server using `flows/06-ollama-simple-flow.json`. Supports `RUNTIME=langgraph` to target a single adapter and `TEST_EMAIL` / `TEST_PASSWORD` for non-interactive CI use. Takes the model and topic as positional arguments. |
 
 ### Running flows
 
 | Script | Purpose |
 |---|---|
 | `run.sh` | Unified flow runner for any adapter. Usage: `./scripts/run.sh [--runtime <adapter>] <spec-file.json> [key=value ...]`. Follows the job to completion and handles HITL pause/resume interactively. Falls back to `runtime_hints.preferred_adapter` from the spec when `--runtime` is omitted. |
-| `run_langgraph.sh` | LangGraph-specific wrapper. Prompts for credentials, submits the flow, handles HITL pauses, and streams node events. |
+| `run_langgraph.sh` | LangGraph-specific wrapper (default spec `flow-plan-execute.json`, resolved relative to the current directory). Prompts for credentials, submits the flow, handles HITL pauses, and streams node events. |
 | `run_mastra.sh` | Mastra-specific wrapper. Same as above; communicates with the Node.js sidecar. |
 | `run_maf.sh` | MS Agent Framework wrapper. Re-sends the full spec on resume so the server can recompile after a restart. |
 | `run_crewai.sh` | CrewAI wrapper. Note: CrewAI handles `human_input=True` natively within the crew; the job will not pause for external HITL input. |
 
-All run scripts accept `BASE_URL`, `TEST_EMAIL`, and `TEST_PASSWORD` environment variables to skip interactive prompts.
+All run scripts accept `BASE_URL` (default `http://localhost:8000`) and `POLL_INTERVAL`. Only `run.sh` skips the credential prompt, via `EMAIL` / `PASSWORD`; the `run_<adapter>.sh` wrappers always prompt. Among the verify scripts, only `verify_llm.sh` and `verify_prompts.sh` (plus `setup-ollama.sh`) accept `TEST_EMAIL` / `TEST_PASSWORD`.
 
 ### Verification and regression
 
@@ -195,7 +204,23 @@ All run scripts accept `BASE_URL`, `TEST_EMAIL`, and `TEST_PASSWORD` environment
 
 | Script | Purpose |
 |---|---|
-| `scripts/ingest_rag_data.py` | Seeds the Qdrant `knowledge_base` collection with Wikipedia articles split into sentence-level chunks. Used to populate data for RAG flow testing. Configurable via `QDRANT_URL`, `EMBED_BASE_URL`, `EMBED_MODEL`, and `COLLECTION` environment variables. |
+| `ingest_rag_data.py` | Seeds the Qdrant `knowledge_base` collection with five Wikipedia articles split into 250-word chunks (50-word overlap). Used to populate data for RAG flow testing. Configurable via `QDRANT_URL`, `EMBED_BASE_URL`, `EMBED_MODEL`, and `COLLECTION` environment variables. |
+
+### Repository checks (Node)
+
+| Script | What it checks |
+|---|---|
+| `check-schema-sync.mjs` | The canvas copy of the schema exports the same names as the canonical `spec/schema.ts` (and the runtime package copy matches the canvas package copy) |
+| `check-memory-core-sync.mjs` | `spec/memory-core.json` generated files are fresh and the TS contract test passes |
+| `check-lexical-patterns-sync.mjs` | Lexical pattern JSON files that exist in two copies stay identical |
+| `check-lexical-gates.mjs` / `lexical-gate-scan.mjs` | Scans shipped source for natural-language regex/keyword decisions not registered in `lexical-gates.json` |
+| `check-model-defaults.mjs` | Per-provider default model ids live only in `packages/runtime/src/model-defaults.ts` |
+| `check-cli-version-sync.mjs` | `packages/aielia/src/version.ts` matches `packages/aielia/package.json` |
+| `check-security-docs.mjs` | `SECURITY.md` and `docs/threat-model.md` exist and the boundaries they name still exist in code |
+| `check-comparison-claims.mjs` | Factual claims on the comparison page and README still match the code |
+| `gen-stats.mjs` | Regenerates `docs/stats.md` and the counts quoted in the READMEs and docs (`--check` verifies it is current; this is what CI runs) |
+| `generate-aielia-manifest.mjs` | Builds the `aielia-latest.json` update manifest (run by the publish workflow) |
+| `harness-conformance/` | Runs the TypeScript and Python harness over shared fixtures and compares results (`compare*.mjs`, known discrepancies in `known-discrepancies*.json`) |
 
 ---
 
