@@ -2,7 +2,7 @@
 
 # Build A Harness 中文版
 
-**围绕你的智能体构建线束 —— 让 AI 智能体可靠运行的开源控制层。**
+**围绕你的智能体构建一套线束 —— 让 AI 智能体可靠运行的开源控制层。**
 
 [![License](https://img.shields.io/badge/许可证-Apache%202.0-blue.svg)](https://opensource.org/licenses/Apache-2.0)
 [![Version](https://img.shields.io/badge/版本-v0.8.0-brightgreen.svg)](https://github.com/3IVIS/buildaharness/releases)
