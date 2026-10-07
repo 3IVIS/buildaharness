@@ -1051,6 +1051,20 @@ describe('PersonalAssistant session management extras', () => {
     ])
   })
 
+  it('undoLastTurn also drops a mid-turn steering note written between the user message and the reply', async () => {
+    const memory = new InMemoryAdapter()
+    const assistant = new PersonalAssistant({ llmClient: new FakeLLMClient('ok'), memory })
+    const sessionId = 'undo-steer'
+    await assistant.turn('First message', { sessionId })
+    const key = `transcript:${sessionId}`
+    await memory.set(key, { role: 'user', content: 'Second message' }, 'append')
+    await memory.set(key, { role: 'user', content: 'steering note' }, 'append')
+    await memory.set(key, { role: 'assistant', content: 'Second reply' }, 'append')
+
+    expect(await assistant.undoLastTurn(sessionId)).toEqual({ undone: true })
+    expect((await assistant.getTranscript(sessionId)).map((m) => m.content)).toEqual(['First message', 'ok'])
+  })
+
   it('a message-level needs_approval turn persists nothing until the retry resolves it, so undo has nothing to drop', async () => {
     // Regression test: this gate used to append the user message to the transcript the
     // moment approval was requested, before the outcome was known. A decline never calls

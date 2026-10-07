@@ -585,9 +585,15 @@ export class AssistantSession {
     const transcript = ((await this.memory.get(transcriptKey)) as ChatMessage[] | undefined) ?? []
     if (transcript.length === 0) return { undone: false }
 
-    const last = transcript[transcript.length - 1]
-    const dropCount = last.role === 'assistant' ? 2 : 1
-    await this.memory.set(transcriptKey, transcript.slice(0, Math.max(0, transcript.length - dropCount)))
+    // A completed turn is its user message, any mid-turn steering notes (also user messages, written just
+    // before the reply) and the reply; a turn paused for approval is just its trailing user message(s).
+    let keep = transcript.length
+    const endsWithReply = transcript[keep - 1].role === 'assistant'
+    if (endsWithReply) keep -= 1
+    const afterReply = keep
+    while (keep > 0 && transcript[keep - 1].role === 'user') keep -= 1
+    if (endsWithReply && keep === afterReply) keep = Math.max(0, keep - 1) // no user message before the reply: drop the entry before it, as before
+    await this.memory.set(transcriptKey, transcript.slice(0, keep))
     return { undone: true }
   }
 
