@@ -9,7 +9,7 @@ Real-time collaboration is **opt-in**. It activates only when `VITE_COLLAB_SERVE
 docker compose -f docker-compose.yml -f docker-compose.collab.yml up
 ```
 
-Then set `VITE_COLLAB_SERVER_URL=ws://localhost:1234` in `.env.local` and restart the canvas dev server (or rebuild the canvas container).
+Then set `VITE_COLLAB_SERVER_URL=ws://localhost:1234` in `.env.local` and restart the canvas dev server (or rebuild the canvas container). The y-websocket port is published on `127.0.0.1` only.
 
 ## How it works
 
@@ -39,32 +39,33 @@ User A edits a node                 User B edits a different node
   (converged)                       (converged)
 ```
 
-The y-websocket server is a **stateless relay** — it only broadcasts CRDT ops between peers. It holds no flow state. If it restarts, peers reconnect and resync from their IndexedDB cache.
+The y-websocket server relays CRDT ops between peers. The bundled overlay also enables LevelDB persistence (`PERSISTENCE=leveldb`, volume `collab_data`) so room documents survive server restarts; the flow itself is still saved through the adapter, not the collab server. If the server restarts, peers reconnect and resync from their IndexedDB cache.
 
 ## Document structure
 
-Each flow gets its own Yjs document, scoped by a stable `_collabRoomKey` UUID (stored in the flow's Zustand state and persisted alongside the spec). The document structure:
+Each flow gets its own Yjs document (room `flow:<_collabRoomKey>`), scoped by a stable `_collabRoomKey` UUID kept in the canvas store and assigned once at flow creation (so renaming the Flow ID never disconnects collaborators). The document structure (`src/collab/doc.ts`):
 
 ```
 Y.Doc
-  ├── Y.Map "nodes"       key: node.id → JSON-serialised FlowNode
-  ├── Y.Map "edges"       key: edge.id → JSON-serialised FlowEdge
-  └── Y.Map "meta"        key: "flowId" → flow ID (for integrity checks)
+  ├── Y.Map "nodes"      node.id → Y.Map { id, type, position, data }
+  ├── Y.Map "edges"      edge.id → Y.Map { id, source, target, type, data }
+  └── Y.Map "flowMeta"   mirrors FlowMeta fields (id, name, description, runtimeHints)
 ```
 
-Using `Y.Map` (keyed by ID) rather than `Y.Array` means concurrent node moves, updates, and deletions converge correctly without index conflicts.
+Using `Y.Map` (keyed by ID) rather than `Y.Array` means concurrent node moves, updates, and deletions converge correctly without index conflicts, and a field update does not retransmit the whole node.
 
 ## File structure
 
 ```
 src/collab/
 ├── index.ts           Public exports from the collab module
-├── doc.ts             createCollabDoc() — creates Y.Doc, WebsocketProvider,
-│                      IndexeddbPersistence, and the awareness protocol
-├── syncToYjs.ts       Zustand → Y.Doc (called on every store mutation)
-├── syncFromYjs.ts     Y.Doc → Zustand (called on every Y.Doc update)
-├── undoManager.ts     Y.UndoManager wrapping the nodes/edges maps
-│                      (integrates with the existing 50-step Zustand history)
+├── doc.ts             createCollabDoc() — creates the Y.Doc, its shared maps
+│                      and the awareness instance (the WebsocketProvider and
+│                      IndexeddbPersistence are created in App.tsx)
+├── syncToYjs.ts       Zustand → Y.Doc (syncStoreToYjs, seedYjsFromStore)
+├── syncFromYjs.ts     Y.Doc → Zustand (bindYjsToStore, hydrateStoreFromYjs)
+├── undoManager.ts     Per-user Y.UndoManager over nodes/edges/flowMeta; while
+│                      collab is active it replaces the Zustand snapshot undo stack
 ├── useAwareness.ts    React hook — per-peer cursor position + user metadata
 ├── CollabStatus.tsx   Connection indicator rendered in Canvas.tsx
 └── CollabCursors.tsx  Live peer cursor overlays (absolute over ReactFlow)
@@ -72,34 +73,26 @@ src/collab/
 
 ## Wiring in App.tsx
 
-```tsx
-// Collab initialisation (runs once per flow load when VITE_COLLAB_SERVER_URL is set)
-const collabRef = useRef<CollabHandle | null>(null)
+The `useCollab()` hook in `src/App.tsx` does nothing unless `VITE_COLLAB_SERVER_URL` is set. When it is, an effect (keyed on the room key) lazily imports `y-websocket` and `y-indexeddb`, then:
 
-useEffect(() => {
-  if (!import.meta.env.VITE_COLLAB_SERVER_URL) return
-  const { doc, provider, awareness } = createCollabDoc(flowId, roomKey)
-  hydrateStoreFromYjs(doc, getStore())    // initial sync: Y.Doc → Zustand
-  bindYjsToStore(doc, getStore())         // ongoing: Zustand mutations → Y.Doc
-  syncStoreToYjs(doc, getStore())         // initial seed: Zustand → Y.Doc
-  collabRef.current = { doc, provider, awareness }
-  return () => provider.destroy()
-}, [flowId, roomKey])
-```
+1. creates the `CollabDoc` and sets the local awareness user (email, or a stable anonymous colour);
+2. loads the IndexedDB copy of the doc (`buildaharness:flow:<roomKey>`), falling back to online-only if IndexedDB is unavailable (for example private browsing);
+3. seeds the Y.Doc from the Zustand store if it is empty (`seedYjsFromStore`), otherwise hydrates the store from it (`hydrateStoreFromYjs`);
+4. connects a `WebsocketProvider`, binds Y.Doc changes to the store (`bindYjsToStore`) and store changes to the Y.Doc (`syncStoreToYjs`), and attaches the undo manager.
 
 ## Offline persistence
 
-By default (`VITE_COLLAB_OFFLINE_PERSISTENCE=true`) the Yjs document is persisted to IndexedDB via `y-indexeddb`. This means:
+The Yjs document is always persisted to IndexedDB via `y-indexeddb` (there is no environment switch for this). This means:
 
 - The canvas loads instantly from the local cache even before the WebSocket connects
 - Edits made offline are queued and synced when the connection is restored
 - Reloading the page does not cause flicker or loss of the current state
 
-Set `VITE_COLLAB_OFFLINE_PERSISTENCE=false` to disable (useful in testing or when storage quota is a concern).
+If IndexedDB is unavailable the canvas logs a warning and continues without offline persistence.
 
 ## Presence and cursors
 
-Each peer's viewport pointer position is broadcast via the Yjs awareness protocol (not via the CRDT document — awareness is ephemeral and not persisted). Each peer gets a stable colour derived from their user ID.
+Each peer's viewport pointer position is broadcast via the Yjs awareness protocol (not via the CRDT document — awareness is ephemeral and not persisted). Each peer gets a stable colour (derived from their email when signed in, otherwise a per-browser anonymous colour).
 
 `CollabStatus` shows a compact indicator with connected peer count and connection state (connecting / connected / disconnected). `CollabCursors` renders a coloured cursor SVG + name label at each peer's current canvas position.
 
@@ -107,25 +100,13 @@ Each peer's viewport pointer position is broadcast via the Yjs awareness protoco
 
 | Variable | Default | Description |
 |---|---|---|
-| `VITE_COLLAB_SERVER_URL` | _(unset — collab disabled)_ | WebSocket URL of the y-websocket server. Must start with `ws://` or `wss://`. |
-| `VITE_COLLAB_OFFLINE_PERSISTENCE` | `true` | Persist Yjs document to IndexedDB for offline-first editing. |
+| `VITE_COLLAB_SERVER_URL` | _(unset — collab disabled)_ | WebSocket URL of the y-websocket server, for example `ws://localhost:1234` or `wss://collab.your-domain.com`. |
 
 ## Self-hosting the y-websocket server
 
-The `docker-compose.collab.yml` overlay starts a y-websocket server on port 1234 using the official `y-websocket` npm package:
+The `docker-compose.collab.yml` overlay starts a y-websocket server (`node:20-alpine`, `npm install --global y-websocket@2`, then `y-websocket`) on port 1234 with LevelDB persistence in the `collab_data` volume. It is published on `127.0.0.1:1234` only and has **no authentication** — the overlay's header comments list the options (JWT in the query string with a custom server, an authenticating reverse proxy, or network isolation).
 
-```yaml
-services:
-  collab:
-    image: node:20-alpine
-    command: npx y-websocket
-    ports:
-      - "1234:1234"
-    environment:
-      - PORT=1234
-```
-
-For production, run it behind your TLS terminator and set `VITE_COLLAB_SERVER_URL=wss://collab.your-domain.com`. The server is stateless — you can run multiple instances behind a load balancer as long as all instances in the same "room" are on the same machine (y-websocket does not have a distributed mode out of the box).
+For production, run it behind your TLS terminator and set `VITE_COLLAB_SERVER_URL=wss://collab.your-domain.com`. y-websocket has no distributed mode, so all peers editing the same room must reach the same server instance; do not spread one room across several instances behind a load balancer.
 
 The Helm chart does not include a collab deployment — add it as a separate `Deployment` and `Service` in your cluster, or use a managed WebSocket service.
 
