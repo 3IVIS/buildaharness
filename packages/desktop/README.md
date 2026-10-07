@@ -15,6 +15,8 @@ macOS that's `~/Library/Application Support/com.buildaharness.assistant/`. The
 `fs` plugin is registered in `src-tauri/src/lib.rs` and scoped in
 `src-tauri/capabilities/default.json` via the `fs:allow-applocaldata-*-recursive`
 permission sets. See Phase 3 of the internal plan.
+The window (1100x760, minimum 520x420) saves and restores its position via
+`tauri-plugin-window-state`.
 
 ## Commands
 
@@ -37,7 +39,11 @@ path persists through `tauri-config-store.ts` (the same `FileSystemAdapter`
 already used for transcripts) and becomes `fileTools`' `workspaceRoot` for
 `read_file`/`list_directory`/`write_file`, taking over from
 `get_dev_workspace_root()` — the compile-time monorepo root, dev-mode-only —
-which remains the fallback until a user picks a real directory.
+which remains the fallback until a user picks a real directory. File access
+inside the chosen workspace goes through the `workspace_*` Tauri commands
+(`workspace_read_text_file`, `workspace_write_text_file`, `workspace_remove_file`,
+`workspace_mkdir`, `workspace_read_dir`, `workspace_realpath`, wrapped by
+`tauri-workspace-fs-backend.ts`), which reject `..` in paths.
 
 **Fixed bug**: `run_claude_prompt_with_file_tools` used to call
 `dev_workspace_root()` itself, unconditionally, instead of accepting the
@@ -62,12 +68,28 @@ both, so they behave identically to the browser build:
   deployment, same as chat-ui's plain-browser build.
 - `anthropic`/`openai`/`openrouter` — `AnthropicLLMClient`/
   `OpenAICompatibleLLMClient` (`@buildaharness/runtime`), calling the
-  provider directly with a user-supplied API key. These are plain `fetch()`
-  calls, which work the same inside Tauri's webview as in a browser tab — no
-  Rust command involved, and no CORS issue in practice, since
-  `tauri.conf.json`'s `security.csp` is unset. Set the key and pick a
-  backend from the Provider section in Settings (see
-  `packages/chat-ui/README.md`).
+  provider directly with a user-supplied API key. On desktop `App.tsx` hands
+  these clients `@tauri-apps/plugin-http`'s `fetch`, so the request is made
+  from Rust (no CORS, and not subject to the webview's CSP, which only allows
+  `connect-src 'self' ipc:`); `http:default` in
+  `src-tauri/capabilities/default.json` is scoped to `http://*` and
+  `https://*`. Set the key and pick a backend from the Provider section in
+  Settings (see `packages/chat-ui/README.md`). The API key is not kept in the
+  plaintext config file: `tauri-config-store.ts` stores it in the OS keychain
+  via the `keychain_set_api_key` / `keychain_get_api_key` /
+  `keychain_delete_api_key` commands (macOS `security`, Linux `secret-tool`
+  from libsecret, Windows a DPAPI-encrypted file under `%LOCALAPPDATA%`), and
+  migrates a pre-existing plaintext key on first load. If the keychain can't
+  be read the app continues without the key rather than failing.
+
+## Webview security
+
+`tauri.conf.json` sets a restrictive `security.csp` (`default-src 'self'`,
+`script-src 'self'`, `connect-src 'self' ipc: http://ipc.localhost`,
+`frame-ancestors 'none'`, no objects or forms) so injected markup cannot load
+remote resources; `devCsp` is looser, for Vite HMR. `fetch_url`'s SSRF guard
+needs DNS, which a webview doesn't have, so it resolves hostnames through the
+`dns_lookup` Tauri command (`tauri-dns-resolver.ts`).
 
 ## Shell
 
@@ -82,7 +104,10 @@ command (`src-tauri/src/lib.rs`) — a Rust port of aielia's
 proposed command is always staged first via the same pending-action flow
 `write_file` already uses — nothing runs until the user approves it in the
 UI. The Rust executor caps output at 20 000 bytes, reduces the child's env to
-`PATH`/`HOME`/`USERPROFILE`/`LANG`, and on timeout (`config.shellTimeoutMs`,
+`PATH`/`HOME`/`USERPROFILE`/`LANG`, points `HTTP_PROXY`/`HTTPS_PROXY`/`ALL_PROXY`
+(and lowercase variants) at a closed loopback port so proxy-aware clients
+(curl, wget, pip, npm, git) fail closed like the CLI's deny-all default (not a
+sandbox: a client that ignores proxy variables is unaffected), and on timeout (`config.shellTimeoutMs`,
 default 30 s) kills the whole process group, not just the top-level shell —
 parity with `shell-executor.ts`'s Node implementation (`detached` + a
 negative-pid signal). On Unix, the child is spawned via `process_group(0)`
