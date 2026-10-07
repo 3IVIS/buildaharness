@@ -7,6 +7,30 @@ what it may do, what it may believe, and what a job may cost — light enough fo
 "what's the weather", and it stages anything that can't be undone (`write_file`,
 `run_shell_command`, `send_email`) for your approval. Website: https://myaielia.com.
 
+## Install
+
+```bash
+# macOS / Linux — standalone binary, installed to ~/.local/bin (override with AIELIA_INSTALL_DIR)
+curl -fsSL https://myaielia.com/install.sh | sh
+curl -fsSL https://myaielia.com/install.sh | sh -s -- --force   # replace a non-aielia file at the target path
+
+# Windows (PowerShell) — installs to %LOCALAPPDATA%\Aielia\aielia.exe and adds it to your user PATH
+irm https://myaielia.com/install.ps1 | iex                       # set $env:AIELIA_FORCE = '1' first to force
+
+# or from npm
+npm install -g @buildaharness/aielia
+```
+
+Both installers read the manifest at `https://myaielia.com/aielia-latest.json`, download
+the binary for your platform over HTTPS only, verify its SHA-256 against the manifest and
+install it; re-running upgrades in place, or says it is already up to date. They refuse
+to overwrite an unrelated file (or a symlink, such as an npm-linked `aielia`) without
+`--force`. `aielia update` does the same upgrade later (see "Updates and the update check"
+below). On the first interactive launch with nothing configured, the CLI asks which
+provider to use and for its API key (live-checked with a free read-only call) and saves
+the choice to the persisted config; piped/scripted stdin skips this and keeps the
+`proxy` default.
+
 ## Design
 
 The harness here is a governance and reliability control plane, not just a
@@ -307,8 +331,9 @@ await assistant.turn('Summarize this into notes.md', { approved: true, pendingAc
 
 Declining (`{ approved: false, pendingActionId }`) discards the staged record
 without writing. A pending action left over from a crashed/abandoned turn sits
-in `.pending-actions/` indefinitely — harmless (never applied without an explicit
-`approved: true` with the matching ID) but not currently auto-swept. This same
+in `.pending-actions/` — harmless (never applied without an explicit
+`approved: true` with the matching ID), and swept on the next startup unless a
+session still has a resumable checkpoint (`sweepAbandonedPendingActionsOnStartup`). This same
 staging record shape (a `kind` discriminator) is shared with `run_shell_command`
 (see "Shell access via tools" below) and `send_email`.
 
@@ -348,7 +373,7 @@ Both backends enforce the same "never write inline" rule, by different
 mechanisms:
 
 - **Proxy/Anthropic backend** (`LLMClient`): `PersonalAssistant`'s tool loop
-  (capped at 5 iterations) calls `callChatStructured` directly, executes
+  (bounded by `maxSteps`, default 15, minus a few steps held back for recovery) calls `callChatStructured` directly, executes
   non-mutating tool calls for real, and intercepts `write_file` itself before
   it ever reaches `file-tools.ts`'s staging code.
 - **Claude CLI backend** (`ClaudeCliLLMClient`): Claude Code's own agentic loop
@@ -365,8 +390,10 @@ mechanisms:
 
 v1 is deliberately read/list/write only — no delete/move tool (higher
 consequence than a write, no "undo" via re-approval). One workspace root per
-assistant instance; no multi-root or per-request override. chat-ui doesn't have
-a write-approval UI yet — file tools are CLI/desktop-only for now.
+assistant instance; no multi-root or per-request override. File tools need a
+real workspace directory, so they are CLI/desktop-only; chat-ui's approval card
+(with the exact change shown) is what resolves a staged write or shell command
+on the desktop build.
 
 ## Clarifying questions
 
@@ -404,8 +431,8 @@ follow-up `needs_clarification` batch if it's still unresolved once the first ba
 folded in, resolved through this exact same path.
 
 Two kinds of sites can raise a `questions` batch: the Trajectory Supervisor's `ASK_USER` directive
-(see ADR-005 — currently inert by default, since
-`HARNESS_TRAJECTORY_SUPERVISOR` stays off) and a handful of deterministic sites with a genuinely
+(see ADR-005 — the supervisor is on by default in Aielia;
+`HARNESS_TRAJECTORY_SUPERVISOR=0` turns it off) and a handful of deterministic sites with a genuinely
 enumerable option set, e.g. a batch-research budget running out ("continue with N more steps" /
 "stop and summarize" / "let me clarify the goal"). A site with no discrete option set keeps
 today's plain `missing_info` halt unchanged — this mechanism never forces a multiple-choice
@@ -742,8 +769,9 @@ non-functional `web_search`. The active state is shown in the startup banner
 running session with `/config set` instead of an env var — see
 "Configuration" below.
 
-Skip the proxy and call a provider directly with your own API key — `ASSISTANT_LLM_BACKEND=anthropic|openai|openrouter` plus
-`ASSISTANT_API_KEY`:
+`ASSISTANT_LLM_BACKEND` also accepts `claude-cli` (shells out to the `claude` CLI already on
+your PATH, no API key needed; CLI and desktop only). Skip the proxy and call a provider directly with your own API
+key — `ASSISTANT_LLM_BACKEND=anthropic|openai|openrouter` plus `ASSISTANT_API_KEY`:
 
 ```bash
 ASSISTANT_LLM_BACKEND=anthropic ASSISTANT_API_KEY=sk-ant-... \
@@ -761,7 +789,8 @@ These three go straight from this process to the provider's own API
 — no proxy deployment needed, but unlike `authToken` (a self-hosted proxy's
 own bearer token), `ASSISTANT_API_KEY`/`apiKey` is a *real* provider key.
 It's stored the same way as every other secret field here — plaintext in
-`config.json`, not an OS keychain — so treat that file accordingly. When
+`config.json` (written with mode `0600`, in a `0700` directory), not an OS
+keychain — so treat that file accordingly. When
 `ASSISTANT_MODEL`/`/config set model` isn't set, each backend falls back to the
 current-generation default id exported from `@buildaharness/runtime`'s
 `model-defaults.ts` (`openai` → `gpt-5-mini`, `openrouter` →
@@ -794,9 +823,13 @@ you> /config
   model          (not set)
   enableWeb      false
   braveApiKey    (not set)
+  webBackend     direct
   enableShell    false
   shellTimeoutMs (not set)
+  shellNetworkAllowlist (not set)
   workspaceRoot  (not set)
+  enableEmail    false
+  ...            (one line per key; the full list is `CONFIG_KEYS` in config.ts)
   dangerouslySkipPermissions false
 
 you> /config set enableWeb true
@@ -812,7 +845,9 @@ you> /config reset enableWeb
 ✓ Reset enableWeb to default
 ```
 
-- `/config` lists every field's current (resolved) value. A field currently
+- `/config` lists every field's current (resolved) value; secret fields
+  (`authToken`, `apiKey`, `braveApiKey`, `resendApiKey`, `smtpPass`) print as
+  `********`, and credentials or query strings inside `proxyUrl` are masked. A field currently
   pinned by an env var shows `(env-pinned: VAR_NAME)` and cannot be changed
   with `/config set` — unset the env var first.
 - `/config set <key> <value>` validates the change (e.g. `enableWeb true`
@@ -825,10 +860,39 @@ you> /config reset enableWeb
 
 **Precedence**: env var > persisted config > built-in default, evaluated
 independently per field. Settings persist as plain JSON at
-`~/.buildaharness/personal-assistant/config.json` — like the rest of this
-package's persistence, it's a real file, not encrypted, so `authToken` and
-`braveApiKey` are stored in plaintext there. This is the same trust boundary
+`~/.buildaharness/personal-assistant/config.json` (created `0600` inside a
+`0700` directory) — like the rest of this
+package's persistence, it's a real file, not encrypted, so `authToken`,
+`apiKey`, `braveApiKey` and the email credentials are stored in plaintext there. This is the same trust boundary
 the repo's root `.env` already has, not a new one.
+
+Settings beyond those above (each has an env var, a `/config set` key, and a built-in default;
+mode flags take `enabled`/`disabled`):
+
+| Key (env var) | Default | What it does |
+|---|---|---|
+| `webBackend` | `direct` | Browser build only (see chat-ui README); the CLI always calls Brave directly |
+| `shellNetworkAllowlist` (`ASSISTANT_SHELL_NETWORK_ALLOWLIST`) | none (deny all) | Hosts an approved shell command may reach |
+| `enableEmail`, `emailProvider` (`resend`/`smtp`), `emailFrom`, `resendApiKey`, `smtpHost`/`smtpPort`/`smtpUser`/`smtpPass` (`ASSISTANT_ENABLE_EMAIL`, `ASSISTANT_EMAIL_*`, `ASSISTANT_RESEND_API_KEY`, `ASSISTANT_SMTP_*`) | off | Registers the staged `send_email` tool; `enableEmail` needs `emailFrom` and the provider's credentials |
+| `sessionCostLimitUsd`, `sessionCallLimit` (`ASSISTANT_SESSION_COST_LIMIT_USD`, `ASSISTANT_SESSION_CALL_LIMIT`) | unbounded | Refuses a new turn once the cross-session estimated spend or completed-turn count reaches the ceiling; shown in `/status` and `/cost` |
+| `memoryBudgetChars` (`ASSISTANT_MEMORY_BUDGET_CHARS`) | 4000 | Character budget for the facts block in the prompt |
+| `memoryWriteMode` (`ASSISTANT_MEMORY_WRITE_MODE`) | `staged` | `auto`, `staged` or `user_only`; see "Memory tiers" |
+| `oneLoopMode` (`ASSISTANT_ONE_LOOP`) | `enabled` | See "Design" |
+| `askMode` (`ASSISTANT_ASK_MODE`) | `disabled` | See "Clarifying questions" |
+| `planMode` (`ASSISTANT_PLAN_MODE`) | `legacy` | `gated` or `legacy` plan rollout |
+| `ambiguityGuardMode` (`ASSISTANT_AMBIGUITY_GUARD`) | `disabled` | Ambiguity guard |
+| `tuiMode` (`ASSISTANT_TUI`) | `disabled` | Full-screen terminal UI (Ink); only on a real TTY |
+| `updateCheck` (`ASSISTANT_UPDATE_CHECK`) | `enabled` | Passive update check |
+| `activeProject` (`ASSISTANT_ACTIVE_PROJECT`) | none | Project new project-scoped facts are tagged with (`/project`) |
+| `goalGraphMode`, `goalGraphSuggestMode` (`ASSISTANT_GOAL_GRAPH`, `ASSISTANT_GOAL_GRAPH_SUGGEST`) | `enabled` in the CLI | Goal tree, steering and next-step options |
+| `planGraphMode` (`ASSISTANT_PLAN_GRAPH`) | `disabled` | `/plan graph` |
+| `layerPolicyMode` (`ASSISTANT_LAYER_POLICY`) | `static` | `static`, `shadow` or `adaptive` |
+| `layers` | `{}` | Per-layer on/off, edited with `/layers`, not `/config set` |
+
+`ASSISTANT_ACTIVITY_LOG=1` additionally appends a debug activity log to
+`activity-log.jsonl` in the data directory (created `0600`). All CLI output has
+terminal escape sequences stripped, so text echoed from a fetched page or file
+cannot rewrite what an approval prompt shows.
 
 ### Lexical checks (off by default)
 
@@ -853,8 +917,10 @@ plan step saved without its own risk level is treated as HIGH.
 
 ## REPL commands
 
-Type `/help` inside a running CLI session for this list. All of them read or
-change local session/config state — none of them make an LLM call themselves.
+Type `/help` inside a running CLI session for this list. Almost all of them read or
+change local session/config state without an LLM call; the exceptions are `/plan sketch`
+and `/memory consolidate`, each of which makes one. `/exit` (also `/quit`, `exit`, `quit`)
+ends the session.
 
 | Command | What it does |
 |---|---|
@@ -863,15 +929,27 @@ change local session/config state — none of them make an LLM call themselves.
 | `/status` | Show the resolved config (model, backend, workspace, enabled capabilities — same as the startup banner) plus this session's transcript length and whether a plan is active |
 | `/export [file]` | Save this session's transcript to a markdown file (default: `assistant-transcript-<timestamp>.md` in the current directory) |
 | `/undo` | Remove the last exchange from conversation history — a completed turn drops both the user message and the reply; a turn still awaiting approval drops just the pending message. Only affects what the model remembers: a real `write_file`/`run_shell_command` effect from that turn is **not** reversed |
-| `/memory` | Show facts learned about you, reminders created so far, and the learning-layer `ExperienceStore`'s real content — every strategy weight, plus the 20 most recently learned decompositions/recovery sequences (newest first), not just counts |
+| `/undo-action [id]` | List the real filesystem effects of approved actions that can still be reverted (see `/status`'s undo-log line), or stage a revert of one for your approval |
+| `/memory` | Show facts learned about you, pending-confirmation guesses, reminders created so far, and the learning-layer `ExperienceStore`'s real content — every strategy weight, plus the 20 most recently learned decompositions/recovery sequences (newest first), not just counts |
+| `/memory confirm <n\|category>` / `/memory reject <n\|category>` | Promote a pending-confirmation guess (or a whole category) to durable memory, or discard it |
+| `/memory forget <n> [erase]` | Remove a learned fact by its number in "Facts I know". It stays restorable through the audit log (`/memory undo`) unless you add `erase`, which scrubs its text from the log too. `/memory forget digest [id]` erases one stored session digest, or all of them |
+| `/memory history` / `/memory undo <seq>` | Show recent memory changes with their sequence numbers, and restore one change's pre-image (needs `AUDIT_MEMORY_AUDIT_LOG`) |
+| `/memory status` | Store size vs budget, pending count, write mode, last consolidation |
+| `/memory archive [restore <n> \| forget <n>]` | List facts set aside or replaced by a newer statement; restore one, or erase one for good |
+| `/memory consolidate [accept\|dismiss <n>]` | Propose merging or retiring overlapping facts; nothing changes until you accept (needs `AUDIT_MEMORY_CONSOLIDATION`) |
+| `/memory off` / `/memory on` | Stop or resume all memory writes for this install; existing facts stay readable and removable |
 | `/memory export [file]` | Write the full, unbounded `ExperienceStore` contents (every strategy weight/decomposition/recovery sequence, not the 20-entry preview `/memory` prints) plus facts/reminders to a JSON file (default: `assistant-memory-<timestamp>.json`). Read-only: there's no matching import path, so exported data can't be hand-edited and loaded back in |
 | `/search <query>` | Ranked search over past messages, across every session in this install — a hit is the one message that matched, not the whole session transcript around it. Read-only: never an LLM call or network request. Scoring is tokenized/graduated, not exact-substring-only (see "Conversation history" above), and a query matching nothing returns an explicit "no results" line |
+| `/project [name]` | Show or switch the project new project-scoped facts are tagged with; `/project clear` reverts to the workspace default |
 | `/model [name]` | Show the active model, or switch it — a thin alias over `/config set model <name>` (see "Configuration" above); rejected the same way if `model` is pinned by `ASSISTANT_MODEL` |
 | `/cost` | Show token usage for the last turn and the running session total |
-| `/doctor` | Check proxy reachability (proxy backend), plus workspace root and data dir health — no dedicated check yet for the anthropic/openai/openrouter backends, only the backend-agnostic checks run for those |
+| `/doctor` | Check proxy reachability (proxy backend) or the `claude` binary (claude-cli backend), plus workspace root and data dir health — no dedicated check yet for the anthropic/openai/openrouter backends, only the backend-agnostic checks run for those |
 | `/why` | Explain the harness path the last turn took (verification confidence + node sequence) |
+| `/layers` | Show all 11 harness layers: fired or skipped, and why, for the last turn. `/layers settings` lists the reasoning layers with their cost/evidence; `/layers on\|off\|reset <id>` changes a layer's persisted on/off choice (an operator-set `AUDIT_*` env flag wins and shows as pinned) |
 | `/sources` | List files/URLs the last turn actually consulted |
 | `/plan` | Show the active structured plan's task status |
+| `/plan sketch <request>` | One-shot, advisory plan sketch: no plan record, nothing staged, cannot execute |
+| `/goals` | Review every known goal thread this session: status, tasks and visibility (freshly computed, carried over, done, suggested) |
 | `/plan graph [thread-id]` | Draw the active plan as a read-only dependency graph (needs `planGraphMode` enabled; full-screen pane in the terminal UI with arrows/Tab/Enter/q, one static render in the plain REPL). Glyphs, mapping and keys: `docs/plan-visualization.md` |
 | `/checkpoint [clear]` | Inspect a stuck in-progress harness checkpoint (step, node, failed-resume count so far), or `/checkpoint clear` to discard it — see "Recovering a stuck checkpoint" above. Scoped to just the checkpoint: unlike `/clear`, transcript/facts/plan are untouched |
 
