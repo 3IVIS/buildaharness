@@ -1592,6 +1592,21 @@ describe('PersonalAssistant file tools', () => {
     expect(await backend.readTextFile(`${ROOT}/todo.txt`)).toBe('buy milk')
   })
 
+  it('a corrupt or out-of-workspace chained record does not turn an already-applied action into an error', async () => {
+    const backend = makeFakeBackend()
+    const { id: writeId } = await stagePendingAction(backend, ROOT, { kind: 'write', path: 'todo.txt', content: 'buy milk' })
+    const badId = 'chained-bad'
+    await backend.writeTextFile(`${ROOT}/.pending-actions/${badId}.json`, JSON.stringify({ id: badId, stagedAt: new Date().toISOString(), kind: 'write', path: '../../etc/passwd', content: 'x', chainedFrom: true }))
+    const writeRecord = await loadPendingAction(backend, ROOT, writeId)
+    await backend.writeTextFile(`${ROOT}/.pending-actions/${writeId}.json`, JSON.stringify({ ...writeRecord, nextPendingActionId: badId }))
+    const assistant = new PersonalAssistant({ llmClient: scriptedResponses([]), fileTools: { backend, workspaceRoot: ROOT } })
+    const spy = vi.spyOn(console, 'error').mockImplementation(() => undefined)
+    const applied = await assistant.turn('irrelevant', { approved: true, pendingActionId: writeId })
+    spy.mockRestore()
+    expect(applied.status).toBe('ok')
+    expect(await backend.readTextFile(`${ROOT}/todo.txt`)).toBe('buy milk')
+  })
+
   // T7: a revert is exactly as consequential as the action it undoes, so it must go through the
   // same explicit approval step — declining one must leave the workspace untouched and the
   // undo-log entry available for a later attempt, same as declining any other staged action.

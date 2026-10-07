@@ -372,12 +372,21 @@ export class ActionApprovalService {
     nextPendingActionId: string,
     previousOutcome: string,
   ): Promise<AssistantTurnResult | undefined> {
-    const next = await loadPendingAction(backend, workspaceRoot, nextPendingActionId)
+    let next: Awaited<ReturnType<typeof loadPendingAction>>
+    let writePreviousContent: string | undefined
+    try {
+      next = await loadPendingAction(backend, workspaceRoot, nextPendingActionId)
+      if (next?.kind === 'write') writePreviousContent = await readCurrentFileContent(backend, workspaceRoot, next.path)
+    } catch (err) {
+      // The previous action has already been resolved: a corrupt or out-of-workspace chained record must
+      // not turn that into an error and hide its outcome.
+      console.error(`[approval] could not load the chained pending action "${nextPendingActionId}":`, err)
+      return undefined
+    }
     if (!next) return undefined
     let reason: string | undefined
     if (next.kind === 'write') {
-      const previousContent = await readCurrentFileContent(backend, workspaceRoot, next.path)
-      reason = `${previousOutcome}\n\nNext, it also proposes writing to "${next.path}":\n${formatWriteDiff(previousContent, next.content)}`
+      reason = `${previousOutcome}\n\nNext, it also proposes writing to "${next.path}":\n${formatWriteDiff(writePreviousContent, next.content)}`
     } else if (next.kind === 'shell') {
       reason = `${previousOutcome}\n\nNext, it also proposes running: ${next.command}\n  (cwd: ${next.cwd})`
     } else if (next.kind === 'email') {
