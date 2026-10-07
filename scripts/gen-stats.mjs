@@ -281,7 +281,7 @@ function buildReplacements(stats) {
     {
       file: 'README.md',
       apply: single(
-        /(\| \*prompt in → answer out\* \| \*)(\d+)( nodes · 11 layers · 759 harness-layer tests\* \|)/,
+        /(\| \*prompt in → answer out\* \| \*)(\d+)( nodes · 11 layers\* \|)/,
         (_m, pre, _num, post) => `${pre}${nodeTypes.total}${post}`,
       ),
     },
@@ -336,7 +336,7 @@ function buildReplacements(stats) {
     {
       file: 'README_CN.md',
       apply: single(
-        /(\| \*提示输入 → 答案输出\* \| \*)(\d+)( 个节点 · 11 层 · 759 个线束层测试\* \|)/,
+        /(\| \*提示输入 → 答案输出\* \| \*)(\d+)( 个节点 · 11 层\* \|)/,
         (_m, pre, _num, post) => `${pre}${nodeTypes.total}${post}`,
       ),
     },

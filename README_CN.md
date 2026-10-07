@@ -1,8 +1,8 @@
 <div align="center">
 
-# Build A Harness 中文版
+# Aielia · Build A Harness 中文版
 
-**围绕你的智能体构建线束 —— 让 AI 智能体可靠运行的开源控制层。**
+**Aielia：可以交付真实工作的日常 AI 助手 —— 基于 Build A Harness 构建；Build A Harness 是让 AI 智能体可靠运行的开源线束与可视化画布。**
 
 [![License](https://img.shields.io/badge/许可证-Apache%202.0-blue.svg)](https://opensource.org/licenses/Apache-2.0)
 [![Version](https://img.shields.io/badge/版本-v0.8.0-brightgreen.svg)](https://github.com/3IVIS/buildaharness/releases)
@@ -20,7 +20,7 @@
 
 线束（harness）是围绕自主智能体的**治理与可靠性控制平面**：智能体拥有智能，线束拥有权威。智能体提出方案；线束决定接下来允许发生什么；由证据决定结果是否被接受。**Build A Harness** 是面向这一层的开源可视化画布与运行时 —— 在画布上绘制 11 层，将同一份 FlowSpec 编译到 LangGraph / CrewAI / Mastra / MS Agent Framework，并在 Langfuse 中追踪每一个决策。
 
-**Aielia** 是参考应用：一个可以交付真实多步骤工作的智能体 —— 对一批条目做调研、处理文件、起草并发送消息 —— 而完整的 11 层线束在每一轮都控制着它能做什么、能相信什么，以及一项任务可以花费多少。任何无法撤销的操作（写入文件、执行命令、发送邮件）都会先暂存，等待你的批准；分类器出错时，会要求批准，而不是当作安全操作放行。
+**Aielia** 是基于它构建的日常助手，也是参考应用：一个可以交付真实多步骤工作的智能体 —— 对一批条目做调研、处理文件、起草并发送消息 —— 而完整的 11 层线束在每一轮都控制着它能做什么、能相信什么，以及一项任务可以花费多少。任何无法撤销的操作（写入文件、执行命令、发送邮件）都会先暂存，等待你的批准；分类器出错时，会要求批准，而不是当作安全操作放行。
 
 站点：[buildaharness.com](https://buildaharness.com) —— 开发者站点 · [myaielia.com](https://myaielia.com) —— 面向普通用户的 Aielia 站点。
 
@@ -47,7 +47,7 @@
 | 输出 | **恢复** + **内存** — 6 种策略 · 压缩 |
 | | **学习** — 经验存储 · 热启动 *（可选）* |
 | | **输出 & 审查员通过** — 合约 · 三镜头审查 |
-| *提示输入 → 答案输出* | *27 个节点 · 11 层 · 759 个线束层测试* |
+| *提示输入 → 答案输出* | *27 个节点 · 11 层* |
 
 <table>
 <tr valign="top">
@@ -105,7 +105,7 @@
 npx @buildaharness/aielia
 ```
 
-首次运行会引导你选择一个模型 —— 复用已登录的 `claude` CLI（无需 API 密钥），或粘贴一个 Anthropic / OpenAI / OpenRouter 密钥。然后直接和它对话即可。
+首次运行会引导你选择提供商（OpenRouter、Anthropic 或 OpenAI）并粘贴 API 密钥，保存前会先校验密钥。已经登录了 `claude` CLI？用 `ASSISTANT_LLM_BACKEND=claude-cli npx @buildaharness/aielia` 即可跳过密钥。然后直接和它对话即可。
 
 ```ts
 import { LLMClient } from '@buildaharness/runtime'
@@ -117,7 +117,7 @@ await aielia.turn('东京在哪个时区？')
 // { status: 'ok', reply: '…', riskLevel: 'LOW', stepsUsed: 1 }
 
 await aielia.turn('给我老板发一封邮件说我辞职了。')
-// { status: 'needs_approval', reason: '…', riskLevel: 'HIGH' }  —— 未发起任何 LLM 调用
+// { status: 'needs_approval', reason: '…', riskLevel: 'HIGH' }  —— 未发送任何内容，也未生成回复
 
 await aielia.turn('给我老板发一封邮件说我辞职了。', { approved: true })
 // 已批准 —— 继续执行，正常走完线束
@@ -136,8 +136,8 @@ await aielia.turn('给我老板发一封邮件说我辞职了。', { approved: t
 - **实时的逐工具调用 ControlState 门** —— 每一次只读工具调用在执行*之前*都会依据本轮的 `ControlState` 进行检查（确定性的 ALLOW / DENY / REQUIRE_APPROVAL，而非仅供参考），因此本轮中逐渐显现的失败模式也能真正触发拒绝。
 - **有界任务** —— 对于明确列出的多个条目，每一项都有各自受限的子搜索（预算在最初几项之后校准）；连续三次死胡同就停止该项；大批量任务会在运行前请求确认；每轮工具调用总数另有硬性上限。每一项最终都是 `found`、`not_found` 或 `truncated_while_productive`，回复绝不会悄悄漏掉任何一项。
 - **故障安全风险分类** —— 分类器出错或响应无法解析时返回 `UNKNOWN → 要求批准`，绝不会静默降级为低风险。
-- **审查员通过（Reviewer Pass）** —— 三镜头审查（一致性、对抗性、抽象层级契合度）与输出合约验证会在回复发出前执行。
-- **类型化事实溯源** —— 只有你亲口陈述的事实才会默认提升为持久记忆；模型推断的事实在得到确认前仅限本次会话。
+- **审查员通过（Reviewer Pass）** —— 三镜头审查（一致性、对抗性、抽象层级契合度）与输出合约验证会在每一轮的线束中运行；只有开启可选的审查修订层时，审查发现才会修改回复。
+- **类型化事实溯源** —— 你亲口陈述的事实会提升为持久记忆；模型推断的事实只有在高置信度时才会提升，中等置信度的需等待 `/memory confirm`，低置信度的仅限本次会话。
 - **AnswerClaim** —— 回复会区分"有证据支持并已验证"与"找到了但无法独立确认"，并显示在聊天的"Why?"面板中。
 - **崩溃安全的轮内恢复** —— 一轮对话中途崩溃时会从最后一个检查点恢复，而非静默重来；一个在重放中反复崩溃的检查点会在两次尝试后被自动丢弃。
 - **不可信内容边界** —— 网页结果和 shell 输出会被包裹为数据，模型被明确要求绝不将其当作指令执行。
@@ -183,7 +183,7 @@ cd adapter && python main.py      # 适配器 → localhost:8000
 <summary>运行测试</summary>
 
 ```bash
-npm test                                         # Vitest — 验证 5 个参考流程
+npm test                                         # Vitest — schema、画布 store 及各个包
 pytest adapter/tests/ -v                         # 适配器单元 + 集成测试
 pytest adapter/tests/test_maf_adapter.py -v     # MAF 套件（42 个测试）
 ```
@@ -239,7 +239,7 @@ import '@buildaharness/canvas/styles.css'
 | [docs/getting-started.md](docs/getting-started.md) | 从全新克隆到密钥、LLM、首次运行 |
 | [docs/nodes.md](docs/nodes.md) | 27 个节点的面板 + schema 同步机制 |
 | [docs/flowspec.md](docs/flowspec.md) | FlowSpec v1.0.0 — 全部 27 种节点类型、边、字段 |
-| [docs/architecture.md](docs/architecture.md) | 系统设计、服务交互、数据流 |
+| [docs/architecture.md](docs/architecture.md) | 系统设计、服务交互、数据流 — 11 层是 5 个基本要素（State、Evidence、Policy、Effect、Recovery）的实现 |
 | [docs/api.md](docs/api.md) | REST API 参考 — 编译、执行、部署、HITL 恢复 |
 | [docs/llm-setup.md](docs/llm-setup.md) | LLM 提供商设置 — OpenAI、Anthropic、Ollama、自定义 |
 | [docs/qdrant.md](docs/qdrant.md) | Qdrant 向量存储 — 播种、集合、生产环境 |
@@ -247,6 +247,8 @@ import '@buildaharness/canvas/styles.css'
 | [docs/collab.md](docs/collab.md) | 实时协作 — Yjs 设置与内部原理 |
 | [docs/deployment.md](docs/deployment.md) | Docker、Helm、SSO/OIDC |
 | [docs/troubleshooting.md](docs/troubleshooting.md) | 常见启动错误 |
+| [docs/threat-model.md](docs/threat-model.md) | 助手的信任边界与已接受的非目标 |
+| [SECURITY.md](SECURITY.md) | 受支持的版本与漏洞报告方式 |
 | [CONTRIBUTING.md](CONTRIBUTING.md) | 如何贡献 |
 
 ---

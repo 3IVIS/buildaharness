@@ -1,8 +1,8 @@
 <div align="center">
 
-# Build A Harness
+# Aielia · Build A Harness
 
-**Build the harness around your agent — the open-source control layer that makes AI agents reliable.**
+**Aielia: an everyday AI assistant you can hand real work to — built with Build A Harness, the open-source harness and visual canvas that make AI agents reliable.**
 
 [![License](https://img.shields.io/badge/License-Apache%202.0-blue.svg)](https://opensource.org/licenses/Apache-2.0)
 [![Version](https://img.shields.io/badge/version-v0.8.0-brightgreen.svg)](https://github.com/3IVIS/buildaharness/releases)
@@ -26,7 +26,8 @@ visual canvas and runtime for that layer — draw the 11 layers, compile the sam
 FlowSpec to LangGraph / CrewAI / Mastra / MS Agent Framework, and trace every
 decision in Langfuse.
 
-**Aielia** is the reference application: an agent you can hand real, multi-step
+**Aielia** is the everyday assistant built with it, and the reference
+application: an agent you can hand real, multi-step
 work — research across a list, files to go through, a message to draft and send —
 while the full 11-layer harness controls what it may do, what it may believe, and
 what a job may cost, on every turn. Anything that can't be undone (writing a
@@ -62,7 +63,7 @@ Canvas  →  flow.json  →  LangGraph · CrewAI · Mastra · MS Agent Framework
 | Output | **Recovery** + **Memory** — 6 strategies · compression |
 | | **Learning** — experience store · warm start *(optional)* |
 | | **Output & Reviewer Pass** — contract · 3-lens review |
-| *prompt in → answer out* | *27 nodes · 11 layers · 759 harness-layer tests* |
+| *prompt in → answer out* | *27 nodes · 11 layers* |
 
 <table>
 <tr valign="top">
@@ -129,9 +130,11 @@ An agent you can hand real, multi-step work to, held in bounds by the harness �
 npx @buildaharness/aielia
 ```
 
-First run walks you through picking a model — reuse an existing `claude` CLI
-login (no API key), or paste an Anthropic / OpenAI / OpenRouter key. Then just
-talk to it.
+First run walks you through picking a provider (OpenRouter, Anthropic or
+OpenAI) and pasting an API key, which it checks before saving. Already logged in
+to the `claude` CLI? Skip the key with
+`ASSISTANT_LLM_BACKEND=claude-cli npx @buildaharness/aielia`. Then just talk to
+it.
 
 ```ts
 import { LLMClient } from '@buildaharness/runtime'
@@ -143,7 +146,7 @@ await aielia.turn('What time zone is Tokyo in?')
 // { status: 'ok', reply: '…', riskLevel: 'LOW', stepsUsed: 1 }
 
 await aielia.turn('Send an email to my boss saying I quit.')
-// { status: 'needs_approval', reason: '…', riskLevel: 'HIGH' }  — no LLM call made
+// { status: 'needs_approval', reason: '…', riskLevel: 'HIGH' }  — nothing sent, no reply generated
 
 await aielia.turn('Send an email to my boss saying I quit.', { approved: true })
 // approved — proceeds and runs the harness normally
@@ -177,9 +180,11 @@ a reviewer/output gate. Aielia ships the following, all enforced in code rather 
 - **Fail-safe risk classification** — a classifier error or unparseable response
   returns `UNKNOWN → requires approval`, never a silent default to low-risk.
 - **Reviewer Pass** — a 3-lens review (consistency, adversarial, abstraction fit)
-  and output-contract validation run before a reply goes out.
-- **Typed fact provenance** — only facts you actually *state* promote to durable
-  memory by default; model-inferred facts stay session-scoped until confirmed.
+  and output-contract validation run in the harness on every turn; the reviewer's
+  findings only revise a reply when the opt-in reviewer-revision layer is on.
+- **Typed fact provenance** — facts you actually *state* promote to durable
+  memory; model-inferred facts promote only at high confidence, medium-confidence
+  ones wait for `/memory confirm`, and low-confidence ones stay session-scoped.
 - **AnswerClaim** — replies distinguish "verified against evidence" from "found
   this but couldn't independently confirm it," surfaced in the chat's "Why?" panel.
 - **Crash-safe mid-turn resume** — a turn that dies mid-flight resumes from its
@@ -230,7 +235,7 @@ cd adapter && python main.py      # adapter → localhost:8000
 <summary>Running tests</summary>
 
 ```bash
-npm test                                         # Vitest — validates 5 reference flows
+npm test                                         # Vitest — schema, canvas store and every package
 pytest adapter/tests/ -v                         # adapter unit + integration
 pytest adapter/tests/test_maf_adapter.py -v     # MAF suite (42 tests)
 ```
