@@ -60,9 +60,14 @@ The gear icon in the header swaps the whole screen for `SettingsScreen.tsx` —
 not a modal — covering Provider (LLM backend picker + whatever fields that
 backend needs, see below), Web Search (enable, Brave API key,
 and — browser build only — a Backend picker, see below), Shell (enable,
-timeout), and, on the Tauri desktop build only, Workspace (a
+timeout), Appearance (Theme: System / Dark / Light; System follows
+`prefers-color-scheme`), Advanced ("Dangerously skip permissions", which turns
+every approval prompt off and puts an "Approvals off" chip in the header),
+on the Tauri desktop build only Workspace (a
 native folder picker, via the Rust `pick_workspace_directory` command in
-`packages/desktop/src-tauri`).
+`packages/desktop/src-tauri`), Reasoning layers (per-layer on/off, see the
+aielia README's `/layers` section) and Diagnostics (below). Saving is deferred:
+edits apply when you press Save, not as you type.
 
 The Provider section's backend picker (`llmBackend`) offers `proxy`, `anthropic`,
 `openai`, `openrouter` and — desktop build only — `claude-cli` (see `App.tsx`'s
@@ -76,15 +81,19 @@ than writing a value into the form.
 
 `createLlmClient` (`App.tsx`) is shared between the plain-browser and desktop
 build paths, so desktop can use any of the 5 backends (`claude-cli` is desktop-only), and the three direct-API ones (`anthropic`/`openai`/`openrouter`)
-behave identically on both surfaces since they're just `fetch()` calls to the
-provider, which works the same inside Tauri's webview as in a browser tab.
+are plain `fetch()` calls to the provider, made the same way on both surfaces.
+(On desktop the webview's CSP, `packages/desktop/src-tauri/tauri.conf.json`, governs
+which origins that `fetch()` may reach; see `packages/desktop/README.md`.)
 
 Settings persist through a `ConfigStore` (`@buildaharness/aielia`'s
 shared `AssistantConfig`/`resolveConfig`) — `browser-config-store.ts`
 (`localStorage`) in a plain browser, `tauri-config-store.ts` (the same
 `FileSystemAdapter` already used for transcripts, under a `config`
-namespace) on desktop. `VITE_ASSISTANT_PROXY_URL`/`_TOKEN`/`_MODEL` still win
-over whatever's persisted — see `browser-config.ts` — so an existing deployed
+namespace) on desktop. Build-time `VITE_ASSISTANT_*` vars still win
+over whatever's persisted (`PROXY_URL`, `PROXY_TOKEN`, `MODEL`, `ONE_LOOP`, `ASK_MODE`,
+`PLAN_MODE`, `ENABLE_WEB`, `WEB_BACKEND`, `GOAL_GRAPH`, `GOAL_GRAPH_SUGGEST`,
+`PLAN_GRAPH`, `LAYER_POLICY`, `MEMORY_WRITE_MODE` — see `browser-config.ts`; a
+pinned field shows read-only in Settings) so an existing deployed
 build with those baked in behaves exactly as before; Settings only changes
 the default that applies when none of those are set. Saving tears down and
 recreates the `PersonalAssistant` instance so a change applies to the very
@@ -130,7 +139,7 @@ browser)"):
 `packages/desktop/README.md`'s Shell section; it remains a no-op in a plain
 browser tab, which has no way to execute anything at all. Secrets
 (`authToken`, `braveApiKey`) are stored in plaintext (`localStorage`
-or an unencrypted JSON file), same trust boundary as the CLI's `config.json`.
+or an unencrypted JSON file), same trust boundary as the CLI's `config.json` (which the CLI writes with mode `0600` inside a `0700` directory).
 On the desktop build `apiKey` goes to the OS keychain (a pre-existing plaintext
 key is migrated on first launch); in the browser build it is plaintext too.
 `apiKey` is a real Anthropic/OpenAI/OpenRouter
@@ -140,8 +149,12 @@ says so next to the field.
 
 ## Session actions & Diagnostics
 
-The header (next to the gear icon) has four buttons — the GUI equivalents
-of the CLI's `/clear`, `/export`, `/undo`, and `/search`:
+The header has New chat, Search, Memory, a "⋯" overflow menu (Export, Undo,
+Goals, Sketch and, when plan graph is on, Plan graph; below 640px these fold
+into the menu) and the gear icon. The first four are the GUI equivalents of
+the CLI's `/clear`, `/export`, `/undo`, and `/search`; Memory and Goals open
+panels for `/memory` and the goal tree; Sketch runs a one-shot, advisory plan
+sketch from the composer text (nothing staged, cannot execute):
 
 - **New chat** — ends the current conversation (`PersonalAssistant.clearSession()`)
   and resets every piece of derived UI state (usage, memory, health) so
@@ -153,6 +166,11 @@ of the CLI's `/clear`, `/export`, `/undo`, and `/search`:
   (`PersonalAssistant.undoLastTurn()`), adjusting the visible message list to
   match: a completed turn drops both bubbles, a still-pending approval card
   drops just that one. Disabled with no conversation yet.
+- **Memory** — opens `components/MemoryPanel.tsx`, which drives the same
+  `PersonalAssistant` memory methods as the CLI's `/memory` subcommands:
+  confirm/reject pending facts, forget (optionally `erase`), the audit history
+  with undo, the archive, and consolidation proposals and episodic digests when
+  those writers are on.
 - **Search** — opens a full-screen search panel (`components/SearchPanel.tsx`)
   over `PersonalAssistant.searchTranscript()`, the same cross-session,
   relevance-ranked search the CLI's `/search <query>` uses (not limited to the
@@ -188,11 +206,20 @@ and the three direct-API ones, gets the same static-table estimate
 "`/cost` and real vs. estimated dollar figures" section for the full
 explanation.
 
+While a reply is being produced the composer shows a **Stop** button that
+aborts the turn (a "Stopped" marker is left in the transcript); it is not
+offered while a staged action is being resumed.
+
+Rendered replies never auto-load images: a markdown `![alt](url)` is shown as
+inert text (`[image not loaded: alt (url)]`), since an auto-loading `<img>` in
+text echoed from a fetched page or file could leak conversation data through
+its URL. Links open in a new tab with `noopener noreferrer nofollow`.
+
 ## Usage
 
 ```bash
 cp packages/chat-ui/.env.example packages/chat-ui/.env.local
-# fill in VITE_ASSISTANT_PROXY_URL / VITE_ASSISTANT_PROXY_TOKEN (see packages/proxy)
+# fill in VITE_ASSISTANT_PROXY_URL (default http://localhost:8787) / VITE_ASSISTANT_PROXY_TOKEN / VITE_ASSISTANT_MODEL (see packages/proxy)
 
 npm run dev --workspace=packages/chat-ui
 ```
@@ -234,8 +261,8 @@ Playwright manages its own browser binary; first run needs
 `npx playwright install --with-deps chromium`. The `webServer` block in
 `playwright.config.ts` does the `build:e2e` + `preview:e2e` itself, so there is no
 separate build step. CI runs this via `.github/workflows/browser-e2e.yml`
-(phase B4) on PRs touching `packages/chat-ui|aielia|harness|runtime`
-plus a nightly cron.
+(phase B4) on PRs touching `packages/chat-ui|aielia|harness|runtime`, and on
+manual dispatch (the nightly cron was removed).
 
 **This dev container cannot run `test:e2e`.** Per the repo's internal developer notes: `$DISPLAY`
 is empty, there is no `Xvfb`/`xvfb-run`, system Firefox is a broken snap and there
