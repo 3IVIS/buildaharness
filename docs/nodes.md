@@ -43,18 +43,18 @@ For the full field-level reference (edges, validators, `fn_ref` rules), see
 <td nowrap><abbr title="Observations, beliefs, assumptions, contradictions — append-only Belief events (derived_from[], contradicts[]), never mutated in place; generation_id is a monotonic version stamp, not a mutation counter">🧠 <code>world_model</code></abbr></td>
 <td nowrap><abbr title="Four generation sources; diversity enforcement (0.7 threshold); K-retention elimination policy">💡 <code>hypothesis_set</code></abbr></td>
 <td nowrap><abbr title="Collects typed Evidence(obs, reliability, source, type, freshness) — observations never auto-promoted to conclusions">🗄️ <code>gather_evidence</code></abbr></td>
-<td nowrap><abbr title="Caps max conclusion reliability per tool given scope limits; updates verification_health.feasibility">⚙️ <code>apply_tool_rel</code></abbr></td>
+<td nowrap><abbr title="Caps max conclusion reliability per tool given scope limits; updates verification_health.feasibility">⚙️ <code>apply_tool_reliability</code></abbr></td>
 </tr>
 <tr>
-<td nowrap><abbr title="Reliability-weighted belief integration; belief_dep_graph propagation; completeness_flags updated">🔄 <code>update_wm</code></abbr></td>
+<td nowrap><abbr title="Reliability-weighted belief integration; belief_dep_graph propagation; completeness_flags updated">🔄 <code>update_world_model</code></abbr></td>
 <td nowrap><abbr title="Five-tier resolver → permission (ALLOW/DENY) · execution_mode (NORMAL/CAUTIOUS/RECOVERY) · escalation · risk_estimate · confidence_estimate; deadlock detection; staleness gate assertions">🛡️ <code>control_state</code></abbr></td>
-<td nowrap><abbr title="Six-state task decomposition; cycle detection; abstraction_fit recomputed on change">🕸️ <code>task_graph</code></abbr></td>
-<td nowrap><abbr title="9 verification layers classified mechanical/environmental/model (LAYER_TIER); real subprocess-backed checks where infrastructure exists, honestly SKIPPED (never a fake PASS) elsewhere; adversarial pass on HIGH risk">✅ <code>verify_gate</code></abbr></td>
+<td nowrap><abbr title="Six-state task decomposition; cycle detection; abstraction_fit recomputed on change">🕸️ <code>task_graph_node</code></abbr></td>
+<td nowrap><abbr title="9 verification layers classified mechanical/environmental/model (LAYER_TIER); real subprocess-backed checks where infrastructure exists, honestly SKIPPED (never a fake PASS) elsewhere; adversarial pass on HIGH risk">✅ <code>verification_gate</code></abbr></td>
 </tr>
 <tr>
-<td nowrap><abbr title="rollback() → record_failure() → strategy switch: DIRECT_EDIT, TRACE_EXEC, BROADER_SEARCH, REIMPLEMENT, MINIMAL_FIX, ESCALATE">♻️ <code>recovery</code></abbr></td>
-<td nowrap><abbr title="Evidence store with tool_reliability_envelopes and tool_availability_manifest">📋 <code>evidence_store</code></abbr></td>
-<td nowrap><abbr title="Optional cross-run structural reuse of decompositions, tool workflows, verification plans, recovery sequences">📊 <code>exp_store</code></abbr></td>
+<td nowrap><abbr title="rollback() → record_failure() → strategy switch: DIRECT_EDIT, TRACE_EXEC, BROADER_SEARCH, REIMPLEMENT, MINIMAL_FIX, ESCALATE (the default order; the schema also accepts REGROUND_TO_AGREEMENT, REFRAME_QUESTION, HOLD_SPACE, COMPRESS_STAGE in strategy_order_override)">♻️ <code>recovery_node</code></abbr></td>
+<td nowrap><abbr title="Evidence store with tool_reliability_envelopes and tool_availability_manifest">📋 <code>evidence_store_node</code></abbr></td>
+<td nowrap><abbr title="Optional cross-run structural reuse of decompositions, tool workflows, verification plans, recovery sequences">📊 <code>experience_store_node</code></abbr></td>
 <td nowrap><abbr title="Three-lens review: implementer · reviewer · adversarial — adversarial prior seeded on causal proximity">👁️ <code>reviewer_pass</code></abbr></td>
 </tr>
 <tr>
@@ -78,8 +78,9 @@ Flow · Effect) rather than one flat list.
 ## Keeping the schema in sync
 
 `spec/schema.ts` is the canonical FlowSpec Zod schema. Four copies must stay in
-sync — the canvas app copy (`src/spec/schema.ts`), the `@buildaharness/canvas`
-package copy, and the `@buildaharness/runtime` package copy — each dropping the
+sync — the canonical file plus the canvas app copy (`src/spec/schema.ts`), the
+`@buildaharness/canvas` package copy and the `@buildaharness/runtime` package
+copy. The three non-canonical copies drop the
 `.refine()` calls on discriminated-union members (`z.discriminatedUnion()`
 requires bare `ZodObject` members). Cross-field validation lives in
 `src/spec/validation.ts` instead. After editing the schema:
