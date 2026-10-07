@@ -95,7 +95,7 @@ The `state` dict is shallow-merged over the stored state: top-level keys provide
 }
 ```
 
-Posts the payload to the run's `pending_clarification`; the next harness iteration consumes it (constraint-change propagation). Returns `{ "job_id": "...", "clarification_posted": true }`. 404 if the run has no harness state, 409 if it is not currently escalated, 422 if a batched question set is pending and `answers` is missing or fails validation (every question needs exactly one answer; a second answer for the same question is rejected).
+Posts the payload to the run's `pending_clarification`; the next harness iteration consumes it (constraint-change propagation). Returns `{ "job_id": "...", "clarification_posted": true }`. 404 if the run has no harness state, 409 if it is not currently escalated, 422 if a batched question set is pending and `answers` is missing or fails validation (every question needs an answer, answers must reference known question ids, and a multi-label answer to a single-select question is rejected).
 
 The Mastra runner sidecar also calls three unauthenticated bridge routes, reachable only inside the Docker network and not part of the public API: `POST /run/fn_ref`, `POST /run/memory_write` and `POST /run/memory_read`.
 
