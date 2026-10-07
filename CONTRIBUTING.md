@@ -1,9 +1,8 @@
 # Contributing to buildaharness
 
-
 ## Current state
 
-v0.8.0 — fully implemented. All four adapter runtimes are executable. Full 11-layer harness architecture is in place. No open RFCs.
+v0.8.0 — fully implemented. All four adapter runtimes are executable. Full 11-layer harness architecture is in place.
 
 **What's shipped:**
 - FlowSpec schema v1.0.0, 27 canvas node types (14 base + 13 harness), 5 reference flows, ADR-001 closed
@@ -12,7 +11,7 @@ v0.8.0 — fully implemented. All four adapter runtimes are executable. Full 11-
 - Team RBAC, JWT revocation, offline/online eval, prompt versioning, A2A, deploy, marketplace
 - SSO/OIDC + SCIM, Helm chart, Yjs real-time collab, `@buildaharness/canvas` package
 - Full harness architecture: 11-layer reasoning and control system, harness tests (P0–P11, P-PC, integration, E2E, invariants)
-- **Aielia** — a personal assistant running the full harness client-side every turn (`@buildaharness/aielia`), with a CLI, a browser build (`@buildaharness/chat-ui`), and a native desktop app (`@buildaharness/desktop`)
+- **Aielia** — an everyday assistant running the full harness client-side every turn (`@buildaharness/aielia`), with a CLI, a browser build (`@buildaharness/chat-ui`), and a native desktop app (`@buildaharness/desktop`)
 - npm packages: `@buildaharness/harness`, `@buildaharness/runtime`, `@buildaharness/react`, `@buildaharness/canvas`, `@buildaharness/aielia`, `@buildaharness/proxy`
 
 **Not in this repo:** a few pieces referenced in internal docs are maintained in a private overlay
@@ -55,19 +54,7 @@ Significant design decisions are recorded as ADRs and referenced throughout the 
 
 Scoped, real gaps with a clear finish line.
 
-### 1 · chat-ui write-approval UI `[chat-ui]`
-
-`write_file` / `run_shell_command` stage a `.pending-actions/<id>.json` record and
-return `needs_approval` with `pendingActionKind`. The CLI and desktop resolve it;
-`packages/chat-ui`'s `ApprovalCard` shows the *request* but not *what will be
-written* — so file tools are CLI/desktop-only for now (package README, "File
-access via tools"). Add a diff/content preview to `ApprovalCard` for
-`pendingActionKind: 'write'` (and the command + resolved `cwd` for `'shell'`),
-sourced from the staged record, so a browser user can approve a staged write with
-the same information the CLI prints. `App.tsx` already threads `pendingActionId`
-through `handleApprove` / `handleDeny`.
-
-### 2 · Make cross-run learning legible and deletable `[assistant]`
+### 1 · Make cross-run learning legible and deletable `[assistant]`
 
 The assistant already learns across runs via `ExperienceStore`
 (`packages/aielia/src/`), but there's no user-facing surface for it —
@@ -76,7 +63,7 @@ you can't see what it has generalised or forget a specific lesson. Add a
 learned" section to the package README, sourced from the existing store API. Done
 when a user can enumerate stored experience entries and delete one, with tests.
 
-### 3 · Inverted index for transcript search `[assistant]`
+### 2 · Inverted index for transcript search `[assistant]`
 
 Transcript search is a linear scan over every stored message
 (`packages/aielia/src/`). Fine for now, O(n) per query as history
@@ -139,11 +126,11 @@ An adapter is a Python module with one public function:
 def compile_<runtime>(spec: dict) -> tuple[str, list[str]]:
     """
     Returns (code: str, warnings: list[str]).
-    Warnings are shown in the canvas compile panel.
+    Warnings are returned in `CompileResponse.warnings` by `POST /compile`.
     """
 ```
 
-Register it in `adapter/main.py` (`SUPPORTED_RUNTIMES` + compile dispatch) and in `adapter/run_api.py` if execution is also supported.
+Register it in `adapter/main.py` (`SUPPORTED_RUNTIMES` + compile dispatch) and in `adapter/run_api.py` if execution is also supported, and declare what it really supports in `adapter/capability_manifest.py` (`/compile` returns 422 for a missing capability and a warning for a partial one).
 
 If execution requires a sidecar (like Mastra's Node.js runner), add it to `docker-compose.yml` and document the protocol.
 
@@ -158,7 +145,7 @@ If execution requires a sidecar (like Mastra's Node.js runner), add it to `docke
 
 ### NODE_SUPPORT_MATRIX — mark compat for all four runtimes
 
-Every node type in `spec/schema.ts` carries runtime compatibility flags: `[LG]` LangGraph, `[CR]` CrewAI, `[MA]` Mastra, `[MS]` MS Agent Framework. Mark full / partial / missing for each. The canvas shows a warning badge when the selected runtime has partial support.
+Every node type has an entry in `NODE_SUPPORT_MATRIX` (`src/spec/schema.ts`) with a level for `langgraph`, `crewai`, `mastra` and `microsoft_agent_framework`. Mark full / partial / missing for each. The canvas shows a warning badge when the selected runtime has partial support.
 
 ### Testing your adapter
 
@@ -228,7 +215,7 @@ The canvas must never break spec round-trip. `npm test` validates all 5 referenc
 
 The canvas package in `packages/canvas/` uses a **per-instance Zustand store** via `createStore()` — not a module-level singleton. This is intentional so the component is safe to mount multiple times on a page. Any contribution that introduces module-level mutable state will be rejected.
 
-Props changes require updating `packages/canvas/src/BuildAHarnessCanvas.tsx`, `packages/canvas/README.md`, and this file's props table if it changes the public API.
+Props changes require updating `packages/canvas/src/BuildAHarnessCanvas.tsx` and `packages/canvas/README.md`.
 
 ### Collab contributions
 
@@ -256,13 +243,13 @@ npm run cli --workspace=packages/aielia
 # Browser build (chat-ui / the /try page)
 npm run dev --workspace=packages/chat-ui           # → http://localhost:3010, paste a key in Settings
 
-npm test --workspace=packages/aielia   # ~900 tests, must stay green
+npm test --workspace=packages/aielia   # must stay green
 npm test --workspace=packages/chat-ui
 ```
 
 The full 11-layer harness runs client-side every turn — the harness loop itself
 makes no LLM calls (it's synchronous state-machine bookkeeping), so the per-turn
-cost is one real model call, or zero for a risk-gated one. `packages/aielia/README.md`
+cost is the model calls the turn itself makes (a risk-gated turn makes no reply call). `packages/aielia/README.md`
 is the design reference; keep it in sync with behaviour changes. Any change to
 risk classification, the tool-policy gate, or the approval flow needs a test that
 pins the new behaviour.
@@ -340,11 +327,11 @@ Tests use an in-memory SQLite database via the `client` fixture in `conftest.py`
 
 ## Database migrations
 
-The current migration chain is `0001 → 0011`. Add new migrations as `000N_descriptive_name.py` in `adapter/migrations/versions/`:
+The current migration chain is `0001 → 0013`. Add new migrations as `000N_descriptive_name.py` in `adapter/migrations/versions/`:
 
 ```python
-revision: str = "0012"
-down_revision: str | None = "0011"
+revision: str = "0014"
+down_revision: str | None = "0013"
 
 def upgrade() -> None:
     op.create_table("my_table", ...)

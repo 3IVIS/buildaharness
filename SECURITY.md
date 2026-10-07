@@ -35,13 +35,13 @@ private channel.
 ### Scope
 
 In scope: the `@buildaharness/*` packages, the adapter API, the harness, and the
-personal assistant. A finding is most useful when it defeats one of the trust
+Aielia assistant (CLI, browser and desktop). A finding is most useful when it defeats one of the trust
 boundaries documented in [`docs/threat-model.md`](docs/threat-model.md) — for
 example, secret exfiltration through an approved shell command, escaping the
 file-tools workspace sandbox, or bypassing the fail-safe risk gate.
 
 Out of scope: the explicitly accepted non-goals listed in the threat model (no OS
-sandbox, plaintext secrets in `config.json`, prompt injection that only
+sandbox, plaintext secrets in the CLI's `config.json` or browser `localStorage`, prompt injection that only
 influences the model's *text* without crossing a tool/effect boundary). Reporting
 one of those as a vulnerability will get a pointer back to the threat model, not a
 fix.

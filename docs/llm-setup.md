@@ -81,7 +81,9 @@ OPENAI_BASE_URL=http://host.docker.internal:11434/v1
 OPENAI_API_KEY=ollama
 ```
 
-> **`host.docker.internal`** is the Docker-internal hostname that resolves to your Mac or Linux host. On Linux, add `--add-host=host.docker.internal:host-gateway` to the adapter and mastra-runner services in `docker-compose.yml` if this hostname is unavailable.
+> **`host.docker.internal`** is the Docker-internal hostname that resolves to your Mac or Linux host. `docker-compose.yml` already maps it (`extra_hosts: host.docker.internal:host-gateway`) on the canvas, adapter, mastra-runner and litellm services, so it also works on Linux.
+
+> The two lines above make the adapter and Mastra runner call Ollama directly. They are optional if you only want the `mistral`, `qwen3` and `qwen2.5-coder` model names: LiteLLM already routes those to Ollama at `http://host.docker.internal:11434` (see `adapter/litellm_config.yaml`). Embeddings (`EMBED_BASE_URL`) always keep going through LiteLLM.
 
 Then restart the affected services:
 
@@ -108,7 +110,7 @@ TEST_EMAIL=ci@example.com TEST_PASSWORD=CiPass99! ./scripts/setup-ollama.sh  # n
 | `Ollama is not running` | Run `ollama serve` (or open the macOS app) |
 | Model not found | Run `ollama pull mistral:latest` |
 | Adapter returns wrong topic / empty result | Check `docker compose logs adapter --tail 30` — `OPENAI_BASE_URL` may not be set |
-| `host.docker.internal` not resolving (Linux) | Set `OPENAI_BASE_URL=http://172.17.0.1:11434/v1` |
+| `host.docker.internal` not resolving (Linux) | Set `OPENAI_BASE_URL=http://172.17.0.1:11434/v1` (and make sure Ollama listens on an address reachable from the container, not only `127.0.0.1`) |
 | Timeout on Mastra | Mastra compiles TypeScript on first run — allow 30–60 s |
 
 ### Without Docker (local dev)
@@ -133,7 +135,10 @@ cd adapter && uvicorn main:app --host 0.0.0.0 --port 8000 --reload &
 | `claude-opus` | Anthropic | `ANTHROPIC_API_KEY` |
 | `mistral` | Ollama (local) | none |
 | `qwen3` | Ollama (local) | none |
-| `qwen2.5-coder` | Ollama (local) | none |
+| `qwen2.5-coder` | Ollama (local, `qwen2.5-coder:7b`) | none |
+| `nomic-embed-text` | Ollama (local), embeddings only | none |
+
+The `claude-cli*` entries in `litellm_config.yaml` point at a `claude-cli-proxy` sidecar that is not defined in `docker-compose.yml`; they are developer-testing placeholders, so use `claude-sonnet`/`claude-opus`/`claude-haiku` with an API key instead. `claude-sonnet`, `claude-opus` and `claude-haiku` currently map to `claude-sonnet-4-6`, `claude-opus-4-7` and `claude-haiku-4-5-20251001`.
 
 ---
 
@@ -146,7 +151,7 @@ OPENAI_BASE_URL = http://litellm:4000   (default — the LiteLLM proxy)
 OPENAI_API_KEY  = <LITELLM_MASTER_KEY>  (authenticates to LiteLLM)
 ```
 
-LiteLLM reads `OPENAI_API_KEY` and `ANTHROPIC_API_KEY` from the host `.env` to call the actual APIs. Every LLM call is traced in Langfuse automatically.
+LiteLLM reads `OPENAI_API_KEY` and `ANTHROPIC_API_KEY` from the host `.env` (via `docker-compose.yml`) to call the actual APIs. Every LLM call is traced in Langfuse automatically.
 
 When you set `OPENAI_BASE_URL` to an Ollama URL, that overrides the default and bypasses LiteLLM entirely.
 

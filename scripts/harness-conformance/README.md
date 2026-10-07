@@ -8,7 +8,8 @@ convention and (via `spec/harness-core.json`, Phase C1) a generated set of
 decision constants — but no shared algorithm and, until now, no shared
 test suite.
 
-Two nodes are covered so far:
+Eight comparators exist today (all wired into `.github/workflows/ci.yml`); the
+table below lists them:
 
 - **`resolveControlState()` / `resolve_control_state()`** — the five-tier
   control-state resolver. Fixtures in `fixtures/`, runner pair
@@ -21,9 +22,21 @@ Two nodes are covered so far:
   contract (layer *status*, not `detail` prose) that has surfaced (and now resolved) two
   tracked divergences.
 
+| Comparator | Fixtures | What it pins |
+|---|---|---|
+| `compare.mjs` | 53 | `resolveControlState()` (byte-identical `ControlState`) |
+| `compare-verify.mjs` | 25 | `verify()` layer status projection |
+| `compare-ask-question.mjs` | 49 | the generic ask-question mechanism |
+| `compare-supervisor.mjs` | 20 | Trajectory Supervisor directive/digest serialisation and coercion |
+| `compare-checkpoint.mjs` | pause/resume checks | cross-runtime checkpoint resume (both directions) |
+| `compare-runtime.mjs` | 69 scenarios | `HarnessRuntime` end to end |
+| `compare-nodes.mjs` | 107 | per-node post-state (diagnostics, risk, VOI, hypotheses, contradictions, ...) |
+| `compare-memory.mjs` | 40 (2 tracked) | the agent-memory port (aielia `MemoryService` vs `agent_memory`) |
+
 Extending this pattern (new fixtures + a `run-ts*`/`run_py*` pair) to
-another of the ~30 harness node files is the natural way to grow coverage
-incrementally.
+another harness node file is the natural way to grow coverage
+incrementally. All comparators need `node_modules` (`npm ci`), `npx tsx`
+and Python 3.12 with the adapter dependencies.
 
 ## The named equivalence contract
 
@@ -297,7 +310,7 @@ reason (a human owns resolving it).
   `critical_failure_tiers == ['environmental','mechanical']` (N same-tier
   FAILs count once — INV-12).
 
-Result: **25 PASS, 0 tracked discrepancies, 0 untracked** (expected; run `compare-verify.mjs` to confirm).
+Result: **25 PASS, 0 tracked discrepancies, 0 untracked** (re-run 2026-10-07).
 
 ### What this pass found (resolved)
 
@@ -417,6 +430,17 @@ node scripts/harness-conformance/compare-ask-question.mjs   # cross-language dif
 ```
 
 
+## TRAJECTORY-SUPERVISOR CONTRACT (`compare-supervisor.mjs`)
+
+`fixtures-supervisor/*.json` (20) feed `directive_in` / `digest_in` through `SupervisorDirective.from_dict()`/`fromJSON()` and
+`TrajectoryDigest.from_dict()`/`fromJSON()` on both runtimes and diff the normalised `to_dict()`/`toJSON()` output (keys deep-sorted, so
+field order is not part of the contract). This pins the enum-safety, payload-shape, length-cap and clamp coercion rules as byte-identical.
+It deliberately does not cover the model-driven decider (`decide_supervisor_directive` is Python-only; TS takes an injected `decider`) or
+the investigation cap counting (see `HARNESS_PY_VS_TS_MISMATCHES.md`). Tracked divergences go in `known-discrepancies-supervisor.json`.
+
+Usage: `node scripts/harness-conformance/compare-supervisor.mjs`.
+
+
 ## Checkpoint cross-resume (`compare-checkpoint.mjs`)
 
 A run paused by one runtime must resume in the other and finish exactly as an uninterrupted run does. The script pauses
@@ -436,8 +460,8 @@ task statuses, final result, strategy state, failure classes, beliefs/observatio
 
     PYTHON=<python with the adapter deps> node scripts/harness-conformance/compare-runtime.mjs [name-substring]
 
-A reviewed, intentional difference goes in `known-discrepancies-runtime.json` (`{"<fixture>": "<reason>"}`); it is reported as
-tracked, and a tracked fixture that starts passing fails the run so the entry gets removed.
+69 scenarios today. A reviewed, intentional difference goes in `known-discrepancies-runtime.json` (`{"<fixture>": "<reason>"}`; the file is optional and
+does not exist while there are none); it is reported as tracked, and a tracked fixture that starts passing fails the run so the entry gets removed.
 
 The `seeded-fail` tool mirrors `packages/harness/src/harness-runtime-stall.test.ts`: a stall (and so the supervisor consult)
 is otherwise unreachable, because the control state goes to DENY after two failures and blocks a third attempt.

@@ -6,17 +6,19 @@ There are two ways in. Pick the one that matches what you want.
 
 ## The 5-minute path — the assistant (Aielia)
 
-No clone, no Docker. You need Node.js 18+ and one of: a `claude` CLI already
-logged in, or an Anthropic / OpenAI / OpenRouter API key.
+No clone, no Docker. You need Node.js 18+ and one of: an Anthropic / OpenAI /
+OpenRouter API key, or a `claude` CLI that is already logged in.
 
 ```bash
 npx @buildaharness/aielia
 ```
 
-On the first run it asks how to reach a model — pick the `claude` CLI if it's
-found (no key needed), or paste a key. Then talk to it. Try a harmless question,
-then something consequential like *"send an email to my boss saying I quit"* to
-watch the approval gate fire before any model call is made.
+On the first run it asks which provider you want (OpenRouter, Anthropic or
+OpenAI) and for an API key, which it checks before saving. If you'd rather reuse
+a logged-in `claude` CLI (no key needed), start it with
+`ASSISTANT_LLM_BACKEND=claude-cli npx @buildaharness/aielia`. Then talk to it.
+Try a harmless question, then something consequential like *"send an email to my
+boss saying I quit"* to watch the approval gate stop it before anything is sent.
 
 Prefer a browser? Open **[myaielia.com/try](https://myaielia.com/try)**,
 paste a key in Settings (it stays in your browser), and go.
@@ -55,13 +57,10 @@ chmod +x scripts/setup-env.sh
 ```
 
 `setup-env.sh` does the following interactively:
-1. Generates all required secrets in `.env`
-2. Asks for your Langfuse admin email and password
-3. Optionally asks for OpenAI and Anthropic API keys
-4. Writes `.env.local` for the Vite canvas dev server
-5. Offers to create the Python venv and install adapter dependencies
-6. Offers to generate the Mastra runner lockfile
-7. Offers to start the Docker stack
+1. **Secrets** — generates all required secrets in `.env`, asks for your Langfuse admin email and password, optionally asks for OpenAI and Anthropic API keys, and writes `.env.local` for the Vite canvas dev server
+2. Offers to create the Python venv and install adapter dependencies
+3. Offers to generate the Mastra runner lockfile (`mastra-runner/package-lock.json`)
+4. Offers to start the Docker stack (default: no)
 
 Answer **yes** to steps 2 and 3. Answer **yes or no** to step 4 depending on whether you want to start the stack immediately.
 
@@ -129,17 +128,18 @@ See [llm-setup.md](./llm-setup.md) for the full model name reference and LiteLLM
 bash scripts/verify_services.sh
 ```
 
-This checks that all containers are running, all HTTP endpoints respond, Postgres and Redis are ready, and Langfuse is reachable.
+This checks that the containers are running and healthy, the HTTP endpoints respond, Postgres and Redis are ready, Langfuse is reachable, and the services can reach each other from inside the adapter container.
 
-Expected output (all green):
+Expected output is a list of `✓` lines (one per check, grouped by section) ending with a pass/fail summary, for example:
 
 ```
-✓  canvas        — http://localhost:3000
-✓  adapter       — http://localhost:8000/health
-✓  langfuse-web  — http://localhost:3001
-✓  postgres      — pg_isready
-✓  redis         — PONG
-✓  qdrant        — http://localhost:6333
+  ✓  adapter — running
+  ✓  adapter — healthy
+  ✓  adapter /health — HTTP 200
+  ✓  canvas / — HTTP 200
+  ✓  langfuse /api/public/health — HTTP 200
+  ✓  redis — PING/PONG
+  ✓  postgres — accepting connections
 ```
 
 If you see failures, check [troubleshooting.md](./troubleshooting.md).
@@ -153,7 +153,7 @@ Go to **http://localhost:3000** in your browser.
 1. Register an account (this is your local account — not connected to any external service)
 2. You will be taken to the flow canvas
 
-The canvas comes pre-loaded with several example flows accessible from the sidebar library.
+The left sidebar has an **Examples** section with the reference flows; click one to load it.
 
 ---
 
@@ -220,9 +220,8 @@ See [tests-and-scripts.md](./tests-and-scripts.md) for the full test reference.
 
 ### Load an example flow
 
-1. Click **Library** in the left sidebar
-2. Select any example flow (e.g. `rag-agent-flow`)
-3. Click **Load** — the flow graph appears in the canvas
+1. Open the **Examples** section in the left sidebar
+2. Click any example flow (e.g. the RAG agent flow) — the flow graph appears in the canvas
 
 ### Build a flow from scratch
 
@@ -232,9 +231,9 @@ A minimal flow needs three nodes connected by two edges:
 [input] → [llm_call] → [output]
 ```
 
-1. Right-click the canvas → **Add node** → `input`
-2. Right-click → **Add node** → `llm_call` — set a `prompt_template` and `output_key` in the config panel
-3. Right-click → **Add node** → `output`
+1. Drag an `input` node from the sidebar palette onto the canvas (or press Ctrl/Cmd+K to search for it)
+2. Add an `llm_call` node the same way — set a `prompt_template` and `output_key` in the config panel
+3. Add an `output` node
 4. Drag from the output handle of `input` to the input handle of `llm_call`, then `llm_call` to `output`
 5. Click **Run** in the toolbar — enter input values and submit
 
@@ -242,7 +241,7 @@ The canvas streams live node status updates (pending → running → completed) 
 
 ### Compile to code
 
-Click **Compile** in the toolbar to see the generated code for any adapter. Switch adapters with the dropdown. This is useful for understanding what the adapter produces and for debugging unexpected behaviour.
+The canvas has no compile button; call `POST /compile?runtime=<runtime>` on the adapter API (see [api.md](./api.md)) with the flow's spec to get the generated code and any warnings for `langgraph`, `crewai`, `mastra` or `microsoft_agent_framework`. This is useful for understanding what the adapter produces and for debugging unexpected behaviour.
 
 ---
 

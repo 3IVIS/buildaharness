@@ -4,6 +4,7 @@
 **Date:** 2026-06-07  
 **Python:** 3.12  
 **Runs per benchmark:** 50  
+**Note:** a point-in-time measurement taken at phase P11.5 on one machine. The harness has changed substantially since; re-run the command below for current figures (they will differ by machine, but remain far below the targets).  
 
 ## Methodology
 
@@ -49,7 +50,7 @@ PYTHONPATH=adapter python3.12 -m pytest adapter/tests/benchmark_harness.py -v --
 All targets are met with large margins:
 
 - **Loop overhead**: 0.11 ms vs 500 ms target — **~4500× headroom**. The harness adds negligible cost per iteration relative to any real LLM inference latency (typically 500–5000 ms).
-- **generate_hypotheses**: 0.23 ms vs 200 ms target — **~870× headroom**. Scales with the number of failure library entries; the default library has ~15 patterns.
+- **generate_hypotheses**: 0.23 ms vs 200 ms target — **~870× headroom**. Scales with the number of failure library entries.
 - **propagate_beliefs**: < 0.01 ms vs 100 ms target. The propagation queue is empty in the benchmark fixture, so this reflects the function call overhead only.
 
 ## Accepted Trade-offs

@@ -2,8 +2,6 @@
 
 A read-only dependency graph of the active plan, on both surfaces. Nothing in it changes a plan: plans change only through the approval gate and `PlanService`.
 
-Design and test record: `plans/plan_visualization_plan.html`.
-
 ## Enabling
 
 Off by default (`planGraphMode`, presentation only, not a layer setting). With it off there is no button, no pane, no asset loaded, and `/plan graph` behaves as plain `/plan`.

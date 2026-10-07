@@ -1,12 +1,24 @@
 # Python harness vs TS harness: mismatches (make Python follow TS)
 
-**Branch: `semantic-constraint-check`** (latest remote branch, 2026-09-30 10:12 UTC). The first pass was written on `main`; every item was re-checked against this branch's diff (`main...HEAD`, incl. its Python changes) and is marked below. Items marked **RESOLVED on this branch** no longer need action.
-
 Scope: `adapter/harness/*.py` vs `packages/harness/src/**`. TS is the reference.
-Method: static, side-by-side read of each paired module, then verified against the real TS: `npm ci --workspace=packages/harness` (Node 22 is installed; only `node_modules` was missing), TS harness tests 751/751, and `scripts/harness-conformance/compare{,-verify,-ask-question,-supervisor,-checkpoint}.mjs` all green (53 + 25 + 49 + 20 fixtures, 0 tracked, 0 untracked, plus the cross-runtime checkpoint resume).
-Only `resolve_control_state`, `verify` (status only), `ask_question` and `supervisor` have cross-language fixtures today. Everything below outside those is unguarded.
 
-## Refresh 2026-10-01 (against `main` @ 487b327f; `t1-opt-in-layers` / `persist-stated-constraints` / `opt-in-layer-policy` touch only `packages/aielia`, so nothing to add from them)
+**How to read this file.** The "Fix status" table and the refresh sections are the current state. Sections 0-19 further down are the original findings of the first static pass, written before Python was brought in line with TS; where the table marks an item fixed, the section text describing the mismatch is historical and no longer true (for example the Python task-status set, `detect_contradictions` applying the resolution policy, and the belief-graph shapes now match TS). Section 20 and the "Refresh" sections are kept up to date. Items still open are listed under "Refresh 2026-10-07" below and marked ⬜/🟡 in the table.
+
+Method: static, side-by-side read of each paired module, then verified by running the cross-language comparators (`node scripts/harness-conformance/compare*.mjs`, needs `node_modules`; see `scripts/harness-conformance/README.md`).
+Fixture-backed comparators today: `compare.mjs` (`resolve_control_state`, 53), `compare-verify.mjs` (`verify`, layer status only, 25), `compare-ask-question.mjs` (49), `compare-supervisor.mjs` (20), `compare-checkpoint.mjs` (cross-runtime checkpoint resume, both directions), `compare-runtime.mjs` (69 `HarnessRuntime` scenarios), `compare-nodes.mjs` (107 node-level fixtures) and `compare-memory.mjs` (agent-memory twin, 40 fixtures, 2 tracked). Everything outside those is unguarded.
+
+## Refresh 2026-10-07 (against `main` @ edf6a8c9)
+
+All eight comparators re-run and green: 53 + 25 + 49 + 20 + 69 + 107 fixtures with 0 tracked and 0 untracked mismatches, checkpoint resume passes in both directions, `compare-memory.mjs` 38 pass + 2 tracked + 0 untracked (see `known-discrepancies-memory.json`). CI (`.github/workflows/ci.yml`) runs all of them.
+
+**New TS-only fixes from the 2026-10 audit that Python does not have yet (no conformance fixture covers them, so the comparators stay green):**
+* `reviewerPass` reopens a COMPLETE task only when a finding names its whole id (`mentionsId` in `reviewer-pass.ts`: `t1` is not reopened by a mention of `t10`; an empty id never matches). Python `reviewer.py`'s `reviewer_pass` still tests `task.id in finding`.
+* Supervisor investigation cap: TS `mergeInvestigationFindings` stamps every merge with a unique `run=<tag>` in the observation prefix, so a repeated question still counts as a separate investigation against `INVESTIGATION_CAP_K`. Python `merge_investigation_findings`/`count_investigations` still count distinct `q=...` prefixes, so a supervisor that repeats the same question is counted once.
+* `validateAskResponse` rejects a second answer to the same question. Python `validate_ask_response` does not (it only collects answered ids). The other half of that TS change (`validateAskAnswer` requiring a `selectedLabels` array for `selected`/`selected_with_edit`) already holds in Python: `AskAnswer.__post_init__` rejects missing/empty labels.
+
+**Ported since the first pass:** `detect_contradictions` no longer re-records a conflict already in the world model (mirrors the TS fix; `dc-lex-existing-no-dup` and `dc-existing-contradiction-no-dup` in `fixtures-nodes/` guards it).
+
+## Refresh 2026-10-01 (historical; against `main` @ 487b327f; `t1-opt-in-layers` / `persist-stated-constraints` / `opt-in-layer-policy` touch only `packages/aielia`, so nothing to add from them)
 
 Re-run on Python 3.12 / Node 22: all six comparators green (53 + 25 + 49 + 20 fixtures, checkpoint resume both directions, runtime **66**/66). Harness pytest files: 992 pass; the 2 failures + 7 errors are environment (`fastapi`/`client` fixture missing) or the known `test_inv_plan_export_never_raises`, identical with and without this change.
 
@@ -24,17 +36,16 @@ Numeric constants differ nowhere that matters (every flagged one was a comment, 
 **Node-level conformance added (`compare-nodes.mjs`, 107 fixtures, CI-wired):** `update_diagnostics`, `estimate_risk`, `estimate_voi`, hypothesis generation, contradiction detection, belief propagation, context compression, `merge_world_models`, `reconcile_parallel_branches`, `warm_start`, `learn_from_journal`, including lexical-enabled variants. Found and fixed: `Diagnostics.coverage_health` defaulted to 1.0/1.0 in Python, 0.5/0.5 in TS. Also found and **fixed in TS** (Python was right): `applyJournalRetentionPolicy` used `slice(-max_passing_verbatim)`, and JS `slice(-0)` is the whole array, so `max_passing_verbatim = 0` kept every passing entry verbatim; it now splits at an explicit index (`context-compression-journal.test.ts`; default policy is 20, so no production behaviour changed). Documented projection-level equivalences: unset optional belief fields == their empty default; contradiction ids compared by position.
 Still without a node-level fixture: `select_task`, `update_task_graph`, `rollback_and_replan`, `execute`, `gather_evidence`/`apply_tool_reliability`, `estimate`-level review gate, reviewer pass (all but the last are only covered through the 66 runtime scenarios).
 
-### Changes on this branch that affect this list
+### Changes made since the first pass that affect this list
 * **RESOLVED:** TS `reviewProposedChange` now runs all 5 dimensions and collects every failure (matches Python). Python's docstring/§9 note "TS short-circuits" is obsolete. `applyReviewOutcome` accepts a list in both.
 * **RESOLVED (mechanism):** `HARNESS_LEXICAL` switches (`harness_lexical_active` / `harnessLexicalActive`) now exist on both sides for: `negation-pairs` (pairwise **and** set-level), `granularity-markers`, `criterion-scope`, `system-error-symptoms`, `failure-exact-match`, `review-negation`, `review-phrases`, `constraint-negation`, `required-sections`, `criterion-substring`, `criterion-proximity` (TS) / `assumption-overlap`, `evidence-negation`, `failure-class-seed` (Py), `change-scope-keywords` (Py, returns 0.0 to mimic TS). **Now aligned (this work):** the Python-only switches (`assumption-overlap`, `evidence-negation`, `failure-class-seed`, `change-scope-keywords`, `required-sections`, `hypothesis-*`) were removed together with the Python-only checks they guarded, and `criterion-proximity` was added, so both runtimes expose the same 12 checks.
 * **NEW TS-only (add to Python):** `semanticConstraintJudge` hook + `outputValidation(..., {skipCallerConstraints})`; budget-answer handling (`takeBudgetAnswers`, `DEFAULT_BUDGET_EXTENSION=10` exported from `ask-question.ts`, "Continue" extends `maxSteps`, "Stop" cancels); `semantic_compaction` opt-in layer in `layer-policy.ts` (`AUDIT_SEMANTIC_COMPACTION`); false-budget-halt fix when all tasks COMPLETE; resume polls the budget answer before halting. Ported: `DEFAULT_BUDGET_EXTENSION` and `external_updates.take_budget_answers`. Not ported: the semantic constraint judge, the `semantic_compaction` layer and the all-tasks-COMPLETE budget shortcut (they live in the async runtime).
 
 ## Fix status (Python brought in line with TS)
 
-Legend: ✅ fixed on this branch · 🟡 done with a documented, deliberate difference · ⬜ not done (needs a decision or is out of scope)
+Legend: ✅ fixed · 🟡 done with a documented, deliberate difference · ⬜ not done (needs a decision or is out of scope)
 
-Verified with `adapter/tests` (harness suites: 950+ passing; the one pre-existing failure `test_inv_plan_export_never_raises`
-is unrelated and fails identically on the base branch). The old Python-only behaviour that TS does not have was removed and
+Verified with `adapter/tests` and the conformance comparators. The old Python-only behaviour that TS does not have was removed and
 its tests rewritten to the TS behaviour; new coverage is in `adapter/tests/test_harness_ts_parity.py`.
 
 | § | Item | Status |
@@ -54,7 +65,7 @@ its tests rewritten to the TS behaviour; new coverage is in `adapter/tests/test_
 | 20 | Phase 5a (wire shapes): every state structure's `to_dict()` now validates against a mirror of the TS zod schemas (`adapter/tests/ts_state_schemas.py`, 39 checks incl. populated state and round trips). Fixed: `Belief.contradicts` (Python-only, now rebuilt by `WorldModel.from_dict`), `BeliefDepGraph.dep_graph_quality`, `Task.completed_evidence` no longer serialised; `Task.block_reason` omitted when unset; `CallerState.last_update` and `Diagnostics.dep_class_gap_annotation` never null | ✅ |
 | 20 | Phase 5b: `harness/checkpoint.py` (TS `harness-checkpoint.ts`: schema v2, v1 migration, `CheckpointSchemaError`, store save/load/delete) and `HarnessRuntime.start()/resume()`; `drive_main_loop` is a generator yielding at the TS suspend points (proposal before execute, continuation, end of iteration). Wire format is the TS one (camelCase top level, TS state shapes), so a checkpoint can be resumed by either runtime. `run()` stays the no-pause convenience | ✅ |
 | 20 | Phase 5c: `scripts/harness-conformance/compare-checkpoint.mjs` (+ `run-ts-checkpoint.mts`, `run_py_checkpoint.py`): a checkpoint paused by TS resumes in Python and vice versa (pause at proposal and at iteration end) and ends identically to an uninterrupted run — verified, both directions | ✅ |
-| 20 | Phase 6 (differential runtime conformance): `scripts/harness-conformance/compare-runtime.mjs` runs 62 scenarios (`fixtures-runtime/`) through the real TS `HarnessRuntime` and the Python twin and compares a trace projection (full node order, steps, task statuses, final result, strategy, failure classes, beliefs, control state, journal, hook/callback log, halts and output-contract errors). Covers success, dependency chains, parallel pairs, failures, continuations, budget halts, seeded stalls with every supervisor action, semantic hooks, lexical switches, caller updates, reviewer pass/revision and output contracts. Found and fixed two real differences: the belief trail is only written when facts were extracted or the complexity signal says the turn is non-trivial (`HarnessRunOptions.complexity_signal`), and the runtime's `verify()` call treats every tool as available (TS passes the EvidenceStore as the manifest) | ✅ 62/62 |
+| 20 | Phase 6 (differential runtime conformance): `scripts/harness-conformance/compare-runtime.mjs` runs 69 scenarios today (62 when first written; `fixtures-runtime/`) through the real TS `HarnessRuntime` and the Python twin and compares a trace projection (full node order, steps, task statuses, final result, strategy, failure classes, beliefs, control state, journal, hook/callback log, halts and output-contract errors). Covers success, dependency chains, parallel pairs, failures, continuations, budget halts, seeded stalls with every supervisor action, semantic hooks, lexical switches, caller updates, reviewer pass/revision and output contracts. Found and fixed two real differences: the belief trail is only written when facts were extracted or the complexity signal says the turn is non-trivial (`HarnessRunOptions.complexity_signal`), and the runtime's `verify()` call treats every tool as available (TS passes the EvidenceStore as the manifest) | ✅ 69/69 |
 | 20 | Refresh 2026-10-01: `semantic_criterion_coverage` and `token_budget` run options ported; scenarios 64-67 | ✅ 66/66 |
 | 20 | `layer-work` merge (constraint stall + unresolved violations, already twinned in `runtime.py`): read TS vs Python diff point by point, added runtime scenarios 68-70 (unresolved violation returned when the host opted into `on_constraint_revision`; the could-not-complete reply is not judged; negative control: removing the Python skip fails 69 and 70) | ✅ 69/69 |
 | 20 | Node-level conformance `compare-nodes.mjs` (107 fixtures); `CoverageHealth` default aligned to TS 0.5/0.5; TS journal `slice(-0)` bug fixed | ✅ 107/107, 0 tracked |
@@ -88,11 +99,6 @@ its tests rewritten to the TS behaviour; new coverage is in `adapter/tests/test_
 | 19 | Supervisor: `decide_supervisor_directive` (litellm) is Python-only; `coerce_for_wired_actions` has no twin | 🟡 |
 | — | Python-only modules (`plan_store`, `plan_schema`, `execution_boundary`, `provenance`, `semantic_checks`, `langfuse_tracing`, `tool_manifest`, `node_compilers`, `state_store`) | ⬜ decide per module whether TS should gain them |
 | — | `harness-runtime.ts` vs `loop.py` step ordering | ⬜ not audited line by line |
-
-### Changes on this branch that affect this list
-* **RESOLVED:** TS `reviewProposedChange` now runs all 5 dimensions and collects every failure (matches Python). Python's docstring/§9 note "TS short-circuits" is obsolete. `applyReviewOutcome` accepts a list in both.
-* **RESOLVED (mechanism):** `HARNESS_LEXICAL` switches (`harness_lexical_active` / `harnessLexicalActive`) now exist on both sides for: `negation-pairs` (pairwise **and** set-level), `granularity-markers`, `criterion-scope`, `system-error-symptoms`, `failure-exact-match`, `review-negation`, `review-phrases`, `constraint-negation`, `required-sections`, `criterion-substring`, `criterion-proximity` (TS) / `assumption-overlap`, `evidence-negation`, `failure-class-seed` (Py), `change-scope-keywords` (Py, returns 0.0 to mimic TS). **Now aligned (this work):** the Python-only switches (`assumption-overlap`, `evidence-negation`, `failure-class-seed`, `change-scope-keywords`, `required-sections`, `hypothesis-*`) were removed together with the Python-only checks they guarded, and `criterion-proximity` was added, so both runtimes expose the same 12 checks.
-* **NEW TS-only (add to Python):** `semanticConstraintJudge` hook + `outputValidation(..., {skipCallerConstraints})`; budget-answer handling (`takeBudgetAnswers`, `DEFAULT_BUDGET_EXTENSION=10` exported from `ask-question.ts`, "Continue" extends `maxSteps`, "Stop" cancels); `semantic_compaction` opt-in layer in `layer-policy.ts` (`AUDIT_SEMANTIC_COMPACTION`); false-budget-halt fix when all tasks COMPLETE; resume polls the budget answer before halting. Ported: `DEFAULT_BUDGET_EXTENSION` and `external_updates.take_budget_answers`. Not ported: the semantic constraint judge, the `semantic_compaction` layer and the all-tasks-COMPLETE budget shortcut (they live in the async runtime).
 
 Legend: **[B]** behaviour differs (outputs diverge), **[M]** missing in Python, **[S]** shape/API/default differs.
 
@@ -166,7 +172,7 @@ Legend: **[B]** behaviour differs (outputs diverge), **[M]** missing in Python, 
 ## 5. Contradictions [B]
 
 * TS `detectContradictions` **applies the resolution policy** to every detected contradiction and pushes it. Python `detect_contradictions` only `add_contradiction`s and returns the list. Callers must apply the policy separately.
-* Lexical gate on pairwise/set-level detection: **RESOLVED on this branch** (both sides gate via `negation-pairs`).
+* Lexical gate on pairwise/set-level detection: **RESOLVED** (both sides gate via `negation-pairs`).
 * TS contradictions carry `description` (`Pairwise contradiction between "a" and "b"`, `Set-level…`, `Temporal…`, `Abstraction…`); Python's detectors leave it empty (only external ones set it). Reviewer lens (TS) prints that description in findings.
 * Temporal: TS reads `change.affected_paths[]`; Python reads `change["affected_source"]` (single).
 * `resolve_high`: TS marks applied + adds to `invalidation_frontier` only; Python additionally **BLOCKs task_graph dict tasks** (`high_contradiction`). TS `resolve_medium` queues `{source,target}` objects, Python queues ids.
@@ -202,7 +208,7 @@ Legend: **[B]** behaviour differs (outputs diverge), **[M]** missing in Python, 
 * Hypothesis compatibility: TS iterates `hypothesisSet.active[].predicted_observations`; Python iterates `hypotheses[]` and skips `eliminated`.
 * Output-contract precheck: TS checks removal of `required_sections`; Python checks `required_interface_fields` (same root cause as the known `output_contract_partial` verify discrepancy).
 * Code quality: TS reads `evidenceStore.tool_availability_manifest`; Python calls `tool_manifest.check_tool_availability`.
-* `review_proposed_change`: **RESOLVED on this branch** (TS now evaluates all 5 and collects failures).
+* `review_proposed_change`: **RESOLVED** (TS now evaluates all 5 and collects failures).
 * Not in Python: `diagnoseReviewFailureOptions`/`REVIEW_DIMENSION_FIXES` mapping exists in `ask_question.py` – verify texts match TS.
 * `review-negation` lexical gate: **RESOLVED** (now in both).
 * Gates: TS `actionGate/postExecGate` take positional args + optional resolver; Python is keyword-only and adds `decomposition_gate`. `contractShadowCheck` inspects `required_sections` (TS) vs `required_interface_fields`/`interface_constraints` (Python). **Known/tracked**.

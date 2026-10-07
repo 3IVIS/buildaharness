@@ -53,10 +53,14 @@ await memory.set('preferences', { theme: 'dark' })
 await memory.get('preferences') // { theme: 'dark' }
 ```
 
-`search(query, topK, minScore)` on all three adapters is a linear scan doing
-`JSON.stringify(value).includes(query)` — a keyword match, not semantic
-search. Fine for small stores; if you need real semantic recall over a large
-memory store, that's not implemented here yet.
+`search(query, topK, minScore)` on all three adapters is a linear scan with
+keyword scoring (`src/memory/scoring.ts`): a case-insensitive substring match
+of the query against the value's leaf content (key names are skipped) scores
+`1.0`; otherwise the score is the fraction of the query's non-stopword tokens
+found in the value, capped at `0.95`. Results are sorted by score and cut to
+`topK`. It is a keyword match, not semantic search — fine for small stores; if
+you need real semantic recall over a large memory store, that's not
+implemented here yet.
 
 ### On persistence: IndexedDB is not permanent
 
@@ -91,6 +95,10 @@ export interface FsBackend {
   removeFile(path: string): Promise<void>                  // no-op if missing
   mkdir(path: string): Promise<void>                        // recursive, no-op if it exists
   readDir(path: string): Promise<string[]>                  // file names only
+  // Optional — implemented only by backends on a real filesystem; callers degrade without them
+  realpath?(path: string): Promise<string>                  // canonical path (symlink detection)
+  stat?(path: string): Promise<{ isDirectory: boolean; size: number } | undefined>
+  rename?(from: string, to: string): Promise<void>         // enables atomic write-tmp-then-rename
 }
 ```
 
@@ -113,7 +121,16 @@ const experienceStore = await FileSystemExperienceStore.create({ backend, baseDi
 
 `LLMClient` implements `ILLMClient` (`callChat` streaming, `callChatSync`,
 `callChatStructured` with tool calls) against `@buildaharness/proxy`'s
-`/llm/chat` endpoint, so API keys never reach the browser.
+`/llm/chat` endpoint, so API keys never reach the browser. Two other
+`ILLMClient` implementations talk to a provider directly with a user-supplied
+key (used by the `anthropic` / OpenAI-compatible backends in chat-ui and the
+CLI): `AnthropicLLMClient({ apiKey })` and
+`OpenAICompatibleLLMClient({ apiKey, baseUrl, defaultModel, extraHeaders? })`,
+with `OPENAI_BASE_URL` / `OPENROUTER_BASE_URL` and the matching default-model
+constants exported. `LLMClient`, `AnthropicLLMClient` and
+`OpenAICompatibleLLMClient` all accept an optional `fetchImpl` (default: the global
+`fetch`); the desktop app passes `@tauri-apps/plugin-http`'s, because its webview CSP
+blocks the global `fetch` to remote hosts.
 
 ```ts
 import { LLMClient } from '@buildaharness/runtime'
@@ -151,7 +168,8 @@ const outcome = await new HarnessRuntime().run(objective, successCriteria, { exp
 | `src/executors/` | One executor per FlowSpec node type |
 | `src/memory/` | `InMemoryAdapter`, `IndexedDBAdapter`, `FileSystemAdapter`, `FsBackend` |
 | `src/experience-store/` | `DexieExperienceStore`, `FileSystemExperienceStore` |
-| `src/llm-client.ts` | `LLMClient` / `ILLMClient` |
+| `src/llm-client.ts`, `anthropic-client.ts`, `openai-compatible-client.ts` | `LLMClient` / `ILLMClient`, `AnthropicLLMClient`, `OpenAICompatibleLLMClient` |
+| `src/reminders/` | `InMemoryReminderStore` and the `ReminderStore` interface |
 | `src/events.ts` | `EventBus` + runtime event types |
 | `src/tools/` | `BUILT_IN_TOOLS`, tool registry |
 

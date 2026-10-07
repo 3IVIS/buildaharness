@@ -21,7 +21,7 @@ The `qdrant` service in `docker-compose.yml` runs `qdrant/qdrant:v1.13.0` and is
 
 The adapter and mastra-runner containers have `QDRANT_URL=http://qdrant:6333` and `EMBED_BASE_URL=http://litellm:4000` pre-set. You do not need to add these to `.env` for the default stack.
 
-Data is persisted in the `qdrant_data` named Docker volume. It survives restarts but is removed by `docker compose down --volumes` or `scripts/reset-volumes.sh`.
+Data is persisted in the `qdrant_data` named Docker volume. It survives restarts and is removed by `docker compose down --volumes`. (`scripts/reset-volumes.sh` removes only the Postgres, Redis and ClickHouse volumes, not `qdrant_data`.)
 
 ---
 
@@ -54,13 +54,13 @@ To use OpenAI `text-embedding-3-small` instead, add to `adapter/litellm_config.y
     api_key: os.environ/OPENAI_API_KEY
 ```
 
-Then set `EMBED_MODEL=text-embedding-3-small` in `.env` and restart the `litellm` container:
+Then restart the `litellm` container and point your flow at the new model by setting `embedding_model` on the memory store (see "Adding a custom collection" below; the default is `nomic-embed-text`). To seed with it, run the ingest script with `EMBED_MODEL=text-embedding-3-small` and update its hard-coded `DIMENSIONS` (768) to match. The adapters themselves do not read an `EMBED_MODEL` environment variable.
 
 ```bash
 docker compose restart litellm
 ```
 
-Note that OpenAI embeddings produce 1536-dimensional vectors. If you are recreating an existing collection, the dimension must match. Recreate the collection when changing models.
+Note that OpenAI embeddings produce 1536-dimensional vectors, so the collection's dimension must match; recreate the collection when changing models.
 
 ---
 
@@ -86,9 +86,11 @@ The collection is **recreated from scratch** on each run. Run again after pullin
 |---|---|---|
 | `QDRANT_URL` | `http://localhost:6333` | Qdrant URL. Use `localhost` when running the script from the host. |
 | `EMBED_BASE_URL` | `http://localhost:4000` | LiteLLM proxy URL. Use `localhost` from the host. |
-| `OPENAI_API_KEY` | `ollama` | API key sent to LiteLLM. Falls back to `LITELLM_MASTER_KEY` from `.env`. |
+| `OPENAI_API_KEY` | `ollama` | API key sent to LiteLLM. If unset, the script reads `LITELLM_MASTER_KEY` from `.env` in the current directory, then falls back to `ollama`. |
 | `EMBED_MODEL` | `nomic-embed-text` | Embedding model name as registered in LiteLLM. |
 | `COLLECTION` | `knowledge_base` | Target Qdrant collection name. |
+
+The vector size (`DIMENSIONS = 768`), chunk size, overlap and batch size are constants in the script, not environment variables.
 
 ### Prerequisites
 
@@ -136,13 +138,12 @@ Done. Collection 'knowledge_base': 312 points indexed.
 
 To add a collection for a new domain (e.g. product documentation), create a new ingest script or extend the existing one:
 
-```python
-# Override environment variables before running
-QDRANT_URL  = "http://localhost:6333"
-COLLECTION  = "product_docs"
-EMBED_MODEL = "nomic-embed-text"
-DIMENSIONS  = 768
+```bash
+# QDRANT_URL, EMBED_BASE_URL, EMBED_MODEL and COLLECTION are read from the environment
+COLLECTION=product_docs python scripts/ingest_rag_data.py
 ```
+
+`DIMENSIONS` (768) and the Wikipedia `TOPICS` list are constants in the script; edit them (or copy the script) to ingest your own documents.
 
 Then reference the new collection in your flow spec:
 
@@ -169,7 +170,7 @@ Then reference the new collection in your flow spec:
 ]
 ```
 
-The adapter resolves `QDRANT_URL` from the environment at runtime and queries the collection whose name matches `store_id`.
+The generated code resolves `QDRANT_URL` from the environment at runtime and queries the collection whose name matches `store_id`.
 
 ---
 
@@ -211,22 +212,18 @@ Then set in your buildaharness Helm values:
 
 ```yaml
 adapter:
-  env:
-    QDRANT_URL: "http://qdrant:6333"
+  extraEnv:
+    - name: QDRANT_URL
+      value: "http://qdrant:6333"
 ```
 
 ### Qdrant Cloud (managed)
 
 1. Create a cluster at [cloud.qdrant.io](https://cloud.qdrant.io)
 2. Copy the cluster URL and API key
-3. Add to `.env`:
+3. Set `QDRANT_URL=https://your-cluster.cloud.qdrant.io:6333` in `.env`.
 
-```env
-QDRANT_URL=https://your-cluster.cloud.qdrant.io:6333
-QDRANT_API_KEY=your-api-key
-```
-
-The adapter passes `QDRANT_API_KEY` automatically when connecting if the variable is set.
+Note: the adapter and Mastra runner code does not read a `QDRANT_API_KEY`, so an API-key-protected cluster is not supported out of the box.
 
 ### External Qdrant with Docker Compose
 
@@ -246,5 +243,5 @@ QDRANT_URL=http://your-qdrant-host:6333
 | `Collection not found` when running a RAG flow | Run `python scripts/ingest_rag_data.py` to seed the collection |
 | Embedding calls fail with `model not found` | Run `ollama pull nomic-embed-text` and restart `litellm` |
 | Dimension mismatch error on upsert | Recreate the collection — dimensions are fixed at creation time. Re-run the ingest script |
-| Slow embedding (> 30 s per batch) | First-run model loading; subsequent batches will be faster. Use a smaller model or increase `BATCH_SIZE` |
+| Slow embedding (> 30 s per batch) | First-run model loading; subsequent batches will be faster. Use a smaller model |
 | `qdrant_data` volume has stale data | `docker volume rm buildaharness_qdrant_data` then re-run ingest |
