@@ -4,7 +4,7 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { createServer, type Server } from 'node:net'
 // @ts-expect-error — plain ESM script, no .d.ts; it's import-safe (see its entry-point guard).
-import { formatWebSearchResults, wrapUntrusted, requestToolGate, reportToolResult, requestToolExecution, fetchUrlSafely, detectInjectionLikely, assertPublicHttpUrl, resolveInWorkspace, stagePendingAction } from './file-tools-mcp-server.mjs'
+import { formatWebSearchResults, wrapUntrusted, requestToolGate, reportToolResult, requestToolExecution, fetchUrlSafely, detectInjectionLikely, assertPublicHttpUrl, resolveInWorkspace, stagePendingAction, createReminder } from './file-tools-mcp-server.mjs'
 
 /**
  * F3 (adoption plan): the claude-cli backend's MCP server gained web_search. The tool
@@ -344,5 +344,15 @@ describe('file-tools-mcp-server stagePendingAction', () => {
     expect(records[0].nextPendingActionId).toBe(staged[1].id)
     expect(records[1].nextPendingActionId).toBe(staged[2].id)
     expect(records[2].nextPendingActionId).toBeUndefined()
+  })
+})
+
+describe('file-tools-mcp-server createReminder', () => {
+  it('concurrent reminders are all kept', async () => {
+    const root = await mkdtemp(join(tmpdir(), 'mcp-rem-'))
+    const file = `${root}/reminders.json`
+    await Promise.all(['a', 'b', 'c', 'd'].map((t) => createReminder(file, t)))
+    const entry = JSON.parse(await readFile(file, 'utf-8')) as { value: { rawText: string }[] }
+    expect(entry.value.map((r) => r.rawText).sort()).toEqual(['a', 'b', 'c', 'd'])
   })
 })

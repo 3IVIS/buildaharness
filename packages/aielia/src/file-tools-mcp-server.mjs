@@ -86,7 +86,7 @@
  * logic without a real MCP client attached over stdio): node file-tools-mcp-server.mjs --test
  */
 
-import { readFile, writeFile, mkdir, readdir, realpath as fsRealpath, mkdtemp, rm } from 'node:fs/promises'
+import { readFile, writeFile, mkdir, readdir, realpath as fsRealpath, mkdtemp, rm, rename } from 'node:fs/promises'
 import { readFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { randomUUID } from 'node:crypto'
@@ -738,14 +738,24 @@ async function readRemindersFile(remindersFile) {
 
 async function writeRemindersFile(remindersFile, reminders) {
   await mkdir(remindersFile.slice(0, remindersFile.lastIndexOf('/')), { recursive: true })
-  await writeFile(remindersFile, JSON.stringify({ key: REMINDERS_KEY, value: reminders }), 'utf-8')
+  // Write-then-rename so a crash mid-write cannot leave a truncated file that fails to parse on every later read.
+  const tmp = `${remindersFile}.tmp-${randomUUID()}`
+  await writeFile(tmp, JSON.stringify({ key: REMINDERS_KEY, value: reminders }), 'utf-8')
+  await rename(tmp, remindersFile)
 }
 
-export async function createReminder(remindersFile, rawText) {
-  const reminders = await readRemindersFile(remindersFile)
-  const record = { id: randomUUID(), rawText, createdAt: new Date().toISOString(), dueAt: null, done: false }
-  await writeRemindersFile(remindersFile, [...reminders, record])
-  return record
+// Concurrent create_reminder calls would each read the same list and the last write would drop the others.
+let reminderChain = Promise.resolve()
+
+export function createReminder(remindersFile, rawText) {
+  const run = reminderChain.then(async () => {
+    const reminders = await readRemindersFile(remindersFile)
+    const record = { id: randomUUID(), rawText, createdAt: new Date().toISOString(), dueAt: null, done: false }
+    await writeRemindersFile(remindersFile, [...reminders, record])
+    return record
+  })
+  reminderChain = run.then(() => undefined, () => undefined)
+  return run
 }
 
 async function main() {
