@@ -38,7 +38,7 @@ Then run:
 wrangler dev
 ```
 
-The proxy starts on `http://localhost:3001`.
+The proxy starts on `http://localhost:8787`.
 
 ### Route configuration
 
@@ -57,7 +57,7 @@ zone_name = "yourdomain.com"
 docker build -t buildaharness-proxy .
 
 # Run (all secrets passed as env vars — never bake them into the image)
-docker run -p 3001:3001 \
+docker run -p 8787:8787 \
   -e ANTHROPIC_API_KEY=sk-ant-... \
   -e OPENAI_API_KEY=sk-... \
   -e PROXY_SECRET=your-secret \

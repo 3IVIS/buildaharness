@@ -21,11 +21,11 @@ COPY dist* ./dist/
 RUN addgroup -S proxy && adduser -S proxy -G proxy
 USER proxy
 
-EXPOSE 3001
+EXPOSE 8787
 
 # Health check — matches GET /health endpoint
 HEALTHCHECK --interval=30s --timeout=5s --start-period=10s --retries=3 \
-  CMD wget -qO- http://localhost:3001/health || exit 1
+  CMD wget -qO- http://localhost:8787/health || exit 1
 
 # Start the Node.js server via the compiled entry point.
 # Hono's node adapter is used in src/server.ts (Node.js-specific entry point).
