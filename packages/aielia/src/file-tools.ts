@@ -380,7 +380,13 @@ export async function applyPendingAction(
     // could be reverted, even though nothing landed on disk (found live: convE, an
     // archive/.keep write that never completed was still listed [undoable] by /undo-action).
     await backend.writeTextFile(resolved, record.content)
-    await recordUndoLogEntry(backend, workspaceRoot, undoEntry)
+    // The write has landed: a failure recording its undo entry must not leave the staging record behind
+    // (a second approval would re-apply the write and capture the new content as "previous").
+    try {
+      await recordUndoLogEntry(backend, workspaceRoot, undoEntry)
+    } catch (err) {
+      console.error('[undo-log] could not record the undo entry for an applied write:', err)
+    }
     await backend.removeFile(pendingActionPath(workspaceRoot, id))
     // `snapshot.previousContent` is `string | null` when undoable (null meaning "new file, no
     // prior content"); collapsed to `undefined` here since both that case and !undoable (binary,
@@ -424,9 +430,15 @@ export async function applyPendingAction(
   // reverted later. See action-snapshot.ts's snapshotWorkspaceTree/buildShellUndoLogEntry.
   const before = await snapshotWorkspaceTree(backend, workspaceRoot)
   const execution = await options.executeShell(record.command, resolvedCwd)
-  const after = await snapshotWorkspaceTree(backend, workspaceRoot)
-  const undoEntry = buildShellUndoLogEntry(id, record.command, before, after)
-  await recordUndoLogEntry(backend, workspaceRoot, undoEntry)
+  // The command has already run: bookkeeping failures must not leave the staging record behind, or a
+  // second approval would run the command again.
+  try {
+    const after = await snapshotWorkspaceTree(backend, workspaceRoot)
+    const undoEntry = buildShellUndoLogEntry(id, record.command, before, after)
+    await recordUndoLogEntry(backend, workspaceRoot, undoEntry)
+  } catch (err) {
+    console.error('[undo-log] could not record the undo entry for an applied shell command:', err)
+  }
   await backend.removeFile(pendingActionPath(workspaceRoot, id))
   return { ...record, execution }
 }

@@ -272,6 +272,18 @@ describe('pending-action staging', () => {
     expect(executeShell).not.toHaveBeenCalled()
   })
 
+  it('a failure recording the undo entry after a shell command ran still removes the staging record (no second run on retry)', async () => {
+    const inner = makeFakeBackend()
+    const backend: FsBackend = { ...inner, async mkdir(path) { if (path.endsWith('.undo-log')) throw new Error('disk full'); return inner.mkdir(path) } }
+    const { id } = await stagePendingAction(backend, ROOT, { kind: 'shell', command: 'echo hi', cwd: ROOT })
+    const executeShell = vi.fn().mockResolvedValue({ output: 'hi\n', exitCode: 0, timedOut: false })
+    const spy = vi.spyOn(console, 'error').mockImplementation(() => undefined)
+    await applyPendingAction(backend, ROOT, id, { executeShell })
+    spy.mockRestore()
+    expect(await loadPendingAction(backend, ROOT, id)).toBeUndefined()
+    expect(executeShell).toHaveBeenCalledTimes(1)
+  })
+
   it('applyPendingAction invokes the injected executeShell callback for kind: shell and deletes the staging record', async () => {
     const backend = makeFakeBackend()
     const { id } = await stagePendingAction(backend, ROOT, { kind: 'shell', command: 'echo hi', cwd: ROOT })
