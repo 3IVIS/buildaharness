@@ -214,9 +214,19 @@ export class LLMClient implements ILLMClient {
   }
 
   async callChatStructured(messages: ChatMessage[], tools?: ToolDefinition[], options: ChatOptions = {}): Promise<LLMStructuredResponse> {
+    const model = options.model ?? ANTHROPIC_DEFAULT_MODEL
+    // This path speaks the Anthropic Messages shape (top-level system, input_schema tools, content
+    // blocks) and the proxy forwards the body verbatim, so an OpenAI model would get a malformed
+    // request and an unparseable reply. Fail clearly instead.
+    if (!model.startsWith('claude-')) {
+      throw new FlowExecutionError({
+        nodeId: 'llm-client',
+        message: `callChatStructured supports only claude-* models through the proxy (got "${model}")`,
+      })
+    }
     const { system, messages: anthropicMessages } = buildAnthropicMessages(messages)
     const body: Record<string, unknown> = {
-      model: options.model ?? ANTHROPIC_DEFAULT_MODEL,
+      model,
       messages: anthropicMessages,
       stream: false,
       ...(system ? { system } : {}),
