@@ -2,7 +2,7 @@
 
 FlowSpec (JSON, `v1.0.0`) is the neutral intermediate representation that buildaharness uses to describe agent workflows. The canvas authors it; adapters compile it to LangGraph, CrewAI, Mastra, or MS Agent Framework code; the adapter API executes it.
 
-The canonical Zod schema lives in `spec/schema.ts`. Canvas and package copies are in `src/spec/schema.ts` and `packages/canvas/src/spec/schema.ts` — see the internal developer notes for sync rules.
+The canonical Zod schema lives in `spec/schema.ts`. Copies live in `src/spec/schema.ts`, `packages/canvas/src/spec/schema.ts` and `packages/runtime/src/spec/schema.ts`; `spec/schema.json` is generated from the canonical file. See [nodes.md](nodes.md#keeping-the-schema-in-sync) for the sync rules.
 
 ---
 
@@ -30,7 +30,7 @@ The canonical Zod schema lives in `spec/schema.ts`. Canvas and package copies ar
 | Field | Required | Description |
 |---|---|---|
 | `spec_version` | Yes | `"0.2.0"` or `"1.0.0"`. Existing v0.2.0 flows validate without changes. |
-| `id` | Yes | Kebab-case flow identifier, e.g. `"rag-agent-flow"`. |
+| `id` | Yes | Kebab-case flow identifier (lowercase letters, digits and hyphens, at least two characters, no leading or trailing hyphen), e.g. `"rag-agent-flow"`. |
 | `name` | No | Human-readable display name. |
 | `description` | No | Free-text description shown in the canvas and marketplace. |
 | `runtime_hints` | No | Non-binding hints about the target runtime. |
@@ -176,14 +176,17 @@ Applied to all `llm_call` nodes that do not set their own `model` or `model_para
 | `sqlite` | Persistent local file. |
 | `postgres` | Production-grade. Uses `DATABASE_URL`. |
 | `redis` | Uses `REDIS_URL`. |
+| `dapr` | Accepted by the schema. |
+| `orleans` | Accepted by the schema. |
 
+The declared backend is a hint, not a guarantee: the LangGraph adapter always emits an in-memory `MemorySaver`, CrewAI maps `enabled` to `Crew(memory=True)`, and MS Agent Framework has no checkpoint resume yet, so `/compile` grades `durable_checkpoint` as `partial` (compile warning) on those three and `missing` on Mastra (HTTP 422 when `checkpoint.enabled` is true). See `adapter/capability_manifest.py`.
 ### `streaming`
 
 ```json
 "streaming": { "enabled": true, "mode": "tokens" }
 ```
 
-`mode`: `updates` (all runtimes) · `tokens` (all runtimes) · `debug` (LangGraph only).
+`mode`: `updates` · `tokens` · `debug`. The schema describes `tokens` as all-runtime and `debug` as LangGraph-only, but no adapter emits streaming code today: `/compile` grades `streaming_tokens` as `missing` on every runtime, so `enabled: true` with `mode: "tokens"` is rejected with HTTP 422.
 
 ### `telemetry`
 
@@ -194,6 +197,8 @@ Applied to all `llm_call` nodes that do not set their own `model` or `model_para
   "trace_all_nodes": true
 }
 ```
+
+`provider`: `langsmith` · `langfuse` · `otel` · `azure_monitor`. Optional `project` and `endpoint_env` (name of the environment variable holding the endpoint); `trace_all_nodes` defaults to `true`.
 
 ### `process_type` (CrewAI only)
 
@@ -207,8 +212,8 @@ Applied to all `llm_call` nodes that do not set their own `model` or `model_para
   "agent_name": "Research Assistant",
   "agent_description": "Researches topics on demand.",
   "version": "1.0.0",
-  "capabilities": ["streaming"],
-  "authentication": "api_key",
+  "capabilities": ["streaming"],   // streaming | pushNotifications | stateTransitionHistory
+  "authentication": "api_key",       // api_key (default) | oauth2 | none
   "input_schema_ref": "start",
   "output_schema_ref": "done",
   "skills": [{ "id": "research", "name": "Research a topic" }]
@@ -245,11 +250,12 @@ Named vector or key-value stores referenced by `memory_read` and `memory_write` 
 | Field | Values | Description |
 |---|---|---|
 | `type` | `key_value \| vector \| hybrid` | Store type. |
-| `backend` | `in_memory \| postgres \| sqlite \| redis \| upstash \| qdrant \| pinecone \| azure_ai_search` | Storage backend. |
+| `description` | string | Optional free-text description. |
+| `backend` | `in_memory \| postgres \| sqlite \| redis \| upstash \| qdrant \| pinecone \| azure_ai_search` | Storage backend (default `in_memory`). |
 | `connection_env` | string | Environment variable name containing the connection URL. |
 | `embedding_model` | string | Model used to embed queries and documents (vector stores only). |
 | `dimensions` | integer | Vector dimension — must match the embedding model output. |
-| `scope` | `thread \| resource \| global` | `thread`: isolated per job. `global`: shared across all runs. |
+| `scope` | `thread \| resource \| global` | `thread` (default): isolated per job. `global`: shared across all runs. |
 | `namespace` | string | Optional partition key for multi-tenant vector stores. |
 
 ---
@@ -282,7 +288,7 @@ Entry point of the flow. Defines the shape of data passed to `POST /run`.
 |---|---|---|
 | `output_schema` | Yes | JSON Schema for the input payload. Validated against `state_schema`. |
 
-Every flow must have exactly one `input` node.
+A flow must contain at least one `input` node (the adapter rejects specs without one).
 
 ---
 
@@ -450,7 +456,7 @@ Pauses execution and waits for human input before continuing.
 | `timeout_seconds` | No | Seconds before the pause expires. `null` = no timeout. |
 | `on_timeout` | No | `raise` (default, fails the job) or `skip` (continues with no input). |
 
-When paused, job status becomes `"paused"` and `hitl_prompt` is included in the status response. Resume via:
+When paused, job status becomes `"paused"` and `hitl_state` (`node_id`, `prompt`, `resume_schema_fields`) is included in the status response. Resume via:
 
 ```bash
 curl -X POST http://localhost:8000/run/{job_id}/resume \
@@ -726,22 +732,23 @@ Enables the 11-layer reasoning and control harness. See [architecture.md](./arch
 "harness_meta": {
   "enabled": true,
   "process_concept_id": "implement_feature",
-  "max_steps": 50
+  "input_key": "input"
 }
 ```
 
 | Field | Required | Description |
 |---|---|---|
 | `enabled` | Yes | Must be `true` to use harness node types. Default `false`. |
-| `process_concept_id` | No | Seeds the task graph from a named process concept (`GET /run/concepts`). |
+| `process_concept_id` | No | Seeds the task graph from a named process concept (`GET /run/concepts`). Must be a registered concept; `POST /run` rejects an unknown id with 400. |
+| `input_key` | No | State key the harness reads as the turn input when no tool output is present yet. Defaults to `"input"`. |
 | `harness_version` | No | Informational — records which harness version authored this flow. |
 | `phase` | No | Informational — records which harness phase this flow was built for. |
 
 ---
 
-## Harness node types (12 types)
+## Harness node types (13 types)
 
-These nodes are only valid when `harness_meta.enabled: true`. They are rendered in the canvas by the `DiagnosticsPanel` and compiled by the harness node compiler dispatch table.
+These nodes are only valid when `harness_meta.enabled: true` (the adapter rejects them otherwise). They are compiled by the harness node compiler dispatch table (`adapter/harness/node_compilers.py`); live sub-dimension diagnostics for a run are shown in the canvas `DiagnosticsPanel`.
 
 All harness nodes share the base fields (`id`, `type`, `label`, `description`, `position`) and accept an optional `harness_config` object.
 
@@ -755,10 +762,11 @@ All harness nodes share the base fields (`id`, `type`, `label`, `description`, `
 | `control_state` | Displays 5-tier control state resolution | `show_block_mask`, `show_notes` |
 | `task_graph_node` | Displays the 6-state task graph | `show_write_domains`, `show_abstraction_level`, `max_tasks_shown` |
 | `verification_gate` | Runs 9-layer verification | `enabled_layers` (array of layer names), `require_adversarial_on_high_risk` |
-| `recovery_node` | Executes named recovery strategies | `strategy_order_override` (array of strategy names), `show_pattern_confidence` |
+| `recovery_node` | Executes named recovery strategies | `strategy_order_override` (array of strategy names), `show_pattern_confidence`, `read_only` (skip writing the node's output back into state) |
 | `evidence_store_node` | Displays evidence store with reliability envelopes | `show_envelopes`, `show_manifest`, `max_evidence_shown` |
 | `experience_store_node` | Displays cross-run learning weights | `show_weights_heatmap`, `show_run_count` |
-| `reviewer_pass` | Runs 3-lens review (consistency, adversarial, abstraction fit) | `show_adversarial_prior`, `show_findings_detail`, `show_reopened_tasks` |
+| `reviewer_pass` | Runs 3-lens review (implementer, reviewer, adversarial) | `show_adversarial_prior`, `show_findings_detail`, `show_reopened_tasks` |
+| `process_concept` | Process concept scaffold: a pre-seeded task-graph template for a common task pattern | `concept_id` (required), `show_steps`, `show_success_criteria` |
 
 **Verification layer names** (for `verification_gate.enabled_layers`):
 `syntax` · `unit` · `integration` · `consistency` · `requirements` · `assumptions` · `goal_correctness` · `evidence_sufficiency` · `output_contract_partial`
@@ -797,6 +805,6 @@ All harness nodes share the base fields (`id`, `type`, `label`, `description`, `
 # Canvas (Vitest)
 npm test                          # runs schema.test.ts
 
-# Manual parse
-node -e "const {assertFlowSpec}=require('./spec/dist/schema.js'); assertFlowSpec(require('./flows/01-rag-agent-flow.json'))"
+# Manual parse (build the spec package first)
+cd spec && npm run build && node scripts/validate-example.cjs ../flows/01-rag-agent-flow.json
 ```
