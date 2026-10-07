@@ -295,6 +295,12 @@ def assign_system_breaking_severity(
     return upgraded
 
 
+def _contradiction_key(c: Contradiction) -> str:
+    """Identity of a conflict independent of its freshly minted id (mirrors TS contradictionKey)."""
+    involved = ",".join(sorted(c.involved_belief_ids))
+    return f"{c.type}|{involved}|{c.description if c.type == 'temporal' else ''}"
+
+
 def detect_contradictions(
     world_model: WorldModel,
     evidence_store: EvidenceStore,
@@ -319,6 +325,20 @@ def detect_contradictions(
     all_contradictions.extend(detect_abstraction_contradictions(beliefs, task_graph))
 
     all_contradictions = assign_system_breaking_severity(all_contradictions, hypothesis_set)
+
+    # The runtime calls this every iteration over the same belief set, and every detection mints a
+    # fresh id — without this, an already-recorded conflict was re-added each pass and (because the
+    # resolution policy is idempotent per contradiction id, not per conflict) its beliefs'
+    # confidence decayed again every iteration. Mirrors TS detectContradictions.
+    known = {_contradiction_key(c) for c in world_model.contradictions}
+    fresh: list[Contradiction] = []
+    for c in all_contradictions:
+        key = _contradiction_key(c)
+        if key in known:
+            continue
+        known.add(key)
+        fresh.append(c)
+    all_contradictions = fresh
 
     for c in all_contradictions:
         world_model.add_contradiction(c)
