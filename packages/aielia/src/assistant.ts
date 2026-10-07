@@ -1313,7 +1313,8 @@ export class PersonalAssistant {
       userMessage,
       sessionId,
       toolLoopWillRun: this.toolLoopWillRun,
-      approved: options.approved ?? false,
+      // The audit retry's nudge is system text, not a user message, and the flagged turn it corrects already passed this gate (it finished ok). Gating it would make the host re-send the ORIGINAL message with approved: true, which runs it as a fresh turn and stores the user message a second time (issue Q1). Write/shell tool approvals still apply.
+      approved: (options.approved ?? false) || options.auditRetry === true,
       dangerouslySkipPermissions: this.dangerouslySkipPermissions,
       onUsage: accumulateUsage,
       recentTranscript: transcript,

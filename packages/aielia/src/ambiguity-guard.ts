@@ -25,7 +25,12 @@ const AMBIGUITY_SYSTEM_PROMPT =
   'ambiguous = true when carrying it out would force the assistant to GUESS something material that the ' +
   'user did not say and the conversation does not settle: which files/items are meant, a cutoff or scope ' +
   '("the old ones", "the big files"), which of two or more plausible readings applies, or an unresolved ' +
-  'reference ("it", "that one"). ambiguous = false when the target and effect are specified or can be ' +
+  'reference ("it", "that one"). The assistant can read files and run read-only commands before acting, so a ' +
+  'missing detail it can find by looking (which test is failing, what "it" or "this" refers to in the ' +
+  'conversation or the code, which function was just discussed) is NOT ambiguity. What counts is a choice that only ' +
+  'the user can make: several valid readings of the request that lead to different, hard-to-reverse results, such as ' +
+  'a vague verb ("clean up", "tidy", "simplify") on a file where one reading deletes content the user may want to ' +
+  'keep. ambiguous = false when the target and effect are specified or can be ' +
   'read unambiguously from the request or conversation — including a request that names an exact path or ' +
   'command — even if it is risky. Risk is NOT ambiguity. A read-only question is never ambiguous merely ' +
   'because several files could be searched.\n\n' +
