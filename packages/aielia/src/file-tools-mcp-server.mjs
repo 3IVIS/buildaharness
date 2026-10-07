@@ -183,7 +183,18 @@ function isEnoent(err) {
 // once the current one resolves, instead of dropping it.
 let lastStagedIdThisProcess
 
-export async function stagePendingAction(workspaceRoot, payload) {
+// Two staging calls in flight at once (a client may issue tool calls concurrently) would both read the same
+// `lastStagedIdThisProcess` and both link it forward, so one link overwrote the other and that action was never
+// surfaced for approval. Staging is therefore serialized.
+let stagingChain = Promise.resolve()
+
+export function stagePendingAction(workspaceRoot, payload) {
+  const run = stagingChain.then(() => stagePendingActionNow(workspaceRoot, payload))
+  stagingChain = run.then(() => undefined, () => undefined)
+  return run
+}
+
+async function stagePendingActionNow(workspaceRoot, payload) {
   const id = randomUUID()
   const dir = `${workspaceRoot}/${PENDING_ACTIONS_DIR}`
   await mkdir(dir, { recursive: true })
