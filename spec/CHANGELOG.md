@@ -6,20 +6,6 @@ Format: [Semantic Versioning](https://semver.org). Schema changes in minor versi
 
 ---
 
-## [1.0.0] — 2026-06-03
-
-### Added — Harness architecture support (Phase 0 foundation)
-
-**`harness_meta` block (optional)** — New optional top-level field that marks a flow as harness-capable. Fields: `harness_version: string`, `phase: string`, `enabled: boolean` (default `false`). When `enabled` is `false`, the adapter rejects any harness node type with a clear error. Flows without this block are treated as `enabled: false`.
-
-**12 harness node type stubs** — New node types accepted by the schema (all require `harness_meta.enabled: true`): `world_model`, `hypothesis_set`, `gather_evidence`, `apply_tool_reliability`, `update_world_model`, `control_state`, `task_graph_node`, `verification_gate`, `recovery_node`, `evidence_store_node`, `experience_store_node`, `reviewer_pass`. Each accepts an opaque `harness_config: object` at this stage; field shapes are added per-phase.
-
-**`SpecVersion` accepts both `"0.2.0"` and `"1.0.0"`** — The `spec_version` field now accepts either string. Migration tool `scripts/migrate-v0.2-to-v1.0.mjs` converts existing flows.
-
-### Migration
-
-Use `node spec/scripts/migrate-v0.2-to-v1.0.mjs <input.json> [output.json]` to convert a v0.2.0 flow to v1.0.0. The migration adds `"spec_version": "1.0.0"` and an empty `harness_meta` block with `enabled: false`. All existing node types and fields are preserved unchanged.
-
 ## [Unreleased]
 
 ### Added — fields the adapter already reads but the schema didn't type
@@ -31,6 +17,30 @@ Use `node spec/scripts/migrate-v0.2-to-v1.0.mjs <input.json> [output.json]` to c
 ### Added — 13th harness node type stub the canonical schema was missing
 
 **`process_concept` node type** — `ProcessConceptNode` / `ProcessConceptNodeConfig` (`harness_config: { concept_id: string, show_steps?: boolean, show_success_criteria?: boolean }`). This node type already had a working config schema in `src/spec/schema.ts`, partial adapter support (langgraph/crewai/mastra partial, MAF missing in `NODE_SUPPORT_MATRIX`), and was already counted in the "14 execution + 13 harness = 27 node types" figure published elsewhere — but was absent from `spec/schema.ts`, the documented canonical source of truth, so the canonical schema only actually specified 12 harness node types. `scripts/check-schema-sync.mjs` previously allowlisted this gap explicitly as tracked, known drift (`CANONICAL_ONLY_NODE_TYPES`); that allowlist entry has been removed now that canonical has it, so this exact class of drift fails the sync check instead of passing silently in the future.
+
+### Added — other schema changes since 1.0.0 that were not logged
+
+**`TransformNode.output_map`** (optional) — `mode: "mapping"` is now satisfied by either a non-empty `mapping` array or an `output_map` (node output field → state key). The validation message changed accordingly.
+
+**`ReducerStrategy` `last_wins`** — New value alongside `replace | append | merge | custom`: explicit last-write-wins, semantically distinct from `replace`.
+
+**Recovery strategy names** — `recovery_node`'s `harness_config.strategy_order_override` also accepts `REGROUND_TO_AGREEMENT`, `REFRAME_QUESTION`, `HOLD_SPACE` and `COMPRESS_STAGE` in addition to the six default strategies.
+
+---
+
+## [1.0.0] — 2026-06-03
+
+### Added — Harness architecture support (Phase 0 foundation)
+
+**`harness_meta` block (optional)** — New optional top-level field that marks a flow as harness-capable. Fields: `harness_version: string`, `phase: string`, `enabled: boolean` (default `false`). When `enabled` is `false`, the adapter rejects any harness node type with a clear error. Flows without this block are treated as `enabled: false`.
+
+**12 harness node type stubs** (a 13th, `process_concept`, was added later — see Unreleased) — New node types accepted by the schema (all require `harness_meta.enabled: true`): `world_model`, `hypothesis_set`, `gather_evidence`, `apply_tool_reliability`, `update_world_model`, `control_state`, `task_graph_node`, `verification_gate`, `recovery_node`, `evidence_store_node`, `experience_store_node`, `reviewer_pass`. Each accepts an opaque `harness_config: object` at this stage; field shapes are added per-phase.
+
+**`SpecVersion` accepts both `"0.2.0"` and `"1.0.0"`** — The `spec_version` field now accepts either string. Migration tool `scripts/migrate-v0.2-to-v1.0.mjs` converts existing flows.
+
+### Migration
+
+Use `node spec/scripts/migrate-v0.2-to-v1.0.mjs <input.json> [output.json]` to convert a v0.2.0 flow to v1.0.0. The migration adds `"spec_version": "1.0.0"` and an empty `harness_meta` block with `enabled: false`. All existing node types and fields are preserved unchanged.
 
 ## [0.2.0] — 2025-05-14 (updated 2026-05-16)
 
@@ -47,8 +57,8 @@ See ADR-001 (codegen field semantics) for full rationale.
 
 ### Added
 
-- `FailBranch` and `RetryConfig` schema types for error-handling branches on `llm_call` and `tool_invoke` nodes
-- `fail_branch` optional field on `LlmCallNode` and `ToolInvokeNode`
+- `FailBranch` and `RetryConfig` schema types for error-handling branches on `llm_call` nodes
+- `fail_branch` optional field on `LlmCallNode` (the schema does not define it on `ToolInvokeNode`)
 - Canvas renders `fail_branch` as a red dashed `FailEdge` with "on fail" label
 - CrewAI and Mastra adapters emit retry logic when `fail_branch` is configured
 
@@ -57,7 +67,7 @@ See ADR-001 (codegen field semantics) for full rationale.
 **`agents[]` registry** — Top-level array of named agent personas (`AgentDef`). Each entry declares `id`, `role`, `backstory`, `goal`, `tools`, `memory_config`, `max_iter`, `allow_delegation`. Referenced by `agent_role` and `agent_debate` nodes.
 
 **`agent_role` node** — Executes an agent persona as a typed task. Key fields: `agent_ref`, `task_description`, `expected_output`, `output_field`.
-- `memory_access: 'isolated' | 'shared'` (default `isolated`) — controls whether the agent shares a named memory store with the parent flow. Harness validation error: `parallel_fork` branches with `memory_access: 'shared'` are disallowed.
+- `memory_access: 'isolated' | 'shared'` (default `isolated`) — controls whether the agent shares a named memory store with the parent flow.
 - `memory_store_id: string` — required when `memory_access` is `'shared'`; must reference a key in `memory_stores`.
 - `tool_approval: 'auto' | 'human'` (default `auto`) — when `'human'`, the adapter synthesises an approval gate before each tool call, reusing the shared HITL checkpoint/resume mechanism.
 

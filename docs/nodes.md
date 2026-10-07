@@ -1,8 +1,11 @@
 # Node palette
 
-Harnesses are built from **14 core nodes** and **13 harness-layer nodes** — every
-node compiles to all four runtimes (LangGraph, CrewAI, Mastra, MS Agent
-Framework). Hover a node name for its description.
+Harnesses are built from **14 core nodes** and **13 harness-layer nodes** (27
+node types in all), each with a compiler in all four runtime adapters
+(LangGraph, CrewAI, Mastra, MS Agent Framework); the support level per node
+(`full` / `partial`) differs and can be overridden per node with
+`runtime_support`. Harness-layer nodes are only valid when
+`harness_meta.enabled` is `true`. Hover a node name for its description.
 
 For the full field-level reference (edges, validators, `fn_ref` rules), see
 [flowspec.md](flowspec.md).
