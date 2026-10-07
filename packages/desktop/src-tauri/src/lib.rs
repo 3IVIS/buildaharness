@@ -233,6 +233,19 @@ async fn run_claude_prompt_with_file_tools(
       .map_err(|e| format!("Couldn't run \"{claude_path}\": {e}"))?;
 
     let stdout = child.stdout.take().expect("piped stdout");
+    // Drain stderr concurrently: it was only read after stdout hit EOF, so a child that writes more
+    // than a pipe buffer (~64KB) to stderr while still producing stdout would block on stderr and
+    // never close stdout, deadlocking this call. Capped so a flood cannot exhaust memory.
+    let stderr_handle = child.stderr.take().map(|r| {
+      std::thread::spawn(move || {
+        use std::io::Read;
+        let mut r = r;
+        let mut buf: Vec<u8> = Vec::new();
+        let _ = (&mut r).take(1_000_000).read_to_end(&mut buf);
+        let _ = std::io::copy(&mut r, &mut std::io::sink());
+        String::from_utf8_lossy(&buf).into_owned()
+      })
+    });
     let mut final_result_line: Option<String> = None;
 
     for line in BufReader::new(stdout).lines() {
@@ -266,11 +279,7 @@ async fn run_claude_prompt_with_file_tools(
       }
     }
 
-    let mut stderr_text = String::new();
-    if let Some(mut stderr) = child.stderr.take() {
-      use std::io::Read;
-      let _ = stderr.read_to_string(&mut stderr_text);
-    }
+    let stderr_text = stderr_handle.and_then(|h| h.join().ok()).unwrap_or_default();
     let status = child.wait().map_err(|e| format!("Couldn't wait on \"{claude_path}\": {e}"))?;
 
     if !status.success() {
@@ -455,6 +464,16 @@ async fn run_shell_command(command: String, cwd: String, timeout_ms: Option<u64>
       if let Ok(value) = std::env::var(key) {
         cmd.env(key, value);
       }
+    }
+    // Network containment: aielia's CLI forces HTTP(S)_PROXY at a loopback allowlist proxy
+    // (shell-executor.ts), deny-all by default, and tells the model that outbound network is denied.
+    // The desktop has no such proxy and ignored networkAllowlist entirely, so commands had open
+    // network. Until a real containment proxy exists here, point the proxy variables at a closed
+    // loopback port (the discard port) so proxy-aware clients (curl, wget, pip, npm, git) fail
+    // closed, matching the CLI's deny-all default. Like the CLI's, this is not a sandbox: a client
+    // that ignores proxy variables is unaffected.
+    for key in ["HTTP_PROXY", "http_proxy", "HTTPS_PROXY", "https_proxy", "ALL_PROXY", "all_proxy"] {
+      cmd.env(key, "http://127.0.0.1:9");
     }
     cmd.stdin(Stdio::null()).stdout(Stdio::piped()).stderr(Stdio::piped());
 
