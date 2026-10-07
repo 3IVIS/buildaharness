@@ -1,4 +1,5 @@
 import { FlowExecutionError } from './errors'
+import { DEFAULT_REQUEST_TIMEOUT_MS, withRequestTimeout } from './request-timeout'
 import type { ChatMessage, ChatOptions, ILLMClient, LLMStructuredResponse, ToolCallResult, ToolDefinition } from './llm-client'
 
 export interface OpenAICompatibleLLMClientOptions {
@@ -10,6 +11,8 @@ export interface OpenAICompatibleLLMClientOptions {
   extraHeaders?: Record<string, string>
   /** Injectable fetch — the Tauri webview's CSP blocks the global fetch to remote hosts, so the desktop app passes @tauri-apps/plugin-http's fetch here. Defaults to the global fetch. */
   fetchImpl?: typeof fetch
+  /** Longest a single wait on the endpoint may take (headers, a whole non-streamed body, or the gap between streamed chunks) before the call fails with a timeout error. Defaults to DEFAULT_REQUEST_TIMEOUT_MS. */
+  requestTimeoutMs?: number
 }
 
 /**
@@ -129,13 +132,24 @@ export class OpenAICompatibleLLMClient implements ILLMClient {
   private readonly defaultModel: string
   private readonly extraHeaders: Record<string, string>
   private readonly fetchImpl: typeof fetch
+  private readonly requestTimeoutMs: number
 
-  constructor({ apiKey, baseUrl, defaultModel, extraHeaders = {}, fetchImpl }: OpenAICompatibleLLMClientOptions) {
+  constructor({ apiKey, baseUrl, defaultModel, extraHeaders = {}, fetchImpl, requestTimeoutMs = DEFAULT_REQUEST_TIMEOUT_MS }: OpenAICompatibleLLMClientOptions) {
+    this.requestTimeoutMs = requestTimeoutMs
     this.apiKey = apiKey
     this.baseUrl = baseUrl
     this.defaultModel = defaultModel
     this.extraHeaders = extraHeaders
     this.fetchImpl = fetchImpl ?? ((...args: Parameters<typeof fetch>) => fetch(...args))
+  }
+
+  /** One POST to chat/completions whose wait for the response headers is bounded; the request is aborted on timeout. */
+  private async post(body: Record<string, unknown>): Promise<Response> {
+    const controller = new AbortController()
+    return withRequestTimeout(
+      this.fetchImpl(`${this.baseUrl}/chat/completions`, { method: 'POST', headers: this.headers(), body: JSON.stringify(body), signal: controller.signal }),
+      this.requestTimeoutMs, 'openai-compatible-client', 'waiting for the model to respond', () => controller.abort(),
+    )
   }
 
   private headers(): Record<string, string> {
@@ -178,10 +192,7 @@ export class OpenAICompatibleLLMClient implements ILLMClient {
   }
 
   async *callChat(messages: ChatMessage[], options: ChatOptions = {}): AsyncIterable<string> {
-    const response = await this.fetchImpl(`${this.baseUrl}/chat/completions`, {
-      method: 'POST',
-      headers: this.headers(),
-      body: JSON.stringify({
+    const response = await this.post({
         model: options.model ?? this.defaultModel,
         messages: this.buildMessages(messages),
         stream: true,
@@ -191,8 +202,7 @@ export class OpenAICompatibleLLMClient implements ILLMClient {
         stream_options: { include_usage: true },
         ...(options.maxTokens ? { max_tokens: options.maxTokens } : {}),
         ...(options.temperature !== undefined ? { temperature: options.temperature } : {}),
-      }),
-    })
+      })
 
     if (!response.ok) {
       throw new FlowExecutionError({ nodeId: 'openai-compatible-client', message: await this.errorMessage(response), cause: { status: response.status } })
@@ -212,7 +222,7 @@ export class OpenAICompatibleLLMClient implements ILLMClient {
 
     try {
     while (true) {
-      const { done, value } = await reader.read()
+      const { done, value } = await withRequestTimeout(reader.read(), this.requestTimeoutMs, 'openai-compatible-client', 'while streaming the reply')
       if (done) break
       buffer += decoder.decode(value, { stream: true })
       const lines = buffer.split('\n')
@@ -269,12 +279,12 @@ export class OpenAICompatibleLLMClient implements ILLMClient {
       body.response_format = { type: 'json_object' }
     }
 
-    const response = await this.fetchImpl(`${this.baseUrl}/chat/completions`, { method: 'POST', headers: this.headers(), body: JSON.stringify(body) })
+    const response = await this.post(body)
     if (!response.ok) {
       throw new FlowExecutionError({ nodeId: 'openai-compatible-client', message: await this.errorMessage(response), cause: { status: response.status } })
     }
 
-    const json = (await response.json()) as {
+    const json = (await withRequestTimeout(response.json(), this.requestTimeoutMs, 'openai-compatible-client', 'while reading the reply')) as {
       choices?: Array<{ message?: { content?: string; tool_calls?: unknown } }>
       usage?: { prompt_tokens?: number; completion_tokens?: number; prompt_tokens_details?: { cached_tokens?: number } }
     }
