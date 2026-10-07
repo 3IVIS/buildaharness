@@ -188,11 +188,14 @@ export function mergeInvestigationFindings(
 ): Observation[] {
   const q = clip(meta.question, 300).replace(/]/g, ' ')
   const merged: Observation[] = []
+  // One tag per merge call: the per-run cap counts distinct prefixes, so without it a supervisor that
+  // repeats the same question was counted once however many investigations ran.
+  const runTag = `${(++_obsCounter).toString(36)}${Date.now().toString(36)}`
   for (const finding of findings) {
     const obs: Observation = {
       id: `supervisor_investigation:${(++_obsCounter).toString(36)}${Date.now().toString(36)}`,
       content:
-        `[supervisor_investigation q=${q}] ` +
+        `[supervisor_investigation q=${q} run=${runTag}] ` +
         `[tool=${finding.tool} reliability=${finding.reliability} ` +
         `derived_from=supervisor_investigation] ${finding.content}`,
       source: 'supervisor_investigation',

@@ -124,12 +124,14 @@ describe('mergeInvestigationFindings', () => {
 })
 
 describe('countInvestigations (per-run cap K)', () => {
-  it('counts distinct investigations, not distinct findings', () => {
+  it('counts one per merge call (several findings count once); a repeated question is a new investigation', () => {
     const wm = new WorldModel()
-    for (const q of ['q1', 'q1', 'q2']) {
-      mergeInvestigationFindings(wm, [{ content: 'f', tool: 'retrieve', reliability: 'MEDIUM' }], { question: q })
-    }
-    expect(countInvestigations(wm)).toBe(2)
+    const f = { content: 'f', tool: 'retrieve', reliability: 'MEDIUM' as const }
+    mergeInvestigationFindings(wm, [f, f, f], { question: 'q1' })
+    expect(countInvestigations(wm)).toBe(1)
+    mergeInvestigationFindings(wm, [f], { question: 'q1' })
+    mergeInvestigationFindings(wm, [f], { question: 'q2' })
+    expect(countInvestigations(wm)).toBe(3)
   })
 })
 
