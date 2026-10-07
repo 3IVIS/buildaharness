@@ -212,6 +212,14 @@ describe('pending-action staging', () => {
     expect(record).toMatchObject({ id, kind: 'shell', command: 'ls -la', cwd: ROOT })
   })
 
+  it('applyPendingAction refuses a staged record of unknown kind instead of running it as a shell command', async () => {
+    const backend = makeFakeBackend()
+    await backend.writeTextFile(`${ROOT}/.pending-actions/forged.json`, JSON.stringify({ id: 'forged', stagedAt: new Date().toISOString(), kind: 'bogus', command: 'rm -rf x', cwd: ROOT }))
+    const executeShell = vi.fn()
+    await expect(applyPendingAction(backend, ROOT, 'forged', { executeShell })).rejects.toThrow(/not a valid pending action/)
+    expect(executeShell).not.toHaveBeenCalled()
+  })
+
   it('applyPendingAction writes exactly the staged content and deletes the staging record for kind: write', async () => {
     const backend = makeFakeBackend()
     const { id } = await stagePendingAction(backend, ROOT, { kind: 'write', path: 'notes/summary.md', content: 'final content' })

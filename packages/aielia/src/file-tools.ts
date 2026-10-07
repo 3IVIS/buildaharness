@@ -408,6 +408,10 @@ export async function applyPendingAction(
     return { ...record, delivery }
   }
 
+  // The record is a plain file on disk: an unknown or malformed one must never fall through to being run as a shell command.
+  if (record.kind !== 'shell' || typeof record.command !== 'string' || typeof record.cwd !== 'string') {
+    throw new Error(`Staged action "${id}" is not a valid pending action`)
+  }
   if (!options.executeShell) {
     throw new Error(`Cannot apply a staged shell action ("${id}") — no executeShell callback was provided`)
   }
