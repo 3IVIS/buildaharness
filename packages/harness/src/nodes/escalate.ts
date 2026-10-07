@@ -89,6 +89,9 @@ export function makeQuestionsBatch(questions: AskQuestion[]): AskQuestion[] {
  * shapes (e.g. a `free_text` answer carrying `selectedLabels`).
  */
 export function validateAskAnswer(answer: AskAnswer): void {
+  if ((answer.kind === 'selected' || answer.kind === 'selected_with_edit') && !Array.isArray(answer.selectedLabels)) {
+    throw new Error(`AskAnswer for "${answer.questionId}": kind "${answer.kind}" requires a selectedLabels array`)
+  }
   switch (answer.kind) {
     case 'selected':
       if (answer.selectedLabels.length === 0) {
@@ -142,6 +145,9 @@ export function validateAskResponse(questions: AskQuestion[], response: AskRespo
       answer.selectedLabels.length > 1
     ) {
       throw new Error(`AskResponse: question "${question.id}" does not allow multiple selections`)
+    }
+    if (answeredIds.has(answer.questionId)) {
+      throw new Error(`AskResponse: question "${answer.questionId}" received more than one answer`)
     }
     answeredIds.add(answer.questionId)
   }

@@ -157,3 +157,20 @@ describe('INV-37 — sequential batching for more than 4 candidate questions', (
     expect(batchTwo.map((q) => q.id)).toEqual(['c6'])
   })
 })
+
+describe('validateAskResponse — duplicate and malformed answers', () => {
+  const q = [{ id: 'a', question: 'A?', options: [{ label: 'x' }, { label: 'y' }] }]
+  it('rejects two answers for the same question', () => {
+    const response = {
+      answers: [
+        { questionId: 'a', kind: 'selected' as const, selectedLabels: ['x'] },
+        { questionId: 'a', kind: 'selected' as const, selectedLabels: ['y'] },
+      ],
+    }
+    expect(() => validateAskResponse(q, response)).toThrow(/more than one answer/)
+  })
+  it('rejects a selected answer without a selectedLabels array', () => {
+    const response = { answers: [{ questionId: 'a', kind: 'selected' }] } as never
+    expect(() => validateAskResponse(q, response)).toThrow(/selectedLabels array/)
+  })
+})
