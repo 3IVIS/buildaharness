@@ -48,7 +48,7 @@ const [stats, setStats] = useState<Record<string, NodeExecStat>>({})
 // On each SSE event from your run API:
 eventSource.onmessage = (e) => {
   const { node_id, status, tokens, ms } = JSON.parse(e.data)
-  setStats((prev) => ({ ...prev, [node_id]: { status, tokens, ms } }))
+  setStats((prev) => ({ ...prev, [node_id]: { status, tokens, ms } })) // status: 'pending' | 'running' | 'paused' | 'done' | 'error'; score? is an optional 0-1 quality score
 }
 
 <BuildAHarnessCanvas execStats={stats} />
@@ -112,7 +112,7 @@ The stylesheet uses CSS custom properties so you can override the palette by tar
 
 ## Undo / redo
 
-The canvas maintains a 50-step undo history internally. Users invoke it with Ctrl+Z / Ctrl+Shift+Z. There is no prop to control history depth in v0.1.
+The canvas store keeps a 50-step undo/redo history, exposed as the `undo()` / `redo()` actions on `useCanvasStore`. This package does not bind a keyboard shortcut to them; wire your own (for example from a toolbar button or a `keydown` handler inside your panel). There is no prop to control history depth.
 
 ## Peer dependencies
 
