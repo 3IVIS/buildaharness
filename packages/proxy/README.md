@@ -12,6 +12,7 @@ wrangler login
 wrangler secret put ANTHROPIC_API_KEY
 wrangler secret put OPENAI_API_KEY
 wrangler secret put PROXY_SECRET
+# optional: wrangler secret put BRAVE_API_KEY   (shared fallback for /web/search)
 
 # 3. Set the allowed origin for CORS (your frontend URL)
 #    Edit wrangler.toml [vars] ALLOWED_ORIGIN, or override per environment.
@@ -66,7 +67,7 @@ docker run -p 3001:3001 \
 
 ### docker-compose (proxy + static React app)
 
-See `docker-compose.yml` in this directory. Copy `.env.example` to `.env` and fill in your secrets, then:
+See `docker-compose.yml` in this directory. Copy `.env.example` to `.env` and fill in your secrets, then (the compose file forwards only `PORT`, `ALLOWED_ORIGIN`, the two provider keys and `PROXY_SECRET`; add `BRAVE_API_KEY`, `TRUST_PROXY_HEADERS`, `AUTH_FAILS_PER_HOUR` or the `WEB_*` quota vars under `environment:` if you need them):
 
 ```bash
 docker compose up
@@ -77,7 +78,7 @@ docker compose up
 | Method | Path | Auth | Description |
 |--------|------|------|-------------|
 | `GET` | `/health` | — | Health check (returns `{"status":"ok"}`) |
-| `POST` | `/auth/token` | — | Exchange `PROXY_SECRET` for a short-lived JWT |
+| `POST` | `/auth/token` | — | Exchange `PROXY_SECRET` (`{ secret }`) for a 1-hour JWT. The secret is compared in constant time; failed attempts are throttled per client IP (`AUTH_FAILS_PER_HOUR`, default 10/hour) and a blocked caller gets `429` with `Retry-After` |
 | `POST` | `/llm/chat` | Bearer JWT | Forward chat completion request to Anthropic or OpenAI |
 | `POST` | `/web/search` | Bearer JWT | Run a Brave web search server-side (`{ query, braveApiKey? }` → `{ results: [{ title, url, snippet, fetchTag }] }`). `braveApiKey` is normally the caller's own key — sent fresh on every request from chat-ui's Settings-stored config, never persisted here — and takes priority over the `BRAVE_API_KEY` Worker secret, which exists only as a fallback for a self-hosted operator who wants one shared key for their own deployment. This exists so the plain-browser build (blocked by CORS calling search providers directly) can search — see the internal plan. Each result carries a `fetchTag` (see `/web/fetch` below) — a signed capability for that exact URL, not a general bearer of fetch rights. |
 | `POST` | `/web/fetch` | Bearer JWT | Fetch a URL's text content server-side (`{ url, fetchTag }` → `{ text, finalUrl, truncated }`), so the plain-browser build gets a working `fetch_url` (blocked client-side by CORS + no browser DNS API). **Requires a `fetchTag`**: a signed-URL capability (`src/web-fetch-tag.ts`, `${exp}.${base64url(HMAC-SHA256(PROXY_SECRET, url + "\n" + exp))}`, ~15 min TTL) minted only by `/web/search` (for search results) or `/web/grant` (for user-pasted URLs) — a request whose `fetchTag` doesn't verify against the exact `url`, or has expired, gets `403 untagged target` before the fetch is even attempted. This closes the open-relay hole a bare authenticated fetch proxy would otherwise be: the model can only fetch a URL it was legitimately handed, not one it invented. Once past the tag check, runs the same SSRF guard as `fetch_url`'s desktop/CLI path (`src/web-fetch-core.ts`, a hand-kept-in-sync port of `packages/aielia/src/web-fetch-core.ts` — see that file's header comment for why it isn't a workspace import): rejects non-http(s) schemes, credentialed URLs, non-80/443 ports, and raw IP literals outright; resolves the hostname and rejects a private/loopback/link-local/metadata address, re-checked on every redirect hop (`302 → private target` → `400`, not followed) — a redirect target itself needs no tag, since the client never sees it. Also enforces a streamed byte cap (`Content-Length` can lie) and a content-type allowlist checked against both the header and the sniffed body bytes (`415` if it looks binary); times out a hung fetch (`504`). Zero ambient authority: fixed `User-Agent`, no forwarded client cookies/`Authorization`/headers/IP. A guard rejection is always a `4xx`, never a silent fallback. **Known gap:** does not pin the outbound TCP connection to the resolved+validated address (a DNS-rebinding TOCTOU window exists between resolve and connect on this Node/self-hosted deploy target) — deferred, since verifying real socket-level pinning needs a live network the test sandbox that built this route doesn't have; see the internal plan's W2 section for the residual-risk reasoning. |
@@ -89,7 +90,7 @@ Every `/web/*` route sits behind a shared, in-memory (single-instance — see th
 
 - **Per-token (JWT `sub`) requests/hour** — `WEB_REQUESTS_PER_HOUR` (default 120), shared across all three routes.
 - **Per-client-IP requests/hour** — `WEB_PER_IP_REQUESTS_PER_HOUR` (default 30), layered in front of the per-`sub` ceiling. This matters specifically for a deployment like the hosted `/try` build, where every anonymous visitor shares one token — without it, the per-`sub` limit alone would be one global ceiling shared by everyone.
-- **Client identity for the per-IP limit and the `/auth/token` failed-attempt throttle (`AUTH_FAILS_PER_HOUR`, default 10/hour/IP)** — `cf-connecting-ip` is trusted only on the Cloudflare Worker; on Node the TCP peer address is used. Set `TRUST_PROXY_HEADERS=1` only behind a reverse proxy that overwrites `X-Forwarded-For`/`X-Real-IP` (the last `X-Forwarded-For` entry is used).
+- **Client identity for the per-IP limit and the `/auth/token` failed-attempt throttle (`AUTH_FAILS_PER_HOUR`, default 10/hour/IP)** — `cf-connecting-ip` is trusted only on the Cloudflare Worker; on Node the TCP peer address is used. Set `TRUST_PROXY_HEADERS=1` (`true`/`yes`/`on` also work) only behind a reverse proxy that overwrites `X-Forwarded-For`/`X-Real-IP` (the last `X-Forwarded-For` entry is used).
 - **`/web/fetch`-specific:** a per-`sub` bytes/hour ceiling (`WEB_BYTES_PER_HOUR`, checked before each fetch and charged with the actual bytes consumed after — a single fetch's own byte cap is unaffected and still enforced by `web-fetch-core.ts`), a per-`sub` max-concurrent-fetches guard (`WEB_MAX_CONCURRENT_FETCHES`), and a proxy-wide per-destination-host throttle (`WEB_HOST_REQUESTS_PER_HOUR`) so the proxy can't be used to hammer one third party.
 - **`/web/search`-specific:** a global (not per-`sub`/IP) daily ceiling on Brave calls (`WEB_BRAVE_DAILY_CEILING`), protecting the shared `BRAVE_API_KEY` fallback from being run up or banned by aggregate traffic. Doesn't apply to a request that brings its own `braveApiKey` — that's the caller's own Brave account and quota, not this deployment's.
 - **`/web/grant`-specific:** its own tighter per-`sub` ceiling (`WEB_GRANT_REQUESTS_PER_HOUR`), see the endpoint table above.
