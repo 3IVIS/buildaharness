@@ -383,7 +383,16 @@ function doRequestToolGate(port, payload, options) {
 
 export function wrapUntrusted(text) {
   // Same defanging as trust-tagging.ts: content cannot close (or re-open) the boundary itself.
-  const safe = text.replace(/<(\s*\/?\s*untrusted_external_content)/gi, '&lt;$1')
+  // String scan, not a regex: this is a structural delimiter check, not a natural-language gate.
+  const safe = text
+    .split('<')
+    .map((part, i) => {
+      if (i === 0) return part
+      let rest = part.trimStart()
+      if (rest.startsWith('/')) rest = rest.slice(1).trimStart()
+      return rest.toLowerCase().startsWith('untrusted_external_content') ? '&lt;' + part : '<' + part
+    })
+    .join('')
   return `<untrusted_external_content>\n${safe}\n</untrusted_external_content>`
 }
 

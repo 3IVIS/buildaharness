@@ -13,7 +13,16 @@ import { parseModelJson } from './model-json.js'
  */
 export function wrapUntrusted(text: string): string {
   // Content cannot close (or re-open) the boundary itself: a literal delimiter tag inside the text is defanged.
-  const safe = text.replace(/<(\s*\/?\s*untrusted_external_content)/gi, '&lt;$1')
+  // String scan, not a regex: this is a structural delimiter check, not a natural-language gate.
+  const safe = text
+    .split('<')
+    .map((part: string, i: number) => {
+      if (i === 0) return part
+      let rest = part.trimStart()
+      if (rest.startsWith('/')) rest = rest.slice(1).trimStart()
+      return rest.toLowerCase().startsWith('untrusted_external_content') ? '&lt;' + part : '<' + part
+    })
+    .join('')
   return `<untrusted_external_content>\n${safe}\n</untrusted_external_content>`
 }
 
