@@ -578,6 +578,33 @@ describe('PersonalAssistant', () => {
       expect(result.auditNotice).toBeUndefined()
     })
 
+    it('does not risk-gate the audit retry, so a failed classification of the nudge never makes the host re-send the original message (Q1)', async () => {
+      let audits = 0
+      const replies = ['Done, I changed the file.', 'I did not change anything; no write was made.']
+      class RetryLLM extends FakeLLMClient {
+        async callChatStructured(messages: ChatMessage[], tools?: ToolDefinition[], options?: ChatOptions): Promise<LLMStructuredResponse> {
+          if (String(messages[0]?.content).includes('You audit one reply')) {
+            audits++
+            return { content: audits <= 2 ? '{"claimsUnrecordedWork": true, "promisesWorkNotDone": false, "unverifiedOutsideFacts": false}' : '{"claimsUnrecordedWork": false, "promisesWorkNotDone": false, "unverifiedOutsideFacts": false}' }
+          }
+          // The classifier fails on the nudge (as in the benchmark's scenario 05): failSafeClassification() -> UNKNOWN, requiresApproval.
+          if (isTurnIntentRequest(messages) && messages.find((m) => m.role === 'user')?.content.startsWith('[automatic reply check]')) return { content: 'not json' }
+          return super.callChatStructured(messages, tools, options)
+        }
+        async callChatSync(): Promise<string> { return replies.shift() ?? '' }
+        async *callChat(): AsyncIterable<string> { yield replies.shift() ?? '' }
+      }
+      const logs: { kind: string; content: string }[] = []
+      const assistant = new PersonalAssistant({ llmClient: new RetryLLM(), replyAudit: true, onDebugLog: (e) => logs.push(e) })
+      const result = await assistant.turn('change the file', { sessionId: 'audit-retry-gate' })
+      expect(result.status).toBe('ok')
+      expect(result.reply).toContain('did not change anything')
+      expect(logs.some((e) => e.kind === 'approval_request')).toBe(false)
+      // One user message in the transcript (the original); the nudge is not stored as a second one.
+      const users = (await assistant.getTranscript('audit-retry-gate')).filter((m) => m.role === 'user').map((m) => m.content)
+      expect(users.filter((c) => c === 'change the file')).toHaveLength(1)
+    })
+
     it('records the spend of the flagged turn before its audit retry runs', async () => {
       let audits = 0
       const replies = ['Done, I changed the file.', 'I did not change anything; no write was made.']
