@@ -341,6 +341,15 @@ describe('reviewerPass', () => {
     expect(Array.isArray(result.adversarial_findings)).toBe(true)
   })
 
+  it('a reviewer finding names a finished task only as a whole identifier (t1 is not reopened by a mention of t10)', async () => {
+    const { wm, bd, dd, hs, tg, diag, fd, es, pq } = makeReviewArgs()
+    const mk = (id: string) => ({ id, description: id, status: 'COMPLETE' as const, risk_level: 'LOW' as const, depends_on: [], parallel_write_domains: [], abstraction_level: 0, assigned_strategy: null })
+    tg.tasks.push(mk('t1'), mk('t10'), mk(''))
+    wm.contradictions.push({ id: 'c1', type: 'pairwise', severity: 'HIGH', scope: 'local', description: 'conflict around t10 output', involved_belief_ids: [] })
+    const result = await reviewerPass(wm, [], fd, bd, dd, hs, tg, diag, es, pq)
+    expect(result.reopened_task_ids).toEqual(['t10'])
+  })
+
   it('adversarial_prior seeded only on beliefs with causal_proximity ≥ 0.5 (3-hop BFS from success_criteria chain)', async () => {
     const { wm, bd, dd, hs, tg, diag, fd, es, pq } = makeReviewArgs()
     // Add a belief that matches success criteria
