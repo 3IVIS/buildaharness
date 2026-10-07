@@ -127,6 +127,9 @@ describe('TuiApp', () => {
     expect(frame).toContain('[y] Yes')
     expect(frame).toContain("[a] Yes, don't ask again this session")
     expect(frame).toContain('[n] No')
+    // Keys typed ahead are ignored while the selector arms; one sent at once must not answer it.
+    await key(instance, 'n')
+    await sleep(500)
     await key(instance, 'a')
     await expect(pending).resolves.toBe('a')
     // The echoed answer is the option's label, not its raw key ("a") — but at columns=40 the
@@ -335,5 +338,23 @@ describe('TuiApp plan graph pane', () => {
     await key(instance, CTRL_C)
     expect(onExit).toHaveBeenCalled()
     void answer
+  })
+})
+
+describe('terminal control stripping in the bridges', () => {
+  it('EventLogBridge drops escape sequences from committed lines, progress and streamed tokens', () => {
+    const log = new EventLogBridge()
+    log.handleEvent({ type: 'line', stream: 'stdout', lines: ['plain \x1b[2Jtext \x1b]0;title\x07done'] })
+    log.handleEvent({ type: 'progress', text: '[step 1] \x1b[31mred' })
+    log.handleEvent({ type: 'token', text: 'tok\x1b[2J' })
+    const snap = log.getSnapshot()
+    expect(snap.lines.map((l) => l.text).join('|')).toBe('plain text done')
+    expect(snap.progressText).toBe('[step 1] red')
+    expect(snap.transientText).toBe('tok')
+  })
+  it('PromptBridge strips escapes from the question and option labels', () => {
+    const prompt = new PromptBridge()
+    void prompt.askSelect('Run \x1b[2Jthis?', [{ key: 'y', label: 'Y\x1b]52;c;AAAA\x07es' }])
+    expect(prompt.getSnapshot()).toEqual({ question: 'Run this?', options: [{ key: 'y', label: 'Yes' }] })
   })
 })

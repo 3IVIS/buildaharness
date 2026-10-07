@@ -36,6 +36,12 @@ afterEach(() => {
 })
 
 describe('checkProxyHealth', () => {
+  it('does not put credentials from the proxy URL in the label', async () => {
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue(new Response(JSON.stringify({ status: 'ok' }), { status: 200 })))
+    const result = await checkProxyHealth('http://u:secretpw@localhost:8787')
+    expect(result.label).not.toContain('secretpw')
+  })
+
   it('reports ok when the endpoint returns {status: "ok"}', async () => {
     vi.stubGlobal('fetch', vi.fn().mockResolvedValue(new Response(JSON.stringify({ status: 'ok' }), { status: 200 })))
 

@@ -253,3 +253,16 @@ describe('formatConfigListing', () => {
     expect(listing).toContain('(env-pinned: ASSISTANT_ENABLE_WEB)')
   })
 })
+
+describe('proxyUrl credential masking', () => {
+  it('/config never prints a user:password or query value embedded in proxyUrl', () => {
+    const listing = formatConfigListing({ ...DEFAULT_CONFIG, proxyUrl: 'http://bob:hunter2@proxy.example:8787/?token=abc123' }, new Set())
+    expect(listing).not.toContain('hunter2')
+    expect(listing).not.toContain('abc123')
+    expect(listing).not.toContain('bob')
+    expect(listing).toContain('proxy.example')
+  })
+  it('a plain URL is shown unchanged', () => {
+    expect(formatConfigListing({ ...DEFAULT_CONFIG, proxyUrl: 'http://localhost:8787' }, new Set())).toContain('http://localhost:8787\n')
+  })
+})

@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { Box, Text, useInput } from 'ink'
 import type { SelectOption } from './cli.js'
 
@@ -10,6 +10,8 @@ export interface SelectPromptProps {
   /** Called once, with the chosen option's `key` — either Enter on the highlighted row, or a direct keystroke matching an option's `key`. */
   onSubmit: (key: string) => void
   isActive?: boolean
+  /** Keys arriving within this many ms of the prompt appearing are ignored: a key typed ahead for the previous turn (an Enter, a 'y') must not answer a question the user has not seen yet. Default 0 (no guard). */
+  armDelayMs?: number
 }
 
 /**
@@ -23,11 +25,22 @@ export interface SelectPromptProps {
  * box), which each renders independently.
  */
 export function SelectPrompt(props: SelectPromptProps): React.JSX.Element {
-  const { question, options, onSubmit, isActive = true } = props
+  const { question, options, onSubmit, isActive = true, armDelayMs = 0 } = props
   const [highlighted, setHighlighted] = useState(0)
+  const armed = useRef(armDelayMs <= 0)
+  useEffect(() => {
+    if (armDelayMs <= 0) return
+    // Re-armed for every new question: the same component instance can show two prompts in a row.
+    armed.current = false
+    const timer = setTimeout(() => {
+      armed.current = true
+    }, armDelayMs)
+    return () => clearTimeout(timer)
+  }, [armDelayMs, question, options])
 
   useInput(
     (input, key) => {
+      if (!armed.current) return
       if (key.upArrow) {
         setHighlighted((h) => (h - 1 + options.length) % options.length)
         return

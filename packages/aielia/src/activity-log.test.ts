@@ -30,6 +30,13 @@ describe('createActivityLogger', () => {
     ])
   })
 
+  it('tightens a pre-existing world-readable log to owner-only', () => {
+    const file = join(tmp(), 'log.jsonl')
+    writeFileSync(file, '', { mode: 0o644 })
+    createActivityLogger(file)({ kind: 'note', sessionId: 's', content: 'x' })
+    expect(statSync(file).mode & 0o077).toBe(0)
+  })
+
   it('creates the log owner-only (it holds full tool output)', () => {
     const dir = tmp()
     const file = join(dir, 'sub', 'log.jsonl')

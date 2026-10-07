@@ -94,4 +94,16 @@ describe('SelectPrompt', () => {
     await key(instance, 'z')
     expect(onSubmit).not.toHaveBeenCalled()
   })
+
+  it('ignores keys typed ahead during armDelayMs, then answers normally', async () => {
+    const onSubmit = vi.fn()
+    const instance = render(<SelectPrompt question="Proceed?" options={OPTIONS} onSubmit={onSubmit} armDelayMs={150} />)
+    await sleep()
+    await key(instance, ENTER)
+    await key(instance, 'y')
+    expect(onSubmit).not.toHaveBeenCalled()
+    await sleep(200)
+    await key(instance, 'n')
+    expect(onSubmit).toHaveBeenCalledWith('n')
+  })
 })

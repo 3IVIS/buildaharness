@@ -9,7 +9,7 @@
  * ASSISTANT_ACTIVITY_LOG is set to 1/true/on/yes, the same trade-off DebugLogEntry documents.
  * Node-only (fs): imported by cli.ts, never by the browser build.
  */
-import { appendFileSync, mkdirSync } from 'node:fs'
+import { appendFileSync, chmodSync, mkdirSync } from 'node:fs'
 import { dirname } from 'node:path'
 import type { DebugLogEntry } from './debug-log.js'
 
@@ -24,9 +24,13 @@ export function createActivityLogger(filePath: string, now: () => Date = () => n
     try {
       if (!ready) {
         mkdirSync(dirname(filePath), { recursive: true, mode: 0o700 })
-        ready = true
       }
       appendFileSync(filePath, JSON.stringify({ at: now().toISOString(), sessionId: entry.sessionId, kind: entry.kind, content: entry.content }) + '\n', { mode: 0o600 })
+      if (!ready) {
+        // `mode` only applies when the file is created; a log left over from an older version may be world-readable.
+        try { chmodSync(filePath, 0o600) } catch { /* not ours to change; the entry is written */ }
+        ready = true
+      }
     } catch (err) {
       // A logging problem must never break a turn.
       console.error('[activity-log] could not write an entry:', err)

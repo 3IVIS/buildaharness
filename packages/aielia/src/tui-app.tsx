@@ -8,6 +8,7 @@ import { SelectPrompt } from './ink-select-prompt.js'
 import { ICONS, PLAN_LINE_PREFIX } from './cli-icons.js'
 import { PlanGraphPane } from './PlanGraphPane.js'
 import type { VizNode } from './plan-viz/types.js'
+import { stripTerminalControls } from './cli-session.js'
 import { renderMarkdownLine, renderDiffLine, renderNeedsApprovalLine } from './markdown-line.js'
 
 // "Indent everything coming from the assistant" — a uniform left margin on every assistant-reply
@@ -221,17 +222,17 @@ export class EventLogBridge implements Store<TuiLogState> {
     this.waitingForOutput = false
     if (this.turnInFlight) this.lastActivityAt = Date.now()
     if (event.type === 'progress') {
-      this.progressText = event.text
+      this.progressText = stripTerminalControls(event.text)
       this.commit()
       return
     }
     if (event.type === 'token') {
-      this.transientText += event.text
+      this.transientText += stripTerminalControls(event.text)
       this.commit()
       return
     }
     const streamedReplyWasOpen = this.transientText.length > 0
-    const merged = this.transientText + event.lines.join('\n')
+    const merged = this.transientText + stripTerminalControls(event.lines.join('\n'))
     const kind = classifyLineKind(merged, streamedReplyWasOpen, event.stream)
     const displayText = kind === 'assistant' ? stripAssistantLabel(merged) : kind === 'plan' ? stripPlanLabel(merged) : merged
     // 'plan' stays one un-split LogLine (see PlanBox's doc comment) — every other kind splits
@@ -323,7 +324,10 @@ export class PromptBridge implements Store<PendingPrompt> {
 
   private ask(question: string, options?: SelectOption[]): Promise<string> {
     return new Promise((resolve) => {
-      this.pending = { question, options }
+      this.pending = {
+        question: stripTerminalControls(question),
+        options: options?.map((o) => ({ ...o, label: stripTerminalControls(o.label) })),
+      }
       this.resolve = resolve
       for (const listener of this.listeners) listener()
     })
@@ -371,6 +375,8 @@ const ALT_SCREEN_ON = '\x1b[?1049h'
 const ALT_SCREEN_OFF = '\x1b[?1049l'
 /** Pause between the empty frame and the screen switch (verified in the S2 probe) so Ink's last chat frame is erased before the switch. */
 const ALT_SCREEN_SETTLE_MS = 80
+/** Keys typed ahead during the turn are ignored for this long after an approval selector appears (see SelectPrompt's armDelayMs). */
+const SELECT_ARM_DELAY_MS = 400
 /** At most one pane re-render per interval, however fast progress updates arrive. */
 const PLAN_GRAPH_MIN_RENDER_MS = 100
 
@@ -743,7 +749,7 @@ export function TuiApp(props: TuiAppProps): React.JSX.Element {
         {graphView.mode === 'pane' && (
           <PlanGraphPane nodes={graphView.nodes} columns={width} rows={paneRows - promptRows} active={!pending} color={!process.env.NO_COLOR} onClose={closePane} />
         )}
-        {graphView.mode === 'pane' && pending?.options && <SelectPrompt question={pending.question} options={pending.options} onSubmit={handleSubmitPrompt} />}
+        {graphView.mode === 'pane' && pending?.options && <SelectPrompt question={pending.question} options={pending.options} onSubmit={handleSubmitPrompt} armDelayMs={SELECT_ARM_DELAY_MS} />}
         {graphView.mode === 'pane' && pending && !pending.options && (
           <TuiInput promptLabel={pending.question} onSubmitChat={handleSubmitChat} onSubmitPrompt={handleSubmitPrompt} columns={columns} />
         )}
@@ -763,7 +769,7 @@ export function TuiApp(props: TuiAppProps): React.JSX.Element {
       {showSpinner && <Spinner since={log.lastActivityAt} hasProgress={log.progressText.length > 0} />}
       <Text dimColor>{'─'.repeat(Math.max(1, width))}</Text>
       {pending?.options ? (
-        <SelectPrompt question={pending.question} options={pending.options} onSubmit={handleSubmitPrompt} />
+        <SelectPrompt question={pending.question} options={pending.options} onSubmit={handleSubmitPrompt} armDelayMs={SELECT_ARM_DELAY_MS} />
       ) : (
         <TuiInput
           promptLabel={pending?.question}

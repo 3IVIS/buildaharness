@@ -1723,6 +1723,17 @@ describe('audit fixes: command lookup, picked next steps, closed input, reset sa
     expect(/[\u001b\u0007\u009b]/.test(output)).toBe(false)
   })
 
+  it('strips terminal escapes from command output such as /search that echoes stored or typed text', async () => {
+    const { cli } = await setupCli()
+    const lines = captureOutput()
+
+    await cli.dispatchLine('/search zzznomatch\u001b]0;pwned\u0007\u001b[2J')
+
+    const output = lines.join('\n')
+    expect(output).toContain('No results for')
+    expect(/[\u001b\u0007]/.test(output)).toBe(false)
+  })
+
   it('/export keeps a path containing spaces whole', async () => {
     const { mkdtemp, readFile, rm } = await import('node:fs/promises')
     const { tmpdir } = await import('node:os')
