@@ -448,3 +448,41 @@ describe('OpenAICompatibleLLMClient', () => {
     })
   })
 })
+
+describe('request timeout (a stalled request must not freeze a turn)', () => {
+  const makeClient = (fetchImpl: typeof fetch, requestTimeoutMs = 50) =>
+    new OpenAICompatibleLLMClient({ apiKey: API_KEY, baseUrl: OPENAI_BASE_URL, defaultModel: 'm', fetchImpl, requestTimeoutMs })
+  const user = [{ role: 'user' as const, content: 'hi' }]
+
+  it('rejects a structured call whose fetch never resolves', async () => {
+    const client = makeClient((() => new Promise(() => {})) as unknown as typeof fetch)
+    await expect(client.callChatStructured(user)).rejects.toThrow(/timed out/)
+  })
+
+  it('rejects a structured call whose body never finishes', async () => {
+    const stalled = new Response(new ReadableStream<Uint8Array>({ start() {} }), { status: 200, headers: { 'Content-Type': 'application/json' } })
+    const client = makeClient((async () => stalled) as unknown as typeof fetch)
+    await expect(client.callChatStructured(user)).rejects.toThrow(/timed out/)
+  })
+
+  it('rejects a streamed reply that stalls after its first chunk, and the timeout is a FlowExecutionError', async () => {
+    const encoder = new TextEncoder()
+    const stream = new ReadableStream<Uint8Array>({
+      start(controller) {
+        controller.enqueue(encoder.encode('data: {"choices":[{"delta":{"content":"par"}}]}\n'))
+        // never closes
+      },
+    })
+    const client = makeClient((async () => new Response(stream, { status: 200 })) as unknown as typeof fetch)
+    const seen: string[] = []
+    const run = (async () => { for await (const t of client.callChat(user)) seen.push(t) })()
+    await expect(run).rejects.toBeInstanceOf(FlowExecutionError)
+    expect(seen).toEqual(['par'])
+  })
+
+  it('does not fire for a request that answers in time', async () => {
+    const body = { choices: [{ message: { content: 'ok' } }] }
+    const client = makeClient((async () => new Response(JSON.stringify(body), { status: 200 })) as unknown as typeof fetch)
+    await expect(client.callChatStructured(user)).resolves.toMatchObject({ content: 'ok' })
+  })
+})
