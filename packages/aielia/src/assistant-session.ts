@@ -1,4 +1,5 @@
 import { actionRecordSuffix, stripActionRecord } from './action-record.js'
+import { deletePlanFiles } from './plan-store.js'
 import {
   loadHarnessCheckpoint,
   deleteHarnessCheckpoint,
@@ -532,6 +533,8 @@ export class AssistantSession {
     await this.memory.delete(`transcript:${sessionId}`)
     await this.memory.delete(`facts:${sessionId}`)
     await this.memory.delete(`plan:${sessionId}`)
+    const planFs = this.undoWorkspace()
+    if (planFs) await deletePlanFiles(planFs, sessionId)
     await this.exitPlanMode(sessionId)
     await deleteHarnessCheckpoint(this.checkpointStore, `turn:${sessionId}`)
     await this.memory.delete(resumeAttemptsKey(sessionId))

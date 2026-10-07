@@ -142,7 +142,15 @@ function planFilePaths(workspaceRoot: string, sessionId: string): { dir: string;
   // sessionId is an API-level identifier, not sandboxed user input the way write_file's `path`
   // arg is — but it still flows into a filesystem path, so strip anything that could traverse
   // out of the plans directory rather than trusting it's always a plain slug.
-  const safeId = sessionId.replace(/[^a-zA-Z0-9_-]/g, '_')
+  let safeId = sessionId.replace(/[^a-zA-Z0-9_-]/g, '_')
+  // Sanitising is lossy ("a/b" and "a_b" both give "a_b"), which made two sessions share one plan file,
+  // and the file wins over the per-session record on load. An id that needed rewriting gets a hash of
+  // the original appended (same scheme as goal-graph-store.ts); already-safe ids keep their file name.
+  if (safeId !== sessionId) {
+    let h = 0x811c9dc5
+    for (let i = 0; i < sessionId.length; i++) h = Math.imul(h ^ sessionId.charCodeAt(i), 0x01000193) >>> 0
+    safeId = `${safeId}-${h.toString(16)}`
+  }
   const dir = `${workspaceRoot}/.buildaharness/plans`
   return { dir, json: `${dir}/${safeId}.plan.json`, md: `${dir}/${safeId}.plan.md` }
 }
@@ -200,6 +208,20 @@ async function writePlanFiles(fsPersistence: PlanFsPersistence, sessionId: strin
     await atomicWriteFile(backend, md, formatPlanFileMarkdown(plan))
   } catch (err) {
     console.error(`plan-store: writing plan files for session ${sessionId} failed:`, err)
+  }
+}
+
+/**
+ * Removes the session's mirrored plan files. `loadPlanRecord` prefers the file over the memory record,
+ * so deleting only the memory record (`/new`) let the old plan come straight back. Never throws.
+ */
+export async function deletePlanFiles(fsPersistence: PlanFsPersistence, sessionId: string): Promise<void> {
+  try {
+    const { json, md } = planFilePaths(fsPersistence.workspaceRoot, sessionId)
+    await fsPersistence.backend.removeFile(json)
+    await fsPersistence.backend.removeFile(md)
+  } catch (err) {
+    console.error(`plan-store: removing plan files for session ${sessionId} failed:`, err)
   }
 }
 

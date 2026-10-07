@@ -1,6 +1,7 @@
 import { describe, it, expect, beforeAll, afterAll } from 'vitest'
 import { InMemoryAdapter, type FsBackend, type MemoryAdapter } from '@buildaharness/runtime'
 import {
+  deletePlanFiles,
   loadActivePlan,
   loadPlanRecord,
   createPlanRecord,
@@ -616,6 +617,26 @@ describe('P5 file-backed plan persistence', () => {
     await savePlan(memory, '../../etc/passwd', plan, fs)
 
     expect([...fs.backend.files.keys()].every((p) => p.startsWith('/workspace/.buildaharness/plans/'))).toBe(true)
+  })
+
+  it('session ids that sanitise to the same text get distinct plan files', async () => {
+    const memory = new InMemoryAdapter()
+    const fs = makeFsPersistence()
+    await savePlan(memory, 'a/b', createPlanRecord(makePlan()), fs)
+    await savePlan(memory, 'a_b', { ...createPlanRecord(makePlan()), successCriteria: 'other' }, fs)
+    expect((await loadPlanRecord(new InMemoryAdapter(), 'a/b', fs))?.successCriteria).not.toBe('other')
+    expect((await loadPlanRecord(new InMemoryAdapter(), 'a_b', fs))?.successCriteria).toBe('other')
+  })
+
+  it('deletePlanFiles stops a cleared session from reloading its old plan from disk', async () => {
+    const memory = new InMemoryAdapter()
+    const fs = makeFsPersistence()
+    await savePlan(memory, 'session-1', createPlanRecord(makePlan()), fs)
+    await memory.delete('plan:session-1')
+    expect(await loadPlanRecord(memory, 'session-1', fs)).not.toBeNull() // the file revives it
+    await memory.delete('plan:session-1')
+    await deletePlanFiles(fs, 'session-1')
+    expect(await loadPlanRecord(memory, 'session-1', fs)).toBeNull()
   })
 
   it('reflects a hand-edited plan JSON file on the next load (the file is the editable-and-reloadable artifact)', async () => {
