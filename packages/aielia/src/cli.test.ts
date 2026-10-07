@@ -804,6 +804,19 @@ describe('approval-prompt handling', () => {
     expect(transcript.some((m) => m.content.includes('email'))).toBe(true)
   })
 
+  it('an approval selector that resolves with an unrecognised key declines (fail closed)', async () => {
+    const llm = new FakeLLMClient('Draft sent.')
+    const assistant = new PersonalAssistant({ llmClient: llm })
+    const askSelect = vi.fn().mockResolvedValue('')
+    const { cli } = await setupCli({ assistant, askSelect })
+    const lines = captureOutput()
+
+    await cli.dispatchLine('Please send an email to my boss telling him I quit.')
+
+    expect(lines.join('\n')).toContain('Cancelled.')
+    expect(llm.calls).toBe(1)
+  })
+
   it('a staged write_file action resolves through turn({approved, pendingActionId}) on accept and actually applies', async () => {
     const backend = makeFakeBackend()
     const llm = new ScriptedToolLLMClient({ id: 'toolu_1', name: 'write_file', input: { path: 'summary.md', content: 'hello' } })

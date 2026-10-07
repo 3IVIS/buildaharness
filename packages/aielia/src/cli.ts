@@ -1483,7 +1483,7 @@ export async function runCli(options: RunCliOptions = {}): Promise<CliInstance> 
           confirmed = true
         } else {
           const decision = await askSelect(promptText, APPROVAL_OPTIONS)
-          confirmed = decision !== 'n'
+          confirmed = decision === 'y' || decision === 'a'
           if (decision === 'a' && result.pendingActionKind) rememberedActionKinds.add(result.pendingActionKind)
         }
         lastTrace = undefined
@@ -1501,7 +1501,7 @@ export async function runCli(options: RunCliOptions = {}): Promise<CliInstance> 
           confirmed = true
         } else {
           const decision = await askSelect('Proceed?', APPROVAL_OPTIONS)
-          confirmed = decision !== 'n'
+          confirmed = decision === 'y' || decision === 'a'
           if (decision === 'a' && result.riskLevel) rememberedRiskLevels.add(result.riskLevel)
         }
         if (confirmed) {
