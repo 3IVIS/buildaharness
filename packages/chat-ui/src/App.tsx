@@ -1,4 +1,6 @@
 import { Fragment, useEffect, useMemo, useRef, useState } from 'react'
+import { downloadBlob } from './download-blob'
+import { isUserAuthoredUrl, rememberUserUrls } from './user-urls'
 import { isTauri, invoke } from '@tauri-apps/api/core'
 import {
   PersonalAssistant,
@@ -191,7 +193,13 @@ function createProxyWebTools(config: AssistantConfig): { search: (query: string)
   // sees a second iteration.
   const fetchImpl: typeof fetch = async (input) => {
     const url = typeof input === 'string' ? input : input instanceof URL ? input.toString() : input.url
-    const fetchTag = fetchTagsByUrl.get(url) ?? (await callProxy<{ fetchTag: string }>('/web/grant', { url })).fetchTag
+    let fetchTag = fetchTagsByUrl.get(url)
+    if (!fetchTag) {
+      // /web/grant is for a URL the user typed. A URL the model invented or copied out of fetched
+      // page text must not become a fetch capability, or the tag scheme is an open relay again.
+      if (!isUserAuthoredUrl(url)) throw new Error('fetch_url refused: that URL was neither returned by web_search nor typed by the user')
+      fetchTag = (await callProxy<{ fetchTag: string }>('/web/grant', { url })).fetchTag
+    }
     const { text } = await callProxy<{ text: string; finalUrl: string; truncated: boolean }>('/web/fetch', { url, fetchTag })
     return new Response(text, { status: 200, headers: { 'content-type': 'text/plain; charset=utf-8' } })
   }
@@ -697,13 +705,7 @@ export function App(): React.JSX.Element {
     if (!assistant) return
     const transcript = await assistant.getTranscript(sessionIdRef.current)
     if (transcript.length === 0) return
-    const blob = new Blob([formatTranscriptMarkdown(transcript)], { type: 'text/markdown' })
-    const url = URL.createObjectURL(blob)
-    const a = document.createElement('a')
-    a.href = url
-    a.download = defaultExportFilename()
-    a.click()
-    URL.revokeObjectURL(url)
+    downloadBlob(new Blob([formatTranscriptMarkdown(transcript)], { type: 'text/markdown' }), defaultExportFilename())
   }
 
   /**
@@ -826,6 +828,7 @@ export function App(): React.JSX.Element {
       return
     }
 
+    rememberUserUrls(message)
     setBusy(true)
     setProgress(null)
     setStreamingText(null)

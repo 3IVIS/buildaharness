@@ -40,8 +40,8 @@ import { braveSearch } from './web-search-provider.js'
 import { resolveConfig, validateConfig, ConfigValidationError, type AssistantConfig, type ConfigStore } from './config.js'
 import { NodeConfigStore } from './node-config-store.js'
 import { applyLayerSettings, formatLayerListing, sanitizeLayerChoices, withLayerChoice, LayerSettingError } from './layer-settings.js'
-import { isConfigKey, envOverridesFromProcessEnv, parseConfigValue, ConfigValueParseError, formatConfigListing, ENV_VAR_FOR_CONFIG_KEY, CONFIG_KEYS } from './cli-config.js'
-import { formatHelp, isQuitCommand, formatStatus, formatTranscriptMarkdown, defaultExportFilename, formatMemorySummary, formatMemoryExport, defaultMemoryExportFilename, formatSearchResults, formatGoalGraphState, formatNextSteps, formatCostSummary, formatDoctorReport, formatUndoLogListing, formatMemoryPendingOutcome, formatMemoryHistory, formatMemoryArchive, formatMemoryInjection, formatMemoryStatus } from './cli-session.js'
+import { isConfigKey, findInvalidNumericSettings, envOverridesFromProcessEnv, parseConfigValue, ConfigValueParseError, formatConfigListing, ENV_VAR_FOR_CONFIG_KEY, CONFIG_KEYS } from './cli-config.js'
+import { stripTerminalControls, formatHelp, isQuitCommand, formatStatus, formatTranscriptMarkdown, defaultExportFilename, formatMemorySummary, formatMemoryExport, defaultMemoryExportFilename, formatSearchResults, formatGoalGraphState, formatNextSteps, formatCostSummary, formatDoctorReport, formatUndoLogListing, formatMemoryPendingOutcome, formatMemoryHistory, formatMemoryArchive, formatMemoryInjection, formatMemoryStatus } from './cli-session.js'
 import { estimateCostUsd } from './model-pricing.js'
 import { formatSpendCapStatus } from './spend-cap.js'
 import { checkProxyHealth, checkClaudeCli, checkWorkspaceRoot, checkDataDirWritable, checkMemoryHealth } from './doctor-checks.js'
@@ -69,6 +69,12 @@ import {
   updateAvailableNotice,
 } from './self-update.js'
 import { CLI_VERSION } from './version.js'
+
+/** console.log for any text that can carry stored, model, tool or web content: terminal escape sequences and other control characters are removed (same filter as stripTerminalControls), plain text is unchanged. */
+function printSafe(...args: unknown[]): void {
+  console.log(...args.map((a) => (typeof a === 'string' ? stripTerminalControls(a) : a)))
+}
+
 
 const defaultDataDir = join(homedir(), '.buildaharness', 'personal-assistant')
 const defaultConfigStore = new NodeConfigStore(join(defaultDataDir, 'config.json'))
@@ -311,7 +317,7 @@ export async function runCli(options: RunCliOptions = {}): Promise<CliInstance> 
   // new or returning user sees, on every surface runCli() drives (plain REPL, piped/scripted
   // input, and the Ink TUI shell, which captures this same console.log via startCapture — see
   // tui-app.ts's own comment on why the banner isn't duplicated there).
-  console.log('Aielia is alpha software — expect rough edges and breaking changes. It uses AI models and can make mistakes; verify anything important.\n')
+  printSafe('Aielia is alpha software — expect rough edges and breaking changes. It uses AI models and can make mistakes; verify anything important.\n')
 
   const dataDir = options.dataDir ?? defaultDataDir
   const configStore = options.configStore ?? defaultConfigStore
@@ -361,6 +367,8 @@ export async function runCli(options: RunCliOptions = {}): Promise<CliInstance> 
 
   try {
     validateConfig({}, config)
+    const numericProblems = findInvalidNumericSettings(config)
+    if (numericProblems.length > 0) throw new ConfigValidationError(numericProblems.join(' '))
   } catch (err) {
     if (!(err instanceof ConfigValidationError)) throw err
     // Thrown, not printed + process.exit()ed here: under the Ink TUI console/stderr are captured into the (never rendered)
@@ -405,7 +413,7 @@ export async function runCli(options: RunCliOptions = {}): Promise<CliInstance> 
   // instead of exiting (see readline's 'SIGINT' event docs) — silently contradicting the
   // startup banner's "Ctrl+C to exit". Registering this listener makes Ctrl+C actually exit.
   rl.on('SIGINT', () => {
-    console.log('\nExiting.')
+    printSafe('\nExiting.')
     process.exit(0)
   })
 
@@ -420,7 +428,7 @@ export async function runCli(options: RunCliOptions = {}): Promise<CliInstance> 
     openai: OPENAI_DEFAULT_MODEL,
     openrouter: OPENROUTER_DEFAULT_MODEL,
   }
-  console.log(`backend: ${config.llmBackend} (${config.model ?? backendDisplayModel[config.llmBackend]})`)
+  printSafe(`backend: ${config.llmBackend} (${config.model ?? backendDisplayModel[config.llmBackend]})`)
 
   // No silent default: capabilities only appear in the banner when actually configured,
   // so the banner never implies something is available that isn't.
@@ -450,8 +458,8 @@ export async function runCli(options: RunCliOptions = {}): Promise<CliInstance> 
       ? `\n${undoableFromBefore} action${undoableFromBefore === 1 ? '' : 's'} from earlier sessions ${undoableFromBefore === 1 ? 'is' : 'are'} still revertible — see /undo-action.\n`
       : ''
 
-  console.log(`Aielia — your personal assistant on the 11-layer harness, one turn at a time. Ctrl+C to exit.${capabilitySuffix}\n${dangerBanner}${nonInteractiveBanner}${undoBanner}`)
-  console.log('Type /help to see all commands, /config to view settings.\n')
+  printSafe(`Aielia — your personal assistant on the 11-layer harness, one turn at a time. Ctrl+C to exit.${capabilitySuffix}\n${dangerBanner}${nonInteractiveBanner}${undoBanner}`)
+  printSafe('Type /help to see all commands, /config to view settings.\n')
   // M5: session start consolidates what earlier sessions left. Background, fail-open, a no-op unless AUDIT_MEMORY_CONSOLIDATION is on.
   void assistant.proposeMemoryConsolidation('cli').catch(() => undefined)
   rl.prompt()
@@ -513,7 +521,7 @@ export async function runCli(options: RunCliOptions = {}): Promise<CliInstance> 
 
   function printPlan(): void {
     if (!lastPlanStatus) {
-      console.log('\nNo active plan for this session.\n')
+      printSafe('\nNo active plan for this session.\n')
       return
     }
     // Phase 6 of the CLI formatting plan ("distinct plan-mode UI") — one combined console.log
@@ -535,7 +543,7 @@ export async function runCli(options: RunCliOptions = {}): Promise<CliInstance> 
       ]),
       `Success criteria: ${lastPlanStatus.successCriteria}`,
     ]
-    console.log(`\n${lines.join('\n')}\n`)
+    console.log(stripTerminalControls(`\n${lines.join('\n')}\n`))
   }
 
   /**
@@ -547,10 +555,10 @@ export async function runCli(options: RunCliOptions = {}): Promise<CliInstance> 
   async function handlePlanSketch(args: string[]): Promise<void> {
     const request = args.join(' ').trim()
     if (!request) {
-      console.log('\nUsage: /plan sketch <request>\n')
+      printSafe('\nUsage: /plan sketch <request>\n')
       return
     }
-    console.log('\nSketching a plan (read-only grounding only, nothing staged)...\n')
+    printSafe('\nSketching a plan (read-only grounding only, nothing staged)...\n')
     const result = await assistant.sketchPlan('cli', request)
     // Phase 6 of the CLI formatting plan: this is genuine LLM-authored prose (often markdown —
     // headers, `- [ ]` checklists), not deterministic CLI-controlled text, so it's routed through
@@ -559,7 +567,7 @@ export async function runCli(options: RunCliOptions = {}): Promise<CliInstance> 
     // existing assistant-reply markdown path (markdown-line.tsx) instead of printing literal
     // '##'/'- [ ]' characters, the same gap the underlying report flagged for the legacy
     // (DEFAULT_PLAN_MODE) prose path specifically.
-    console.log(`Aielia> ${result.reply ?? '(no reply)'}\n`)
+    console.log(stripTerminalControls(`Aielia> ${result.reply ?? '(no reply)'}\n`))
     if (result.usage) lastTurnUsage = withCostEstimate(result.usage)
   }
 
@@ -591,7 +599,7 @@ export async function runCli(options: RunCliOptions = {}): Promise<CliInstance> 
         ? ['Review notes:', ...snapshot.reviewNotes.map((note) => `  - ${note}`)]
         : []),
     ]
-    console.log(`\n${lines.join('\n')}\n`)
+    console.log(stripTerminalControls(`\n${lines.join('\n')}\n`))
   }
 
   /**
@@ -617,7 +625,7 @@ export async function runCli(options: RunCliOptions = {}): Promise<CliInstance> 
     const validCancels = cancelTaskIds.filter((id) => knownIds.has(id))
     const validEdits = parsedEdits.filter((edit) => knownIds.has(edit.id) && edit.description)
     const unknown = [...cancelTaskIds.filter((id) => !knownIds.has(id)), ...parsedEdits.filter((e) => !knownIds.has(e.id)).map((e) => e.id)]
-    if (unknown.length > 0) console.log(`  [ignoring unknown task id(s): ${[...new Set(unknown)].join(', ')}]`)
+    if (unknown.length > 0) printSafe(`  [ignoring unknown task id(s): ${[...new Set(unknown)].join(', ')}]`)
     return {
       ...(validCancels.length > 0 ? { cancelTaskIds: validCancels } : {}),
       ...(validEdits.length > 0 ? { editedTasks: validEdits } : {}),
@@ -632,7 +640,7 @@ export async function runCli(options: RunCliOptions = {}): Promise<CliInstance> 
    */
   async function handlePlanApprovalCommand(sub: string): Promise<void> {
     if (!pendingPlanApproval) {
-      console.log('\nNo plan is awaiting approval.\n')
+      printSafe('\nNo plan is awaiting approval.\n')
       return
     }
     const { id, message, snapshot } = pendingPlanApproval
@@ -644,7 +652,7 @@ export async function runCli(options: RunCliOptions = {}): Promise<CliInstance> 
       decision = 'approve_trusted'
     } else if (sub === 'edit') {
       if (!snapshot) {
-        console.log('\n[tasks unavailable for editing — /plan approve or /plan decline]\n')
+        printSafe('\n[tasks unavailable for editing — /plan approve or /plan decline]\n')
         return
       }
       printPlanApproval(snapshot)
@@ -672,7 +680,7 @@ export async function runCli(options: RunCliOptions = {}): Promise<CliInstance> 
   async function handlePlanGraph(args: string[]): Promise<void> {
     const nodes = await loadPlanGraphNodes(undefined, args[0])
     if (!nodes) {
-      console.log(args[0] ? `\nNo plan graph for thread "${args[0]}".\n` : '\nNo active plan for this session.\n')
+      printSafe(args[0] ? `\nNo plan graph for thread "${args[0]}".\n` : '\nNo active plan for this session.\n')
       return
     }
     if (options.openPlanGraph) {
@@ -681,7 +689,7 @@ export async function runCli(options: RunCliOptions = {}): Promise<CliInstance> 
         options.openPlanGraph(nodes)
         return
       }
-      console.log(`\n[plan graph unavailable: ${probe.message}] showing the checklist instead.`)
+      printSafe(`\n[plan graph unavailable: ${probe.message}] showing the checklist instead.`)
       printPlan()
       return
     }
@@ -689,17 +697,17 @@ export async function runCli(options: RunCliOptions = {}): Promise<CliInstance> 
     const color = Boolean(process.stdout.isTTY) && !process.env.NO_COLOR
     const result = renderPlan(nodes, { maxCols: cols, color })
     if (!result.ok) {
-      console.log(`\n[plan graph unavailable: ${result.message}] showing the checklist instead.`)
+      printSafe(`\n[plan graph unavailable: ${result.message}] showing the checklist instead.`)
       printPlan()
       return
     }
     if (!result.fits) {
-      console.log(`\n[plan graph is wider than ${cols} columns] dependency list:\n`)
-      for (const n of nodes) console.log(`  [${n.status}] ${n.id} — ${n.label}${n.deps.length ? `  (after: ${n.deps.join(', ')})` : ''}`)
-      console.log('')
+      printSafe(`\n[plan graph is wider than ${cols} columns] dependency list:\n`)
+      for (const n of nodes) printSafe(`  [${n.status}] ${n.id} — ${n.label}${n.deps.length ? `  (after: ${n.deps.join(', ')})` : ''}`)
+      printSafe('')
       return
     }
-    console.log(`\n${result.lines.join('\n')}\n`)
+    printSafe(`\n${result.lines.join('\n')}\n`)
   }
 
   async function handlePlan(args: string[]): Promise<void> {
@@ -751,54 +759,54 @@ export async function runCli(options: RunCliOptions = {}): Promise<CliInstance> 
     // What the reply could have known (M6): printed with or without a harness trace, since a fast-path turn still saw memory.
     const memoryLine = formatMemoryInjection(assistant.getLastMemoryInjection())
     if (!lastTrace) {
-      console.log(`\n${lastNoTraceReason ?? 'No harness trace for the last turn (nothing to explain yet, or it took the fast path).'}\n${memoryLine}\n`)
+      printSafe(`\n${lastNoTraceReason ?? 'No harness trace for the last turn (nothing to explain yet, or it took the fast path).'}\n${memoryLine}\n`)
       return
     }
-    console.log(`\n${verificationHealthLabel(lastTrace.verificationHealth)}`)
+    printSafe(`\n${verificationHealthLabel(lastTrace.verificationHealth)}`)
     // Only the layers that actually fired, chained in the order they fired — quiet otherwise
     // (Design Principle 3 of the harness layer activation plan: the common, unremarkable case
     // stays quiet, matching the existing "don't badge LOW risk" convention). Use /layers for
     // the full fired/skipped picture across all 11.
     const chain = buildWhyChain(lastTrace.layerActivity)
     if (chain.length > 0) {
-      console.log('  ' + chain.map((item) => `${LAYER_SHORT_CODE[item.layer]} (${item.reason})`).join(' > '))
+      printSafe('  ' + chain.map((item) => `${LAYER_SHORT_CODE[item.layer]} (${item.reason})`).join(' > '))
     }
     // Absent on every non-batch turn (see AssistantTrace.batchBudget's doc comment) — only a
     // batch-research turn ever has this to show.
     if (lastTrace.batchBudget) {
-      console.log('  ' + batchBudgetSummaryLine(lastTrace.batchBudget))
+      printSafe('  ' + batchBudgetSummaryLine(lastTrace.batchBudget))
     }
-    console.log(memoryLine)
-    console.log('')
+    printSafe(memoryLine)
+    printSafe('')
   }
 
   /** Full fired/skipped picture across all 11 harness layers for the last turn — pure text rendering of the same layer_activity data /why's "What I checked" summarizes selectively. */
   function printLayers(): void {
     if (!lastTrace) {
-      console.log(`\n${lastNoTraceReason ?? 'No harness trace for the last turn (nothing to explain yet, or it took the fast path).'}\n`)
+      printSafe(`\n${lastNoTraceReason ?? 'No harness trace for the last turn (nothing to explain yet, or it took the fast path).'}\n`)
       return
     }
-    console.log('')
+    printSafe('')
     const byLayer = new Map(lastTrace.layerActivity.map((e) => [e.layer, e]))
     for (const layer of LAYER_ORDER) {
       const e = byLayer.get(layer)
       const mark = e?.fired ? '✓' : '·'
       const reason = e?.reason ?? 'not evaluated this turn'
-      console.log(`  [${mark}] ${LAYER_DISPLAY_NAME[layer].padEnd(22)} ${reason}`)
+      printSafe(`  [${mark}] ${LAYER_DISPLAY_NAME[layer].padEnd(22)} ${reason}`)
     }
     // The full per-item breakdown behind /why's one-line batchBudgetSummaryLine tally — same
     // "absent on every non-batch turn" gating as that summary.
     if (lastTrace.batchBudget) {
-      console.log('')
-      console.log(`  ${batchBudgetSummaryLine(lastTrace.batchBudget)}`)
+      printSafe('')
+      printSafe(`  ${batchBudgetSummaryLine(lastTrace.batchBudget)}`)
       const STATUS_MARK: Record<'found' | 'not_found' | 'truncated_while_productive', string> = {
         found: '✓', not_found: '✗', truncated_while_productive: '~',
       }
       for (const outcome of lastTrace.batchBudget.perItemOutcomes) {
-        console.log(`    [${STATUS_MARK[outcome.status]}] ${outcome.item.padEnd(30)} ${outcome.status} (${outcome.callsUsed} calls)`)
+        printSafe(`    [${STATUS_MARK[outcome.status]}] ${outcome.item.padEnd(30)} ${outcome.status} (${outcome.callsUsed} calls)`)
       }
     }
-    console.log('')
+    printSafe('')
   }
 
   const SOURCE_TOOL_LABEL: Record<AssistantSource['tool'], string> = {
@@ -810,18 +818,18 @@ export async function runCli(options: RunCliOptions = {}): Promise<CliInstance> 
 
   function printSources(): void {
     if (!lastSources || lastSources.length === 0) {
-      console.log('\nNo sources for the last turn (it used no file/web tool calls).\n')
+      printSafe('\nNo sources for the last turn (it used no file/web tool calls).\n')
       return
     }
-    console.log('')
+    printSafe('')
     for (const source of lastSources) {
-      console.log(`  - ${SOURCE_TOOL_LABEL[source.tool]} ${source.path}`)
+      printSafe(`  - ${SOURCE_TOOL_LABEL[source.tool]} ${source.path}`)
     }
-    console.log('')
+    printSafe('')
   }
 
   function printHelp(): void {
-    console.log(`\n${formatHelp()}\n`)
+    printSafe(`\n${formatHelp()}\n`)
   }
 
   /** Ends the current conversation: clears transcript/facts/plan state and resets local display state so /why, /sources, /plan immediately reflect the fresh session instead of showing stale data. */
@@ -833,7 +841,7 @@ export async function runCli(options: RunCliOptions = {}): Promise<CliInstance> 
     pendingPlanApproval = undefined
     lastTurnUsage = undefined
     lastNoTraceReason = undefined
-    console.log('\n✓ Started a fresh conversation.\n')
+    printSafe('\n✓ Started a fresh conversation.\n')
   }
 
   /**
@@ -848,7 +856,7 @@ export async function runCli(options: RunCliOptions = {}): Promise<CliInstance> 
   async function handleCheckpoint(args: string[]): Promise<void> {
     if (args[0] === 'clear') {
       const result = await assistant.clearCheckpoint('cli')
-      console.log(
+      printSafe(
         result.cleared
           ? `\n✓ Cleared the stuck checkpoint (was at step ${result.stepsUsed}, node "${result.currentNode}"). Conversation history is untouched — your next message starts a fresh harness run.\n`
           : '\nNo checkpoint to clear — the last turn either completed normally or there was nothing in progress.\n',
@@ -857,14 +865,14 @@ export async function runCli(options: RunCliOptions = {}): Promise<CliInstance> 
     }
     const status = await assistant.getCheckpointStatus('cli')
     if (!status.present) {
-      console.log('\nNo checkpoint present — the last turn completed normally or there was nothing in progress.\n')
+      printSafe('\nNo checkpoint present — the last turn completed normally or there was nothing in progress.\n')
       return
     }
     const attemptsNote =
       status.failedResumeAttempts > 0
         ? ` — failed to resume ${status.failedResumeAttempts} time${status.failedResumeAttempts === 1 ? '' : 's'} in a row so far`
         : ''
-    console.log(
+    printSafe(
       `\nA checkpoint is present: step ${status.stepsUsed}, last node "${status.currentNode}"${attemptsNote}.\n` +
         `Your next message will try to resume it automatically. Run /checkpoint clear to discard it and start fresh instead.\n`,
     )
@@ -874,7 +882,7 @@ export async function runCli(options: RunCliOptions = {}): Promise<CliInstance> 
     const transcript = await assistant.getTranscript('cli')
     const undoLogEntries = await assistant.listUndoLogEntries()
     const spendCapLine = await spendCapStatusLine()
-    console.log(
+    printSafe(
       `\n${formatStatus({ config, overriddenKeys, transcriptLength: transcript.length, planActive: lastPlanStatus !== undefined, undoLogEntries, spendCapLine })}\n`,
     )
   }
@@ -890,17 +898,18 @@ export async function runCli(options: RunCliOptions = {}): Promise<CliInstance> 
   async function handleExport(args: string[]): Promise<void> {
     const transcript = await assistant.getTranscript('cli')
     if (transcript.length === 0) {
-      console.log('\nNothing to export yet.\n')
+      printSafe('\nNothing to export yet.\n')
       return
     }
-    const filename = resolvePath(process.cwd(), args[0] ?? defaultExportFilename())
+    // The whole remainder is the path: a name with spaces must not be cut at the first one.
+    const filename = resolvePath(process.cwd(), args.length > 0 ? args.join(' ') : defaultExportFilename())
     try {
       await writeFile(filename, formatTranscriptMarkdown(transcript), 'utf-8')
-      console.log(`\n✓ Exported ${transcript.length} message${transcript.length === 1 ? '' : 's'} to ${filename}\n`)
+      printSafe(`\n✓ Exported ${transcript.length} message${transcript.length === 1 ? '' : 's'} to ${filename}\n`)
     } catch (err) {
       // Mirrors handleTurn's catch convention (below) — a failed write is reported, not thrown.
       const { message } = classifyError(err)
-      console.log(`\n[error] ${message}\n`)
+      printSafe(`\n[error] ${message}\n`)
     }
   }
 
@@ -922,7 +931,7 @@ export async function runCli(options: RunCliOptions = {}): Promise<CliInstance> 
   async function handleUndo(): Promise<void> {
     const transcriptBefore = await assistant.getTranscript('cli')
     if (transcriptBefore.length === 0) {
-      console.log('\nNothing to undo.\n')
+      printSafe('\nNothing to undo.\n')
       return
     }
     const wasPendingApproval = transcriptBefore[transcriptBefore.length - 1].role !== 'assistant'
@@ -930,7 +939,7 @@ export async function runCli(options: RunCliOptions = {}): Promise<CliInstance> 
 
     const result = await assistant.undoLastTurn('cli')
     if (!result.undone) {
-      console.log('\nNothing to undo.\n')
+      printSafe('\nNothing to undo.\n')
       return
     }
     // The display state described the now-undone turn — there's no cheap way to recover the
@@ -942,7 +951,7 @@ export async function runCli(options: RunCliOptions = {}): Promise<CliInstance> 
     const caveat = undoneReminders.length > 0
       ? ` Note: ${undoneReminders.length === 1 ? 'a reminder' : `${undoneReminders.length} reminders`} created in that exchange (${undoneReminders.map((s) => `"${s.input.text}"`).join(', ')}) ${undoneReminders.length === 1 ? 'is' : 'are'} still active — /undo only removes chat history, not that side effect.`
       : ''
-    console.log(
+    printSafe(
       `\n✓ Removed ${wasPendingApproval ? 'the pending message awaiting approval' : 'the last exchange (1 user message, 1 assistant reply)'}.${caveat}\n`,
     )
   }
@@ -958,17 +967,17 @@ export async function runCli(options: RunCliOptions = {}): Promise<CliInstance> 
   async function handleUndoAction(args: string[]): Promise<void> {
     if (args.length === 0) {
       const entries = await assistant.listUndoLogEntries()
-      console.log(`\n${formatUndoLogListing(entries)}\n`)
+      printSafe(`\n${formatUndoLogListing(entries)}\n`)
       return
     }
 
     const staged = await assistant.stageUndoAction(args[0])
     if (staged.status === 'error') {
-      console.log(`\n✗ ${staged.message}\n`)
+      printSafe(`\n✗ ${staged.message}\n`)
       return
     }
 
-    console.log(`\n[needs approval — revert] ${staged.reason}`)
+    console.log(stripTerminalControls(`\n[needs approval — revert] ${staged.reason}`))
     const confirmed = await askYesNo('Apply this revert? (y/N) ')
     lastTrace = undefined
     lastNoTraceReason = `No harness trace — the last turn was a staged revert that was ${confirmed ? 'approved' : 'declined'} before the harness ran.`
@@ -979,7 +988,7 @@ export async function runCli(options: RunCliOptions = {}): Promise<CliInstance> 
     const summary = await assistant.getMemorySummary('cli')
     const digests = await assistant.listSessionDigests()
     const digestLine = digests.length > 0 ? `\nSession digests stored: ${digests.length} (/memory forget digest [id] erases them; /memory export includes them).\n` : ''
-    console.log(`\n${formatMemoryStatus(await assistant.getMemoryStatus('cli'))}\n\n${formatMemorySummary(summary)}\n${digestLine}`)
+    printSafe(`\n${formatMemoryStatus(await assistant.getMemoryStatus('cli'))}\n\n${formatMemorySummary(summary)}\n${digestLine}`)
   }
 
   /**
@@ -992,13 +1001,13 @@ export async function runCli(options: RunCliOptions = {}): Promise<CliInstance> 
    */
   async function handleMemoryExport(args: string[]): Promise<void> {
     const data = await assistant.exportMemory('cli')
-    const filename = resolvePath(process.cwd(), args[0] ?? defaultMemoryExportFilename())
+    const filename = resolvePath(process.cwd(), args.length > 0 ? args.join(' ') : defaultMemoryExportFilename())
     try {
       await writeFile(filename, formatMemoryExport(data), 'utf-8')
-      console.log(`\n✓ Exported learned memory to ${filename}\n`)
+      printSafe(`\n✓ Exported learned memory to ${filename}\n`)
     } catch (err) {
       const { message } = classifyError(err)
-      console.log(`\n[error] ${message}\n`)
+      printSafe(`\n[error] ${message}\n`)
     }
   }
 
@@ -1006,24 +1015,24 @@ export async function runCli(options: RunCliOptions = {}): Promise<CliInstance> 
   async function handleMemoryPending(action: 'confirm' | 'reject', args: string[]): Promise<void> {
     const selector = args[0]
     if (!selector) {
-      console.log(`\nUsage: /memory ${action} <n> or /memory ${action} <category>\n`)
+      printSafe(`\nUsage: /memory ${action} <n> or /memory ${action} <category>\n`)
       return
     }
     const outcome = action === 'confirm' ? await assistant.confirmPendingFact(selector) : await assistant.rejectPendingFact(selector)
-    console.log(`\n${formatMemoryPendingOutcome(action === 'confirm' ? 'confirmed' : 'rejected', outcome)}\n`)
+    printSafe(`\n${formatMemoryPendingOutcome(action === 'confirm' ? 'confirmed' : 'rejected', outcome)}\n`)
   }
 
   /** `/memory forget <n>` — removes an already-durable/session fact by its `/memory` display number. Unlike confirm/reject, there's no category form (see PersonalAssistant.forgetFact's doc comment). */
   async function handleMemoryForget(args: string[]): Promise<void> {
     const selector = args[0]
     if (!selector) {
-      console.log('\nUsage: /memory forget <n> [erase]\n')
+      printSafe('\nUsage: /memory forget <n> [erase]\n')
       return
     }
     const erase = args[1] === 'erase'
     const outcome = await assistant.forgetFact(selector, 'cli', erase)
     const note = outcome.ok && !erase && memoryAuditLogEnabled() ? ' The audit log still holds its text (see /memory history); use `/memory forget <n> erase` to remove that too.' : ''
-    console.log(`\n${formatMemoryPendingOutcome('forgotten', outcome)}${note}\n`)
+    printSafe(`\n${formatMemoryPendingOutcome('forgotten', outcome)}${note}\n`)
   }
 
   /** `/memory` with no args shows a preview; `/memory export [file]` writes the full contents to disk (see handleMemoryExport); `/memory confirm|reject <n|category>` resolves a pending-confirmation guess (see handleMemoryPending); `/memory forget <n>` removes an already-learned fact (see handleMemoryForget). */
@@ -1039,7 +1048,7 @@ export async function runCli(options: RunCliOptions = {}): Promise<CliInstance> 
     if (args[0] === 'forget' && (args[1] === 'digest' || args[1] === 'digests')) {
       // D4: episodic digests are covered by /memory forget — one by id, or all of them.
       const removed = await assistant.forgetDigests(args[2])
-      console.log(`\nForgot ${removed} session digest${removed === 1 ? '' : 's'}.\n`)
+      printSafe(`\nForgot ${removed} session digest${removed === 1 ? '' : 's'}.\n`)
       return
     }
     if (args[0] === 'forget') {
@@ -1047,38 +1056,38 @@ export async function runCli(options: RunCliOptions = {}): Promise<CliInstance> 
       return
     }
     if (args[0] === 'history') {
-      console.log(`\n${formatMemoryHistory(await assistant.memoryHistory())}\n`)
+      printSafe(`\n${formatMemoryHistory(await assistant.memoryHistory())}\n`)
       return
     }
     if (args[0] === 'status') {
-      console.log(`\n${formatMemoryStatus(await assistant.getMemoryStatus('cli'))}\n`)
+      printSafe(`\n${formatMemoryStatus(await assistant.getMemoryStatus('cli'))}\n`)
       return
     }
     if (args[0] === 'archive') {
       // One numbered listing (set-aside + replaced entries); `restore` and `forget` index the same list.
       if (args[1] === 'forget') {
         const outcome = await assistant.forgetArchivedFact(args[2] ?? '')
-        console.log(`\n${formatMemoryPendingOutcome('forgotten', outcome)}\n`)
+        printSafe(`\n${formatMemoryPendingOutcome('forgotten', outcome)}\n`)
         return
       }
       if (args[1] === 'restore') {
         const outcome = await assistant.restoreArchivedMemory(args[2] ?? '', 'cli')
-        console.log(`\n${outcome.message}\n`)
+        printSafe(`\n${outcome.message}\n`)
         return
       }
-      console.log(`\n${formatMemoryArchive(await assistant.listArchivedFacts(), await assistant.restorableArchiveCount())}\n`)
+      printSafe(`\n${formatMemoryArchive(await assistant.listArchivedFacts(), await assistant.restorableArchiveCount())}\n`)
       return
     }
     if (args[0] === 'off' || args[0] === 'on') {
       await assistant.setMemoryEnabled(args[0] === 'on')
-      console.log(args[0] === 'off'
+      printSafe(args[0] === 'off'
         ? '\nMemory writes are OFF for this install: nothing new will be saved (facts, pending guesses, digests). What is already stored stays readable; /memory forget and /memory reject still work. /memory on resumes.\n'
         : '\nMemory writes are on.\n')
       return
     }
     if (args[0] === 'undo') {
       const outcome = await assistant.undoMemoryChange(args[1] ?? '', 'cli')
-      console.log(`\n${outcome.message}\n`)
+      printSafe(`\n${outcome.message}\n`)
       return
     }
     if (args[0] === 'consolidate') {
@@ -1092,31 +1101,31 @@ export async function runCli(options: RunCliOptions = {}): Promise<CliInstance> 
   async function handleMemoryConsolidate(args: string[]): Promise<void> {
     if (args[0] === 'accept' || args[0] === 'dismiss') {
       const outcome = args[0] === 'accept' ? await assistant.acceptMemoryProposal(args[1] ?? '', 'cli') : await assistant.dismissMemoryProposal(args[1] ?? '')
-      console.log(`\n${outcome.message}\n`)
+      printSafe(`\n${outcome.message}\n`)
       return
     }
     // Runs whichever consolidator is registered (PersonalAssistant registers M5's), then lists what is staged.
     const outcome = await assistant.consolidateMemory('cli')
     const proposals = await assistant.memoryProposals()
-    if (proposals.length === 0) { console.log(`\n${outcome.message}\n`); return }
-    console.log(`\n${outcome.status === 'done' ? '' : `${outcome.message}\n`}Proposed changes (nothing applied yet):\n${proposals.map((p, i) => `  ${i + 1}. [${p.kind}]${p.touchesUserAsserted ? ' (touches something you said yourself)' : ''} ${p.text ? `-> "${p.text}" ` : ''}${p.reason}`).join('\n')}\n  Use /memory consolidate accept <n> or dismiss <n>.\n`)
+    if (proposals.length === 0) { printSafe(`\n${outcome.message}\n`); return }
+    printSafe(`\n${outcome.status === 'done' ? '' : `${outcome.message}\n`}Proposed changes (nothing applied yet):\n${proposals.map((p, i) => `  ${i + 1}. [${p.kind}]${p.touchesUserAsserted ? ' (touches something you said yourself)' : ''} ${p.text ? `-> "${p.text}" ` : ''}${p.reason}`).join('\n')}\n  Use /memory consolidate accept <n> or dismiss <n>.\n`)
   }
 
   /** `/search <query>` — ranked search over past messages (see PersonalAssistant.searchTranscript), never an LLM call or network request. A query with no terms is treated the same as no results, not an error. */
   async function handleSearch(args: string[]): Promise<void> {
     const query = args.join(' ')
     if (!query.trim()) {
-      console.log('\nUsage: /search <query>\n')
+      printSafe('\nUsage: /search <query>\n')
       return
     }
     const hits = await assistant.searchTranscript(query)
-    console.log(`\n${formatSearchResults(hits, query)}\n`)
+    printSafe(`\n${formatSearchResults(hits, query)}\n`)
   }
 
   /** `/goals` — R5's review surface (see plans/hierarchical_goal_tree_and_steering_plan.html Phase 7): every known goal thread this session, tagged with its visibility bucket. A pure read, same "never an LLM call" discipline as /search — works whether or not goalGraphMode is enabled, since it just shows whatever the session's GoalGraphRecord already holds (empty for a session that never touched goal-thread machinery). */
   async function handleGoals(): Promise<void> {
     const state = await assistant.getGoalGraphState('cli')
-    console.log(`\n${formatGoalGraphState(state)}\n`)
+    printSafe(`\n${formatGoalGraphState(state)}\n`)
   }
 
   async function printCost(): Promise<void> {
@@ -1130,7 +1139,7 @@ export async function runCli(options: RunCliOptions = {}): Promise<CliInstance> 
     // once any turn had run before the current /new.
     const spendState = await assistant.getSpendState('cli')
     const session = { inputTokens: spendState.cumulativeInputTokens, outputTokens: spendState.cumulativeOutputTokens, costUsd: spendState.cumulativeCostUsd }
-    console.log(`\n${formatCostSummary({ lastTurn: lastTurnUsage, session, backend: config.llmBackend, spendCapLine })}\n`)
+    printSafe(`\n${formatCostSummary({ lastTurn: lastTurnUsage, session, backend: config.llmBackend, spendCapLine })}\n`)
   }
 
   async function handleDoctor(): Promise<void> {
@@ -1151,7 +1160,7 @@ export async function runCli(options: RunCliOptions = {}): Promise<CliInstance> 
       // that explicitly here rather than leaving it unstated (no keychain integration exists).
       { label: 'provider keys stored: plaintext in config.json (no OS keychain integration)', ok: true },
     ])
-    console.log(`\n${formatDoctorReport(checks)}\n`)
+    printSafe(`\n${formatDoctorReport(checks)}\n`)
   }
 
   let lastProgressLineLength = 0
@@ -1167,7 +1176,7 @@ export async function runCli(options: RunCliOptions = {}): Promise<CliInstance> 
     const prefix = progress.planPosition
       ? `[${progress.planPosition.templateName ?? 'custom plan'} — step ${progress.planPosition.stepIndex}/${progress.planPosition.stepCount} (${progress.planPosition.completionPct.toFixed(0)}%)]`
       : `[step ${progress.stepsUsed}/${progress.maxSteps}]`
-    const line = `${prefix}${label ? ` ${label}…` : ''}`
+    const line = stripTerminalControls(`${prefix}${label ? ` ${label}…` : ''}`)
     process.stdout.write(`\r${line.padEnd(lastProgressLineLength)}`)
     lastProgressLineLength = line.length
   }
@@ -1187,9 +1196,9 @@ export async function runCli(options: RunCliOptions = {}): Promise<CliInstance> 
     // proposal line ("Reading X") a viewer already saw a moment earlier stays on screen and this
     // second line closes the loop instead of replacing it.
     if (step.deniedReason) {
-      console.log(`  ${ICONS.deniedStep} Denied: ${step.summary} — ${step.deniedReason}`)
+      console.log(stripTerminalControls(`  ${ICONS.deniedStep} Denied: ${step.summary} — ${step.deniedReason}`))
     } else {
-      console.log(`  ${toolStepIcon(step.tool)} ${step.summary}`)
+      console.log(stripTerminalControls(`  ${toolStepIcon(step.tool)} ${step.summary}`))
     }
     lastTurnToolSteps.push(step)
   }
@@ -1229,20 +1238,20 @@ export async function runCli(options: RunCliOptions = {}): Promise<CliInstance> 
   function printClarificationQuestion(question: AskQuestion, draft: ClarificationDraft, index: number, total: number): void {
     const options = orderedAskOptions(question)
     const allowFreeText = question.allowFreeText !== false
-    console.log('')
-    if (question.header) console.log(`[${question.header}]`)
-    if (total > 1) console.log(`Question ${index + 1} of ${total}`)
-    console.log(question.question)
+    printSafe('')
+    if (question.header) console.log(stripTerminalControls(`[${question.header}]`))
+    if (total > 1) printSafe(`Question ${index + 1} of ${total}`)
+    console.log(stripTerminalControls(question.question))
     options.forEach((option, i) => {
       const n = i + 1
       const picked = draft.selectedLabels.includes(option.label) ? '✓' : ' '
       const recommended = option.recommended ? ' (recommended)' : ''
-      console.log(`  [${picked}] ${n}) ${option.label}${recommended}`)
-      if (option.description) console.log(`        ${option.description}`)
-      if (option.preview) console.log(`        preview: ${option.preview}`)
+      console.log(stripTerminalControls(`  [${picked}] ${n}) ${option.label}${recommended}`))
+      if (option.description) console.log(stripTerminalControls(`        ${option.description}`))
+      if (option.preview) console.log(stripTerminalControls(`        preview: ${option.preview}`))
     })
-    if (draft.editText) console.log(`  note: ${draft.editText}`)
-    if (draft.freeText) console.log(`  other: ${draft.freeText}`)
+    if (draft.editText) console.log(stripTerminalControls(`  note: ${draft.editText}`))
+    if (draft.freeText) console.log(stripTerminalControls(`  other: ${draft.freeText}`))
     const commands = [
       options.length > 0 ? (question.allowMultiple ? '<n>/t<n> toggle option' : '<n> select option') : undefined,
       options.length > 0 ? 'e<n> add a note to a selected option' : undefined,
@@ -1250,7 +1259,7 @@ export async function runCli(options: RunCliOptions = {}): Promise<CliInstance> 
       total > 1 ? 'b back, n next' : undefined,
       's submit',
     ].filter((c): c is string => c !== undefined)
-    console.log(`  (${commands.join(' | ')})`)
+    printSafe(`  (${commands.join(' | ')})`)
   }
 
   /**
@@ -1270,7 +1279,7 @@ export async function runCli(options: RunCliOptions = {}): Promise<CliInstance> 
       // escalation copy rather than entering a loop with nothing to ask.
       lastTrace = undefined
       lastNoTraceReason = `No harness trace — the last turn needed clarification (${result.reason ?? 'no further detail'}) but had no answerable questions.`
-      console.log(`\n[needs clarification] ${result.reason ?? 'This request needs clarification.'}\n`)
+      console.log(stripTerminalControls(`\n[needs clarification] ${result.reason ?? 'This request needs clarification.'}\n`))
       return
     }
 
@@ -1278,16 +1287,16 @@ export async function runCli(options: RunCliOptions = {}): Promise<CliInstance> 
     // branch — a piped/scripted run has no one to answer these questions, so it falls through to
     // the plain-text escalation copy instead of blocking on a readline read of closed stdin.
     if (nonInteractiveApprovalMode === 'decline') {
-      console.log(`\n[non-interactive mode: auto-declining — ASSISTANT_NON_INTERACTIVE_APPROVAL=decline]`)
-      console.log(`\n[needs clarification] ${result.reason ?? 'This request needs clarification.'}`)
-      for (const q of questions) console.log(`  - ${q.question}`)
-      console.log('')
+      printSafe(`\n[non-interactive mode: auto-declining — ASSISTANT_NON_INTERACTIVE_APPROVAL=decline]`)
+      console.log(stripTerminalControls(`\n[needs clarification] ${result.reason ?? 'This request needs clarification.'}`))
+      for (const q of questions) console.log(stripTerminalControls(`  - ${q.question}`))
+      printSafe('')
       lastTrace = undefined
       lastNoTraceReason = 'No harness trace — the last turn needed clarification and was auto-declined (non-interactive mode) before the harness resumed.'
       return
     }
 
-    console.log(`\n[needs clarification] ${questions.length} question${questions.length === 1 ? '' : 's'} to answer.`)
+    printSafe(`\n[needs clarification] ${questions.length} question${questions.length === 1 ? '' : 's'} to answer.`)
     const drafts = new Map<string, ClarificationDraft>(questions.map((q) => [q.id, emptyClarificationDraft()]))
     let index = 0
 
@@ -1297,12 +1306,19 @@ export async function runCli(options: RunCliOptions = {}): Promise<CliInstance> 
       printClarificationQuestion(question, draft, index, questions.length)
       const token = (await askLine('clarify> ')).trim()
       const lower = token.toLowerCase()
+      // The input stream is gone (EOF / Ctrl+D): every further read would come back blank forever, so stop asking.
+      if (inputUnavailable) {
+        printSafe('\n[no input available — leaving the clarification unanswered]\n')
+        lastTrace = undefined
+        lastNoTraceReason = 'No harness trace — the last turn needed clarification and input closed before it was answered.'
+        return
+      }
 
       if (lower === 's' || lower === 'submit') {
         const answers = questions.map((q) => clarificationDraftToAnswer(q.id, drafts.get(q.id)!))
         const missing = questions.filter((q, i) => answers[i] === null)
         if (missing.length > 0) {
-          console.log(`\nStill need an answer for: ${missing.map((q) => q.question).join('; ')}\n`)
+          printSafe(`\nStill need an answer for: ${missing.map((q) => q.question).join('; ')}\n`)
           continue
         }
         const response: AskResponse = { answers: answers as AskAnswer[] }
@@ -1319,12 +1335,12 @@ export async function runCli(options: RunCliOptions = {}): Promise<CliInstance> 
       }
       if (lower === 'o') {
         if (question.allowFreeText === false) {
-          console.log('\nThis question does not accept a free-text answer.\n')
+          printSafe('\nThis question does not accept a free-text answer.\n')
           continue
         }
         const text = await askLine('Other — type your own answer: ')
         if (!text.trim()) {
-          console.log('\nEmpty answer ignored.\n')
+          printSafe('\nEmpty answer ignored.\n')
           continue
         }
         drafts.set(question.id, { selectedLabels: [], editText: '', freeText: text.trim() })
@@ -1335,11 +1351,11 @@ export async function runCli(options: RunCliOptions = {}): Promise<CliInstance> 
         const options = orderedAskOptions(question)
         const option = options[Number(editMatch[1]) - 1]
         if (!option) {
-          console.log(`\nNo option ${editMatch[1]}.\n`)
+          printSafe(`\nNo option ${editMatch[1]}.\n`)
           continue
         }
         if (!draft.selectedLabels.includes(option.label)) {
-          console.log(`\nSelect option ${editMatch[1]} first, then add a note with e${editMatch[1]}.\n`)
+          printSafe(`\nSelect option ${editMatch[1]} first, then add a note with e${editMatch[1]}.\n`)
           continue
         }
         const note = await askLine('Note: ')
@@ -1351,7 +1367,7 @@ export async function runCli(options: RunCliOptions = {}): Promise<CliInstance> 
         const options = orderedAskOptions(question)
         const option = options[Number(toggleMatch[1]) - 1]
         if (!option) {
-          console.log(`\nNo option ${toggleMatch[1]}.\n`)
+          printSafe(`\nNo option ${toggleMatch[1]}.\n`)
           continue
         }
         if (question.allowMultiple) {
@@ -1367,7 +1383,7 @@ export async function runCli(options: RunCliOptions = {}): Promise<CliInstance> 
         continue
       }
 
-      console.log(`\nUnrecognized input "${token}".\n`)
+      printSafe(`\nUnrecognized input "${token}".\n`)
     }
   }
 
@@ -1392,7 +1408,7 @@ export async function runCli(options: RunCliOptions = {}): Promise<CliInstance> 
         process.stdout.write('\nAielia> ')
         streamedAnyTokens = true
       }
-      process.stdout.write(token)
+      process.stdout.write(stripTerminalControls(token))
     }
 
     try {
@@ -1460,14 +1476,14 @@ export async function runCli(options: RunCliOptions = {}): Promise<CliInstance> 
               : result.pendingActionKind === 'batch'
                 ? 'Continue?'
                 : 'Apply this write?'
-        console.log(`\n[needs approval — ${kindLabel}] ${result.reason}`)
+        console.log(stripTerminalControls(`\n[needs approval — ${kindLabel}] ${result.reason}`))
         let confirmed: boolean
         if (result.pendingActionKind && rememberedActionKinds.has(result.pendingActionKind)) {
-          console.log(`["don't ask again" active this session for ${kindLabel} — auto-approved]`)
+          printSafe(`["don't ask again" active this session for ${kindLabel} — auto-approved]`)
           confirmed = true
         } else {
           const decision = await askSelect(promptText, APPROVAL_OPTIONS)
-          confirmed = decision !== 'n'
+          confirmed = decision === 'y' || decision === 'a'
           if (decision === 'a' && result.pendingActionKind) rememberedActionKinds.add(result.pendingActionKind)
         }
         lastTrace = undefined
@@ -1477,15 +1493,15 @@ export async function runCli(options: RunCliOptions = {}): Promise<CliInstance> 
       }
 
       if (result.status === 'needs_approval') {
-        console.log(`\n[needs approval — ${result.riskLevel}] ${result.reason}`)
-        console.log(`  "${message}"`)
+        console.log(stripTerminalControls(`\n[needs approval — ${result.riskLevel}] ${result.reason}`))
+        printSafe(`  "${message}"`)
         let confirmed: boolean
         if (result.riskLevel && rememberedRiskLevels.has(result.riskLevel)) {
-          console.log(`["don't ask again" active this session for risk level ${result.riskLevel} — auto-approved]`)
+          printSafe(`["don't ask again" active this session for risk level ${result.riskLevel} — auto-approved]`)
           confirmed = true
         } else {
           const decision = await askSelect('Proceed?', APPROVAL_OPTIONS)
-          confirmed = decision !== 'n'
+          confirmed = decision === 'y' || decision === 'a'
           if (decision === 'a' && result.riskLevel) rememberedRiskLevels.add(result.riskLevel)
         }
         if (confirmed) {
@@ -1503,7 +1519,7 @@ export async function runCli(options: RunCliOptions = {}): Promise<CliInstance> 
           // inside runTurn. Without it, a later "did that actually happen?" question found no
           // trace of the request at all and confidently denied it was ever made.
           await assistant.recordDeclinedRequest('cli', message, result.reason ?? 'This request needed approval.')
-          console.log('Cancelled.\n')
+          printSafe('Cancelled.\n')
         }
         return
       }
@@ -1520,12 +1536,12 @@ export async function runCli(options: RunCliOptions = {}): Promise<CliInstance> 
       // printed as a bare "- null" and could not be approved, edited, or declined at all.
       if (result.status === 'needs_plan_approval') {
         if (!result.planApprovalId) {
-          console.log(`\n[needs plan approval] ${result.reason ?? 'A plan is awaiting approval, but its approval id is missing.'}\n`)
+          printSafe(`\n[needs plan approval] ${result.reason ?? 'A plan is awaiting approval, but its approval id is missing.'}\n`)
           return
         }
         const id = result.planApprovalId
         const snapshot = result.planApproval
-        if (result.reason) console.log(`\n${result.reason}`)
+        if (result.reason) printSafe(`\n${result.reason}`)
         if (snapshot) printPlanApproval(snapshot)
         // Stashed (not just resolved inline) so the /plan approve|edit|decline commands can finish
         // the job if the user picks "decide later" below.
@@ -1533,12 +1549,12 @@ export async function runCli(options: RunCliOptions = {}): Promise<CliInstance> 
         lastTrace = undefined
         lastNoTraceReason = 'No harness trace — the last turn staged a plan for approval (pending /plan approve|decline|edit).'
         if (!snapshot) {
-          console.log('Decide with /plan approve or /plan decline.\n')
+          printSafe('Decide with /plan approve or /plan decline.\n')
           return
         }
         const choice = await askSelect('Approve this plan?', PLAN_APPROVAL_OPTIONS)
         if (choice === 'd') {
-          console.log('Left pending — /plan to review, /plan approve|edit|decline to decide.\n')
+          printSafe('Left pending — /plan to review, /plan approve|edit|decline to decide.\n')
           return
         }
         pendingPlanApproval = undefined
@@ -1565,7 +1581,7 @@ export async function runCli(options: RunCliOptions = {}): Promise<CliInstance> 
       if (result.status === 'escalated') {
         lastTrace = undefined
         lastNoTraceReason = `No harness trace — the last turn escalated (${result.reason}) before completing.`
-        console.log(`\n[escalated] ${result.reason}\n`)
+        console.log(stripTerminalControls(`\n[escalated] ${result.reason}\n`))
         return
       }
 
@@ -1634,16 +1650,16 @@ export async function runCli(options: RunCliOptions = {}): Promise<CliInstance> 
         // onToken only ever saw draftReply, not a Phase 4.1 pausedNote appended afterward (see
         // AssistantTurnResult.pausedNote's doc comment), so that part still needs printing here.
         const pausedNoteText = result.pausedNote ? `\n\n${result.pausedNote}` : ''
-        process.stdout.write(`${pausedNoteText}${riskSuffix}${sourcesHint}${planHint}${contradictionNotice}${reviewNotice}${nextStepsBlock}\n\n`)
+        process.stdout.write(stripTerminalControls(`${pausedNoteText}${riskSuffix}${sourcesHint}${planHint}${contradictionNotice}${reviewNotice}${nextStepsBlock}\n\n`))
       } else {
-        console.log(`\nAielia>${riskSuffix} ${result.reply}${sourcesHint}${planHint}${contradictionNotice}${reviewNotice}${nextStepsBlock}\n`)
+        console.log(stripTerminalControls(`\nAielia>${riskSuffix} ${result.reply}${sourcesHint}${planHint}${contradictionNotice}${reviewNotice}${nextStepsBlock}\n`))
       }
     } catch (err) {
       // Mirrors chat-ui's error bubble: a failed turn (e.g. proxy down) shouldn't
       // crash the REPL via an unhandled rejection — just report it and keep going.
       clearProgress()
       const { message: errorMessage, retryable } = classifyError(err, config.llmBackend)
-      console.log(`\n[error] ${errorMessage}${retryable ? ' Type the message again to retry.' : ''}\n`)
+      console.log(stripTerminalControls(`\n[error] ${errorMessage}${retryable ? ' Type the message again to retry.' : ''}\n`))
     }
   }
 
@@ -1666,14 +1682,14 @@ export async function runCli(options: RunCliOptions = {}): Promise<CliInstance> 
     // land in — unlike the catch below, this path is reached deterministically on every
     // approval gate, not only when reading the answer happens to fail.
     if (nonInteractiveApprovalMode === 'decline') {
-      console.log(`\n[non-interactive mode: auto-declining — ASSISTANT_NON_INTERACTIVE_APPROVAL=decline]`)
+      printSafe(`\n[non-interactive mode: auto-declining — ASSISTANT_NON_INTERACTIVE_APPROVAL=decline]`)
       return Promise.resolve(false)
     }
     return new Promise((resolve) => {
       try {
         rl.question(question, (answer) => resolve(answer.trim().toLowerCase().startsWith('y')))
       } catch {
-        console.log(`\n[could not read a response — treating as declined]`)
+        printSafe(`\n[could not read a response — treating as declined]`)
         resolve(false)
       }
     })
@@ -1687,6 +1703,7 @@ export async function runCli(options: RunCliOptions = {}): Promise<CliInstance> 
    * for the read-failure case, just resolving to an empty string (an unrecognized/ignored answer,
    * see printClarificationQuestion's callers) instead of askYesNo's "treat as declined" boolean.
    */
+  let inputUnavailable = false
   function askLine(question: string): Promise<string> {
     // Test-only seam — same shape as askYesNo's own.
     if (options.askLine) return options.askLine(question)
@@ -1694,7 +1711,8 @@ export async function runCli(options: RunCliOptions = {}): Promise<CliInstance> 
       try {
         rl.question(question, (answer) => resolve(answer.trim()))
       } catch {
-        console.log(`\n[could not read a response — treating as blank]`)
+        inputUnavailable = true
+        printSafe(`\n[could not read a response — treating as blank]`)
         resolve('')
       }
     })
@@ -1716,7 +1734,7 @@ export async function runCli(options: RunCliOptions = {}): Promise<CliInstance> 
     if (options.askSelect) return options.askSelect(question, selectOptions)
     const fallbackKey = selectOptions[selectOptions.length - 1]!.key
     if (nonInteractiveApprovalMode === 'decline') {
-      console.log(`\n[non-interactive mode: auto-declining — ASSISTANT_NON_INTERACTIVE_APPROVAL=decline]`)
+      printSafe(`\n[non-interactive mode: auto-declining — ASSISTANT_NON_INTERACTIVE_APPROVAL=decline]`)
       return Promise.resolve(fallbackKey)
     }
     const optionLines = selectOptions.map((option, i) => `  ${i + 1}) [${option.key}] ${option.label}`).join('\n')
@@ -1729,7 +1747,7 @@ export async function runCli(options: RunCliOptions = {}): Promise<CliInstance> 
           resolve((byKey ?? byIndex)?.key ?? fallbackKey)
         })
       } catch {
-        console.log(`\n[could not read a response — treating as declined]`)
+        printSafe(`\n[could not read a response — treating as declined]`)
         resolve(fallbackKey)
       }
     })
@@ -1748,7 +1766,7 @@ export async function runCli(options: RunCliOptions = {}): Promise<CliInstance> 
 
   async function handleConfigCommand(args: string[]): Promise<void> {
     if (args.length === 0) {
-      console.log(`\n${formatConfigListing(config, overriddenKeys)}\n`)
+      printSafe(`\n${formatConfigListing(config, overriddenKeys)}\n`)
       return
     }
 
@@ -1756,15 +1774,15 @@ export async function runCli(options: RunCliOptions = {}): Promise<CliInstance> 
       const key = args[1]
       const raw = args.slice(2).join(' ')
       if (!key || !isConfigKey(key)) {
-        console.log(`\n✗ Unknown config key "${key ?? ''}". Known keys: ${CONFIG_KEYS.join(', ')}\n`)
+        printSafe(`\n✗ Unknown config key "${key ?? ''}". Known keys: ${CONFIG_KEYS.join(', ')}\n`)
         return
       }
       if (!raw) {
-        console.log(`\nUsage: /config set ${key} <value>\n`)
+        printSafe(`\nUsage: /config set ${key} <value>\n`)
         return
       }
       if (overriddenKeys.has(key)) {
-        console.log(`\n✗ "${key}" is pinned by ${ENV_VAR_FOR_CONFIG_KEY[key]} — unset that env var to change it here.\n`)
+        printSafe(`\n✗ "${key}" is pinned by ${ENV_VAR_FOR_CONFIG_KEY[key]} — unset that env var to change it here.\n`)
         return
       }
 
@@ -1773,7 +1791,7 @@ export async function runCli(options: RunCliOptions = {}): Promise<CliInstance> 
         value = parseConfigValue(key, raw)
       } catch (err) {
         if (!(err instanceof ConfigValueParseError)) throw err
-        console.log(`\n✗ ${err.message}\n`)
+        printSafe(`\n✗ ${err.message}\n`)
         return
       }
 
@@ -1782,20 +1800,20 @@ export async function runCli(options: RunCliOptions = {}): Promise<CliInstance> 
         validateConfig(patch, config)
       } catch (err) {
         if (!(err instanceof ConfigValidationError)) throw err
-        console.log(`\n✗ ${err.message}\n`)
+        printSafe(`\n✗ ${err.message}\n`)
         return
       }
 
       await configStore.save(patch)
       await reloadAssistant()
-      console.log(`\n✓ ${key} updated (took effect immediately, no restart needed)\n`)
+      printSafe(`\n✓ ${key} updated (took effect immediately, no restart needed)\n`)
       return
     }
 
     if (args[0] === 'reset') {
       const key = args[1]
       if (key && !isConfigKey(key)) {
-        console.log(`\n✗ Unknown config key "${key}". Known keys: ${CONFIG_KEYS.join(', ')}\n`)
+        printSafe(`\n✗ Unknown config key "${key}". Known keys: ${CONFIG_KEYS.join(', ')}\n`)
         return
       }
       // Takes effect immediately, same as /config set — and can silently break the active
@@ -1804,10 +1822,21 @@ export async function runCli(options: RunCliOptions = {}): Promise<CliInstance> 
       // requests) — /config set is left as-is (a single, explicit, intentional value the user
       // just typed, not a broad "wipe back to defaults" that's easy to trigger without meaning to
       // reset something specific).
+      // The reset must not leave a configuration that cannot start (e.g. dropping the apiKey of an API backend): the
+      // next launch would refuse to run at all, and /config could no longer be used to repair it.
+      const remaining: Partial<AssistantConfig> = { ...(await configStore.load()) }
+      for (const k of key ? [key] : CONFIG_KEYS) delete remaining[k as keyof AssistantConfig]
+      try {
+        validateConfig({}, resolveConfig(remaining, envOverrides).config)
+      } catch (err) {
+        if (!(err instanceof ConfigValidationError)) throw err
+        printSafe(`\n✗ Not reset: ${err.message}\n`)
+        return
+      }
       const target = key ? `"${key}"` : 'ALL settings'
       const confirmed = await askYesNo(`\nReset ${target} to default? This takes effect immediately. (y/N) `)
       if (!confirmed) {
-        console.log('\nCancelled — nothing was reset.\n')
+        printSafe('\nCancelled — nothing was reset.\n')
         return
       }
       const clearPatch = key
@@ -1815,11 +1844,11 @@ export async function runCli(options: RunCliOptions = {}): Promise<CliInstance> 
         : (Object.fromEntries(CONFIG_KEYS.map((k) => [k, undefined])) as Partial<AssistantConfig>)
       await configStore.save(clearPatch)
       await reloadAssistant()
-      console.log(`\n✓ Reset ${key ?? 'all settings'} to default\n`)
+      printSafe(`\n✓ Reset ${key ?? 'all settings'} to default\n`)
       return
     }
 
-    console.log('\nUsage: /config | /config set <key> <value> | /config reset [key]\n')
+    printSafe('\nUsage: /config | /config set <key> <value> | /config reset [key]\n')
   }
 
   /**
@@ -1829,35 +1858,35 @@ export async function runCli(options: RunCliOptions = {}): Promise<CliInstance> 
   async function handleLayers(args: string[]): Promise<void> {
     const [sub, id] = args
     if (sub === 'settings' || sub === 'list') {
-      console.log(`\n${formatLayerListing(sanitizeLayerChoices(config.layers), layerPins, process.env)}\n`)
+      printSafe(`\n${formatLayerListing(sanitizeLayerChoices(config.layers), layerPins, process.env)}\n`)
       return
     }
     try {
       if (sub === 'on' || sub === 'off') {
-        if (!id) { console.log(`\nUsage: /layers ${sub} <id>\n`); return }
+        if (!id) { printSafe(`\nUsage: /layers ${sub} <id>\n`); return }
         const layers = withLayerChoice(sanitizeLayerChoices(config.layers), id, sub === 'on')
         await configStore.save({ layers })
       } else if (sub === 'reset') {
         const layers = id ? withLayerChoice(sanitizeLayerChoices(config.layers), id, undefined) : {}
         await configStore.save({ layers })
       } else {
-        console.log('\nUsage: /layers settings | /layers on <id> | /layers off <id> | /layers reset [id]\n')
+        printSafe('\nUsage: /layers settings | /layers on <id> | /layers off <id> | /layers reset [id]\n')
         return
       }
     } catch (err) {
       if (!(err instanceof LayerSettingError)) throw err
-      console.log(`\n✗ ${err.message}\n`)
+      printSafe(`\n✗ ${err.message}\n`)
       return
     }
     await reloadAssistant()
     const pinned = id !== undefined && layerPins.has(id)
-    console.log(pinned ? `\n✗ Saved, but "${id}" is pinned by its AUDIT_* env flag, so the saved choice has no effect until that is unset.\n` : `\n✓ Layers updated (took effect immediately, no restart needed)\n`)
+    printSafe(pinned ? `\n✗ Saved, but "${id}" is pinned by its AUDIT_* env flag, so the saved choice has no effect until that is unset.\n` : `\n✓ Layers updated (took effect immediately, no restart needed)\n`)
   }
 
   /** Thin convenience wrapper over /config set model — not a second mechanism. Bare /model shows the current value. */
   async function handleModel(args: string[]): Promise<void> {
     if (args.length === 0) {
-      console.log(`\n${config.model ?? "(using each backend's default)"}\n`)
+      printSafe(`\n${config.model ?? "(using each backend's default)"}\n`)
       return
     }
     await handleConfigCommand(['set', 'model', args.join(' ')])
@@ -1872,7 +1901,7 @@ export async function runCli(options: RunCliOptions = {}): Promise<CliInstance> 
    */
   async function handleProject(args: string[]): Promise<void> {
     if (args.length === 0) {
-      console.log(`\n${assistant.getActiveProject() || '(none)'}\n`)
+      printSafe(`\n${assistant.getActiveProject() || '(none)'}\n`)
       return
     }
     if (args[0] === 'clear') {
@@ -1941,7 +1970,7 @@ export async function runCli(options: RunCliOptions = {}): Promise<CliInstance> 
       quitting = true
       // M3: refresh the conversation's handoff digest at the session edge (no-op unless AUDIT_EPISODIC_DIGEST is on; fail-open).
       try { await assistant.endSession('cli') } catch { /* a digest failure must never block exit */ }
-      console.log('Exiting.')
+      printSafe('Exiting.')
       rl.close()
       return
     }
@@ -1949,11 +1978,14 @@ export async function runCli(options: RunCliOptions = {}): Promise<CliInstance> 
     const pick = /^[1-3]$/.test(message) && lastNextSteps ? lastNextSteps[Number(message) - 1] : undefined
     lastNextSteps = undefined
     if (pick) {
-      console.log(`  → ${pick.description}`)
+      printSafe(`  → ${pick.description}`)
       message = pick.description
     }
     const [token, ...args] = message.split(/\s+/)
-    const handler = commands[token]
+    // An own-property lookup: `commands['constructor']` / `['toString']` would otherwise resolve to an inherited
+    // function, swallowing a message that merely starts with such a word. A picked next-step option is model-written
+    // text: it is always sent as an ordinary message, never run as a slash command.
+    const handler = !pick && Object.hasOwn(commands, token) ? commands[token] : undefined
     if (handler) {
       await handler(args)
       return
@@ -1999,7 +2031,7 @@ export async function runCli(options: RunCliOptions = {}): Promise<CliInstance> 
 
   function isKnownCommand(message: string): boolean {
     const [token] = message.split(/\s+/)
-    return token in commands || isQuitCommand(message)
+    return Object.hasOwn(commands, token) || isQuitCommand(message)
   }
 
   /**
@@ -2013,7 +2045,7 @@ export async function runCli(options: RunCliOptions = {}): Promise<CliInstance> 
     if (isGoalGraphEnabled(config.goalGraphMode) && turnInProgress && !isKnownCommand(message)) {
       steeringChannel.enqueue(message)
       assistant.logQueuedMessage('cli', message)
-      console.log('\n[queued — the current turn is still running; this will be taken into account once it finishes]\n')
+      printSafe('\n[queued — the current turn is still running; this will be taken into account once it finishes]\n')
       return Promise.resolve()
     }
     return enqueue(message)

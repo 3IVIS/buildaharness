@@ -98,7 +98,13 @@ function undoLogDir(workspaceRoot: string): string {
   return `${workspaceRoot}/${UNDO_LOG_DIR}`
 }
 
+/** Undo-log ids are UUIDs minted by this module; `/undo-action <id>` passes user text, so anything that could climb out of `.undo-log/` is rejected. */
+function isSafeUndoLogId(id: string): boolean {
+  return /^[A-Za-z0-9_-]+$/.test(id)
+}
+
 function undoLogPath(workspaceRoot: string, id: string): string {
+  if (!isSafeUndoLogId(id)) throw new Error(`Invalid undo-log entry id "${id}"`)
   return `${undoLogDir(workspaceRoot)}/${id}.json`
 }
 
@@ -114,6 +120,7 @@ export async function recordUndoLogEntry(backend: FsBackend, workspaceRoot: stri
 }
 
 export async function loadUndoLogEntry(backend: FsBackend, workspaceRoot: string, id: string): Promise<UndoLogEntry | undefined> {
+  if (!isSafeUndoLogId(id)) return undefined
   const raw = await backend.readTextFile(undoLogPath(workspaceRoot, id))
   return raw === undefined ? undefined : (JSON.parse(raw) as UndoLogEntry)
 }
@@ -137,6 +144,7 @@ export async function listUndoLogEntries(backend: FsBackend, workspaceRoot: stri
 }
 
 export async function deleteUndoLogEntry(backend: FsBackend, workspaceRoot: string, id: string): Promise<void> {
+  if (!isSafeUndoLogId(id)) return
   await backend.removeFile(undoLogPath(workspaceRoot, id))
 }
 
@@ -196,8 +204,12 @@ export interface WorkspaceSnapshot {
   excludedDirSignatures: Map<string, string>
 }
 
+/** A pattern with more wildcards than this is dropped: `*a*a*a*…b` compiles to a regex that backtracks catastrophically, and the .gitignore may come from an untrusted checkout. */
+const MAX_GITIGNORE_WILDCARDS = 4
+
 function gitignoreLineToRegex(pattern: string): RegExp {
   const escaped = pattern
+    .replace(/\*{2,}/g, '*')
     .replace(/[.+^${}()|[\]\\]/g, '\\$&')
     .replace(/\*/g, '.*')
     .replace(/\?/g, '.')
@@ -218,6 +230,7 @@ function parseGitignore(content: string): RegExp[] {
     .filter((line) => line.length > 0 && !line.startsWith('#') && !line.startsWith('!'))
     .map((line) => line.replace(/^\/+/, '').replace(/\/+$/, ''))
     .filter((line) => line.length > 0)
+    .filter((line) => (line.match(/[*?]/g)?.length ?? 0) <= MAX_GITIGNORE_WILDCARDS)
     .map(gitignoreLineToRegex)
 }
 
@@ -229,6 +242,9 @@ interface WalkState {
   snapshot: WorkspaceSnapshot
   gitignorePatterns: RegExp[]
   fileCount: number
+  /** Canonical workspace root, when the backend can resolve symlinks — entries resolving outside it are never read. */
+  realRoot?: string
+  backend: FsBackend
 }
 
 async function walk(backend: FsBackend, dir: string, state: WalkState): Promise<void> {
@@ -238,6 +254,21 @@ async function walk(backend: FsBackend, dir: string, state: WalkState): Promise<
     if (state.snapshot.truncated) return
     const path = `${dir}/${name}`
     let info: { isDirectory: boolean; size: number } | undefined
+    // backend.stat follows symlinks, so without this a link inside the workspace pointing outside it
+    // would have its target's files read and copied into the undo log (and a link loop would be
+    // walked until ELOOP). Anything that resolves outside the workspace is skipped, never read.
+    if (state.realRoot !== undefined && state.backend.realpath) {
+      try {
+        const real = await state.backend.realpath(path)
+        if (real !== state.realRoot && !real.startsWith(`${state.realRoot}/`)) {
+          state.snapshot.skipped.push({ path, reason: 'symlink resolving outside the workspace' })
+          continue
+        }
+      } catch {
+        state.snapshot.skipped.push({ path, reason: 'could not resolve this path' })
+        continue
+      }
+    }
     try {
       // backend.stat is asserted present by the caller (snapshotWorkspaceTree bails out before
       // ever calling walk() if it's missing) — the non-null assertion here just avoids repeating
@@ -326,7 +357,15 @@ export async function snapshotWorkspaceTree(backend: FsBackend, workspaceRoot: s
     // no extra patterns, not a reason to fail the whole snapshot.
   }
 
-  await walk(backend, workspaceRoot, { snapshot, gitignorePatterns, fileCount: 0 })
+  let realRoot: string | undefined
+  if (backend.realpath) {
+    try {
+      realRoot = await backend.realpath(workspaceRoot)
+    } catch {
+      realRoot = undefined
+    }
+  }
+  await walk(backend, workspaceRoot, { snapshot, gitignorePatterns, fileCount: 0, realRoot, backend })
   return snapshot
 }
 

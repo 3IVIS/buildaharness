@@ -169,3 +169,32 @@ describe('M1 budgeted render', () => {
     expect(migrateFact(old).durable).toBe(true)
   })
 })
+
+describe('keyed supersession by a session-only candidate (audit)', () => {
+  it('a non-durable or low-confidence keyed guess never retires the durable fact with that key', async () => {
+    const { service, memory } = makeService()
+    await service.recordFacts('s', 'hi', [stated('the user lives in Austin', 'home_city')])
+    await service.recordFacts('s', 'hi', [{ text: 'the user is visiting Berlin today', durable: false, confidence: 'high', category: 'location', key: 'home_city' }])
+    await service.recordFacts('s', 'hi', [{ text: 'the user maybe lives in Oslo', durable: true, confidence: 'low', category: 'location', key: 'home_city' }])
+    const durable = (await memory.get(DURABLE_FACTS_KEY)) as UserFact[]
+    expect(durable.map((f) => f.text)).toEqual(['the user lives in Austin'])
+    expect(await memory.get(RETIRED_FACTS_KEY)).toBeUndefined()
+  })
+})
+
+describe('recordFacts re-reads the stores after the model call (audit)', () => {
+  it('a pending entry written while the contradiction check is in flight is not overwritten', async () => {
+    const memory = new InMemoryAdapter()
+    const slowLlm = {
+      ...llm,
+      async callChatStructured() {
+        await memory.set('facts:pending-confirmation', [{ text: 'staged meanwhile', extractedAt: 'x', sourceTurn: 'r', source: 'model_inferred', durable: true, confidence: 'medium', category: 'other' }])
+        return { content: NO_CONTRADICTIONS }
+      },
+    }
+    const service = new MemoryService(memory, new InMemoryReminderStore(new InMemoryAdapter()), new InMemoryExperienceStore(), slowLlm as never, () => undefined, () => '')
+    await service.recordFacts('s', 'hi', [{ text: 'the user might like jazz', durable: true, confidence: 'medium', category: 'preference' }])
+    const pending = (await memory.get('facts:pending-confirmation')) as { text: string }[]
+    expect(pending.map((p) => p.text).sort()).toEqual(['staged meanwhile', 'the user might like jazz'])
+  })
+})

@@ -176,3 +176,12 @@ describe('SubgraphExecutor', () => {
     })
   })
 })
+
+describe('subgraphExecutor flow_ref cycles', () => {
+  it('refuses to nest beyond the depth limit', async () => {
+    const node = { id: 'sub', type: 'subgraph', flow_ref: 'nested-flow' } as never
+    const base = createExecutionContext({ llmClient: makeMockLLMClient(), subgraphRegistry: new Map([['nested-flow', NESTED_FLOW]]) })
+    const deep = { ...base, subgraphDepth: 16 }
+    await expect(subgraphExecutor(node, new FlowState(), deep)).rejects.toThrow(/nesting deeper/)
+  })
+})

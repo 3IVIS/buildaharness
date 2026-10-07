@@ -1,11 +1,12 @@
 import { Hono } from 'hono'
 import { cors } from 'hono/cors'
-import { createAuthMiddleware, signToken } from './auth'
+import { createAuthMiddleware, secretsMatch, signToken } from './auth'
 import { forwardToProvider } from './forward'
 import { handleWebSearch } from './web-search'
 import { handleWebFetch } from './web-fetch'
 import { handleWebGrant } from './web-grant'
-import { createWebQuotaMiddleware } from './web-quota-middleware'
+import { createWebQuotaMiddleware, clientIpOptions } from './web-quota-middleware'
+import { HOUR_MS, authFailCounter, clientIp } from './rate-limit'
 
 type Bindings = {
   ALLOWED_ORIGIN: string
@@ -25,6 +26,10 @@ type Bindings = {
   WEB_BRAVE_DAILY_CEILING?: string
   WEB_GRANT_REQUESTS_PER_HOUR?: string
   WEB_GUARD_REJECT_ALERT_THRESHOLD?: string
+  /** Set to 1 only behind a reverse proxy that overwrites x-forwarded-for / x-real-ip; otherwise the per-IP limit uses the TCP peer. */
+  TRUST_PROXY_HEADERS?: string
+  /** Failed /auth/token attempts allowed per client IP per hour (default 10). */
+  AUTH_FAILS_PER_HOUR?: string
 }
 
 const app = new Hono<{ Bindings: Bindings }>()
@@ -44,8 +49,18 @@ app.get('/health', (c) => c.json({ status: 'ok' }))
 app.post('/auth/token', async (c) => {
   const proxySecret = c.env?.PROXY_SECRET ?? process.env.PROXY_SECRET
   if (!proxySecret) return c.json({ error: 'server misconfigured' }, 500)
-  const body = await c.req.json<{ secret?: string }>().catch(() => ({} as { secret?: string }))
-  if (body.secret !== proxySecret) return c.json({ error: 'unauthorized' }, 401)
+  // Failed-attempt throttle per client IP: the shared secret is the only credential, so bound guessing.
+  const env = (c.env ?? {}) as Record<string, string | undefined>
+  const failKey = `ip:${clientIp(c.req.raw.headers, clientIpOptions(c, env))}`
+  const failLimitRaw = Number(env.AUTH_FAILS_PER_HOUR ?? process.env.AUTH_FAILS_PER_HOUR)
+  const failLimit = Number.isFinite(failLimitRaw) && failLimitRaw > 0 ? failLimitRaw : 10
+  const blocked = authFailCounter.peek(failKey, failLimit, HOUR_MS)
+  if (!blocked.allowed) return c.json({ error: 'too many failed attempts' }, 429, { 'Retry-After': String(blocked.retryAfterSeconds) })
+  const body = await c.req.json<{ secret?: unknown }>().catch(() => ({} as { secret?: unknown }))
+  if (!(await secretsMatch(body?.secret, proxySecret))) {
+    authFailCounter.consume(failKey, 1, Number.MAX_SAFE_INTEGER, HOUR_MS)
+    return c.json({ error: 'unauthorized' }, 401)
+  }
   const token = await signToken(proxySecret)
   return c.json({ token })
 })

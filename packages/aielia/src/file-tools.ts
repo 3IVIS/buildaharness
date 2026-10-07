@@ -277,6 +277,9 @@ function pendingActionsDir(workspaceRoot: string): string {
 }
 
 function pendingActionPath(workspaceRoot: string, id: string): string {
+  // An id is only ever a UUID minted by stagePendingAction; reject anything that could climb out of
+  // `.pending-actions/` (e.g. "../../x") before it is used to read or delete a file.
+  if (!/^[A-Za-z0-9_-]+$/.test(id)) throw new Error(`Invalid pending action id "${id}"`)
   return `${pendingActionsDir(workspaceRoot)}/${id}.json`
 }
 
@@ -377,7 +380,13 @@ export async function applyPendingAction(
     // could be reverted, even though nothing landed on disk (found live: convE, an
     // archive/.keep write that never completed was still listed [undoable] by /undo-action).
     await backend.writeTextFile(resolved, record.content)
-    await recordUndoLogEntry(backend, workspaceRoot, undoEntry)
+    // The write has landed: a failure recording its undo entry must not leave the staging record behind
+    // (a second approval would re-apply the write and capture the new content as "previous").
+    try {
+      await recordUndoLogEntry(backend, workspaceRoot, undoEntry)
+    } catch (err) {
+      console.error('[undo-log] could not record the undo entry for an applied write:', err)
+    }
     await backend.removeFile(pendingActionPath(workspaceRoot, id))
     // `snapshot.previousContent` is `string | null` when undoable (null meaning "new file, no
     // prior content"); collapsed to `undefined` here since both that case and !undoable (binary,
@@ -405,17 +414,31 @@ export async function applyPendingAction(
     return { ...record, delivery }
   }
 
+  // The record is a plain file on disk: an unknown or malformed one must never fall through to being run as a shell command.
+  if (record.kind !== 'shell' || typeof record.command !== 'string' || typeof record.cwd !== 'string') {
+    throw new Error(`Staged action "${id}" is not a valid pending action`)
+  }
   if (!options.executeShell) {
     throw new Error(`Cannot apply a staged shell action ("${id}") — no executeShell callback was provided`)
   }
+  // Same defense in depth as the write branch: the cwd was validated when the command was staged, but a
+  // record is a plain file on disk, so re-validate before anything is spawned in it.
+  const resolvedCwd = resolveInWorkspace(workspaceRoot, record.cwd)
+  await assertRealPathInWorkspace(backend, workspaceRoot, resolvedCwd)
   // A shell command's effects aren't scoped to one known path the way a write's are — snapshot
   // the whole tree before and after, so the diff (whatever it turns out to be) can still be
   // reverted later. See action-snapshot.ts's snapshotWorkspaceTree/buildShellUndoLogEntry.
   const before = await snapshotWorkspaceTree(backend, workspaceRoot)
-  const execution = await options.executeShell(record.command, record.cwd)
-  const after = await snapshotWorkspaceTree(backend, workspaceRoot)
-  const undoEntry = buildShellUndoLogEntry(id, record.command, before, after)
-  await recordUndoLogEntry(backend, workspaceRoot, undoEntry)
+  const execution = await options.executeShell(record.command, resolvedCwd)
+  // The command has already run: bookkeeping failures must not leave the staging record behind, or a
+  // second approval would run the command again.
+  try {
+    const after = await snapshotWorkspaceTree(backend, workspaceRoot)
+    const undoEntry = buildShellUndoLogEntry(id, record.command, before, after)
+    await recordUndoLogEntry(backend, workspaceRoot, undoEntry)
+  } catch (err) {
+    console.error('[undo-log] could not record the undo entry for an applied shell command:', err)
+  }
   await backend.removeFile(pendingActionPath(workspaceRoot, id))
   return { ...record, execution }
 }

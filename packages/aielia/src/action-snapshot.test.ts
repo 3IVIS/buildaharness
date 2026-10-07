@@ -7,6 +7,7 @@ import {
   buildShellUndoLogEntry,
   recordUndoLogEntry,
   loadUndoLogEntry,
+  deleteUndoLogEntry,
   listUndoLogEntries,
   UNDO_LOG_MAX_ENTRIES,
   UNDO_SNAPSHOT_MAX_FILE_BYTES,
@@ -270,5 +271,54 @@ describe('undo-log read/write', () => {
     expect(remaining.some((e) => e.id === entries[0].id)).toBe(false)
     // The most recently recorded entry must survive the prune.
     expect(remaining.some((e) => e.id === entries[entries.length - 1].id)).toBe(true)
+  })
+
+  it('rejects an id that would climb out of .undo-log/ (path traversal via /undo-action <id>)', async () => {
+    const backend = makeFakeBackend()
+    const entry = makeWriteEntry()
+    // A file sitting where `${ROOT}/.undo-log/../secret.json` points.
+    await backend.writeTextFile(`${ROOT}/.undo-log/../secret.json`, JSON.stringify(entry))
+    expect(await loadUndoLogEntry(backend, ROOT, '../secret')).toBeUndefined()
+    await deleteUndoLogEntry(backend, ROOT, '../secret')
+    expect(await backend.readTextFile(`${ROOT}/.undo-log/../secret.json`)).toBeDefined()
+  })
+})
+
+describe('snapshotWorkspaceTree and symlinks', () => {
+  it('does not read files reached through a symlink that leaves the workspace', async () => {
+    const { mkdtemp, mkdir, writeFile, symlink, realpath, rm } = await import('node:fs/promises')
+    const { tmpdir } = await import('node:os')
+    const { createNodeFsBackend } = await import('./node-fs-backend.js')
+    const base = await mkdtemp(`${tmpdir()}/snap-symlink-`)
+    try {
+      const ws = `${base}/ws`
+      const outside = `${base}/outside`
+      await mkdir(ws)
+      await mkdir(outside)
+      await writeFile(`${outside}/secret.txt`, 'top secret')
+      await writeFile(`${ws}/inside.txt`, 'ok')
+      await symlink(outside, `${ws}/link`)
+      await symlink(`${outside}/secret.txt`, `${ws}/secret-link.txt`)
+      const snap = await snapshotWorkspaceTree(createNodeFsBackend(), await realpath(ws))
+      expect([...snap.files.values()]).toEqual(['ok'])
+      expect(snap.skipped.some((s) => s.path.endsWith('/link'))).toBe(true)
+    } finally {
+      await rm(base, { recursive: true, force: true })
+    }
+  })
+})
+
+describe('snapshotWorkspaceTree .gitignore handling', () => {
+  it('ignores a pathological wildcard pattern instead of hanging on a long file name', async () => {
+    const backend = makeFakeBackend()
+    const name = `${'a'.repeat(200)}.txt`
+    await backend.writeTextFile(`${ROOT}/.gitignore`, `${'*a'.repeat(30)}*b\nignored.log\n`)
+    await backend.writeTextFile(`${ROOT}/${name}`, 'x')
+    await backend.writeTextFile(`${ROOT}/ignored.log`, 'y')
+    const started = Date.now()
+    const snap = await snapshotWorkspaceTree(backend, ROOT)
+    expect(Date.now() - started).toBeLessThan(2000)
+    expect(snap.files.has(`${ROOT}/${name}`)).toBe(true)
+    expect(snap.files.has(`${ROOT}/ignored.log`)).toBe(false)
   })
 })

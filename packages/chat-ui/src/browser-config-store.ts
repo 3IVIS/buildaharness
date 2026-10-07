@@ -23,7 +23,10 @@ export class BrowserConfigStore implements ConfigStore {
     }
     if (raw === null) return {}
     try {
-      return JSON.parse(raw) as Partial<AssistantConfig>
+      const parsed: unknown = JSON.parse(raw)
+      // `null`, a number or an array parses fine but is not a config object — treat it like corrupt JSON.
+      if (typeof parsed !== 'object' || parsed === null || Array.isArray(parsed)) throw new Error('not an object')
+      return parsed as Partial<AssistantConfig>
     } catch {
       console.warn(`${STORAGE_KEY} in localStorage is not valid JSON — ignoring it and falling back to defaults.`)
       return {}

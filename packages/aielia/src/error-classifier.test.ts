@@ -2,6 +2,13 @@ import { describe, it, expect } from 'vitest'
 import { classifyError } from './error-classifier.js'
 
 describe('classifyError', () => {
+  it('does not call a filesystem ENOENT a missing Claude CLI', () => {
+    const fsErr = Object.assign(new Error("ENOENT: no such file or directory, open '/x/y.json'"), { code: 'ENOENT', syscall: 'open' })
+    expect(classifyError(fsErr).message).not.toContain('Claude CLI')
+    const spawnErr = Object.assign(new Error('spawn claude ENOENT'), { code: 'ENOENT', syscall: 'spawn claude' })
+    expect(classifyError(spawnErr).message).toContain('Claude CLI')
+  })
+
   it('classifies ENOENT as "claude not found", not retryable', () => {
     const err = Object.assign(new Error('spawn claude ENOENT'), { code: 'ENOENT' })
     const result = classifyError(err)

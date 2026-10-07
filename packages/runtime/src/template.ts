@@ -19,6 +19,8 @@ export function _resolvePath(expr: string, data: Record<string, unknown>): unkno
   let current: unknown = data
   for (const part of parts) {
     if (current === null || current === undefined) return undefined
+    // Never walk the prototype chain ('constructor', '__proto__', ...) from a spec-authored path.
+    if (part === '__proto__' || part === 'constructor' || part === 'prototype') return undefined
     current = (current as Record<string, unknown>)[part]
   }
   return current

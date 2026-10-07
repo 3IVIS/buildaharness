@@ -212,6 +212,14 @@ describe('pending-action staging', () => {
     expect(record).toMatchObject({ id, kind: 'shell', command: 'ls -la', cwd: ROOT })
   })
 
+  it('applyPendingAction refuses a staged record of unknown kind instead of running it as a shell command', async () => {
+    const backend = makeFakeBackend()
+    await backend.writeTextFile(`${ROOT}/.pending-actions/forged.json`, JSON.stringify({ id: 'forged', stagedAt: new Date().toISOString(), kind: 'bogus', command: 'rm -rf x', cwd: ROOT }))
+    const executeShell = vi.fn()
+    await expect(applyPendingAction(backend, ROOT, 'forged', { executeShell })).rejects.toThrow(/not a valid pending action/)
+    expect(executeShell).not.toHaveBeenCalled()
+  })
+
   it('applyPendingAction writes exactly the staged content and deletes the staging record for kind: write', async () => {
     const backend = makeFakeBackend()
     const { id } = await stagePendingAction(backend, ROOT, { kind: 'write', path: 'notes/summary.md', content: 'final content' })
@@ -253,6 +261,27 @@ describe('pending-action staging', () => {
     const { id } = await stagePendingAction(backend, ROOT, { kind: 'shell', command: 'echo hi', cwd: ROOT })
 
     await expect(applyPendingAction(backend, ROOT, id)).rejects.toThrow(/executeShell/)
+  })
+
+  it('applyPendingAction re-validates a staged shell cwd and refuses one outside the workspace', async () => {
+    const backend = makeFakeBackend()
+    const { id } = await stagePendingAction(backend, ROOT, { kind: 'shell', command: 'echo hi', cwd: '/etc' })
+    const executeShell = vi.fn().mockResolvedValue({ output: '', exitCode: 0, timedOut: false })
+
+    await expect(applyPendingAction(backend, ROOT, id, { executeShell })).rejects.toThrow(/outside the workspace/)
+    expect(executeShell).not.toHaveBeenCalled()
+  })
+
+  it('a failure recording the undo entry after a shell command ran still removes the staging record (no second run on retry)', async () => {
+    const inner = makeFakeBackend()
+    const backend: FsBackend = { ...inner, async mkdir(path) { if (path.endsWith('.undo-log')) throw new Error('disk full'); return inner.mkdir(path) } }
+    const { id } = await stagePendingAction(backend, ROOT, { kind: 'shell', command: 'echo hi', cwd: ROOT })
+    const executeShell = vi.fn().mockResolvedValue({ output: 'hi\n', exitCode: 0, timedOut: false })
+    const spy = vi.spyOn(console, 'error').mockImplementation(() => undefined)
+    await applyPendingAction(backend, ROOT, id, { executeShell })
+    spy.mockRestore()
+    expect(await loadPendingAction(backend, ROOT, id)).toBeUndefined()
+    expect(executeShell).toHaveBeenCalledTimes(1)
   })
 
   it('applyPendingAction invokes the injected executeShell callback for kind: shell and deletes the staging record', async () => {
@@ -533,5 +562,14 @@ describe('readCurrentFileContent', () => {
     const backend = makeFakeBackend()
 
     await expect(readCurrentFileContent(backend, ROOT, '../outside.txt')).rejects.toThrow(PathOutsideWorkspaceError)
+  })
+})
+
+describe('pending action id validation', () => {
+  it('rejects an id that would climb out of .pending-actions', async () => {
+    const backend = makeFakeBackend()
+    await expect(loadPendingAction(backend, ROOT, '../../evil')).rejects.toThrow(/Invalid pending action id/)
+    await expect(applyPendingAction(backend, ROOT, '../x')).rejects.toThrow(/Invalid pending action id/)
+    await expect(discardPendingAction(backend, ROOT, '../x')).rejects.toThrow(/Invalid pending action id/)
   })
 })

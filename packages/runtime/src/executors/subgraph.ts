@@ -6,6 +6,8 @@ import { FlowExecutionError } from '../errors'
 import { FlowRuntime } from '../runtime'
 import { resolveValue } from '../template'
 
+const MAX_SUBGRAPH_DEPTH = 16
+
 export async function subgraphExecutor(node: Node, state: FlowState, context: ExecutionContext): Promise<ExecutorOutput> {
   if (node.type !== 'subgraph') throw new Error(`subgraphExecutor called with node type "${node.type}"`)
 
@@ -31,6 +33,13 @@ export async function subgraphExecutor(node: Node, state: FlowState, context: Ex
     ...context,
     hitlResolvers: new Map(),
     branchResults: new Map(),
+    subgraphDepth: (context.subgraphDepth ?? 0) + 1,
+  }
+
+  // A flow_ref cycle (a flow that embeds itself) would otherwise recurse until the stack or memory runs out.
+  const depth = (context.subgraphDepth ?? 0) + 1
+  if (depth > MAX_SUBGRAPH_DEPTH) {
+    throw new FlowExecutionError({ nodeId: node.id, message: `subgraph node "${node.id}": nesting deeper than ${MAX_SUBGRAPH_DEPTH} levels (flow_ref cycle?)` })
   }
 
   const nestedRuntime = new FlowRuntime()

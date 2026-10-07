@@ -50,7 +50,7 @@ export interface ToolPolicyResult {
 /** Tool names that are always staged for human approval, independent of risk classification or
  * control state — file-tools.ts's write_file/run_shell_command unconditional gate, expressed here
  * as policy data instead of duplicated per call site. */
-const ALWAYS_REQUIRE_APPROVAL_TOOLS: ReadonlySet<string> = new Set(['write_file', 'run_shell_command'])
+const ALWAYS_REQUIRE_APPROVAL_TOOLS: ReadonlySet<string> = new Set(['write_file', 'run_shell_command', 'send_email'])
 
 export function evaluateToolPolicy(input: ToolPolicyInput): ToolPolicyResult {
   if (ALWAYS_REQUIRE_APPROVAL_TOOLS.has(input.toolName)) {

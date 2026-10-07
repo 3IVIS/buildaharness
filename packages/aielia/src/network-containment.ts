@@ -54,6 +54,9 @@ function handleConnection(clientSocket: Socket, allowlist: readonly string[]): v
       return
     }
     clientSocket.removeListener('data', onData)
+    // With no 'data' listener a flowing socket silently drops what arrives next; hold it (e.g. the
+    // rest of a plain-HTTP request body) until the upstream connection exists and pipe() resumes it.
+    clientSocket.pause()
 
     const headerText = buffered.slice(0, headerEnd).toString('utf-8')
     const requestLine = headerText.split('\r\n')[0] ?? ''
@@ -77,6 +80,9 @@ function handleConnection(clientSocket: Socket, allowlist: readonly string[]): v
       upstream.pipe(clientSocket)
     })
     upstream.on('error', () => clientSocket.destroy())
+    // pipe() does not tear down the other side on an error or a premature close; without this a
+    // client that vanishes leaves its upstream socket open indefinitely.
+    clientSocket.on('close', () => upstream.destroy())
   }
 
   clientSocket.on('data', onData)

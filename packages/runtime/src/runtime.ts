@@ -207,11 +207,11 @@ export class FlowRuntime {
     const branchControllers = targets.map(() => new AbortController())
 
     // Link parent abort signal to all branch controllers
-    if (context.signal.addEventListener) {
-      context.signal.addEventListener('abort', () => {
-        for (const ctrl of branchControllers) ctrl.abort()
-      })
+    const abortAll = (): void => {
+      for (const ctrl of branchControllers) ctrl.abort()
     }
+    if (context.signal.aborted) abortAll()
+    context.signal.addEventListener?.('abort', abortAll)
 
     const branchPromises = targets.map((targetId, idx) => {
       // Each branch gets an independent snapshot of parent state
@@ -240,8 +240,8 @@ export class FlowRuntime {
           })
         )
       )
-    } catch (err) {
-      throw err
+    } finally {
+      context.signal.removeEventListener?.('abort', abortAll)
     }
 
     // All branches converge at the same join node

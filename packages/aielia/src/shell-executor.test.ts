@@ -70,6 +70,12 @@ describe('runApprovedShellCommand (real subprocess)', () => {
     expect(result.exitCode).toBeNull()
   }, 10_000)
 
+  it('still returns after the timeout when a descendant left the process group and holds the output pipes open', async () => {
+    // `setsid` puts the sleeper in its own session, out of reach of the group kill; it keeps stdout open.
+    const result = await runApprovedShellCommand('setsid sleep 4 & sleep 4', process.cwd(), { timeoutMs: 200 })
+    expect(result.timedOut).toBe(true)
+  }, 3500)
+
   it('truncates combined stdout/stderr past the byte cap', async () => {
     const result = await runApprovedShellCommand('yes x | head -c 5000', process.cwd(), { maxOutputBytes: 100 })
     expect(result.output.endsWith('(truncated)')).toBe(true)
@@ -155,5 +161,13 @@ describe('applyPendingAction integration with runApprovedShellCommand', () => {
     } finally {
       await rm(dir, { recursive: true, force: true })
     }
+  })
+})
+
+describe('runApprovedShellCommand output cap', () => {
+  it('bounds a flooding command to the output cap and still reports it', async () => {
+    const result = await runApprovedShellCommand('yes | head -c 5000000', tmpdir(), { maxOutputBytes: 1000, timeoutMs: 10_000 })
+    expect(result.output.length).toBeLessThan(3000)
+    expect(result.output).toContain('(truncated)')
   })
 })

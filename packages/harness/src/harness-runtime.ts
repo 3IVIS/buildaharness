@@ -890,9 +890,18 @@ function reevaluatePolicy(ctx: LoopContext): void {
   } catch { /* keep the previous policy */ }
 }
 
+/** Runs a host observability callback; a throwing handler (e.g. a tracing hook) must never break the run. */
+function notifyHost(fn: () => void): void {
+  try {
+    fn()
+  } catch {
+    /* an observability handler must never break the run */
+  }
+}
+
 function reportLayer(ctx: LoopContext, layer: LayerActivityEvent['layer'], fired: boolean, reason: string, gate?: GateOutcome): void {
   // AL8b: decision/trigger ride along only when the policy (not the static baseline) decided.
-  ctx.onLayerActivity?.(gate?.trigger !== undefined ? { layer, fired, reason, decision: gate.decision, trigger: gate.trigger } : { layer, fired, reason })
+  notifyHost(() => ctx.onLayerActivity?.(gate?.trigger !== undefined ? { layer, fired, reason, decision: gate.decision, trigger: gate.trigger } : { layer, fired, reason }))
 }
 
 /**
@@ -1257,21 +1266,30 @@ async function* driveMainLoop(ctx: LoopContext): AsyncGenerator<HarnessCheckpoin
     // coding/system-state facts the lexical check already handles — see personal-assistant's
     // looksLikeCodingFact).
     if (ctx.contradictionChecker && hookOn(ctx, 'semantic_contradiction')) {
+      let skipCoverageMark = false
       const newBeliefs = ctx.worldModel.beliefs.slice(ctx.lastContradictionCheckCount)
       const existingBeliefs = ctx.worldModel.beliefs.slice(0, ctx.lastContradictionCheckCount)
       if (newBeliefs.length > 0 && (existingBeliefs.length > 0 || newBeliefs.length >= 2)) {
-        const found = await ctx.contradictionChecker(
-          newBeliefs.map(b => ({ id: b.id, statement: b.statement })),
-          existingBeliefs.map(b => ({ id: b.id, statement: b.statement })),
-        )
-        for (const input of found) {
+        // Fails open like the other semantic hooks: a throwing checker (LLM/network error) leaves the
+        // lexical result as is, and its beliefs stay uncovered so a later iteration asks again.
+        let found: ExternalContradictionInput[] | null = null
+        try {
+          found = await ctx.contradictionChecker(
+            newBeliefs.map(b => ({ id: b.id, statement: b.statement })),
+            existingBeliefs.map(b => ({ id: b.id, statement: b.statement })),
+          )
+        } catch {
+          found = null
+        }
+        if (found === null) skipCoverageMark = true
+        for (const input of found ?? []) {
           recordExternalContradiction(ctx.worldModel, input, ctx.beliefDepGraph)
         }
       }
       // Marks these beliefs covered regardless of whether the checker actually called an LLM
       // — a "these are coding facts, skip" decision is still a completed check, courtesy of
       // the always-on lexical pass above.
-      ctx.lastContradictionCheckCount = ctx.worldModel.beliefs.length
+      if (!skipCoverageMark) ctx.lastContradictionCheckCount = ctx.worldModel.beliefs.length
     }
 
     if (ctx.worldModel.contradictions.length > contradictionsBefore) {
@@ -1397,20 +1415,25 @@ async function* driveMainLoop(ctx: LoopContext): AsyncGenerator<HarnessCheckpoin
       })
       const hypothesisPredictions = ctx.hypothesisSet.active.flatMap(h => h.predicted_observations)
       if (highConfidenceBeliefs.length > 0 || hypothesisPredictions.length > 0) {
-        const semanticResult = await ctx.semanticChangeReviewer({
-          changeDescription: currentTask.description,
-          highConfidenceBeliefs,
-          hypothesisPredictions,
-        })
-        if (semanticResult.conflict) {
+        let semanticResult: { conflict: boolean; reason?: string } = { conflict: false }
+        try {
+          semanticResult = await ctx.semanticChangeReviewer({
+            changeDescription: currentTask.description,
+            highConfidenceBeliefs,
+            hypothesisPredictions,
+          })
+        } catch {
+          /* fails open: a throwing reviewer means no conflict was found */
+        }
+        if (semanticResult?.conflict) {
           // Advisory, not a gate: failing the review here would re-run the identical task against
           // the identical beliefs (same verdict every time) until the step budget ran out — and
           // would throw away a draft that may already address the conflict. The host decides how
           // to surface the reason instead (see onReviewConflict).
-          ctx.onReviewConflict?.({
+          notifyHost(() => ctx.onReviewConflict?.({
             taskId: currentTask.id,
             reason: semanticResult.reason ?? 'Semantic review found a conflict with known context',
-          })
+          }))
         }
       }
     }
@@ -1475,12 +1498,12 @@ async function* driveMainLoop(ctx: LoopContext): AsyncGenerator<HarnessCheckpoin
     if (gateResult === 'ESCALATE' || gateResult === 'BLOCK') {
       applyTaskOutcome(ctx.taskGraph, currentTask.id, { status: 'PENDING', fromExecutionLayer: false })
       const stalled = cannotMakeProgress(ctx.strategyState, ctx.failureDiagnostics)
-      ctx.onGateDecision?.({
+      notifyHost(() => ctx.onGateDecision?.({
         taskId: currentTask.id,
         result: gateResult,
         reason: ctx.controlState.escalation_reason,
         haltedRun: stalled,
-      })
+      }))
       if (stalled) {
         throw new EscalationHalt({
           reason: 'cannot_make_progress',
@@ -1799,7 +1822,12 @@ async function* driveMainLoop(ctx: LoopContext): AsyncGenerator<HarnessCheckpoin
       const symptoms = ctx.worldModel.observations.map(o => o.content)
       if (symptoms.length > 0 && libraryEntries.length > 0 && symptoms.length !== ctx.lastFailureMatchSymptomCount) {
         ctx.lastFailureMatchSymptomCount = symptoms.length
-        const semanticMatch = await ctx.semanticFailureMatcher(symptoms, libraryEntries)
+        let semanticMatch: Awaited<ReturnType<NonNullable<LoopContext['semanticFailureMatcher']>>> = null
+        try {
+          semanticMatch = await ctx.semanticFailureMatcher(symptoms, libraryEntries)
+        } catch {
+          /* fails open: a throwing matcher means no semantic match */
+        }
         if (semanticMatch) {
           ctx.failureMatchedTaskIds.add(currentTask.id)
           ctx.failureDiagnostics.matched_pattern = {
@@ -1835,7 +1863,7 @@ async function* driveMainLoop(ctx: LoopContext): AsyncGenerator<HarnessCheckpoin
       reportLayer(ctx, 'verification', true, verifyResult.has_critical_failure
         ? `verification failed: ${verifyResult.layer_results.find(lr => lr.status === 'FAIL')?.detail ?? 'unknown'}`
         : 'all applicable layers passed')
-      ctx.onVerification?.(verifyResult)
+      notifyHost(() => ctx.onVerification?.(verifyResult))
     }
 
     ctx.nodeExecutionOrder.push('post_exec_gate')
@@ -2009,10 +2037,12 @@ async function* driveMainLoop(ctx: LoopContext): AsyncGenerator<HarnessCheckpoin
       if (rollbackResult.replanScope === 'GLOBAL') ctx.taskGraph = rollbackResult.newTaskGraph
       reportLayer(ctx, 'recovery', true, `Trying a different approach — switched to "${rollbackResult.newStrategyState.current_strategy}" (${rollbackResult.replanScope ?? 'local'} replan)`)
       if (rollbackResult.failureModeSwitch) {
-        ctx.onFailureModeSwitch?.({ taskId: currentTask.id, ...rollbackResult.failureModeSwitch })
+        const sw = rollbackResult.failureModeSwitch
+        notifyHost(() => ctx.onFailureModeSwitch?.({ taskId: currentTask.id, ...sw }))
       }
       if (rollbackResult.learnedSwitch) {
-        ctx.onLearnedStrategySwitch?.({ taskId: currentTask.id, ...rollbackResult.learnedSwitch })
+        const sw = rollbackResult.learnedSwitch
+        notifyHost(() => ctx.onLearnedStrategySwitch?.({ taskId: currentTask.id, ...sw }))
       }
     }
 

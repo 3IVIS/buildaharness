@@ -294,12 +294,14 @@ export interface ResolvedConfig {
 export function resolveConfig(persisted: Partial<AssistantConfig> = {}, overrides: Partial<AssistantConfig> = {}): ResolvedConfig {
   const config = { ...DEFAULT_CONFIG }
   for (const key of Object.keys(persisted) as (keyof AssistantConfig)[]) {
+    if (!CONFIG_KEYS.includes(key)) continue // a hand-edited file's "__proto__"/unknown key must not reach Object.assign (a "__proto__" value would replace config's prototype)
     const value = persisted[key]
     if (value !== undefined) Object.assign(config, { [key]: value })
   }
 
   const overriddenKeys = new Set<keyof AssistantConfig>()
   for (const key of Object.keys(overrides) as (keyof AssistantConfig)[]) {
+    if (!CONFIG_KEYS.includes(key)) continue
     const value = overrides[key]
     if (value !== undefined) {
       Object.assign(config, { [key]: value })

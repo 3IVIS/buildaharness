@@ -1,4 +1,5 @@
 import type { ChatMessage } from '@buildaharness/runtime'
+import { defangUntrustedTags } from './trust-tagging.js'
 
 // PersonalAssistant's persisted transcript only ever holds 'user'/'assistant'
 // text messages (see assistant.ts's memory.set calls) — the tool-loop's own
@@ -35,8 +36,22 @@ function splitForCompaction(transcript: ChatMessage[]): { older: ChatMessage[]; 
   return { older: transcript.slice(0, transcript.length - KEEP_RECENT), recent: transcript.slice(transcript.length - KEEP_RECENT) }
 }
 
+const MAX_SUMMARY_CHARS = 8000
+
 function truncatedSummary(older: ChatMessage[]): ChatMessage {
-  const summaryLines = older.map(m => `${m.role}: ${m.content.slice(0, SUMMARY_PREVIEW_CHARS)}`)
+  const summaryLines: string[] = []
+  for (const m of older) {
+    // An earlier summary is already in this form: carry its lines over whole instead of cutting the entire
+    // summary to one preview (which dropped everything but its first lines at the second compaction).
+    if (m.role === 'assistant' && m.content.startsWith(SUMMARY_HEADER)) {
+      summaryLines.push(...m.content.slice(SUMMARY_HEADER.length).split('\n').filter((line) => line !== ''))
+    } else {
+      summaryLines.push(`${m.role}: ${defangUntrustedTags(m.content).slice(0, SUMMARY_PREVIEW_CHARS)}`)
+    }
+  }
+  // Bounded growth: the oldest lines go first once the summary is over its cap.
+  let total = summaryLines.reduce((sum, line) => sum + line.length + 1, 0)
+  while (total > MAX_SUMMARY_CHARS && summaryLines.length > 1) total -= summaryLines.shift()!.length + 1
   return { role: 'assistant', content: `${SUMMARY_HEADER}\n${summaryLines.join('\n')}` }
 }
 
@@ -68,6 +83,6 @@ export async function compactTranscriptSemantic(
   } catch {
     /* fall back to the truncated form */
   }
-  const message: ChatMessage = summary ? { role: 'assistant', content: `${SUMMARY_HEADER}\n${summary}` } : truncatedSummary(split.older)
+  const message: ChatMessage = summary ? { role: 'assistant', content: `${SUMMARY_HEADER}\n${defangUntrustedTags(summary)}` } : truncatedSummary(split.older)
   return { transcript: [message, ...split.recent], compacted: true }
 }

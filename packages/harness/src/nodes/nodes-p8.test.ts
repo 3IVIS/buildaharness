@@ -680,3 +680,19 @@ describe('update_diagnostics', () => {
     expect(checkAbstractionAlignment(statementLevelGraph, wm, true)).toBeCloseTo(1.0)
   })
 })
+
+describe('detectContradictions — repeated passes over an unchanged belief set', () => {
+  it('does not re-record a known conflict or decay its beliefs again', () => {
+    const wm = new WorldModel()
+    wm.addBelief({ id: 'b1', statement: 'the build passed', confidence: 0.9, derived_from: ['e1'], recorded_at: '2026-01-01T00:00:00Z' })
+    wm.addBelief({ id: 'b2', statement: 'the build failed', confidence: 0.9, derived_from: ['e2'], recorded_at: '2026-01-01T00:00:00Z' })
+    detectContradictions(wm, new EvidenceStore(), new HypothesisSet())
+    const count = wm.contradictions.length
+    const conf = wm.beliefs.map(b => b.confidence)
+    expect(count).toBeGreaterThan(0)
+    detectContradictions(wm, new EvidenceStore(), new HypothesisSet())
+    detectContradictions(wm, new EvidenceStore(), new HypothesisSet())
+    expect(wm.contradictions.length).toBe(count)
+    expect(wm.beliefs.map(b => b.confidence)).toEqual(conf)
+  })
+})

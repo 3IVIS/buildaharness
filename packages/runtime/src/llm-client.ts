@@ -125,6 +125,10 @@ export class LLMClient implements ILLMClient {
   }
 
   async *callChat(messages: ChatMessage[], options: ChatOptions = {}): AsyncIterable<string> {
+    const model = options.model ?? ANTHROPIC_DEFAULT_MODEL
+    // Anthropic's API takes `system` top-level and rejects role:'system'/'tool' messages, so
+    // reshape for claude-* models (the proxy forwards the body verbatim); OpenAI keeps the raw shape.
+    const shaped = model.startsWith('claude-') ? buildAnthropicMessages(messages) : undefined
     const response = await fetch(`${this.proxyUrl}/llm/chat`, {
       method: 'POST',
       headers: {
@@ -132,8 +136,9 @@ export class LLMClient implements ILLMClient {
         'Authorization': `Bearer ${this.authToken}`,
       },
       body: JSON.stringify({
-        model: options.model ?? ANTHROPIC_DEFAULT_MODEL,
-        messages,
+        model,
+        messages: shaped ? shaped.messages : messages,
+        ...(shaped?.system ? { system: shaped.system } : {}),
         stream: true,
         ...(options.maxTokens ? { max_tokens: options.maxTokens } : {}),
         ...(options.temperature !== undefined ? { temperature: options.temperature } : {}),
@@ -166,6 +171,7 @@ export class LLMClient implements ILLMClient {
       }
     }
 
+    try {
     while (true) {
       const { done, value } = await reader.read()
       if (done) break
@@ -192,6 +198,10 @@ export class LLMClient implements ILLMClient {
         }
       }
     }
+    } finally {
+      // Free the connection when the consumer stops early or an error is thrown mid-stream.
+      await reader.cancel().catch(() => {})
+    }
     reportUsage()
   }
 
@@ -204,9 +214,19 @@ export class LLMClient implements ILLMClient {
   }
 
   async callChatStructured(messages: ChatMessage[], tools?: ToolDefinition[], options: ChatOptions = {}): Promise<LLMStructuredResponse> {
+    const model = options.model ?? ANTHROPIC_DEFAULT_MODEL
+    // This path speaks the Anthropic Messages shape (top-level system, input_schema tools, content
+    // blocks) and the proxy forwards the body verbatim, so an OpenAI model would get a malformed
+    // request and an unparseable reply. Fail clearly instead.
+    if (!model.startsWith('claude-')) {
+      throw new FlowExecutionError({
+        nodeId: 'llm-client',
+        message: `callChatStructured supports only claude-* models through the proxy (got "${model}")`,
+      })
+    }
     const { system, messages: anthropicMessages } = buildAnthropicMessages(messages)
     const body: Record<string, unknown> = {
-      model: options.model ?? ANTHROPIC_DEFAULT_MODEL,
+      model,
       messages: anthropicMessages,
       stream: false,
       ...(system ? { system } : {}),

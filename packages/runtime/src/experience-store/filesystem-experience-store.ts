@@ -41,12 +41,24 @@ export class FileSystemExperienceStore implements ExperienceStore {
     await opts.backend.mkdir(dir)
     const path = `${dir}/experience.json`
     const raw = await opts.backend.readTextFile(path)
-    const inner = raw ? InMemoryExperienceStore.fromJSON(JSON.parse(raw) as ExperienceStoreData) : new InMemoryExperienceStore()
+    let inner = new InMemoryExperienceStore()
+    if (raw) {
+      try {
+        inner = InMemoryExperienceStore.fromJSON(JSON.parse(raw) as ExperienceStoreData)
+      } catch {
+        // A truncated/corrupt snapshot (e.g. a crash mid-write) must not stop startup; learning restarts empty.
+      }
+    }
     return new FileSystemExperienceStore(inner, opts.backend, path)
   }
 
+  private writeChain: Promise<unknown> = Promise.resolve()
+
   private persist(): void {
-    void this.backend.writeTextFile(this.path, JSON.stringify(this.inner.toJSON())).catch(() => {})
+    // Chained so snapshots reach disk in mutation order (concurrent writes could land an older one last).
+    this.writeChain = this.writeChain
+      .then(() => this.backend.writeTextFile(this.path, JSON.stringify(this.inner.toJSON())))
+      .catch(() => {})
   }
 
   get available(): boolean {

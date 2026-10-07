@@ -43,7 +43,16 @@ export class TauriConfigStore implements ConfigStore {
       this.migrationNoticePending = true
     }
 
-    const apiKey = plaintextApiKey ?? ((await invoke<string | null>('keychain_get_api_key')) ?? undefined)
+    let apiKey = plaintextApiKey
+    if (apiKey === undefined) {
+      // A missing/locked keychain (e.g. no libsecret on Linux) must not make the whole config, and so the
+      // whole app, unloadable: every other setting is still readable. Writes still fail loudly (save()).
+      try {
+        apiKey = (await invoke<string | null>('keychain_get_api_key')) ?? undefined
+      } catch (err) {
+        console.warn('Could not read the API key from the OS keychain; continuing without it.', err)
+      }
+    }
     return { ...rest, apiKey }
   }
 

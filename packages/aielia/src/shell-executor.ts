@@ -92,29 +92,7 @@ export const runApprovedShellCommand: ShellCommandExecutor = async (
     let timedOut = false
     let settled = false
 
-    const timer = setTimeout(() => {
-      timedOut = true
-      try {
-        if (proc.pid) process.kill(-proc.pid, 'SIGKILL')
-        else proc.kill('SIGKILL')
-      } catch {
-        proc.kill('SIGKILL')
-      }
-    }, timeoutMs)
-
-    proc.stdout?.on('data', (chunk: Buffer) => {
-      output += chunk.toString('utf-8')
-    })
-    proc.stderr?.on('data', (chunk: Buffer) => {
-      output += chunk.toString('utf-8')
-    })
-    proc.on('error', (err: Error) => {
-      if (settled) return
-      settled = true
-      clearTimeout(timer)
-      reject(err)
-    })
-    proc.on('close', (exitCode: number | null) => {
+    const finish = (exitCode: number | null): void => {
       if (settled) return
       settled = true
       clearTimeout(timer)
@@ -123,6 +101,38 @@ export const runApprovedShellCommand: ShellCommandExecutor = async (
         exitCode: timedOut ? null : exitCode,
         timedOut,
       })
+    }
+
+    const timer = setTimeout(() => {
+      timedOut = true
+      try {
+        if (proc.pid) process.kill(-proc.pid, 'SIGKILL')
+        else proc.kill('SIGKILL')
+      } catch {
+        proc.kill('SIGKILL')
+      }
+      // 'close' waits for every stdout/stderr pipe to end; a descendant that left the process group
+      // (setsid) keeps them open and would otherwise leave this promise pending forever.
+      setTimeout(() => {
+        proc.stdout?.destroy()
+        proc.stderr?.destroy()
+        finish(null)
+      }, 2000).unref?.()
+    }, timeoutMs)
+
+    // Keep only what truncateOutput could ever return (plus a little slack for multi-byte chars):
+    // a command that floods stdout for the whole timeout must not grow this string without bound.
+    const append = (chunk: Buffer): void => {
+      if (output.length <= maxOutputBytes * 2) output += chunk.toString('utf-8')
+    }
+    proc.stdout?.on('data', append)
+    proc.stderr?.on('data', append)
+    proc.on('error', (err: Error) => {
+      if (settled) return
+      settled = true
+      clearTimeout(timer)
+      reject(err)
     })
+    proc.on('close', (exitCode: number | null) => finish(exitCode))
   })
 }

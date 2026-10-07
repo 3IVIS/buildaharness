@@ -109,7 +109,15 @@ function goalGraphKey(sessionId: string): string {
 }
 
 function goalGraphFilePath(workspaceRoot: string, sessionId: string): string {
-  const safeId = sessionId.replace(/[^a-zA-Z0-9_-]/g, '_')
+  let safeId = sessionId.replace(/[^a-zA-Z0-9_-]/g, '_')
+  // Sanitising is lossy ("a/b" and "a_b" both give "a_b"), which made two sessions share one file —
+  // and the file wins over the per-session memory record on load. An id that needed rewriting gets a
+  // hash of the original appended; ids that were already safe keep their existing file name.
+  if (safeId !== sessionId) {
+    let h = 0x811c9dc5
+    for (let i = 0; i < sessionId.length; i++) h = Math.imul(h ^ sessionId.charCodeAt(i), 0x01000193) >>> 0
+    safeId = `${safeId}-${h.toString(16)}`
+  }
   return `${workspaceRoot}/.buildaharness/goals/${safeId}.goalgraph.json`
 }
 

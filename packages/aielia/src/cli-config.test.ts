@@ -7,6 +7,7 @@ import { DEFAULT_PLAN_GRAPH_MODE } from './plan-graph-flag.js'
 import { DEFAULT_GOAL_GRAPH_SUGGEST_MODE } from './goal-graph-suggest-flag.js'
 import {
   isConfigKey,
+  findInvalidNumericSettings,
   envOverridesFromProcessEnv,
   parseConfigValue,
   ConfigValueParseError,
@@ -208,6 +209,21 @@ describe('parseConfigValue', () => {
   })
 })
 
+describe('findInvalidNumericSettings', () => {
+  it('flags a NaN spending ceiling from a malformed env var instead of letting it disable the cap', () => {
+    const { config } = { config: { ...DEFAULT_CONFIG, ...envOverridesFromProcessEnv({ ASSISTANT_SESSION_COST_LIMIT_USD: 'abc', ASSISTANT_SESSION_CALL_LIMIT: '' }) } }
+    const problems = findInvalidNumericSettings(config)
+    expect(problems.join(' ')).toContain('sessionCostLimitUsd')
+    expect(problems.join(' ')).toContain('ASSISTANT_SESSION_COST_LIMIT_USD')
+    expect(problems.join(' ')).toContain('sessionCallLimit')
+  })
+
+  it('accepts unset and positive values', () => {
+    expect(findInvalidNumericSettings(DEFAULT_CONFIG)).toEqual([])
+    expect(findInvalidNumericSettings({ ...DEFAULT_CONFIG, sessionCostLimitUsd: 2.5, shellTimeoutMs: 1000 })).toEqual([])
+  })
+})
+
 describe('formatConfigListing', () => {
   it('masks secret keys regardless of value', () => {
     const listing = formatConfigListing({ ...DEFAULT_CONFIG, braveApiKey: 'sk-super-secret' }, new Set())
@@ -221,6 +237,12 @@ describe('formatConfigListing', () => {
     expect(listing).not.toContain('sk-ant-super-secret')
   })
 
+  it('masks the email credentials (resendApiKey, smtpPass) too', () => {
+    const listing = formatConfigListing({ ...DEFAULT_CONFIG, resendApiKey: 're_secret_value', smtpPass: 'smtp-secret-pass' }, new Set())
+    expect(listing).not.toContain('re_secret_value')
+    expect(listing).not.toContain('smtp-secret-pass')
+  })
+
   it('shows "(not set)" for an absent optional field', () => {
     const listing = formatConfigListing(DEFAULT_CONFIG, new Set())
     expect(listing).toMatch(/model\s+\(not set\)/)
@@ -229,5 +251,18 @@ describe('formatConfigListing', () => {
   it('annotates env-pinned keys with the responsible env var', () => {
     const listing = formatConfigListing(DEFAULT_CONFIG, new Set(['enableWeb']))
     expect(listing).toContain('(env-pinned: ASSISTANT_ENABLE_WEB)')
+  })
+})
+
+describe('proxyUrl credential masking', () => {
+  it('/config never prints a user:password or query value embedded in proxyUrl', () => {
+    const listing = formatConfigListing({ ...DEFAULT_CONFIG, proxyUrl: 'http://bob:hunter2@proxy.example:8787/?token=abc123' }, new Set())
+    expect(listing).not.toContain('hunter2')
+    expect(listing).not.toContain('abc123')
+    expect(listing).not.toContain('bob')
+    expect(listing).toContain('proxy.example')
+  })
+  it('a plain URL is shown unchanged', () => {
+    expect(formatConfigListing({ ...DEFAULT_CONFIG, proxyUrl: 'http://localhost:8787' }, new Set())).toContain('http://localhost:8787\n')
   })
 })

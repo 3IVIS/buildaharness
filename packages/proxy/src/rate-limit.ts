@@ -22,6 +22,9 @@ interface Window {
   windowStart: number
 }
 
+/** Upper bound on distinct keys one WindowCounter tracks (memory-exhaustion guard). */
+const MAX_TRACKED_KEYS = 50_000
+
 /** Fixed-window counter: at most `limit` cost-units per `windowMs`, keyed by an arbitrary string. */
 export class WindowCounter {
   private windows = new Map<string, Window>()
@@ -30,6 +33,7 @@ export class WindowCounter {
   consume(key: string, cost: number, limit: number, windowMs: number, now: number = Date.now()): RateLimitResult {
     let w = this.windows.get(key)
     if (!w || now - w.windowStart >= windowMs) {
+      if (!w && this.windows.size >= MAX_TRACKED_KEYS) this.prune(now, windowMs)
       w = { count: 0, windowStart: now }
       this.windows.set(key, w)
     }
@@ -58,6 +62,16 @@ export class WindowCounter {
     const w = this.windows.get(key)
     if (!w || now - w.windowStart >= windowMs) return 0
     return w.count
+  }
+
+  /** Drops expired windows; if still over the cap (every window live), evicts the oldest entries. Bounds memory under key-spraying. */
+  private prune(now: number, windowMs: number): void {
+    for (const [k, w] of this.windows) if (now - w.windowStart >= windowMs) this.windows.delete(k)
+    // Map iterates in insertion order, so the first keys are the oldest.
+    for (const k of this.windows.keys()) {
+      if (this.windows.size < MAX_TRACKED_KEYS * 0.9) break
+      this.windows.delete(k)
+    }
   }
 
   reset(): void {
@@ -97,6 +111,7 @@ export const ipRequestCounter = new WindowCounter()
 export const braveDailyCounter = new WindowCounter()
 export const guardRejectCounter = new WindowCounter()
 export const grantCounter = new WindowCounter()
+export const authFailCounter = new WindowCounter()
 export const fetchConcurrency = new ConcurrencyTracker()
 
 /**
@@ -113,6 +128,7 @@ export function resetWebRateLimitState(): void {
   braveDailyCounter.reset()
   guardRejectCounter.reset()
   grantCounter.reset()
+  authFailCounter.reset()
   fetchConcurrency.reset()
 }
 
@@ -157,14 +173,34 @@ export function getWebRateLimitConfig(env: Record<string, string | undefined>): 
   }
 }
 
-/** Best-effort client IP from the headers a reverse proxy / Cloudflare would set; 'unknown' if none are present (never blocks solely for being unknown). */
-export function clientIp(headers: { get(name: string): string | null }): string {
-  return (
-    headers.get('cf-connecting-ip') ??
-    headers.get('x-real-ip') ??
-    headers.get('x-forwarded-for')?.split(',')[0]?.trim() ??
-    'unknown'
-  )
+export interface ClientIpOptions {
+  /** Trust cf-connecting-ip (only safe when the request really came through Cloudflare, i.e. on the Worker). */
+  trustCloudflare?: boolean
+  /** Trust x-real-ip / x-forwarded-for (only safe behind a reverse proxy that overwrites them). */
+  trustForwarded?: boolean
+  /** The TCP peer address, when the runtime exposes one (Node). Used when no trusted header applies. */
+  remoteAddress?: string
+}
+
+/**
+ * Best-effort client IP. Forwarding headers are client-controlled unless a trusted front end
+ * overwrites them, so each is honoured only when the deployment opted in; otherwise the TCP peer
+ * address is used, else 'unknown' (never blocks solely for being unknown, but all unknowns share
+ * one bucket). x-forwarded-for uses the LAST entry: the one appended by the nearest trusted proxy.
+ */
+export function clientIp(headers: { get(name: string): string | null }, opts: ClientIpOptions = {}): string {
+  if (opts.trustCloudflare) {
+    const cf = headers.get('cf-connecting-ip')?.trim()
+    if (cf) return cf
+  }
+  if (opts.trustForwarded) {
+    const real = headers.get('x-real-ip')?.trim()
+    if (real) return real
+    const parts = headers.get('x-forwarded-for')?.split(',')
+    const last = parts?.[parts.length - 1]?.trim()
+    if (last) return last
+  }
+  return opts.remoteAddress || 'unknown'
 }
 
 export interface WebLogEntry {

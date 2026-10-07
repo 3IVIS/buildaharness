@@ -319,7 +319,7 @@ export function renderFactsBlock(inScope: UserFact[], budgetChars: number): Rend
     .map((f, i) => ({ f, i, p: f.durable ? (TIER_PRIORITY[tierForFact(f)] ?? 1) : 2 }))
     .sort((a, b) =>
       a.p - b.p
-      || b.f.extractedAt.localeCompare(a.f.extractedAt)
+      || (b.f.extractedAt ?? '').localeCompare(a.f.extractedAt ?? '')
       || (b.f.lastInjectedAt ?? '').localeCompare(a.f.lastInjectedAt ?? '')
       || b.i - a.i)
   const header = '\nKnown facts about the user:\n'
@@ -521,6 +521,18 @@ export class MemoryService {
     const route = decision.action === 'flag' ? 'pending' : decision.action === 'session' ? 'session' : resolveWriteRoute(this.writeMode(), writer, fact)
     if (route === 'durable') {
       const durable = (((await this.memory.get(DURABLE_FACTS_KEY)) as UserFact[] | undefined) ?? []).map(migrateFact)
+      // A keyed candidate replaces the live entry with the same key (M1 supersession), exactly as the in-turn and confirm paths do.
+      const priors = fact.key && memoryBudgetedRenderEnabled() ? durable.filter((f) => f.key === fact.key && (f.project ?? '') === (fact.project ?? '')) : []
+      if (priors.length > 0) {
+        if (priors.some((p) => p.text === fact.text)) return { route, fact }
+        const retiredAt = this.clock()
+        const retired = ((await this.memory.get(RETIRED_FACTS_KEY)) as UserFact[] | undefined) ?? []
+        await this.memory.set(RETIRED_FACTS_KEY, [...retired, ...priors.map((p) => ({ ...p, retiredAt }))])
+        const replacement: UserFact = { ...fact, supersedes: priors[priors.length - 1].text }
+        const drafts: AuditDraft[] = priors.map((p, i) => ({ op: i === priors.length - 1 ? 'replace' as const : 'retire' as const, factId: factId(p), before: p, ...(i === priors.length - 1 ? { after: replacement } : {}), index: durable.indexOf(p), store: 'durable' as const, writer, turn: sessionId }))
+        await this.commitDurable([...durable.filter((f) => !priors.includes(f)), replacement], drafts)
+        return { route, fact: replacement }
+      }
       await this.commitDurable([...durable, fact], [{ op: 'add', factId: factId(fact), after: fact, store: 'durable', writer, turn: sessionId }])
     } else if (route === 'pending') {
       const pending = ((await this.memory.get(PENDING_CONFIRMATION_KEY)) as PendingFact[] | undefined) ?? []
@@ -660,8 +672,23 @@ export class MemoryService {
     await this.appendAudit(drafts)
   }
 
-  private async appendAudit(drafts: AuditDraft[]): Promise<void> {
-    if (drafts.length === 0 || !memoryAuditLogEnabled()) return
+  /** Tail of the in-process chain serialising the audit log's read-modify-write (concurrent appends lost entries and reused seq numbers). */
+  private auditChain: Promise<unknown> = Promise.resolve()
+  /** Same for the usage flush's read-modify-write of the fact stores. */
+  private flushChain: Promise<unknown> = Promise.resolve()
+
+  private serialized<T>(chain: 'auditChain' | 'flushChain', task: () => Promise<T>): Promise<T> {
+    const run = this[chain].then(task, task)
+    this[chain] = run.catch(() => undefined)
+    return run
+  }
+
+  private appendAudit(drafts: AuditDraft[]): Promise<void> {
+    if (drafts.length === 0 || !memoryAuditLogEnabled()) return Promise.resolve()
+    return this.serialized('auditChain', () => this.appendAuditNow(drafts))
+  }
+
+  private async appendAuditNow(drafts: AuditDraft[]): Promise<void> {
     const log = ((await this.memory.get(AUDIT_LOG_KEY)) as AuditEntry[] | undefined) ?? []
     let seq = log.length > 0 ? log[log.length - 1].seq : 0
     const at = this.clock()
@@ -902,8 +929,13 @@ export class MemoryService {
     if (memoryBudgetedRenderEnabled()) await this.flushInjectionUsage(sessionId)
     if (newFacts.length === 0 && flaggedForPending.length === 0) return { contradictions: [], corroborations: [] }
 
-    let sessionFacts = (((await this.memory.get(`facts:${sessionId}`)) as UserFact[] | undefined) ?? []).map(migrateFact)
-    let durableFacts = (((await this.memory.get(DURABLE_FACTS_KEY)) as UserFact[] | undefined) ?? []).map(migrateFact)
+    // The pools the contradiction check compares against come from this first read; the stores that get
+    // written are re-read after the (slow) model call below, so a write another path (the post-turn reviewer,
+    // /memory confirm) made in the meantime is not overwritten by this call's stale copy.
+    const readSession = async (): Promise<UserFact[]> => (((await this.memory.get(`facts:${sessionId}`)) as UserFact[] | undefined) ?? []).map(migrateFact)
+    const readDurable = async (): Promise<UserFact[]> => (((await this.memory.get(DURABLE_FACTS_KEY)) as UserFact[] | undefined) ?? []).map(migrateFact)
+    let sessionFacts = await readSession()
+    let durableFacts = await readDurable()
     let pendingFacts = ((await this.memory.get(PENDING_CONFIRMATION_KEY)) as PendingFact[] | undefined) ?? []
     let rejectedFacts = ((await this.memory.get(REJECTED_FACTS_KEY)) as RejectedFact[] | undefined) ?? []
     // newFacts.length > 0 (guaranteed above) always changes sessionFacts; the other three stores
@@ -933,6 +965,11 @@ export class MemoryService {
     const { contradictions, corroborations } = semanticContradictionEnabled()
       ? await checkForContradictions(newBeliefs, existingBeliefs, this.llmClient, this.model(), onUsage, uncertainBeliefs, rejectedBeliefs)
       : { contradictions: [], corroborations: [] }
+
+    sessionFacts = await readSession()
+    durableFacts = await readDurable()
+    pendingFacts = ((await this.memory.get(PENDING_CONFIRMATION_KEY)) as PendingFact[] | undefined) ?? []
+    rejectedFacts = ((await this.memory.get(REJECTED_FACTS_KEY)) as RejectedFact[] | undefined) ?? []
 
     const uncertainIdIndex = new Map(uncertainBeliefs.map((b, i) => [b.id, i]))
     const rejectedIdIndex = new Map(rejectedBeliefs.map((b, i) => [b.id, i]))
@@ -984,7 +1021,7 @@ export class MemoryService {
       const rIdx = rejectedIdIndex.get(cor.existingId)
       if (rIdx !== undefined) {
         const restated = rejectedPool[rIdx]
-        rejectedFacts = rejectedFacts.filter((f) => f !== restated)
+        rejectedFacts = rejectedFacts.filter((f) => !(f.text === restated.text && f.rejectedAt === restated.rejectedAt))
         pendingFacts = [
           ...pendingFacts,
           {
@@ -1016,7 +1053,9 @@ export class MemoryService {
         const priorLive = [...durableFacts, ...sessionFacts].filter(sameKey)
         // Restating the same value is a no-op, not a new entry.
         if (priorLive.some((f) => f.text === fact.text)) continue
-        if (priorLive.length > 0) {
+        // Only a candidate that is itself headed for the durable store may replace anything: a session-only
+        // (non-durable or low-confidence) guess must never destroy a durable entry with the same key.
+        if (priorLive.length > 0 && route === 'durable') {
           const retiredAt = this.clock()
           const seen = new Set<string>()
           for (const old of priorLive) {
@@ -1274,7 +1313,12 @@ export class MemoryService {
   }
 
   /** Writes the batched `injectedCount`/`lastInjectedAt` updates collected by budgeted renders, to whichever store(s) hold each fact. A no-op (no writes) when nothing was rendered. */
-  private async flushInjectionUsage(sessionId: string): Promise<void> {
+  private flushInjectionUsage(sessionId: string): Promise<void> {
+    if (this.pendingInjections.size === 0) return Promise.resolve()
+    return this.serialized('flushChain', () => this.flushInjectionUsageNow(sessionId))
+  }
+
+  private async flushInjectionUsageNow(sessionId: string): Promise<void> {
     if (this.pendingInjections.size === 0) return
     const pending = this.pendingInjections
     this.pendingInjections = new Map()
@@ -1381,7 +1425,9 @@ export class MemoryService {
         await this.memory.set(RETIRED_FACTS_KEY, [...retired, { ...target, retiredAt: this.clock() }])
         await this.commitDurable(durableFacts.filter((f) => f !== target), [{ op: 'retire', factId: factId(target), before: target, index: durableFacts.indexOf(target), store: 'durable', writer: 'confirm:reviewer-retire', turn: 'memory' }])
       }
-      return { fact: { ...unflagged, source: 'externally_verified', confidence: undefined }, conflictNotice: contradictions[0]?.description }
+      // The target is gone (already retired or removed since the proposal was staged): nothing happened, so say so rather than report a clean confirm.
+      const vanished = target ? undefined : 'The fact this proposal would have retired no longer exists, so nothing was changed.'
+      return { fact: { ...unflagged, source: 'externally_verified', confidence: undefined }, conflictNotice: vanished ?? contradictions[0]?.description }
     }
     const confirmed: UserFact = { ...unflagged, source: 'externally_verified', confidence: undefined }
     // M4: a confirmed keyed upsert replaces the live entry with the same key (M1 supersession), keeping the old one in the retired store.
@@ -1484,7 +1530,13 @@ export class MemoryService {
   }
 
   /** Strips one fact's pre/post-images from the audit log (entries stay, marked `erased`, and can no longer be undone) and unlinks `supersedes` references to it. */
-  private async eraseFromAuditLog(fact: UserFact): Promise<void> {
+  private eraseFromAuditLog(fact: UserFact): Promise<void> {
+    // Same read-modify-write of the audit log as appendAudit: unserialized, an append landing between this read and
+    // write would put the erased fact's images back.
+    return this.serialized('auditChain', () => this.eraseFromAuditLogNow(fact))
+  }
+
+  private async eraseFromAuditLogNow(fact: UserFact): Promise<void> {
     const unlink = <T extends UserFact>(f: T): T => (f.supersedes === fact.text ? { ...f, supersedes: undefined } : f)
     const log = ((await this.memory.get(AUDIT_LOG_KEY)) as AuditEntry[] | undefined) ?? []
     const touches = (e: AuditEntry): boolean => e.factId === factId(fact) || (e.before !== undefined && sameFact(e.before, fact)) || (e.after !== undefined && sameFact(e.after, fact))

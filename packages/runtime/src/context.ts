@@ -44,6 +44,8 @@ export interface ExecutionContext {
   readonly subgraphRegistry: Map<string, unknown>
   readonly hitlPersistStore: MemoryAdapter
   readonly harnessMeta: HarnessMeta
+  /** Nesting level of the subgraph currently executing (0/absent at the top level); guards flow_ref cycles. */
+  readonly subgraphDepth?: number
 }
 
 export function createExecutionContext(opts: {

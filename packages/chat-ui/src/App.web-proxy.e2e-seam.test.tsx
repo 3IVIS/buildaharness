@@ -4,6 +4,7 @@ import userEvent from '@testing-library/user-event'
 import { createScriptedLLMClient } from '@buildaharness/aielia'
 import { App } from './App'
 import { setAssistantTestHooks } from './assistant-test-hooks'
+import { resetUserUrls } from './user-urls'
 import { createInMemoryFsBackend } from './e2e/in-memory-fs-backend'
 
 /**
@@ -53,6 +54,7 @@ function installWebProxyFetchMock(): RecordedCall[] {
           { status: 200 },
         )
       }
+      if (path === '/web/grant') return new Response(JSON.stringify({ fetchTag: 'granted-tag' }), { status: 200 })
       if (path === '/web/fetch') {
         return new Response(JSON.stringify({ text: 'the page says hello', finalUrl: RESULT_URL, truncated: false }), { status: 200 })
       }
@@ -92,6 +94,7 @@ async function sendAndReadReply(message: string): Promise<string> {
 describe('App — webBackend "proxy"', () => {
   afterEach(() => {
     cleanup()
+    resetUserUrls()
     setAssistantTestHooks(null)
     localStorage.clear()
     vi.unstubAllGlobals()
@@ -129,6 +132,30 @@ describe('App — webBackend "proxy"', () => {
     // Never a /web/grant call: the fetched URL came straight from the search result, so its
     // fetchTag is already stashed — no need to mint a fresh one.
     expect(calls.some((c) => c.path === '/web/grant')).toBe(false)
+  })
+
+  const GRANT_CONFIG = JSON.stringify({ llmBackend: 'proxy', oneLoopMode: 'disabled', enableWeb: true, webBackend: 'proxy', proxyUrl: PROXY_URL, authToken: AUTH_TOKEN })
+  const FETCH_ONLY_SCRIPT = () => ({
+    responses: [{ content: '', toolCalls: [{ id: 't1', name: 'fetch_url', input: { url: RESULT_URL } }] }, 'done.'],
+    streamChunks: ['done.'],
+  })
+
+  it('a URL the user typed is granted a fetch tag', async () => {
+    localStorage.setItem(STORAGE_KEY, GRANT_CONFIG)
+    const calls = installWebProxyFetchMock()
+    setAssistantTestHooks({ makeLlmClient: () => createScriptedLLMClient(FETCH_ONLY_SCRIPT()), makeFsBackend: () => createInMemoryFsBackend({}) })
+    await sendAndReadReply(`please read ${RESULT_URL}`)
+    expect(calls.find((c) => c.path === '/web/grant')?.body).toEqual({ url: RESULT_URL })
+    expect(calls.find((c) => c.path === '/web/fetch')?.body).toEqual({ url: RESULT_URL, fetchTag: 'granted-tag' })
+  })
+
+  it('a URL the model chose on its own is never granted (no open relay through /web/grant)', async () => {
+    localStorage.setItem(STORAGE_KEY, GRANT_CONFIG)
+    const calls = installWebProxyFetchMock()
+    setAssistantTestHooks({ makeLlmClient: () => createScriptedLLMClient(FETCH_ONLY_SCRIPT()), makeFsBackend: () => createInMemoryFsBackend({}) })
+    await sendAndReadReply('what is on the example page')
+    expect(calls.some((c) => c.path === '/web/grant')).toBe(false)
+    expect(calls.some((c) => c.path === '/web/fetch')).toBe(false)
   })
 
   it('webBackend "direct" (default) is unaffected — no proxy calls for web tools', async () => {

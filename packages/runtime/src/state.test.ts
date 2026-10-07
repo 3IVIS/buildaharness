@@ -68,3 +68,12 @@ describe('FlowState', () => {
     expect(state.get('count')).toBe(0)
   })
 })
+
+describe('FlowState prototype safety', () => {
+  it('patch ignores an own __proto__ key from parsed JSON', () => {
+    const s = new FlowState()
+    s.patch(JSON.parse('{"__proto__": {"injected": 1}, "ok": 2}'))
+    expect(s.get('injected')).toBeUndefined()
+    expect(s.get('ok')).toBe(2)
+  })
+})

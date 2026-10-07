@@ -227,3 +227,36 @@ describe('AgentLoop onToolProposal wiring (Phase D0)', () => {
     expect(llmClient.lastDecision?.reason).toMatch(/fail-safe UNKNOWN/)
   })
 })
+
+describe('a rejected staging call is a tool error the model sees, not an exception that ends the turn', () => {
+  class RejectedWriteThenAnswerLLM implements ILLMClient {
+    public toolMessages: string[] = []
+    private calls = 0
+    constructor(private readonly call: { name: string; input: Record<string, unknown> }) {}
+    async *callChat(): AsyncIterable<string> { yield 'recovered' }
+    async callChatSync(): Promise<string> { return '' }
+    async callChatStructured(messages: ChatMessage[]): Promise<LLMStructuredResponse> {
+      this.calls += 1
+      if (this.calls === 1) return { content: '', toolCalls: [{ id: 'toolu_1', ...this.call }, { id: 'toolu_2', name: 'list_reminders', input: {} }] }
+      this.toolMessages = messages.filter((m) => m.role === 'tool').map((m) => m.content)
+      return { content: 'recovered' }
+    }
+  }
+
+  it('write_file outside the workspace comes back as an Error tool result and the turn continues', async () => {
+    const llm = new RejectedWriteThenAnswerLLM({ name: 'write_file', input: { path: '../escape.txt', content: 'x' } })
+    const result = await buildAgentLoop(llm).runToolLoop('s', [], 'write it', 'system prompt')
+    expect(result.kind).toBe('final')
+    expect(llm.toolMessages[0]).toMatch(/^Error: .*outside the workspace/)
+    expect(llm.toolMessages).toHaveLength(2) // every call id got a result
+  })
+
+  it('send_email with a malformed recipient does the same', async () => {
+    const llm = new RejectedWriteThenAnswerLLM({ name: 'send_email', input: { to: 'not-an-address', subject: 's', body: 'b' } })
+    const memory = new InMemoryAdapter()
+    const loop = new AgentLoop(memory, llm, () => undefined, fakeFileTools, undefined, undefined, { backend: {} as FsBackend, workspaceRoot: '/workspace', sendEmail: async () => ({ provider: 'smtp' as const }) }, new InMemoryReminderStore(memory), 5, undefined, undefined)
+    const result = await loop.runToolLoop('s', [], 'mail it', 'system prompt')
+    expect(result.kind).toBe('final')
+    expect(llm.toolMessages[0]).toMatch(/^Error: .*not a valid email address/)
+  })
+})

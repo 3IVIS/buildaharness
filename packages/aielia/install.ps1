@@ -111,12 +111,20 @@ function Install-Aielia {
     New-Item -ItemType Directory -Force -Path $installDir | Out-Null
     # A running aielia.exe can't be overwritten but can be renamed aside (the CLI cleans up
     # aielia.exe.old on its next launch).
+    $old = "$target.old"
+    $movedAside = $false
     if (Test-Path -LiteralPath $target) {
-      $old = "$target.old"
       if (Test-Path -LiteralPath $old) { Remove-Item -Force -LiteralPath $old -ErrorAction SilentlyContinue }
       Move-Item -Force -LiteralPath $target -Destination $old
+      $movedAside = $true
     }
-    Move-Item -Force -LiteralPath $download -Destination $target
+    try {
+      Move-Item -Force -LiteralPath $download -Destination $target
+    } catch {
+      # Don't leave the user with no aielia.exe at all: put the previous one back.
+      if ($movedAside) { Move-Item -Force -LiteralPath $old -Destination $target -ErrorAction SilentlyContinue }
+      throw
+    }
   } finally {
     Remove-Item -Recurse -Force -LiteralPath $tmp -ErrorAction SilentlyContinue
   }

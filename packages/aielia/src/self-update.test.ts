@@ -1,7 +1,7 @@
 import { describe, it, expect, beforeEach, afterEach } from 'vitest'
 import { createServer, type Server } from 'node:http'
 import { createHash } from 'node:crypto'
-import { mkdtempSync, writeFileSync, readFileSync, existsSync, rmSync, statSync } from 'node:fs'
+import { mkdtempSync, writeFileSync, readFileSync, existsSync, rmSync, statSync, symlinkSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import type { AddressInfo } from 'node:net'
@@ -140,6 +140,16 @@ describe('self-update against a local mock server', () => {
     expect(logs.join('\n')).toContain('0.3.1 → 0.4.0')
   })
 
+  it('does not write through a symlink planted at the temp download path', async () => {
+    publishManifest()
+    const victim = join(dir, 'victim.txt')
+    writeFileSync(victim, 'precious')
+    symlinkSync(victim, join(dir, 'aielia.update.tmp'))
+    expect(await runUpdateCommand(opts())).toBe(0)
+    expect(readFileSync(victim, 'utf8')).toBe('precious')
+    expect(readFileSync(join(dir, 'aielia'))).toEqual(NEW_BIN)
+  })
+
   it('--dry-run reports the update but downloads nothing and leaves the binary alone', async () => {
     publishManifest()
     expect(await runUpdateCommand(opts({ dryRun: true }))).toBe(0)
@@ -169,6 +179,21 @@ describe('self-update against a local mock server', () => {
     expect(await runUpdateCommand(opts())).toBe(1)
     expect(readFileSync(join(dir, 'aielia'), 'utf8')).toBe('old-binary')
     expect(logs.join('\n')).toContain('disagrees')
+  })
+
+  it('refuses a download that was redirected onto plain http', async () => {
+    const manifest = { tag: 'aielia-v0.4.0', version: '0.4.0', assets: { 'linux-x64': { url: 'https://example.test/dl/aielia-linux-x64', sha256: sha(NEW_BIN) } } }
+    const stub: typeof fetch = async (input) => {
+      const url = String(input)
+      if (url.endsWith('aielia-latest.json')) return new Response(JSON.stringify(manifest))
+      const res = new Response(NEW_BIN)
+      Object.defineProperty(res, 'url', { value: 'http://evil.test/dl/aielia-linux-x64' })
+      return res
+    }
+    const code = await runUpdateCommand(opts({ fetchFn: stub, allowInsecureHttp: false, manifestUrl: 'https://example.test/aielia-latest.json' }))
+    expect(code).toBe(1)
+    expect(readFileSync(join(dir, 'aielia'), 'utf8')).toBe('old-binary')
+    expect(logs.join('\n')).toContain('Refusing non-HTTPS URL')
   })
 
   it('refuses cleanly with an npm pointer when not running as a SEA, without any network call', async () => {

@@ -12,7 +12,20 @@ import { parseModelJson } from './model-json.js'
  * instruction that content in this tag is data, never instructions.
  */
 export function wrapUntrusted(text: string): string {
-  return `<untrusted_external_content>\n${text}\n</untrusted_external_content>`
+  return `<untrusted_external_content>\n${defangUntrustedTags(text)}\n</untrusted_external_content>`
+}
+
+/** A literal delimiter tag inside text is neutralised (`&lt;`) so the text cannot close or re-open the untrusted boundary. String scan, not a regex: a structural delimiter check, not a natural-language gate. */
+export function defangUntrustedTags(text: string): string {
+  return text
+    .split('<')
+    .map((part: string, i: number) => {
+      if (i === 0) return part
+      let rest = part.trimStart()
+      if (rest.startsWith('/')) rest = rest.slice(1).trimStart()
+      return rest.toLowerCase().startsWith('untrusted_external_content') ? '&lt;' + part : '<' + part
+    })
+    .join('')
 }
 
 // A speed bump, not real defense — regex-based, will miss paraphrased attempts

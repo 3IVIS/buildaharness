@@ -270,6 +270,22 @@ function recomputeAbstractionFit(
   diagnostics.verification_health.feasibility = checkAbstractionAlignment(taskGraph, worldModel, true)
 }
 
+function isIdChar(ch: string | undefined): boolean {
+  return ch !== undefined && ch.length === 1 && ((ch >= '0' && ch <= '9') || (ch >= 'a' && ch <= 'z') || (ch >= 'A' && ch <= 'Z') || ch === '_' || ch === '-')
+}
+
+/** True when `id` occurs in `text` as a whole identifier, not as a fragment of a longer one ("t1" in "t10"). An empty id never matches. */
+function mentionsId(text: string, id: string): boolean {
+  if (id.length === 0) return false
+  let from = 0
+  for (;;) {
+    const at = text.indexOf(id, from)
+    if (at === -1) return false
+    if (!isIdChar(text[at - 1]) && !isIdChar(text[at + id.length])) return true
+    from = at + 1
+  }
+}
+
 export interface PropagationQueue {
   reopenedTaskIds: string[]
 }
@@ -331,7 +347,7 @@ export async function reviewerPass(
   for (const finding of reviewResult.findings) {
     // Look for task IDs in findings referencing specific tasks
     for (const task of taskGraph.tasks) {
-      if (finding.includes(task.id) && task.status === 'COMPLETE') {
+      if (task.status === 'COMPLETE' && mentionsId(finding, task.id)) {
         if (!allReopened.includes(task.id)) {
           allReopened.push(task.id)
           propagationQueue.reopenedTaskIds.push(task.id)

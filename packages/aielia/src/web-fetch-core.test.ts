@@ -37,6 +37,33 @@ describe('assertPublicHttpUrl — W2 hardening', () => {
   })
 })
 
+describe('assertPublicHttpUrl — resolved-address range coverage', () => {
+  const rejected = [
+    '::ffff:7f00:1', // IPv4-mapped loopback in the hex form URL/DNS libraries emit
+    '::ffff:127.0.0.1',
+    '::ffff:a9fe:a9fe', // mapped 169.254.169.254
+    '::7f00:1', // IPv4-compatible loopback
+    '64:ff9b::7f00:1', // NAT64 loopback
+    'fe90::1', // link-local fe80::/10 beyond fe80:
+    'febf::1',
+    'fd12::1',
+    'ff02::1', // multicast
+    '100.64.0.1', // carrier-grade NAT
+    '198.18.0.1',
+    '224.0.0.1',
+    '0.0.0.0',
+  ]
+  for (const address of rejected) {
+    it(`rejects a hostname resolving to ${address}`, async () => {
+      await expect(assertPublicHttpUrl('http://h.example/', fakeDns({ 'h.example': [address] }))).rejects.toThrow(PrivateNetworkTargetError)
+    })
+  }
+  it('still accepts public IPv4 and IPv6 resolutions', async () => {
+    await expect(assertPublicHttpUrl('http://h.example/', fakeDns({ 'h.example': ['93.184.216.34', '2606:2800:220:1:248:1893:25c8:1946'] }))).resolves.toBeUndefined()
+    await expect(assertPublicHttpUrl('http://h.example/', fakeDns({ 'h.example': ['::ffff:5db8:d822'] }))).resolves.toBeUndefined()
+  })
+})
+
 function textResponse(body: string, init: { status?: number; headers?: Record<string, string> } = {}): Response {
   return new Response(body, { status: init.status ?? 200, headers: init.headers })
 }
@@ -76,6 +103,17 @@ describe('fetchTextSafely', () => {
     await expect(fetchTextSafely({ url: 'http://public.example/', dns, fetchImpl })).rejects.toThrow(PrivateNetworkTargetError)
   })
 
+  it('asks the fetch implementation not to follow redirects itself (the Tauri http plugin ignores redirect: manual)', async () => {
+    let seen: Record<string, unknown> | undefined
+    const fetchImpl = (async (_url: string, init?: RequestInit) => {
+      seen = init as Record<string, unknown>
+      return textResponse('hello')
+    }) as unknown as typeof fetch
+    await fetchTextSafely({ url: 'http://public.example/', dns: publicDns, fetchImpl })
+    expect(seen?.redirect).toBe('manual')
+    expect(seen?.maxRedirections).toBe(0)
+  })
+
   it('gives up after too many redirects', async () => {
     const fetchImpl = (async () => textResponse('', { status: 302, headers: { location: 'http://public.example/' } })) as typeof fetch
     await expect(fetchTextSafely({ url: 'http://public.example/', dns: publicDns, fetchImpl, maxRedirects: 2 })).rejects.toThrow('Too many redirects')
@@ -87,6 +125,12 @@ describe('fetchTextSafely', () => {
         init?.signal?.addEventListener('abort', () => reject(new DOMException('aborted', 'AbortError')))
       })) as unknown as typeof fetch
     await expect(fetchTextSafely({ url: 'http://public.example/', dns: publicDns, fetchImpl, timeoutMs: 20 })).rejects.toThrow('Timed out fetching')
+  })
+
+  it('times out a body that stalls after the headers arrived', async () => {
+    const stalled = new ReadableStream<Uint8Array>({ start(c) { c.enqueue(new TextEncoder().encode('partial')) } })
+    const fetchImpl = (async () => new Response(stalled, { status: 200, headers: { 'content-type': 'text/plain' } })) as typeof fetch
+    await expect(fetchTextSafely({ url: 'http://public.example/', dns: publicDns, fetchImpl, timeoutMs: 50 })).rejects.toThrow(/Timed out/)
   })
 
   it('cannot be bypassed by an unrecognized options field (e.g. a future skipLocalGuard sentinel) — the guard always runs', async () => {

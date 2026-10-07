@@ -479,6 +479,73 @@ describe('ClaudeCliLLMClient', () => {
     }
   })
 
+  it('passes the prompt after `--` so a message starting with "-" is not parsed as a CLI option', async () => {
+    spawnMock.mockImplementation(() => fakeClaudeProcess(JSON.stringify({ result: 'ok' })))
+    const client = new ClaudeCliLLMClient()
+    await client.callChatSync([{ role: 'user', content: '- buy milk\n- buy eggs' }])
+    const args = spawnMock.mock.calls[0][1] as string[]
+    expect(args.slice(-2)).toEqual(['--', '- buy milk\n- buy eggs'])
+  })
+
+  it('streaming: a final result line with no trailing newline is still used', async () => {
+    const workspaceRoot = await mkdtemp(join(tmpdir(), 'cli-llm-test-'))
+    try {
+      spawnMock.mockImplementation(() => fakeClaudeProcess(streamJsonResult('no newline').trimEnd()))
+      const client = new ClaudeCliLLMClient({ fileTools: { workspaceRoot } })
+      const result = await client.callChatStructured([{ role: 'user', content: 'hi' }], [{ name: 'read_file', input_schema: {} }])
+      expect(result.content).toBe('no newline')
+    } finally {
+      await rm(workspaceRoot, { recursive: true, force: true })
+    }
+  })
+
+  it('a half-written pending-action file does not fail the whole call', async () => {
+    const workspaceRoot = await mkdtemp(join(tmpdir(), 'cli-llm-test-'))
+    try {
+      await mkdir(join(workspaceRoot, '.pending-actions'))
+      await writeFile(join(workspaceRoot, '.pending-actions', 'bad.json'), '{"id": "x", ')
+      spawnMock.mockImplementation(() => fakeClaudeProcess(streamJsonResult('fine')))
+      const client = new ClaudeCliLLMClient({ fileTools: { workspaceRoot } })
+      const result = await client.callChatStructured([{ role: 'user', content: 'hi' }], [{ name: 'read_file', input_schema: {} }])
+      expect(result.content).toBe('fine')
+    } finally {
+      await rm(workspaceRoot, { recursive: true, force: true })
+    }
+  })
+
+  it('a gate peer that resets its connection does not crash the process', async () => {
+    const workspaceRoot = await mkdtemp(join(tmpdir(), 'cli-llm-test-'))
+    try {
+      spawnMock.mockImplementation((...args: unknown[]) => {
+        const spawnArgs = args[1] as string[]
+        const mcpConfig = JSON.parse(spawnArgs[spawnArgs.indexOf('--mcp-config') + 1])
+        const port = Number(mcpConfig.mcpServers['file-tools'].env.TOOL_GATE_PORT)
+        const proc = new EventEmitter() as EventEmitter & { stdout: EventEmitter; stderr: EventEmitter }
+        proc.stdout = new EventEmitter()
+        proc.stderr = new EventEmitter()
+        const socket = createConnection({ port, host: '127.0.0.1' })
+        socket.on('connect', () => {
+          socket.write('{"tool":"read_file","input":{}}\n')
+          socket.resetAndDestroy()
+          setTimeout(() => {
+            proc.stdout.emit('data', Buffer.from(streamJsonResult('done')))
+            proc.emit('close', 0)
+          }, 50)
+        })
+        return proc
+      })
+      const client = new ClaudeCliLLMClient({ fileTools: { workspaceRoot } })
+      const result = await client.callChatStructured(
+        [{ role: 'user', content: 'x' }],
+        [{ name: 'read_file', input_schema: {} }],
+        { onToolProposal: async () => ({ decision: 'allow' }) },
+      )
+      expect(result.content).toBe('done')
+    } finally {
+      await rm(workspaceRoot, { recursive: true, force: true })
+    }
+  })
+
   it('Phase D0: TOOL_GATE_PORT is set on the MCP server env, and a proposal round-trips through onToolProposal', async () => {
     const workspaceRoot = await mkdtemp(join(tmpdir(), 'cli-llm-test-'))
     try {

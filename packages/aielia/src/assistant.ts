@@ -106,6 +106,21 @@ export type { AssistantTrace, AssistantTurnResult, AssistantProgress, ProposerKi
 export type { PlanDecision, PlanApprovalEdits } from './plan-approval-service.js'
 export type { PlanMode } from './plan-store.js'
 
+/** Adds token usage records together; undefined when none carried any. */
+function sumUsage(parts: (TokenUsage | undefined)[]): TokenUsage | undefined {
+  let total: TokenUsage | undefined
+  for (const u of parts) {
+    if (!u) continue
+    total = {
+      inputTokens: (total?.inputTokens ?? 0) + u.inputTokens,
+      outputTokens: (total?.outputTokens ?? 0) + u.outputTokens,
+      costUsd: u.costUsd !== undefined ? (total?.costUsd ?? 0) + u.costUsd : total?.costUsd,
+      cachedInputTokens: u.cachedInputTokens !== undefined ? (total?.cachedInputTokens ?? 0) + u.cachedInputTokens : total?.cachedInputTokens,
+    }
+  }
+  return total
+}
+
 const isBrowser = (): boolean => typeof indexedDB !== 'undefined'
 
 /** Result of `/memory confirm`/`/memory reject` (single index or bulk category) — see PersonalAssistant.confirmPendingFact/rejectPendingFact. */
@@ -648,7 +663,8 @@ export class PersonalAssistant {
     // so it's exempt — otherwise a turn that was allowed to start, then paused for approval,
     // could get silently stuck refusing to ever resolve once the ceiling was crossed by
     // something else in between.
-    if (!options.pendingActionId) {
+    // The audit retry is the same user message's own correction: a cap crossed by the flagged turn must not replace its delivered reply with an escalation.
+    if (!options.pendingActionId && !options.auditRetry) {
       const check = await this.session.checkSpendCapForTurn(sessionId)
       if (!check.allowed) {
         this.onTrace?.({ kind: 'turn_end', sessionId, status: 'escalated' })
@@ -666,6 +682,8 @@ export class PersonalAssistant {
       if (signal?.aborted) throw new TurnAbortedError()
       turnWork = this.runTurn(userMessage, options, sessionId)
       const result = await (signal ? raceAbort(turnWork, signal) : turnWork)
+      // `excerpt` is raw tool text kept only for the grounding check; some paths (the approval-resume loop) hand sources back unstripped.
+      if (result.sources) result.sources = result.sources.map(({ excerpt: _excerpt, ...source }) => source)
       // The system's own action record goes into the stored transcript only, never into the reply that is shown. A marker in the
       // reply is the model imitating it (it claimed writes and test runs that never happened in benchmark scenarios 05 and 13).
       if (result.reply && containsActionRecord(result.reply)) {
@@ -716,6 +734,8 @@ export class PersonalAssistant {
         if (nudge) {
           this.auditRetryBudget--
           this.onDebugLog?.({ kind: 'note', sessionId, content: `reply audit: ${auditNotice ?? 'flagged'} — retrying once with a nudge` })
+          // The flagged turn is a finished, billed turn: record what it and its audit cost before the retry runs (the early return skips recordSpend below).
+          await this.session.recordSpend(sessionId, sumUsage([result.usage, ...auditUsage]))
           return await this.turn(nudge, { ...options, sessionId, auditRetry: true, approved: undefined, pendingActionId: undefined, pendingClarificationId: undefined, planApprovalId: undefined })
         }
         if (auditNotice) {

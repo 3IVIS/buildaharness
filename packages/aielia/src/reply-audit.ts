@@ -29,7 +29,7 @@ export interface ReplyAudit {
   contradictsCommandOutput: boolean
 }
 
-export const CLEAN_AUDIT: ReplyAudit = { claimsUnrecordedWork: false, promisesWorkNotDone: false, unverifiedOutsideFacts: false, contradictsCommandOutput: false }
+export const CLEAN_AUDIT: Readonly<ReplyAudit> = Object.freeze({ claimsUnrecordedWork: false, promisesWorkNotDone: false, unverifiedOutsideFacts: false, contradictsCommandOutput: false })
 
 const AUDIT_SCHEMA = {
   type: 'object',
@@ -113,11 +113,11 @@ const anyFlag = (a: ReplyAudit): boolean => a.claimsUnrecordedWork || a.promises
  * Any error or unparseable answer returns a clean audit: a failed check must never flag a reply.
  */
 export async function auditReply(input: ReplyAuditInput, llmClient: ILLMClient, model?: string, onUsage?: (usage: TokenUsage) => void): Promise<ReplyAudit> {
-  if (!input.reply.trim()) return CLEAN_AUDIT
+  if (!input.reply.trim()) return { ...CLEAN_AUDIT }
   const first = await auditOnce(input, llmClient, model, onUsage)
-  if (!first || !anyFlag(first)) return first ?? CLEAN_AUDIT
+  if (!first || !anyFlag(first)) return first ?? { ...CLEAN_AUDIT }
   const second = await auditOnce(input, llmClient, model, onUsage)
-  if (!second) return CLEAN_AUDIT
+  if (!second) return { ...CLEAN_AUDIT }
   return {
     claimsUnrecordedWork: first.claimsUnrecordedWork && second.claimsUnrecordedWork,
     promisesWorkNotDone: first.promisesWorkNotDone && second.promisesWorkNotDone,

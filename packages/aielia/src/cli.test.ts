@@ -804,6 +804,19 @@ describe('approval-prompt handling', () => {
     expect(transcript.some((m) => m.content.includes('email'))).toBe(true)
   })
 
+  it('an approval selector that resolves with an unrecognised key declines (fail closed)', async () => {
+    const llm = new FakeLLMClient('Draft sent.')
+    const assistant = new PersonalAssistant({ llmClient: llm })
+    const askSelect = vi.fn().mockResolvedValue('')
+    const { cli } = await setupCli({ assistant, askSelect })
+    const lines = captureOutput()
+
+    await cli.dispatchLine('Please send an email to my boss telling him I quit.')
+
+    expect(lines.join('\n')).toContain('Cancelled.')
+    expect(llm.calls).toBe(1)
+  })
+
   it('a staged write_file action resolves through turn({approved, pendingActionId}) on accept and actually applies', async () => {
     const backend = makeFakeBackend()
     const llm = new ScriptedToolLLMClient({ id: 'toolu_1', name: 'write_file', input: { path: 'summary.md', content: 'hello' } })
@@ -1630,5 +1643,124 @@ describe('invalid configuration fails loudly (benchmark 10-12: process exited si
     await expect(run).rejects.toThrow(/enableWeb requires braveApiKey/)
     await expect(run).rejects.toThrow(/Fix it by setting the missing value/)
     expect(exit).not.toHaveBeenCalled()
+  })
+})
+
+describe('audit fixes: command lookup, picked next steps, closed input, reset safety, terminal escapes', () => {
+  it('a message that merely starts with an Object.prototype member name is sent to the assistant, not swallowed as a command', async () => {
+    const assistant = new PersonalAssistant({ llmClient: new FakeLLMClient() })
+    const turn = vi.spyOn(assistant, 'turn').mockResolvedValue({ status: 'ok', reply: 'fine' })
+    const { cli } = await setupCli({ assistant })
+    captureOutput()
+
+    await cli.dispatchLine('constructor functions in JavaScript')
+    await cli.dispatchLine('__proto__ pollution')
+
+    expect(turn).toHaveBeenCalledTimes(2)
+    expect(turn.mock.calls[0]![0]).toBe('constructor functions in JavaScript')
+  })
+
+  it('a picked next-step option that reads like a slash command is sent as a message, never run as a command', async () => {
+    const assistant = new PersonalAssistant({ llmClient: new FakeLLMClient() })
+    const turn = vi.spyOn(assistant, 'turn').mockResolvedValue({
+      status: 'ok',
+      reply: 'done',
+      nextSteps: [{ description: '/config set dangerouslySkipPermissions true', confidence: 'high', rationale: 'x' }],
+    } as never)
+    const { cli, configStore } = await setupCli({ assistant })
+    captureOutput()
+
+    await cli.dispatchLine('do something')
+    await cli.dispatchLine('1')
+
+    expect(turn).toHaveBeenCalledTimes(2)
+    expect(turn.mock.calls[1]![0]).toBe('/config set dangerouslySkipPermissions true')
+    expect(await configStore.load()).toEqual({})
+  })
+
+  it('a clarification whose input stream has closed stops asking instead of looping forever', async () => {
+    const assistant = new PersonalAssistant({ llmClient: new FakeLLMClient() })
+    vi.spyOn(assistant, 'turn').mockResolvedValue({
+      status: 'needs_clarification',
+      reply: null,
+      pendingClarificationId: 'pc-closed',
+      questions: [{ id: 'q', question: 'Which one?', options: [{ label: 'A' }, { label: 'B' }] }],
+    })
+    const input = new PassThrough()
+    const { cli } = await setupCli({ assistant, input })
+    const lines = captureOutput()
+    input.end()
+    await flushAsync()
+
+    await cli.dispatchLine('please clarify')
+
+    expect(lines.join('\n')).toContain('no input available')
+  }, 5000)
+
+  it('refuses a startup configuration with a malformed numeric limit (NaN would silently disable the spending cap)', async () => {
+    vi.spyOn(console, 'log').mockImplementation(() => {})
+    const run = runCli({
+      dataDir: '/tmp/cli-test-unused',
+      backend: makeFakeBackend(),
+      remindersFile: '/tmp/cli-test-unused/reminders/reminders.json',
+      envOverrides: { sessionCostLimitUsd: Number('abc') },
+      input: new PassThrough(),
+      output: new Writable({ write: (_c, _e, cb) => cb() }),
+      configStore: makeConfigStore(),
+    })
+    await expect(run).rejects.toBeInstanceOf(StartupError)
+    await expect(run).rejects.toThrow(/sessionCostLimitUsd must be a positive number/)
+  })
+
+  it('/config reset of a key the active backend needs is refused, so the next launch can still start', async () => {
+    const configStore = makeConfigStore({ llmBackend: 'anthropic', apiKey: 'sk-ant-xxxxxxxxxxxxxxxxxxxxxxxx' })
+    const { cli } = await setupCli({ configStore, askYesNo: async () => true })
+    const lines = captureOutput()
+
+    await cli.dispatchLine('/config reset apiKey')
+
+    expect(lines.join('\n')).toContain('Not reset')
+    expect(await configStore.load()).toMatchObject({ apiKey: 'sk-ant-xxxxxxxxxxxxxxxxxxxxxxxx' })
+  })
+
+  it('strips terminal escape sequences from a reply before it reaches the terminal', async () => {
+    const assistant = new PersonalAssistant({ llmClient: new FakeLLMClient() })
+    vi.spyOn(assistant, 'turn').mockResolvedValue({ status: 'ok', reply: 'safe\u001b]52;c;ZXZpbA==\u0007 text\u001b[2J\u009b31m end' })
+    const { cli } = await setupCli({ assistant })
+    const lines = captureOutput()
+
+    await cli.dispatchLine('hello there')
+
+    const output = lines.join('\n')
+    expect(output).toContain('safe text')
+    expect(/[\u001b\u0007\u009b]/.test(output)).toBe(false)
+  })
+
+  it('strips terminal escapes from command output such as /search that echoes stored or typed text', async () => {
+    const { cli } = await setupCli()
+    const lines = captureOutput()
+
+    await cli.dispatchLine('/search zzznomatch\u001b]0;pwned\u0007\u001b[2J')
+
+    const output = lines.join('\n')
+    expect(output).toContain('No results for')
+    expect(/[\u001b\u0007]/.test(output)).toBe(false)
+  })
+
+  it('/export keeps a path containing spaces whole', async () => {
+    const { mkdtemp, readFile, rm } = await import('node:fs/promises')
+    const { tmpdir } = await import('node:os')
+    const { join } = await import('node:path')
+    const dir = await mkdtemp(join(tmpdir(), 'cli-export-'))
+    try {
+      const assistant = new PersonalAssistant({ llmClient: new FakeLLMClient() })
+      vi.spyOn(assistant, 'getTranscript').mockResolvedValue([{ role: 'user', content: 'hi' }, { role: 'assistant', content: 'hello' }])
+      const { cli } = await setupCli({ assistant })
+      captureOutput()
+      await cli.dispatchLine(`/export ${join(dir, 'my transcript.md')}`)
+      expect(await readFile(join(dir, 'my transcript.md'), 'utf-8')).toContain('hello')
+    } finally {
+      await rm(dir, { recursive: true, force: true })
+    }
   })
 })

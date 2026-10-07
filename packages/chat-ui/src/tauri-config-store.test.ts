@@ -145,6 +145,17 @@ describe('TauriConfigStore', () => {
       expect(persistedAfter.apiKey).toBe('sk-legacy-plaintext')
     })
 
+    it('load() still returns the other settings when the keychain cannot be read', async () => {
+      const store = new TauriConfigStore({ backend: makeFakeBackend(), baseDir: '/data' })
+      await store.save({ enableWeb: true })
+      invokeMock.mockImplementation((command: string) =>
+        command === 'keychain_get_api_key' ? Promise.reject(new Error('secret-tool missing')) : Promise.resolve(undefined),
+      )
+      const warn = vi.spyOn(console, 'warn').mockImplementation(() => {})
+      expect(await store.load()).toMatchObject({ enableWeb: true, apiKey: undefined })
+      warn.mockRestore()
+    })
+
     it('a keychain error on save() propagates rather than silently falling back to plaintext', async () => {
       invokeMock.mockImplementation((command: string) => {
         if (command === 'keychain_set_api_key') return Promise.reject(new Error('keychain access denied'))

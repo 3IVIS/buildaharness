@@ -22,7 +22,7 @@ import { resolveMemoryWriteMode, MEMORY_WRITE_MODES } from './memory-governance.
 export { CONFIG_KEYS }
 
 /** Never printed in full by formatConfigValue — /config shows these masked regardless of value. */
-export const SECRET_CONFIG_KEYS: ReadonlySet<keyof AssistantConfig> = new Set(['authToken', 'apiKey', 'braveApiKey'])
+export const SECRET_CONFIG_KEYS: ReadonlySet<keyof AssistantConfig> = new Set(['authToken', 'apiKey', 'braveApiKey', 'resendApiKey', 'smtpPass'])
 
 /** Which env var, if any, can pin a given key — shown next to a value in /config's listing when that var is set. */
 export const ENV_VAR_FOR_CONFIG_KEY: Partial<Record<keyof AssistantConfig, string>> = {
@@ -153,6 +153,27 @@ export function envOverridesFromProcessEnv(env: NodeJS.ProcessEnv): Partial<Assi
   return overrides
 }
 
+/**
+ * Numeric settings that must be positive, finite numbers. An environment variable is parsed with a bare
+ * `Number(...)`, so `ASSISTANT_SESSION_COST_LIMIT_USD=abc` arrives as NaN — and every `spent >= NaN` check is
+ * false, which silently turns a spending ceiling OFF. Returns the problems found (empty when all are fine) so
+ * startup can refuse a broken limit instead of running unguarded.
+ */
+const POSITIVE_NUMERIC_KEYS = ['sessionCostLimitUsd', 'sessionCallLimit', 'shellTimeoutMs', 'memoryBudgetChars', 'smtpPort'] as const
+
+export function findInvalidNumericSettings(config: AssistantConfig): string[] {
+  const problems: string[] = []
+  for (const key of POSITIVE_NUMERIC_KEYS) {
+    const value = config[key]
+    if (value === undefined) continue
+    if (typeof value !== 'number' || !Number.isFinite(value) || value <= 0) {
+      const envVar = ENV_VAR_FOR_CONFIG_KEY[key]
+      problems.push(`${key} must be a positive number (got ${JSON.stringify(value)})${envVar ? `; check ${envVar}` : ''}.`)
+    }
+  }
+  return problems
+}
+
 /** Thrown by parseConfigValue on a value that doesn't fit the target key's type — cli.ts reports .message and leaves the config unchanged. */
 export class ConfigValueParseError extends Error {}
 
@@ -243,6 +264,21 @@ export function parseConfigValue(key: keyof AssistantConfig, raw: string): unkno
   }
 }
 
+/** A URL with any user:password, and every query-string value, masked, so a credential embedded in proxyUrl is never printed. Text that is not a URL is returned unchanged. */
+export function redactUrlCredentials(text: string): string {
+  let url: URL
+  try {
+    url = new URL(text)
+  } catch {
+    return text
+  }
+  if (!url.username && !url.password && !url.search) return text
+  if (url.username) url.username = '***'
+  if (url.password) url.password = '***'
+  for (const key of [...url.searchParams.keys()]) url.searchParams.set(key, '***')
+  return url.toString().split('%2A%2A%2A').join('***')
+}
+
 function formatConfigValue(key: keyof AssistantConfig, config: AssistantConfig): string {
   const value = config[key]
   if (value === undefined || value === '') return '(not set)'
@@ -251,6 +287,7 @@ function formatConfigValue(key: keyof AssistantConfig, config: AssistantConfig):
     const changed = Object.entries(config.layers ?? {})
     return changed.length === 0 ? '(defaults; see /layers)' : changed.map(([id, on]) => `${id}=${on ? 'on' : 'off'}`).join(' ')
   }
+  if (key === 'proxyUrl') return redactUrlCredentials(String(value))
   return String(value)
 }
 

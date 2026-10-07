@@ -184,6 +184,17 @@ describe('LLMClient', () => {
       expect(body.stream).toBe(true)
     })
 
+    it('reshapes system messages to the top-level system field for claude models', async () => {
+      const mockFetch = vi.fn().mockResolvedValue(new Response(makeSSEStream(['data: [DONE]']), { status: 200 }))
+      vi.stubGlobal('fetch', mockFetch)
+      for await (const _ of client.callChat([{ role: 'system', content: 'be brief' }, { role: 'user', content: 'hi' }], { model: 'claude-opus-5' })) {
+        // consume
+      }
+      const body = JSON.parse(mockFetch.mock.calls[0][1].body as string)
+      expect(body.system).toBe('be brief')
+      expect(body.messages).toEqual([{ role: 'user', content: 'hi' }])
+    })
+
     it('uses the default model when none is specified', async () => {
       const mockFetch = vi.fn().mockResolvedValue(
         new Response(makeSSEStream(['data: [DONE]']), {
@@ -276,6 +287,14 @@ describe('LLMClient', () => {
   })
 
   describe('callChatStructured', () => {
+    it('refuses a non-claude model instead of sending an Anthropic-shaped body to OpenAI', async () => {
+      const fetchMock = vi.fn()
+      vi.stubGlobal('fetch', fetchMock)
+      const client = new LLMClient({ proxyUrl: 'http://p', authToken: 't' })
+      await expect(client.callChatStructured([{ role: 'user', content: 'hi' }], undefined, { model: 'gpt-4o' })).rejects.toThrow(FlowExecutionError)
+      expect(fetchMock).not.toHaveBeenCalled()
+    })
+
     function mockFetchJson(body: Record<string, unknown>): ReturnType<typeof vi.fn> {
       const mockFetch = vi.fn().mockResolvedValue(
         new Response(JSON.stringify(body), { status: 200, headers: { 'Content-Type': 'application/json' } })

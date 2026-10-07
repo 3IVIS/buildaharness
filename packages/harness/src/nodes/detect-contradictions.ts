@@ -295,6 +295,10 @@ function applyResolutionPolicy(c: Contradiction, worldModel: WorldModel, beliefD
   else if (c.severity === 'SYSTEM_BREAKING') resolveSystemBreaking(c, worldModel)
 }
 
+function contradictionKey(c: Contradiction): string {
+  return `${c.type}|${[...c.involved_belief_ids].sort().join(',')}|${c.type === 'temporal' ? c.description : ''}`
+}
+
 /**
  * Matches detect_contradictions(): orchestrates all four detection functions,
  * upgrades system-breaking severity, stores every result via add_contradiction(),
@@ -321,6 +325,18 @@ export function detectContradictions(
   ]
 
   all = assignSystemBreakingSeverity(all, hypothesisSet)
+
+  // The runtime calls this every iteration over the same belief set, and every detection mints a
+  // fresh id — without this, an already-recorded conflict was re-pushed each pass and (because the
+  // resolution policy is idempotent per contradiction id, not per conflict) its beliefs' confidence
+  // decayed again every iteration.
+  const known = new Set(worldModel.contradictions.map(contradictionKey))
+  all = all.filter((c) => {
+    const key = contradictionKey(c)
+    if (known.has(key)) return false
+    known.add(key)
+    return true
+  })
 
   for (const c of all) {
     worldModel.contradictions.push(c)

@@ -65,6 +65,40 @@ describe('network containment proxy', () => {
     }
   })
 
+  it('forwards plain-HTTP request body bytes that arrive after the headers (while the upstream connects)', async () => {
+    let received = ''
+    const upstream = createServer((sock) => {
+      sock.on('data', (c) => {
+        received += c.toString('utf-8')
+        if (received.includes('BODY-PART-2')) sock.end('ok')
+      })
+    })
+    const upstreamPort = await new Promise<number>((res) => {
+      upstream.listen(0, '127.0.0.1', () => {
+        const addr = upstream.address()
+        res(typeof addr === 'object' && addr ? addr.port : 0)
+      })
+    })
+    try {
+      const proxy = await getNetworkContainmentProxy(['127.0.0.1'])
+      await new Promise<void>((resolve, reject) => {
+        const socket = connect(proxy.port, '127.0.0.1', () => {
+          socket.write(`POST http://127.0.0.1:${upstreamPort}/ HTTP/1.1\r\nHost: 127.0.0.1\r\nContent-Length: 22\r\n\r\nBODY-PART-1`)
+          // The rest of the body is sent separately, a tick later: it lands while the proxy is still
+          // connecting upstream, which is when an unpaused socket used to drop it.
+          setImmediate(() => socket.write('BODY-PART-2'))
+        })
+        socket.resume()
+        socket.on('end', () => resolve())
+        socket.on('error', reject)
+        socket.setTimeout(5000, () => { socket.destroy(); reject(new Error('no response')) })
+      })
+      expect(received).toContain('BODY-PART-1BODY-PART-2')
+    } finally {
+      await new Promise<void>((res) => upstream.close(() => res()))
+    }
+  })
+
   it('reuses one proxy instance per allowlist (order- and case-independent)', async () => {
     const a = await getNetworkContainmentProxy(['a.example', 'B.example'])
     const b = await getNetworkContainmentProxy(['b.example', 'A.example'])

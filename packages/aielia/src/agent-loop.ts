@@ -1197,12 +1197,12 @@ export class AgentLoop {
           }
         }
         if (kind === 'email') {
-          const { to, subject, body } = payload as { to: string; subject: string; body: string }
+          const { to, subject, body, cc, bcc } = payload as { to: string; subject: string; body: string; cc?: string; bcc?: string }
           return {
             done: true,
             result: {
               kind: 'needs_approval',
-              reason: formatEmailApprovalReason({ to, subject, body }),
+              reason: formatEmailApprovalReason({ to, subject, body, cc, bcc }),
               pendingActionId: id,
               pendingActionKind: 'email',
             },
@@ -1226,7 +1226,12 @@ export class AgentLoop {
         reportStep('write_file', writeCall.input)
         // Stop immediately — don't execute any other tool calls from this same
         // response — and stage the write rather than ever touching real disk.
-        const result = await executeFileTool(this.fileTools, 'write_file', writeCall.input)
+        let result: Awaited<ReturnType<typeof executeFileTool>>
+        try {
+          result = await executeFileTool(this.fileTools, 'write_file', writeCall.input)
+        } catch (err) {
+          return this.stagingRejected(messages, response, writeCall, err, controlPlaneState)
+        }
         if (result.kind !== 'staged_write') {
           throw new Error('write_file executor returned an unexpected result kind')
         }
@@ -1250,7 +1255,12 @@ export class AgentLoop {
         // Every run_shell_command call is gated, full stop — there is no "safe subset" that
         // skips staging, including an identical repeat of an already-resolved (command, cwd) pair
         // (its result may no longer reflect current state).
-        const result = await executeShellTool(this.shellTools, 'run_shell_command', shellCall.input)
+        let result: Awaited<ReturnType<typeof executeShellTool>>
+        try {
+          result = await executeShellTool(this.shellTools, 'run_shell_command', shellCall.input)
+        } catch (err) {
+          return this.stagingRejected(messages, response, shellCall, err, controlPlaneState)
+        }
         return {
           done: true,
           result: {
@@ -1268,9 +1278,14 @@ export class AgentLoop {
         if (!this.actionTools) throw new Error('send_email tool call received but actionTools is not configured')
         reportStep('send_email', emailCall.input)
         // Same as write_file/run_shell_command: stop immediately, stage the proposal, never deliver
-        // inline. executeActionTool throws InvalidEmailArgsError on a malformed recipient — that
-        // propagates and the loop's own error handling turns it into a tool error the model sees.
-        const result = await executeActionTool(this.actionTools, 'send_email', emailCall.input)
+        // inline. executeActionTool throws InvalidEmailArgsError on a malformed recipient — that is
+        // handed back to the model as a tool error (stagingRejected), not thrown out of the turn.
+        let result: Awaited<ReturnType<typeof executeActionTool>>
+        try {
+          result = await executeActionTool(this.actionTools, 'send_email', emailCall.input)
+        } catch (err) {
+          return this.stagingRejected(messages, response, emailCall, err, controlPlaneState)
+        }
         return {
           done: true,
           result: {
@@ -1367,6 +1382,40 @@ export class AgentLoop {
       }
     }
 
+    return { done: false, dispatchedAnyToolCall: true }
+  }
+
+  /**
+   * A staging call (write_file / run_shell_command / send_email) was rejected before anything was staged — a path or
+   * cwd outside the workspace, a malformed recipient. The tool descriptions promise "rejected immediately": that is a
+   * tool error the model sees and can correct, exactly like a failed read, not an exception that ends the turn.
+   * Every tool call in the response gets a result (the provider requires one per call id).
+   */
+  private stagingRejected(
+    messages: ChatMessage[],
+    response: { content: string; toolCalls?: ToolCallResult[] },
+    rejected: ToolCallResult,
+    err: unknown,
+    controlPlaneState: TurnControlPlaneState | undefined,
+  ): { done: false; dispatchedAnyToolCall: boolean } {
+    const detail = err instanceof Error ? err.message : String(err)
+    this.onTrace?.({ kind: 'tool_call', tool: rejected.name, ok: false })
+    messages.push({ role: 'assistant', content: response.content, toolCalls: response.toolCalls })
+    for (const call of response.toolCalls ?? []) {
+      messages.push({
+        role: 'tool',
+        content: call.id === rejected.id ? `Error: ${detail}` : 'Not executed: another tool call in the same reply was rejected. Call this tool again on its own if it is still needed.',
+        toolCallId: call.id,
+      })
+    }
+    if (controlPlaneState) {
+      recordToolOutcome(controlPlaneState, {
+        toolName: rejected.name,
+        ok: false,
+        callKey: `${rejected.name}:${JSON.stringify(rejected.input)}`,
+        summary: `${rejected.name} failed: ${detail.slice(0, 200)}`,
+      })
+    }
     return { done: false, dispatchedAnyToolCall: true }
   }
 

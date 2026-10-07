@@ -470,6 +470,22 @@ function splitRiskClauses(message: string): string[] {
   return splitOnAny(risk.riskClauseBoundary, message)
 }
 
+/** Splits on sentence-ending punctuation and newlines (a character scan, not a language rule). */
+function splitSentences(text: string): string[] {
+  const parts: string[] = []
+  let current = ''
+  for (const ch of text) {
+    if (ch === '.' || ch === '!' || ch === '?' || ch === '\n' || ch === '。' || ch === '！' || ch === '？') {
+      parts.push(current)
+      current = ''
+    } else {
+      current += ch
+    }
+  }
+  parts.push(current)
+  return parts.filter((part) => part.trim() !== '')
+}
+
 function isExemptClause(clause: string): boolean {
   return testAny(risk.pastTenseQuestion, clause) || testAny(risk.reportedThirdPartySpeech, clause) || testAny(risk.firstPersonPastNarrative, clause)
 }
@@ -490,6 +506,17 @@ export function classifyRisk(message: string): RiskClassification {
 export function classifyRiskLexical(message: string): RiskClassification {
   const isReminderRecallQuestion = testAny(risk.reminderRecallQuestion, message)
   if (risk.reminderPattern.pattern.test(message) && !isReminderRecallQuestion) {
+    // A high-risk action in a clause of its own ("Remind me at 5pm. Also delete all my files") must not
+    // ride on the reminder's no-approval verdict. The reminder clause itself is skipped, so "remind me to
+    // email John" (the email is the reminder's content) stays a reminder.
+    for (const clause of splitRiskClauses(message).flatMap(splitSentences)) {
+      if (risk.reminderPattern.pattern.test(clause) || isExemptClause(clause)) continue
+      for (const { pattern, reason } of risk.highRiskPatterns) {
+        if (pattern.test(clause)) {
+          return { riskLevel: 'HIGH', requiresApproval: true, reason: `Request ${reason}.` }
+        }
+      }
+    }
     if (looksLikeEnumeratedItemsLexical(message)) {
       return { riskLevel: 'MEDIUM', requiresApproval: true, reason: `Request ${risk.bulkReminderReason}.` }
     }

@@ -36,9 +36,9 @@ export interface StaticExportMeta {
   tokens: { prompt: number; completion: number; total: number; calls: number }
 }
 
-/** `</` is escaped so no data string can close the page's own script element. */
+/** Every `<` is \u003c-escaped (valid JSON, same value) so no data string can close the page's own script element or open an HTML comment inside it. */
 function embedJson(value: unknown): string {
-  return JSON.stringify(value).replace(/<\//g, '<\\/')
+  return JSON.stringify(value).replace(/</g, '\\u003c')
 }
 
 /** Port of cuddlytoddly's `_build_static_html`: three placeholder replacements. The events list is empty (aielia keeps no event history), so the page hides its Replay button. */

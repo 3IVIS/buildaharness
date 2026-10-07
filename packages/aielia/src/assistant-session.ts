@@ -1,4 +1,5 @@
 import { actionRecordSuffix, stripActionRecord } from './action-record.js'
+import { deletePlanFiles } from './plan-store.js'
 import {
   loadHarnessCheckpoint,
   deleteHarnessCheckpoint,
@@ -288,7 +289,16 @@ export class AssistantSession {
    * already correctly no-ops whenever no cap is configured, so this never enforces a cap that
    * isn't set.
    */
-  async recordSpend(sessionId: string, usage: TokenUsage | undefined): Promise<void> {
+  /** Tail of the chain serialising recordSpend's read-modify-write: the background memory reviewer records spend while a turn does, and the later write used to drop the other's cost. */
+  private spendChain: Promise<unknown> = Promise.resolve()
+
+  recordSpend(sessionId: string, usage: TokenUsage | undefined): Promise<void> {
+    const run = this.spendChain.then(() => this.recordSpendNow(sessionId, usage))
+    this.spendChain = run.then(() => undefined, () => undefined)
+    return run
+  }
+
+  private async recordSpendNow(sessionId: string, usage: TokenUsage | undefined): Promise<void> {
     const state = await this.getSpendState(sessionId)
     const costUsd = usage?.costUsd ?? (usage ? estimateCostUsd(this.model() ?? DEFAULT_MODEL_FOR_COST_ESTIMATE, usage) : undefined) ?? 0
     await this.memory.set(`spend:${sessionId}`, {
@@ -532,6 +542,8 @@ export class AssistantSession {
     await this.memory.delete(`transcript:${sessionId}`)
     await this.memory.delete(`facts:${sessionId}`)
     await this.memory.delete(`plan:${sessionId}`)
+    const planFs = this.undoWorkspace()
+    if (planFs) await deletePlanFiles(planFs, sessionId)
     await this.exitPlanMode(sessionId)
     await deleteHarnessCheckpoint(this.checkpointStore, `turn:${sessionId}`)
     await this.memory.delete(resumeAttemptsKey(sessionId))
@@ -585,9 +597,15 @@ export class AssistantSession {
     const transcript = ((await this.memory.get(transcriptKey)) as ChatMessage[] | undefined) ?? []
     if (transcript.length === 0) return { undone: false }
 
-    const last = transcript[transcript.length - 1]
-    const dropCount = last.role === 'assistant' ? 2 : 1
-    await this.memory.set(transcriptKey, transcript.slice(0, Math.max(0, transcript.length - dropCount)))
+    // A completed turn is its user message, any mid-turn steering notes (also user messages, written just
+    // before the reply) and the reply; a turn paused for approval is just its trailing user message(s).
+    let keep = transcript.length
+    const endsWithReply = transcript[keep - 1].role === 'assistant'
+    if (endsWithReply) keep -= 1
+    const afterReply = keep
+    while (keep > 0 && transcript[keep - 1].role === 'user') keep -= 1
+    if (endsWithReply && keep === afterReply) keep = Math.max(0, keep - 1) // no user message before the reply: drop the entry before it, as before
+    await this.memory.set(transcriptKey, transcript.slice(0, keep))
     return { undone: true }
   }
 

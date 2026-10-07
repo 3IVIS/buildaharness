@@ -142,7 +142,15 @@ function planFilePaths(workspaceRoot: string, sessionId: string): { dir: string;
   // sessionId is an API-level identifier, not sandboxed user input the way write_file's `path`
   // arg is — but it still flows into a filesystem path, so strip anything that could traverse
   // out of the plans directory rather than trusting it's always a plain slug.
-  const safeId = sessionId.replace(/[^a-zA-Z0-9_-]/g, '_')
+  let safeId = sessionId.replace(/[^a-zA-Z0-9_-]/g, '_')
+  // Sanitising is lossy ("a/b" and "a_b" both give "a_b"), which made two sessions share one plan file,
+  // and the file wins over the per-session record on load. An id that needed rewriting gets a hash of
+  // the original appended (same scheme as goal-graph-store.ts); already-safe ids keep their file name.
+  if (safeId !== sessionId) {
+    let h = 0x811c9dc5
+    for (let i = 0; i < sessionId.length; i++) h = Math.imul(h ^ sessionId.charCodeAt(i), 0x01000193) >>> 0
+    safeId = `${safeId}-${h.toString(16)}`
+  }
   const dir = `${workspaceRoot}/.buildaharness/plans`
   return { dir, json: `${dir}/${safeId}.plan.json`, md: `${dir}/${safeId}.plan.md` }
 }
@@ -204,6 +212,31 @@ async function writePlanFiles(fsPersistence: PlanFsPersistence, sessionId: strin
 }
 
 /**
+ * Removes the session's mirrored plan files. `loadPlanRecord` prefers the file over the memory record,
+ * so deleting only the memory record (`/new`) let the old plan come straight back. Never throws.
+ */
+export async function deletePlanFiles(fsPersistence: PlanFsPersistence, sessionId: string): Promise<void> {
+  try {
+    const { json, md } = planFilePaths(fsPersistence.workspaceRoot, sessionId)
+    await fsPersistence.backend.removeFile(json)
+    await fsPersistence.backend.removeFile(md)
+  } catch (err) {
+    console.error(`plan-store: removing plan files for session ${sessionId} failed:`, err)
+  }
+}
+
+function hasPlanShape(value: unknown): boolean {
+  if (typeof value !== 'object' || value === null) return false
+  const v = value as Record<string, unknown>
+  if (!Array.isArray(v.tasks)) return false
+  return v.tasks.every((t) => {
+    if (typeof t !== 'object' || t === null) return false
+    const task = t as Record<string, unknown>
+    return typeof task.id === 'string' && typeof task.description === 'string' && Array.isArray(task.depends_on) && typeof task.status === 'string'
+  })
+}
+
+/**
  * Reads back the fs-persisted plan JSON, if any. Returns `undefined` (not `null`) when there's
  * nothing to prefer over Dexie — no fs configured, no file yet (a session that predates P5 or
  * has never run on a filesystem surface), or a read/parse error — so callers can tell "fall back
@@ -215,7 +248,15 @@ async function readPlanFile(fsPersistence: PlanFsPersistence | undefined, sessio
     const { json } = planFilePaths(fsPersistence.workspaceRoot, sessionId)
     const raw = await fsPersistence.backend.readTextFile(json)
     if (raw === undefined) return undefined
-    return migratePlanRecord(JSON.parse(raw) as PlanRecord | LegacyPlanRecordShape)
+    const parsed: unknown = JSON.parse(raw)
+    // The file is hand-editable, so a syntactically valid but wrong-shaped document ({}, a list of
+    // strings, tasks without ids) must fall back to the Dexie record rather than crash every later
+    // `plan.tasks.map(...)`.
+    if (!hasPlanShape(parsed)) {
+      console.error(`plan-store: plan file for session ${sessionId} has an invalid shape; ignoring it`)
+      return undefined
+    }
+    return migratePlanRecord(parsed as PlanRecord | LegacyPlanRecordShape)
   } catch (err) {
     console.error(`plan-store: reading plan file for session ${sessionId} failed:`, err)
     return undefined

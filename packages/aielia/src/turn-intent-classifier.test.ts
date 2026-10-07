@@ -216,6 +216,25 @@ describe('classifyTurnIntent — happy path field derivation', () => {
     ])
   })
 
+  it('repairs duplicate ids, self-dependencies and dependency cycles instead of passing a graph the harness would reject', async () => {
+    const llm = new StructuredOnlyLLMClient(
+      response({
+        decomposedTasks: [
+          { id: 'a', description: 'First thing', depends_on: ['a', 'b'], riskLevel: 'LOW' },
+          { id: 'b', description: 'Second thing', depends_on: ['a'], riskLevel: 'LOW' },
+          { id: 'b', description: 'Duplicate id', depends_on: [], riskLevel: 'LOW' },
+          { id: 'c', description: 'Third thing', depends_on: ['b'], riskLevel: 'LOW' },
+        ],
+      }),
+    )
+    const result = await classifyTurnIntent('do a, b, then c', llm, NO_PLAN)
+    expect(result.decomposedTasks).toEqual([
+      { id: 'a', description: 'First thing', depends_on: [], riskLevel: 'LOW' },
+      { id: 'b', description: 'Second thing', depends_on: ['a'], riskLevel: 'LOW' },
+      { id: 'c', description: 'Third thing', depends_on: ['b'], riskLevel: 'LOW' },
+    ])
+  })
+
   it('drops a depends_on reference left dangling by isDecomposedTaskSpec filtering out its malformed target', async () => {
     // step-2 legitimately depends on step-1, but step-1 itself is malformed (no riskLevel) and
     // gets filtered out by isDecomposedTaskSpec — leaving step-2's depends_on pointing at an id

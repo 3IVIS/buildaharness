@@ -1,6 +1,6 @@
 import type { Context } from 'hono'
 import { createMiddleware } from 'hono/factory'
-import { HOUR_MS, clientIp, getWebRateLimitConfig, ipRequestCounter, requestCounter } from './rate-limit'
+import { HOUR_MS, clientIp, type ClientIpOptions, getWebRateLimitConfig, ipRequestCounter, requestCounter } from './rate-limit'
 
 interface JwtPayloadHolder {
   payload?: { sub?: string }
@@ -10,6 +10,22 @@ interface JwtPayloadHolder {
 export function subjectOf(c: Context): string {
   const holder = c.get('jwtPayload') as JwtPayloadHolder | undefined
   return holder?.payload?.sub ?? 'unknown'
+}
+
+/**
+ * Which client-identity sources to trust. On the Cloudflare Worker (no Node `incoming` binding)
+ * cf-connecting-ip is set by Cloudflare itself. On Node it is client-controlled, so only the TCP
+ * peer address is used unless the operator sets TRUST_PROXY_HEADERS (a reverse proxy that
+ * overwrites x-forwarded-for / x-real-ip sits in front).
+ */
+export function clientIpOptions(c: Context, env: Record<string, string | undefined>): ClientIpOptions {
+  const node = (c.env as { incoming?: { socket?: { remoteAddress?: string } } } | undefined)?.incoming
+  const trustProxy = /^(1|true|yes|on)$/i.test(env.TRUST_PROXY_HEADERS ?? process.env.TRUST_PROXY_HEADERS ?? '')
+  return {
+    trustCloudflare: !node || trustProxy,
+    trustForwarded: trustProxy,
+    remoteAddress: node?.socket?.remoteAddress,
+  }
 }
 
 /**
@@ -29,7 +45,7 @@ export function createWebQuotaMiddleware() {
     const env = (c.env ?? {}) as Record<string, string | undefined>
     const config = getWebRateLimitConfig(env)
     const sub = subjectOf(c)
-    const ip = clientIp(c.req.raw.headers)
+    const ip = clientIp(c.req.raw.headers, clientIpOptions(c, env))
 
     const subResult = requestCounter.consume(`sub:${sub}`, 1, config.requestsPerHour, HOUR_MS)
     if (!subResult.allowed) {

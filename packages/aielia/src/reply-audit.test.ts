@@ -27,6 +27,15 @@ const FLAG_U = '{"claimsUnrecordedWork": false, "promisesWorkNotDone": false, "u
 const NONE = '{"claimsUnrecordedWork": false, "promisesWorkNotDone": false, "unverifiedOutsideFacts": false, "contradictsCommandOutput": false}'
 
 describe('reply audit', () => {
+  it('returns a fresh object each time so a caller mutating a clean audit cannot poison later ones', async () => {
+    const a = await auditReply(base, new AuditLLM(new Error('boom')))
+    a.promisesWorkNotDone = true
+    expect((await auditReply(base, new AuditLLM(new Error('boom')))).promisesWorkNotDone).toBe(false)
+    expect(CLEAN_AUDIT.promisesWorkNotDone).toBe(false)
+    const b = await auditReply({ ...base, reply: ' ' }, new AuditLLM('{}'))
+    b.claimsUnrecordedWork = true
+    expect(CLEAN_AUDIT.claimsUnrecordedWork).toBe(false)
+  })
   it('asks a second time only when the first call flags, and keeps only what both raise', async () => {
     const clean = new SequenceLLM([NONE, FLAG_C])
     expect(await auditReply(base, clean)).toEqual(CLEAN_AUDIT)

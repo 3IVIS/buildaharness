@@ -415,3 +415,12 @@ describe('formatDoctorReport', () => {
     expect(output).not.toContain('should not appear')
   })
 })
+
+describe('stripTerminalControls', () => {
+  it('removes OSC/CSI sequences and stray control characters but keeps newlines, tabs and plain text', async () => {
+    const { stripTerminalControls } = await import('./cli-session.js')
+    expect(stripTerminalControls('a\u001b]0;title\u0007b\u001b[31mred\u001b[0m\u001b]52;c;QQ==\u001b\\c\r\nd\te\u0000')).toBe('abredc\nd\te')
+    expect(stripTerminalControls('plain — text ✓\n')).toBe('plain — text ✓\n')
+    expect(stripTerminalControls('x‮y​z')).toBe('xyz')
+  })
+})

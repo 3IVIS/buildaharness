@@ -85,9 +85,15 @@ describe('formatEmailApprovalReason', () => {
     expect(reason).toContain('Bye.')
   })
 
-  it('truncates a long body', () => {
-    const reason = formatEmailApprovalReason({ to: 'a@b.co', subject: 's', body: 'x'.repeat(2000) })
-    expect(reason).toContain('…')
-    expect(reason.length).toBeLessThan(2000)
+  it('shows the whole body, never a truncated preview', () => {
+    const body = `${'x'.repeat(2000)}HIDDEN-TAIL`
+    const reason = formatEmailApprovalReason({ to: 'a@b.co', subject: 's', body })
+    expect(reason).toContain('HIDDEN-TAIL')
+  })
+
+  it('shows Cc and Bcc recipients so a hidden Bcc cannot ride through approval', () => {
+    const reason = formatEmailApprovalReason({ to: 'a@b.co', subject: 's', body: 'b', cc: 'c@d.co', bcc: 'spy@evil.co' })
+    expect(reason).toContain('Cc: c@d.co')
+    expect(reason).toContain('Bcc: spy@evil.co')
   })
 })

@@ -1,4 +1,4 @@
-import { useRef, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { Box, Text, useInput, usePaste, useWindowSize } from 'ink'
 
 /** @default 5 — the plan's own "grows up to 5 rows, then scrolls internally" number. */
@@ -113,6 +113,18 @@ export function TuiInput(props: TuiInputProps): React.JSX.Element {
   const [history, setHistory] = useState<string[]>([])
   const [historyIndex, setHistoryIndex] = useState<number | null>(null)
   const [pendingDraft, setPendingDraft] = useState('')
+
+  // A question appearing (or going away) must not inherit a half-typed draft: pressing Enter would submit that draft as
+  // the answer (an approval prompt reads any text starting with "y" as yes). History is kept; only the draft is dropped.
+  const previousPromptLabel = useRef(promptLabel)
+  useEffect(() => {
+    if (previousPromptLabel.current === promptLabel) return
+    previousPromptLabel.current = promptLabel
+    setValue('')
+    setCursor(0)
+    setHistoryIndex(null)
+    setPendingDraft('')
+  }, [promptLabel])
 
   const windowSize = useWindowSize()
   const terminalColumns = props.columns ?? windowSize.columns

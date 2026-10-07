@@ -60,7 +60,7 @@ export async function agentDebateExecutor(node: Node, _state: FlowState, context
         const fn = context.functions.get(cond.fn_ref)
         if (fn) {
           const result = fn({ transcript })
-          if (result.converged) { converged = true; break }
+          if (result?.converged) { converged = true; break }
         }
       }
     }

@@ -50,6 +50,12 @@ function CodeBlock({ children }: { children?: React.ReactNode }): React.JSX.Elem
 
 const MARKDOWN_COMPONENTS: Components = {
   table: ({ children }) => <div className="bubble__table-scroll"><table>{children}</table></div>,
+  // Assistant replies can echo attacker-controlled text from fetched pages/files. An auto-loading
+  // <img> would let injected markdown exfiltrate conversation data through its URL query string with
+  // no click, so images are never fetched — shown as inert text instead.
+  img: ({ src, alt }) => <span className="bubble__blocked-image">[image not loaded{alt ? `: ${alt}` : ''}{typeof src === 'string' && src ? ` (${src})` : ''}]</span>,
+  // Never navigate the app window itself (desktop webview) away from the app.
+  a: ({ href, children }) => <a href={href} target="_blank" rel="noopener noreferrer nofollow">{children}</a>,
   pre: ({ children }) => <CodeBlock>{children}</CodeBlock>,
 }
 

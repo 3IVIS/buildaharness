@@ -578,6 +578,33 @@ describe('PersonalAssistant', () => {
       expect(result.auditNotice).toBeUndefined()
     })
 
+    it('records the spend of the flagged turn before its audit retry runs', async () => {
+      let audits = 0
+      const replies = ['Done, I changed the file.', 'I did not change anything; no write was made.']
+      class RetryLLM extends FakeLLMClient {
+        async callChatStructured(messages: ChatMessage[], tools?: ToolDefinition[], options?: ChatOptions): Promise<LLMStructuredResponse> {
+          if (String(messages[0]?.content).includes('You audit one reply')) {
+            audits++
+            options?.onUsage?.({ inputTokens: 1, outputTokens: 1, costUsd: 0.001 })
+            return { content: audits <= 2 ? '{"claimsUnrecordedWork": true, "promisesWorkNotDone": false, "unverifiedOutsideFacts": false, "contradictsCommandOutput": false}' : '{"claimsUnrecordedWork": false, "promisesWorkNotDone": false, "unverifiedOutsideFacts": false, "contradictsCommandOutput": false}' }
+          }
+          return super.callChatStructured(messages, tools, options)
+        }
+        async *callChat(_m: ChatMessage[], options?: ChatOptions): AsyncIterable<string> {
+          options?.onUsage?.({ inputTokens: 100, outputTokens: 10, costUsd: 0.5 })
+          yield replies.shift() ?? ''
+        }
+      }
+      // The cap (0.4) is crossed by the flagged turn's own 0.5; the correction of that same message must still run.
+      const assistant = new PersonalAssistant({ llmClient: new RetryLLM(), replyAudit: true, spendCap: { sessionCostLimitUsd: 0.4 } })
+      const result = await assistant.turn('change the file', { sessionId: 'audit-spend' })
+      expect(result.status).toBe('ok')
+      expect(result.reply).toContain('did not change anything')
+      const state = await assistant.getSpendState('audit-spend')
+      expect(state.cumulativeCalls).toBe(2)
+      expect(state.cumulativeCostUsd).toBeGreaterThan(0.99) // both turns' 0.5, not only the retry's
+    })
+
     it('logs the suggestions as one next_steps entry per turn, and the proposer is told which language to write in', async () => {
       const llm = new NextStepAwareLLMClient('It is 3pm in Tokyo.')
       const prompts: string[] = []
@@ -1022,6 +1049,32 @@ describe('PersonalAssistant session management extras', () => {
       { role: 'user', content: 'First message' },
       { role: 'assistant', content: 'Second reply.' },
     ])
+  })
+
+  it('concurrent recordSpend calls (a turn and the background memory reviewer) are all counted', async () => {
+    const base = new InMemoryAdapter()
+    const slow = Object.create(base) as InMemoryAdapter
+    slow.get = async (k: string) => { const v = await base.get(k); await new Promise((r) => setTimeout(r, 2)); return v }
+    const assistant = new PersonalAssistant({ llmClient: new FakeLLMClient('ok'), memory: slow })
+    const session = (assistant as unknown as { session: { recordSpend(id: string, u: unknown): Promise<void> } }).session
+    await Promise.all([1, 2, 3].map(() => session.recordSpend('spend-race', { inputTokens: 10, outputTokens: 1, costUsd: 1 })))
+    const state = await assistant.getSpendState('spend-race')
+    expect(state.cumulativeCalls).toBe(3)
+    expect(state.cumulativeCostUsd).toBe(3)
+  })
+
+  it('undoLastTurn also drops a mid-turn steering note written between the user message and the reply', async () => {
+    const memory = new InMemoryAdapter()
+    const assistant = new PersonalAssistant({ llmClient: new FakeLLMClient('ok'), memory })
+    const sessionId = 'undo-steer'
+    await assistant.turn('First message', { sessionId })
+    const key = `transcript:${sessionId}`
+    await memory.set(key, { role: 'user', content: 'Second message' }, 'append')
+    await memory.set(key, { role: 'user', content: 'steering note' }, 'append')
+    await memory.set(key, { role: 'assistant', content: 'Second reply' }, 'append')
+
+    expect(await assistant.undoLastTurn(sessionId)).toEqual({ undone: true })
+    expect((await assistant.getTranscript(sessionId)).map((m) => m.content)).toEqual(['First message', 'ok'])
   })
 
   it('a message-level needs_approval turn persists nothing until the retry resolves it, so undo has nothing to drop', async () => {
@@ -1552,6 +1605,21 @@ describe('PersonalAssistant file tools', () => {
     expect(await backend.readTextFile(`${ROOT}/todo.txt`)).toBe('buy milk')
   })
 
+  it('a corrupt or out-of-workspace chained record does not turn an already-applied action into an error', async () => {
+    const backend = makeFakeBackend()
+    const { id: writeId } = await stagePendingAction(backend, ROOT, { kind: 'write', path: 'todo.txt', content: 'buy milk' })
+    const badId = 'chained-bad'
+    await backend.writeTextFile(`${ROOT}/.pending-actions/${badId}.json`, JSON.stringify({ id: badId, stagedAt: new Date().toISOString(), kind: 'write', path: '../../etc/passwd', content: 'x', chainedFrom: true }))
+    const writeRecord = await loadPendingAction(backend, ROOT, writeId)
+    await backend.writeTextFile(`${ROOT}/.pending-actions/${writeId}.json`, JSON.stringify({ ...writeRecord, nextPendingActionId: badId }))
+    const assistant = new PersonalAssistant({ llmClient: scriptedResponses([]), fileTools: { backend, workspaceRoot: ROOT } })
+    const spy = vi.spyOn(console, 'error').mockImplementation(() => undefined)
+    const applied = await assistant.turn('irrelevant', { approved: true, pendingActionId: writeId })
+    spy.mockRestore()
+    expect(applied.status).toBe('ok')
+    expect(await backend.readTextFile(`${ROOT}/todo.txt`)).toBe('buy milk')
+  })
+
   // T7: a revert is exactly as consequential as the action it undoes, so it must go through the
   // same explicit approval step — declining one must leave the workspace untouched and the
   // undo-log entry available for a later attempt, same as declining any other staged action.
@@ -2062,6 +2130,22 @@ describe('PersonalAssistant shell tools', () => {
 
     const userLogs = onDebugLog.mock.calls.map((c) => c[0]).filter((e) => e.kind === 'user_message')
     expect(userLogs).toHaveLength(1)
+  })
+
+  it('does not leak the internal source excerpt on the approval-resume path', async () => {
+    const executeCommand = vi.fn().mockResolvedValue({ output: 'ok\n', exitCode: 0, timedOut: false })
+    const { ctx, backend } = makeShellTools(executeCommand)
+    await backend.writeTextFile(`${ROOT}/notes.txt`, 'basil')
+    const llm = scriptedResponses([
+      { content: '', toolCalls: [{ id: 'toolu_1', name: 'run_shell_command', input: { command: 'ls' } }] },
+      { content: '', toolCalls: [{ id: 'toolu_2', name: 'read_file', input: { path: 'notes.txt' } }] },
+      { content: 'notes.txt says basil.' },
+    ])
+    const assistant = new PersonalAssistant({ llmClient: llm, shellTools: ctx, fileTools: { backend, workspaceRoot: ROOT } })
+    const staged = await assistant.turn('run ls then read notes.txt')
+    const result = await assistant.turn('run ls then read notes.txt', { approved: true, pendingActionId: staged.pendingActionId })
+    expect(result.status).toBe('ok')
+    expect(result.sources).toEqual([{ tool: 'read_file', path: 'notes.txt' }])
   })
 
   it('logs a declined staged run_shell_command to onDebugLog too', async () => {

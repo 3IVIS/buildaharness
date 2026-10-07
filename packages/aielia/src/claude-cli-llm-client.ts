@@ -134,19 +134,15 @@ function invokeClaudeStreaming(claudePath: string, args: string[], onToolStep?: 
     let stderr = ''
     let finalResultLine: string | undefined
 
-    proc.stdout.on('data', (chunk: Buffer) => {
-      buffer += chunk.toString('utf-8')
-      let newlineIndex: number
-      while ((newlineIndex = buffer.indexOf('\n')) !== -1) {
-        const line = buffer.slice(0, newlineIndex)
-        buffer = buffer.slice(newlineIndex + 1)
-        if (!line.trim()) continue
+    const handleLine = (line: string): void => {
+      {
+        if (!line.trim()) return
 
         let event: { type?: string; message?: { content?: unknown[] } }
         try {
           event = JSON.parse(line)
         } catch {
-          continue // stream-json is one complete JSON object per line — an unparseable line is never expected, but must never crash the stream
+          return // stream-json is one complete JSON object per line — an unparseable line is never expected, but must never crash the stream
         }
 
         if (event.type === 'assistant' && onToolStep) {
@@ -159,6 +155,15 @@ function invokeClaudeStreaming(claudePath: string, args: string[], onToolStep?: 
           finalResultLine = line
         }
       }
+    }
+    proc.stdout.on('data', (chunk: Buffer) => {
+      buffer += chunk.toString('utf-8')
+      let newlineIndex: number
+      while ((newlineIndex = buffer.indexOf('\n')) !== -1) {
+        const line = buffer.slice(0, newlineIndex)
+        buffer = buffer.slice(newlineIndex + 1)
+        handleLine(line)
+      }
     })
     proc.stderr.on('data', (chunk) => { stderr += chunk })
     proc.on('error', reject)
@@ -167,6 +172,8 @@ function invokeClaudeStreaming(claudePath: string, args: string[], onToolStep?: 
         reject(new Error(stderr.trim() || `claude exited with code ${code}`))
         return
       }
+      handleLine(buffer) // a final line with no trailing newline is still a complete event
+      buffer = ''
       resolvePromise(parseClaudeCliOutput(finalResultLine ?? ''))
     })
   })
@@ -202,6 +209,8 @@ function startToolGateServer(
 ): Promise<{ server: Server; port: number }> {
   return new Promise((resolvePromise, reject) => {
     const server = createServer((socket) => {
+      // A peer that dies mid-request (the MCP subprocess killed, a reset) emits 'error' on the socket; with no listener that is an uncaught exception that would crash the process.
+      socket.on('error', () => {})
       let buffer = ''
       socket.on('data', (chunk: Buffer) => {
         buffer += chunk.toString('utf-8')
@@ -347,7 +356,8 @@ export class ClaudeCliLLMClient implements ILLMClient {
     ]
     const model = options.model ?? this.model
     if (model) args.push('--model', model)
-    args.push(prompt)
+    // `--` ends option parsing: a message that starts with "-" (a markdown list, "-5 degrees") would otherwise be rejected as an unknown option.
+    args.push('--', prompt)
     const { reply, usage, model: resolved } = await invokeClaude(this.claudePath, args)
     if (resolved) this.resolvedModelId = resolved
     if (usage) options.onUsage?.(usage)
@@ -446,7 +456,7 @@ export class ClaudeCliLLMClient implements ILLMClient {
       ]
       const model = options.model ?? this.model
       if (model) args.push('--model', model)
-      args.push(prompt)
+      args.push('--', prompt) // see callChatSync: a prompt starting with "-" must not be parsed as an option
 
       const callStartedAt = Date.now()
       const { reply, usage, model: resolved } = await invokeClaudeStreaming(this.claudePath, args, options.onToolStep)
@@ -488,11 +498,16 @@ export class ClaudeCliLLMClient implements ILLMClient {
     for (const name of names) {
       if (!name.endsWith('.json')) continue
       const filePath = `${dir}/${name}`
-      const stats = await stat(filePath)
-      // Small buffer against filesystem mtime rounding (e.g. 1s resolution on some
-      // filesystems) being coarser than Date.now()'s precision.
-      if (stats.mtimeMs < startTimeMs - 1000) continue
-      const record = JSON.parse(await readFile(filePath, 'utf-8')) as PendingActionRecord
+      let record: PendingActionRecord
+      try {
+        const stats = await stat(filePath)
+        // Small buffer against filesystem mtime rounding (e.g. 1s resolution on some
+        // filesystems) being coarser than Date.now()'s precision.
+        if (stats.mtimeMs < startTimeMs - 1000) continue
+        record = JSON.parse(await readFile(filePath, 'utf-8')) as PendingActionRecord
+      } catch {
+        continue // a record deleted or half-written mid-scan must not fail the whole call (and lose a staged action's sibling)
+      }
       if (!earliest || record.stagedAt < earliest.stagedAt) earliest = record
     }
     return earliest
