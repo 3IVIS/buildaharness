@@ -1051,6 +1051,18 @@ describe('PersonalAssistant session management extras', () => {
     ])
   })
 
+  it('concurrent recordSpend calls (a turn and the background memory reviewer) are all counted', async () => {
+    const base = new InMemoryAdapter()
+    const slow = Object.create(base) as InMemoryAdapter
+    slow.get = async (k: string) => { const v = await base.get(k); await new Promise((r) => setTimeout(r, 2)); return v }
+    const assistant = new PersonalAssistant({ llmClient: new FakeLLMClient('ok'), memory: slow })
+    const session = (assistant as unknown as { session: { recordSpend(id: string, u: unknown): Promise<void> } }).session
+    await Promise.all([1, 2, 3].map(() => session.recordSpend('spend-race', { inputTokens: 10, outputTokens: 1, costUsd: 1 })))
+    const state = await assistant.getSpendState('spend-race')
+    expect(state.cumulativeCalls).toBe(3)
+    expect(state.cumulativeCostUsd).toBe(3)
+  })
+
   it('undoLastTurn also drops a mid-turn steering note written between the user message and the reply', async () => {
     const memory = new InMemoryAdapter()
     const assistant = new PersonalAssistant({ llmClient: new FakeLLMClient('ok'), memory })

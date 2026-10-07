@@ -289,7 +289,16 @@ export class AssistantSession {
    * already correctly no-ops whenever no cap is configured, so this never enforces a cap that
    * isn't set.
    */
-  async recordSpend(sessionId: string, usage: TokenUsage | undefined): Promise<void> {
+  /** Tail of the chain serialising recordSpend's read-modify-write: the background memory reviewer records spend while a turn does, and the later write used to drop the other's cost. */
+  private spendChain: Promise<unknown> = Promise.resolve()
+
+  recordSpend(sessionId: string, usage: TokenUsage | undefined): Promise<void> {
+    const run = this.spendChain.then(() => this.recordSpendNow(sessionId, usage))
+    this.spendChain = run.then(() => undefined, () => undefined)
+    return run
+  }
+
+  private async recordSpendNow(sessionId: string, usage: TokenUsage | undefined): Promise<void> {
     const state = await this.getSpendState(sessionId)
     const costUsd = usage?.costUsd ?? (usage ? estimateCostUsd(this.model() ?? DEFAULT_MODEL_FOR_COST_ESTIMATE, usage) : undefined) ?? 0
     await this.memory.set(`spend:${sessionId}`, {
