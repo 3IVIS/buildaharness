@@ -68,12 +68,14 @@ both, so they behave identically to the browser build:
   deployment, same as chat-ui's plain-browser build.
 - `anthropic`/`openai`/`openrouter` — `AnthropicLLMClient`/
   `OpenAICompatibleLLMClient` (`@buildaharness/runtime`), calling the
-  provider directly with a user-supplied API key. On desktop `App.tsx` hands
-  these clients `@tauri-apps/plugin-http`'s `fetch`, so the request is made
-  from Rust (no CORS, and not subject to the webview's CSP, which only allows
-  `connect-src 'self' ipc:`); `http:default` in
-  `src-tauri/capabilities/default.json` is scoped to `http://*` and
-  `https://*`. Set the key and pick a backend from the Provider section in
+  provider directly with a user-supplied API key, using the webview's own
+  `fetch()` (`App.tsx`'s `createLlmClient()` passes no custom fetch to them; only
+  the web search/fetch tools use `@tauri-apps/plugin-http`). Note that
+  `tauri.conf.json`'s `security.csp` currently sets
+  `connect-src 'self' ipc: http://ipc.localhost`, which does not list the
+  provider (or proxy) origins; the CSP was added without a built app to test
+  against, so confirm these backends still connect before relying on them.
+  Set the key and pick a backend from the Provider section in
   Settings (see `packages/chat-ui/README.md`). The API key is not kept in the
   plaintext config file: `tauri-config-store.ts` stores it in the OS keychain
   via the `keychain_set_api_key` / `keychain_get_api_key` /
@@ -87,7 +89,9 @@ both, so they behave identically to the browser build:
 `tauri.conf.json` sets a restrictive `security.csp` (`default-src 'self'`,
 `script-src 'self'`, `connect-src 'self' ipc: http://ipc.localhost`,
 `frame-ancestors 'none'`, no objects or forms) so injected markup cannot load
-remote resources; `devCsp` is looser, for Vite HMR. `fetch_url`'s SSRF guard
+remote resources; `devCsp` is looser, for Vite HMR. `http:default` in
+`src-tauri/capabilities/default.json` is scoped to `http://*` and `https://*`
+for the web tools' `plugin-http` fetch. `fetch_url`'s SSRF guard
 needs DNS, which a webview doesn't have, so it resolves hostnames through the
 `dns_lookup` Tauri command (`tauri-dns-resolver.ts`).
 
