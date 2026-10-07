@@ -25,12 +25,12 @@ These are generated with `openssl` and written to `.env` on first run. They must
 
 | Variable | How to generate | Notes |
 |---|---|---|
-| `JWT_SECRET` | `openssl rand -base64 32` | Signs all user JWTs (HS256). Change requires all existing tokens to be re-issued. |
-| `POSTGRES_PASSWORD` | `openssl rand -base64 24 \| tr -d '=+/'` | Postgres `buildaharness` user password. Must match the password baked into the data volume — see `reset-volumes.sh` if they drift. |
-| `REDIS_PASSWORD` | `openssl rand -base64 24 \| tr -d '=+/'` | Redis `requirepass` value. Must match `REDIS_URL`. |
+| `JWT_SECRET` | `openssl rand -base64 32` | Signs all user JWTs (HS256). The adapter refuses to start if it is unset. Changing it requires all existing tokens to be re-issued. |
+| `POSTGRES_PASSWORD` | `openssl rand -base64 24` (with `=+/` stripped) | Postgres `buildaharness` user password. Must match the password baked into the data volume — see `reset-volumes.sh` if they drift. |
+| `REDIS_PASSWORD` | `openssl rand -base64 24` (with `=+/` stripped) | Redis `requirepass` value. Must match `REDIS_URL`. |
 | `DATABASE_URL` | Auto-built from `POSTGRES_PASSWORD` | `postgresql+asyncpg://buildaharness:<pw>@postgres:5432/buildaharness`. Must use the Docker service name `postgres`, not `localhost`. |
 | `REDIS_URL` | Auto-built from `REDIS_PASSWORD` | `redis://:<pw>@redis:6379/1`. Must not contain unexpanded shell variables. |
-| `LITELLM_MASTER_KEY` | `openssl rand -base64 32` | Bearer token for the LiteLLM proxy. Also used as `OPENAI_API_KEY` inside adapter containers. |
+| `LITELLM_MASTER_KEY` | `openssl rand -base64 32` | Bearer token for the LiteLLM proxy. Also used as `OPENAI_API_KEY` inside the adapter and mastra-runner containers. |
 | `LANGFUSE_NEXTAUTH_SECRET` | `openssl rand -base64 32` | NextAuth.js session signing key for Langfuse web UI. |
 | `LANGFUSE_SALT` | `openssl rand -base64 32` | Langfuse internal password hashing salt. |
 | `LANGFUSE_ENCRYPTION_KEY` | `openssl rand -hex 32` | **Must be exactly 64 lowercase hex characters.** Use `rand -hex 32`, not `rand -base64`. |
@@ -44,9 +44,11 @@ These are generated with `openssl` and written to `.env` on first run. They must
 `setup-env.sh` keeps these derived URLs in sync with their password variables. `check-env.sh` fails if:
 - `DATABASE_URL` contains a placeholder password
 - The password embedded in `DATABASE_URL` does not match `POSTGRES_PASSWORD`
-- `DATABASE_URL` uses `localhost` instead of the Docker service name `postgres`
 - `REDIS_URL` contains an unexpanded shell variable (`${REDIS_PASSWORD}`)
 - The password embedded in `REDIS_URL` does not match `REDIS_PASSWORD`
+- `LANGFUSE_ENCRYPTION_KEY` is not exactly 64 hex characters
+
+`check-env.sh` only warns (does not fail) when `DATABASE_URL` uses `localhost` instead of the Docker service name `postgres`.
 
 ---
 
@@ -85,12 +87,26 @@ Set these in `.env` to override defaults. All are optional.
 | `MAX_BODY_BYTES` | `1048576` | Maximum request body size in bytes (1 MB). |
 | `JOB_TTL_HOURS` | `4` | Hours before completed jobs are evicted from the job store. |
 | `INVOKE_TIMEOUT_S` | `120` | Synchronous `/flows/{id}/invoke` timeout in seconds. |
-| `TRUST_PROXY` | `true` | Reads `X-Real-IP` / `X-Forwarded-For` for rate limiting. Set `false` if the adapter is internet-facing without a reverse proxy. |
-| `LANGFUSE_EVAL_ENABLED` | — | Set `true` to register LLM-as-judge evaluator configs at adapter boot. |
+| `TRUST_PROXY` | `true` | Adapter only: reads `X-Real-IP` / `X-Forwarded-For` for rate limiting. Set `false` (or `0`/`no`) if the adapter is internet-facing without a reverse proxy. Not set in `docker-compose.yml`. (The `@buildaharness/proxy` package has its own, opposite-default `TRUST_PROXY_HEADERS` — see below.) |
+| `LANGFUSE_EVAL_ENABLED` | `false` | Set `true` to register LLM-as-judge evaluator configs at adapter boot. |
 | `OPENAI_BASE_URL` | `http://litellm:4000` | Base URL for LLM calls. Override to `http://host.docker.internal:11434/v1` to bypass LiteLLM and call Ollama directly. |
 | `QDRANT_URL` | `http://qdrant:6333` | Qdrant vector store URL. Used by RAG flows. |
 | `EMBED_BASE_URL` | `http://litellm:4000` | Base URL for embedding API calls. Kept separate from `OPENAI_BASE_URL` so embeddings always route through LiteLLM (and appear in Langfuse) even when LLM calls bypass it. |
 | `EMBED_MODEL` | `nomic-embed-text` | Default embedding model. Must be registered in `adapter/litellm_config.yaml`. |
+| `ADAPTER_LOG_LEVEL` | `INFO` | `DEBUG`, `INFO`, `WARNING` or `ERROR`; anything else falls back to `INFO`. |
+| `ADAPTER_LOG_FORMAT` | `text` | Set `json` for one JSON object per log line. |
+| `ADAPTER_LOG_FILE` | — | Also write logs to this file path. |
+| `DOTENV_LOAD` | `true` | Set `false`/`0`/`no` to stop the adapter loading a `.env` file itself. |
+| `EXTRA_CALLABLE_MODULES` | — | Comma-separated Python module names whose functions flows may call via `fn_ref` (in addition to the built-ins). `check-env.sh` warns when it is empty. |
+| `CREWAI_EXECUTOR_MODEL` | — | Override the model used by CrewAI's generic executor agent (non-coach tasks). |
+| `MAF_SK_TIMEOUT` | `300` | Timeout in seconds for Semantic Kernel calls in generated MAF code. |
+| `PROMPT_CACHE_TTL` | `60` | Seconds the adapter caches resolved prompts. |
+| `LANGFUSE_PUBLIC_KEY` / `LANGFUSE_SECRET_KEY` | — | Langfuse API keys used by the adapter for tracing (see the secrets table above). |
+| `LANGFUSE_PUBLIC_URL` | `http://localhost:3001` | Browser-reachable Langfuse URL used in trace links. (`LANGFUSE_BASE_URL`/`LANGFUSE_HOST` are set to the internal `http://langfuse:3000` by `docker-compose.yml`.) |
+| `AGENT_MEMORY_WRITE_MODE` | _(empty)_ | Write mode for the agent-memory REST router (`adapter/memory_api.py`); the `AUDIT_MEMORY_*` flags that gate it are read via `MemoryFlags.from_env()` and default OFF. |
+| `HARNESS_TRAJECTORY_SUPERVISOR` | off | Truthy (`1`/`true`/`yes`/`on`/`enabled`) enables the stall-edge Trajectory Supervisor in the Python harness. |
+| `HARNESS_ASK_QUESTION` | off | Global switch for the generic ask-question mechanism (`adapter/harness/ask_question.py`). |
+| `STALL_WINDOW` / `MAX_SWITCHES` / `RECURRENCE_THRESHOLD` / `OSCILLATION_WINDOW` | `5` / `3` / `3` / `6` | Harness progress-detection tuning (`adapter/harness/progress.py`): steps without completion before a stall, strategy switches before a loop, same-failure repeats before recurrence, and the risk-oscillation window. |
 
 ---
 
@@ -98,9 +114,14 @@ Set these in `.env` to override defaults. All are optional.
 
 | Variable | Default | Description |
 |---|---|---|
+| `MASTRA_RUNNER_URL` | `http://mastra-runner:8001` | Adapter-side: where the adapter forwards Mastra jobs. If the runner is unreachable, Mastra falls back to codegen-only. |
+| `MASTRA_RUNNER_TIMEOUT_S` | `3600` | Adapter-side: how long the adapter waits for a Mastra job. |
+| `MASTRA_POLL_INTERVAL_S` | `0.8` | Adapter-side: poll interval for Mastra job status. |
+| `MASTRA_RUNNER_PORT` | `8001` | Port the runner listens on. |
+| `MASTRA_RUNNER_MAX_JOBS` | `50` | Max in-flight jobs; more are rejected to prevent OOM. |
 | `MASTRA_EXEC_TIMEOUT_MS` | `300000` | Mastra workflow execution timeout in milliseconds (5 min). Mastra compiles TypeScript on the first run — allow 30–60 s on cold start. |
-| `RUNNER_API_KEY` | `MASTRA_RUNNER_API_KEY` | Shared secret the adapter sends when calling the sidecar. Must match `MASTRA_RUNNER_API_KEY`. |
-| `PYTHON_ADAPTER_URL` | `http://adapter:8000` | URL the Mastra runner uses to call back into the Python adapter for `fn_ref` bridge calls. |
+| `RUNNER_API_KEY` | — | Runner-side name for the shared secret (the runner reads `MASTRA_RUNNER_API_KEY` first, then `RUNNER_API_KEY`). `docker-compose.yml` passes `MASTRA_RUNNER_API_KEY` into it. Empty = no auth (the runner logs a warning). |
+| `ADAPTER_URL` | `http://adapter:8000` | URL the Mastra runner uses to call back into the Python adapter for `fn_ref` bridge calls. |
 
 ---
 
@@ -120,6 +141,7 @@ Set these when `OIDC_ENABLED=true`. See [deployment.md](./deployment.md) for the
 | `OIDC_ADMIN_GROUPS` | — | Comma-separated group names that map to org admin role. |
 | `OIDC_ORG_SLUG_CLAIM` | `org` | Claim used to resolve the target org on login. |
 | `OIDC_AUTO_PROVISION` | `true` | Create users automatically on first SSO login. |
+| `OIDC_PROVIDER_NAME` | `SSO` | Display name for the SSO login button. |
 | `SCIM_BEARER_TOKEN` | — | Static bearer token for the SCIM 2.0 provisioning endpoint (`/scim/v2`). |
 | `REFRESH_TOKEN_TTL_DAYS` | `30` | SSO refresh token lifetime in days. |
 
@@ -132,11 +154,10 @@ These are **Vite build-time variables** for the canvas dev server. Set them in `
 | Variable | Default | Description |
 |---|---|---|
 | `VITE_API_URL` | `http://localhost:8000` | Adapter URL visible from the browser. |
-| `VITE_LANGFUSE_ENABLED` | `true` | Enable Langfuse tracing from the canvas. |
+| `VITE_LANGFUSE_ENABLED` | `true` (as written by `setup-env.sh`; tracing is off unless exactly `true`) | Enable Langfuse tracing from the canvas. |
 | `VITE_LANGFUSE_PUBLIC_KEY` | (from `LANGFUSE_PUBLIC_KEY`) | Langfuse public key — must match `LANGFUSE_PUBLIC_KEY` in `.env`. `check-env.sh` fails if they diverge. |
 | `VITE_LANGFUSE_HOST` | `http://localhost:3001` | Langfuse host URL. |
-| `VITE_COLLAB_SERVER_URL` | _(unset — collab disabled)_ | y-websocket URL to enable real-time collab, e.g. `ws://localhost:1234`. See [collab.md](./collab.md). |
-| `VITE_COLLAB_OFFLINE_PERSISTENCE` | `true` | Persist Yjs CRDT doc to IndexedDB for offline-first editing. |
+| `VITE_COLLAB_SERVER_URL` | _(unset — collab disabled)_ | y-websocket URL to enable real-time collab, e.g. `ws://localhost:1234`. See [collab.md](./collab.md). The Yjs doc is always persisted to IndexedDB; there is no env switch for that. |
 
 ---
 
@@ -148,15 +169,17 @@ These variables are read by the `@buildaharness/proxy` Hono app — either the C
 |---|---|---|---|
 | `ANTHROPIC_API_KEY` | Yes* | Secret | Anthropic API key (`sk-ant-…`). Required when using Claude models. |
 | `OPENAI_API_KEY` | Yes* | Secret | OpenAI API key (`sk-…`). Required when using GPT models. |
-| `PROXY_SECRET` | Yes | Secret | Shared secret used to issue and verify short-lived JWTs. Set to a long random string. |
-| `ALLOWED_ORIGIN` | Yes | Public | URL of your frontend app (e.g. `https://app.example.com`). Wildcard (`*`) is not permitted. |
+| `PROXY_SECRET` | Yes | Secret | Shared secret used to issue (1-hour) and verify JWTs; `POST /auth/token` compares the submitted secret in constant time. Set to a long random string. |
+| `AUTH_FAILS_PER_HOUR` | No | Public | Failed `POST /auth/token` attempts allowed per client IP per hour before the proxy answers 429 with `Retry-After`. Default `10`. |
+| `TRUST_PROXY_HEADERS` | No | Public | Set `1`/`true`/`yes`/`on` only behind a reverse proxy that overwrites `X-Forwarded-For` / `X-Real-IP` (the last `X-Forwarded-For` entry is used). Unset: on Node the TCP peer address is the client IP; on the Cloudflare Worker `CF-Connecting-IP` is trusted. |
+| `ALLOWED_ORIGIN` | Yes | Public | URL of your frontend app (e.g. `https://app.example.com`), used as the CORS origin. Set it explicitly: if it is unset the code falls back to `*`. |
 | `PORT` | No | Public | Port the Node.js server listens on. Defaults to `3001`. Ignored by the Cloudflare Worker. |
 | `BRAVE_API_KEY` | No | Secret | Fallback Brave Search API key for a self-hosted shared deployment. Not required for normal use — the browser client sends its own key with every `POST /web/search` request instead (see that route's `braveApiKey` body field). |
 | `WEB_REQUESTS_PER_HOUR` | No | Public | Per-JWT-`sub` requests/hour ceiling shared across all of `/web/*`. Default `120`. |
 | `WEB_BYTES_PER_HOUR` | No | Public | Per-`sub` cumulative response-bytes/hour ceiling for `/web/fetch`, checked before each fetch and charged after it completes. Default `2000000` (~2MB). |
 | `WEB_MAX_CONCURRENT_FETCHES` | No | Public | Max concurrent in-flight `/web/fetch` calls per `sub`. Default `4`. |
 | `WEB_HOST_REQUESTS_PER_HOUR` | No | Public | Per-destination-host `/web/fetch` throttle (proxy-wide, not per-`sub`), so the proxy can't be used to hammer one third-party host. Default `60`. |
-| `WEB_PER_IP_REQUESTS_PER_HOUR` | No | Public | Per-client-IP requests/hour ceiling layered in front of the per-`sub` one on every `/web/*` route — matters when many anonymous users share one token (e.g. the hosted `/try` build). IP is read from `CF-Connecting-IP` / `X-Real-IP` / `X-Forwarded-For`. Default `30`. |
+| `WEB_PER_IP_REQUESTS_PER_HOUR` | No | Public | Per-client-IP requests/hour ceiling layered in front of the per-`sub` one on every `/web/*` route — matters when many anonymous users share one token (e.g. the hosted `/try` build). The client IP comes from the TCP peer address (Node) or `CF-Connecting-IP` (Worker); forwarding headers count only with `TRUST_PROXY_HEADERS`. Default `30`. |
 | `WEB_BRAVE_DAILY_CEILING` | No | Public | Global (not per-`sub`/IP) daily ceiling on `backend=brave` calls to `POST /web/search`, protecting the one shared `BRAVE_API_KEY` from being run up or banned. Default `2000`. |
 | `WEB_GRANT_REQUESTS_PER_HOUR` | No | Public | Per-`sub` requests/hour ceiling for `POST /web/grant` specifically, tighter than `WEB_REQUESTS_PER_HOUR` — an open URL-signing oracle is worse than an open fetch, since a tag can be replayed against `/web/fetch` repeatedly while valid. Default `20`. |
 | `WEB_GUARD_REJECT_ALERT_THRESHOLD` | No | Public | Repeated-guard-rejection count (per `sub`, within an hour) that triggers a `console.warn` alert line — a cheap signal that someone is probing the SSRF guard with private-range targets. Not itself a block. Default `5`. |
@@ -175,6 +198,46 @@ Set these in `templates/react-app/.env.local`. They are bundled into the browser
 | `VITE_AUTH_TOKEN` | No | Dev-only | Pre-issued JWT for the proxy. **Only for development and private/internal deployments.** In a publicly accessible app, obtain tokens at runtime via `POST /auth/token` instead. |
 
 > **Warning:** `VITE_AUTH_TOKEN` is embedded in the JavaScript bundle that ships to the browser. Any visitor can read it. Do not use it for public production deployments.
+
+---
+
+## Aielia (CLI, chat-ui, desktop)
+
+Aielia reads its own variables, separate from the Docker stack. In the CLI they are read from the process environment by `packages/aielia/src/cli-config.ts` and override the persisted `~/.buildaharness/personal-assistant/config.json` for that run (an unset variable never shadows a saved value). chat-ui reads the build-time `VITE_ASSISTANT_*` twin of the variables marked (V). Full behaviour of each is in [`packages/aielia/README.md`](../packages/aielia/README.md).
+
+| Variable | Default | Description |
+|---|---|---|
+| `ASSISTANT_LLM_BACKEND` | `proxy` | `proxy`, `claude-cli`, `anthropic`, `openai` or `openrouter`. |
+| `ASSISTANT_PROXY_URL` (V), `ASSISTANT_PROXY_TOKEN` (V) | — | `@buildaharness/proxy` base URL and its bearer JWT (proxy backend). |
+| `ASSISTANT_API_KEY` | — | Real provider key for the direct `anthropic`/`openai`/`openrouter` backends. |
+| `ASSISTANT_MODEL` (V) | per backend | Model id override. |
+| `CLAUDE_PATH` | `claude` | Path to the `claude` binary for the `claude-cli` backend. |
+| `ASSISTANT_ENABLE_WEB` (V) | off | Exactly `1` enables `web_search`/`fetch_url`. |
+| `BRAVE_SEARCH_API_KEY` | — | Brave Search key for the web tools. |
+| `ASSISTANT_ENABLE_SHELL` | off | Exactly `1` enables the approval-gated `run_shell_command` tool. |
+| `ASSISTANT_SHELL_TIMEOUT_MS` | `30000` | Hard timeout for shell commands. |
+| `ASSISTANT_SHELL_NETWORK_ALLOWLIST` | — | Comma-separated hostnames the shell may reach. |
+| `ASSISTANT_WORKSPACE_DIR` | — | Directory the file/shell tools are confined to. |
+| `ASSISTANT_ENABLE_EMAIL`, `ASSISTANT_EMAIL_PROVIDER` (`resend`\|`smtp`), `ASSISTANT_EMAIL_FROM`, `ASSISTANT_RESEND_API_KEY`, `ASSISTANT_SMTP_HOST`/`_PORT`/`_USER`/`_PASS` | off | Optional `send_email` tool and its transport. |
+| `ASSISTANT_DANGEROUSLY_SKIP_PERMISSIONS` | off | Exactly `1` skips approval prompts. Dangerous. |
+| `ASSISTANT_NON_INTERACTIVE_APPROVAL` | — | `decline` or `require-tty`; controls approval gates when stdin is not a TTY. |
+| `ASSISTANT_SESSION_COST_LIMIT_USD`, `ASSISTANT_SESSION_CALL_LIMIT` | — | Per-session spending/call ceilings. A non-numeric value is refused at startup. |
+| `ASSISTANT_MEMORY_BUDGET_CHARS`, `ASSISTANT_MEMORY_WRITE_MODE` (V) | `4000`, — | Memory render budget; write mode `auto`/`staged`/`user_only`. |
+| `ASSISTANT_ONE_LOOP` (V) | `enabled` | `disabled` restores the pre-rewire tool loop. |
+| `ASSISTANT_ASK_MODE` (V), `ASSISTANT_AMBIGUITY_GUARD` | `disabled` | Ask-question mechanism and ambiguity guard. |
+| `ASSISTANT_PLAN_MODE` (V) | `legacy` | `gated` or `legacy`. |
+| `ASSISTANT_GOAL_GRAPH` (V), `ASSISTANT_GOAL_GRAPH_SUGGEST` (V) | `enabled` | Goal tree and next-step options. |
+| `ASSISTANT_PLAN_GRAPH` (V) | `disabled` | Read-only plan graph view. |
+| `ASSISTANT_LAYER_POLICY` (V) | `static` | Layer policy mode. |
+| `ASSISTANT_TUI` | `disabled` | Terminal UI mode. |
+| `ASSISTANT_UPDATE_CHECK` | `enabled` | `disabled` turns off the CLI update check. |
+| `ASSISTANT_ACTIVE_PROJECT` | — | Active project name. |
+| `ASSISTANT_LEXICAL_MODE`, `ASSISTANT_LEXICAL_ON=<family,...>`, `ASSISTANT_LEXICAL_OFF=<family,...>`, `HARNESS_LEXICAL_MODE`/`_ON`/`_OFF` | `disabled` | Every lexical (regex/keyword) family is off by default; `enabled` turns all on, `_ON` turns listed families on, `_OFF` wins over both (see `packages/aielia/src/lexical/lexical-mode.ts`). |
+| `HARNESS_TRAJECTORY_SUPERVISOR` | on in Aielia, off in the library | `0` disables the supervisor in Aielia. |
+| `HARNESS_ASK_QUESTION` | `disabled` | Global ask-question switch for the harness library. |
+| `AUDIT_*` | per flag | Per-feature escape hatches read in one place each (for example `AUDIT_SEMANTIC_CONSTRAINT_CHECK`, `AUDIT_RETRY_SYSTEM_ERRORS`, `AUDIT_MEMORY_BUDGETED_RENDER`, `AUDIT_MEMORY_WRITE_GATE`, `AUDIT_EPISODIC_DIGEST`, `AUDIT_RECALL_TOOL`); `=0`/`off` restores the old behaviour. Users normally change the layer-related ones via `/layers` or Settings rather than by hand. |
+
+The `claude-cli` backend also passes `TOOL_GATE_PORT`, `WORKSPACE_ROOT`, `REMINDERS_FILE`, `ENABLE_SHELL_TOOLS`, `ENABLE_EMAIL_TOOL`, `ENABLE_RECALL_TOOL` and `ASSISTANT_LEXICAL_RESOLVED_OFF` to its MCP file-tools subprocess; these are internal and are set by Aielia, not by you.
 
 ---
 
