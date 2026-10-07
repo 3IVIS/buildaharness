@@ -8,6 +8,8 @@ export interface OpenAICompatibleLLMClientOptions {
   defaultModel: string
   /** OpenRouter's recommended (not required) HTTP-Referer/X-Title headers, or any other provider-specific extras — merged into every request. */
   extraHeaders?: Record<string, string>
+  /** Injectable fetch — the Tauri webview's CSP blocks the global fetch to remote hosts, so the desktop app passes @tauri-apps/plugin-http's fetch here. Defaults to the global fetch. */
+  fetchImpl?: typeof fetch
 }
 
 /**
@@ -126,12 +128,14 @@ export class OpenAICompatibleLLMClient implements ILLMClient {
   private readonly baseUrl: string
   private readonly defaultModel: string
   private readonly extraHeaders: Record<string, string>
+  private readonly fetchImpl: typeof fetch
 
-  constructor({ apiKey, baseUrl, defaultModel, extraHeaders = {} }: OpenAICompatibleLLMClientOptions) {
+  constructor({ apiKey, baseUrl, defaultModel, extraHeaders = {}, fetchImpl }: OpenAICompatibleLLMClientOptions) {
     this.apiKey = apiKey
     this.baseUrl = baseUrl
     this.defaultModel = defaultModel
     this.extraHeaders = extraHeaders
+    this.fetchImpl = fetchImpl ?? ((...args: Parameters<typeof fetch>) => fetch(...args))
   }
 
   private headers(): Record<string, string> {
@@ -174,7 +178,7 @@ export class OpenAICompatibleLLMClient implements ILLMClient {
   }
 
   async *callChat(messages: ChatMessage[], options: ChatOptions = {}): AsyncIterable<string> {
-    const response = await fetch(`${this.baseUrl}/chat/completions`, {
+    const response = await this.fetchImpl(`${this.baseUrl}/chat/completions`, {
       method: 'POST',
       headers: this.headers(),
       body: JSON.stringify({
@@ -265,7 +269,7 @@ export class OpenAICompatibleLLMClient implements ILLMClient {
       body.response_format = { type: 'json_object' }
     }
 
-    const response = await fetch(`${this.baseUrl}/chat/completions`, { method: 'POST', headers: this.headers(), body: JSON.stringify(body) })
+    const response = await this.fetchImpl(`${this.baseUrl}/chat/completions`, { method: 'POST', headers: this.headers(), body: JSON.stringify(body) })
     if (!response.ok) {
       throw new FlowExecutionError({ nodeId: 'openai-compatible-client', message: await this.errorMessage(response), cause: { status: response.status } })
     }

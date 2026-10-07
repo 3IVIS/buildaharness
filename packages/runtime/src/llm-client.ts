@@ -118,10 +118,13 @@ export interface ILLMClient {
 export class LLMClient implements ILLMClient {
   private proxyUrl: string
   private authToken: string
+  private fetchImpl: typeof fetch
 
-  constructor({ proxyUrl, authToken }: { proxyUrl: string; authToken: string }) {
+  /** `fetchImpl`: injectable fetch (the Tauri webview's CSP blocks the global one to remote hosts; the desktop app passes @tauri-apps/plugin-http's). Defaults to the global fetch. */
+  constructor({ proxyUrl, authToken, fetchImpl }: { proxyUrl: string; authToken: string; fetchImpl?: typeof fetch }) {
     this.proxyUrl = proxyUrl
     this.authToken = authToken
+    this.fetchImpl = fetchImpl ?? ((...args: Parameters<typeof fetch>) => fetch(...args))
   }
 
   async *callChat(messages: ChatMessage[], options: ChatOptions = {}): AsyncIterable<string> {
@@ -129,7 +132,7 @@ export class LLMClient implements ILLMClient {
     // Anthropic's API takes `system` top-level and rejects role:'system'/'tool' messages, so
     // reshape for claude-* models (the proxy forwards the body verbatim); OpenAI keeps the raw shape.
     const shaped = model.startsWith('claude-') ? buildAnthropicMessages(messages) : undefined
-    const response = await fetch(`${this.proxyUrl}/llm/chat`, {
+    const response = await this.fetchImpl(`${this.proxyUrl}/llm/chat`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
@@ -236,7 +239,7 @@ export class LLMClient implements ILLMClient {
     if (tools && tools.length > 0) {
       body.tools = tools.map(t => ({ name: t.name, description: t.description, input_schema: t.input_schema }))
     }
-    const response = await fetch(`${this.proxyUrl}/llm/chat`, {
+    const response = await this.fetchImpl(`${this.proxyUrl}/llm/chat`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${this.authToken}` },
       body: JSON.stringify(body),
