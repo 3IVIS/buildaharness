@@ -382,7 +382,9 @@ function doRequestToolGate(port, payload, options) {
 // ── Trust boundary for fetched content — mirrors trust-tagging.ts ──────────
 
 export function wrapUntrusted(text) {
-  return `<untrusted_external_content>\n${text}\n</untrusted_external_content>`
+  // Same defanging as trust-tagging.ts: content cannot close (or re-open) the boundary itself.
+  const safe = text.replace(/<(\s*\/?\s*untrusted_external_content)/gi, '&lt;$1')
+  return `<untrusted_external_content>\n${safe}\n</untrusted_external_content>`
 }
 
 // Reads the same canonical JSON trust-tagging.ts's own INJECTION_PATTERNS compiles from
