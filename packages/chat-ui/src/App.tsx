@@ -1,4 +1,5 @@
 import { Fragment, useEffect, useMemo, useRef, useState } from 'react'
+import { downloadBlob } from './download-blob'
 import { isTauri, invoke } from '@tauri-apps/api/core'
 import {
   PersonalAssistant,
@@ -658,13 +659,7 @@ export function App(): React.JSX.Element {
     if (!assistant) return
     const transcript = await assistant.getTranscript(sessionIdRef.current)
     if (transcript.length === 0) return
-    const blob = new Blob([formatTranscriptMarkdown(transcript)], { type: 'text/markdown' })
-    const url = URL.createObjectURL(blob)
-    const a = document.createElement('a')
-    a.href = url
-    a.download = defaultExportFilename()
-    a.click()
-    URL.revokeObjectURL(url)
+    downloadBlob(new Blob([formatTranscriptMarkdown(transcript)], { type: 'text/markdown' }), defaultExportFilename())
   }
 
   /**

@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from 'react'
+import { downloadBlob } from '../download-blob'
 import type { PlanSnapshot } from '@buildaharness/aielia'
 import { buildStaticHtml, loadStaticTemplate, loadViewerHtml, planExportFilename } from '../plan-viz/plan-viz-assets'
 
@@ -59,12 +60,7 @@ export function PlanVizPanel({ snapshot, fullscreen, onToggleFullscreen, onClose
       timestamp: new Date().toISOString().slice(0, 16).replace('T', ' ') + ' UTC',
       tokens: snapshot.tokens,
     })
-    const url = URL.createObjectURL(new Blob([html], { type: 'text/html' }))
-    const a = document.createElement('a')
-    a.href = url
-    a.download = planExportFilename()
-    a.click()
-    URL.revokeObjectURL(url)
+    downloadBlob(new Blob([html], { type: 'text/html' }), planExportFilename())
   }
 
   return (

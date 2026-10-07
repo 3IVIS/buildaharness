@@ -352,7 +352,7 @@ describe('App', () => {
 
     await waitFor(() => expect(clickSpy).toHaveBeenCalledTimes(1))
     expect(URL.createObjectURL).toHaveBeenCalledTimes(1)
-    expect(URL.revokeObjectURL).toHaveBeenCalledWith('blob:mock-url')
+    await waitFor(() => expect(URL.revokeObjectURL).toHaveBeenCalledWith('blob:mock-url'), { timeout: 3000 })
   })
 
   it('"Export" is disabled with no conversation yet', async () => {

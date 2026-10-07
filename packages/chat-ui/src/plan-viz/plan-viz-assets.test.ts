@@ -32,6 +32,16 @@ describe('plan-viz assets', () => {
     expect(html).toContain('SMTP rejected')
   })
 
+  it('static export cannot be broken out of by markup in node data', async () => {
+    const { snapshot } = appendixCPlan()
+    const first = Object.keys(snapshot.nodes)[0]
+    snapshot.nodes[first].metadata = { ...snapshot.nodes[first].metadata, description: '</script><!--<script>alert(1)</script>' }
+    const html = buildStaticHtml('"SNAPSHOT_DATA_PLACEHOLDER" "EXPORT_META_PLACEHOLDER"', snapshot, { goal: '</script>', timestamp: 't', tokens: snapshot.tokens })
+    expect(html).not.toContain('</script')
+    expect(html).not.toContain('<!--')
+    expect(html).toContain('\\u003c/script>')
+  })
+
   it('export filenames contain no colon', () => {
     expect(planExportFilename(new Date('2026-10-05T12:34:56.789Z'))).toBe('aielia-plan-2026-10-05T12-34-56.html')
   })
