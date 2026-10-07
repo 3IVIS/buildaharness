@@ -217,12 +217,16 @@ invisible one.
 
 | Path | Contents |
 |---|---|
-| `src/state/` | The 13 state structures (`WorldModel`, `TaskGraph`, `ControlState`, `Diagnostics`, `EvidenceStore`, `HypothesisSet`, `MemoryState`, `StrategyState`, `FailureDiagnostics`, `OutputContract`, `CallerState`, `ExperienceStore`) |
+| `src/state/` | The 13 state structures (`WorldModel`, `TaskGraph`, `ControlState`, `Diagnostics`, `EvidenceStore`, `HypothesisSet`, `MemoryState`, `StrategyState`, `FailureDiagnostics`, `OutputContract`, `CallerState`, `ExperienceStore`, `Budget`) |
 | `src/nodes/` | One file per harness node (`gather-evidence.ts`, `resolve-control-state.ts`, `execute.ts`, `verify.ts`, `reviewer-pass.ts`, etc.) |
 | `src/harness-runtime.ts` | `HarnessRuntime` — the resumable main loop |
 | `src/harness-checkpoint.ts` | `HarnessCheckpoint`/`CheckpointStore` types + save/load/delete helpers |
 | `src/harness-run-state.ts` | `HarnessRunState` — serializes/deserializes all 13 structures together |
 | `src/process-concept.ts`, `process-registry.ts` | Reusable task-graph seeding "process concepts" |
+| `src/supervisor.ts`, `trajectory-digest.ts`, `investigation.ts` | Trajectory Supervisor: a stall-edge-only meta-controller, off unless `HARNESS_TRAJECTORY_SUPERVISOR` is truthy |
+| `src/ask-question.ts` | Generic ask-question mechanism (raises `EscalationHalt` with the questions as the blocker) |
+| `src/layer-policy*.ts`, `layer-budget.ts`, `layer-outcome.ts` | Per-layer policy, budget and outcome bookkeeping |
+| `src/lexical/` | The lexical-checks-off switch described above (`lexical-off.ts`) |
 
 ## Commands
 
