@@ -168,6 +168,20 @@ describe('audit log and render robustness', () => {
     expect(log.map((e) => e.seq)).toEqual([1, 2, 3])
   })
 
+  it('an erase racing an audit append loses neither the erasure nor the new entry', async () => {
+    const base = new InMemoryAdapter()
+    const slow = Object.create(base) as InMemoryAdapter
+    slow.get = async (k: string) => { const v = await base.get(k); await new Promise((r) => setTimeout(r, 2)); return v }
+    const { service, memory } = makeService(slow)
+    const secret = { text: 'secret thing', extractedAt: 't1', sourceTurn: 's', source: 'user_asserted', durable: true }
+    await base.set(AUDIT_LOG_KEY, [{ seq: 1, at: 'x', op: 'add', factId: 'secret thing|t1', after: secret, store: 'durable', writer: 'w', turn: 't' }])
+    const priv = service as unknown as { appendAudit(d: unknown[]): Promise<void>; eraseFromAuditLog(f: unknown): Promise<void> }
+    await Promise.all([priv.eraseFromAuditLog(secret), priv.appendAudit([{ op: 'add', factId: 'other|t2', store: 'durable', writer: 'w', turn: 't' }])])
+    const log = (await memory.get(AUDIT_LOG_KEY)) as AuditEntry[]
+    expect(log).toHaveLength(2)
+    expect(JSON.stringify(log)).not.toContain('secret thing')
+  })
+
   it('a confirmed retire proposal whose target vanished says nothing was changed', async () => {
     const { service, memory } = makeService()
     const fact = { text: 'x', extractedAt: 't', sourceTurn: 's', source: 'model_inferred', category: 'other', proposedOp: 'retire', retireTargetId: 'gone|t' }

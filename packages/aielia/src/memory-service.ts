@@ -1530,7 +1530,13 @@ export class MemoryService {
   }
 
   /** Strips one fact's pre/post-images from the audit log (entries stay, marked `erased`, and can no longer be undone) and unlinks `supersedes` references to it. */
-  private async eraseFromAuditLog(fact: UserFact): Promise<void> {
+  private eraseFromAuditLog(fact: UserFact): Promise<void> {
+    // Same read-modify-write of the audit log as appendAudit: unserialized, an append landing between this read and
+    // write would put the erased fact's images back.
+    return this.serialized('auditChain', () => this.eraseFromAuditLogNow(fact))
+  }
+
+  private async eraseFromAuditLogNow(fact: UserFact): Promise<void> {
     const unlink = <T extends UserFact>(f: T): T => (f.supersedes === fact.text ? { ...f, supersedes: undefined } : f)
     const log = ((await this.memory.get(AUDIT_LOG_KEY)) as AuditEntry[] | undefined) ?? []
     const touches = (e: AuditEntry): boolean => e.factId === factId(fact) || (e.before !== undefined && sameFact(e.before, fact)) || (e.after !== undefined && sameFact(e.after, fact))
