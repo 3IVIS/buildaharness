@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeAll, afterAll } from 'vitest'
-import { classifyRisk } from './risk-classifier.js'
+import { classifyRisk, classifyRiskLexical } from './risk-classifier.js'
 
 // This file tests the 'risk' lexical family, which is off by default (lexical/lexical-mode.ts), so it
 // switches just that family on.
@@ -94,6 +94,13 @@ describe('classifyRisk', () => {
     const result = classifyRisk('remind me to delete the old invoices')
     expect(result.riskLevel).toBe('MEDIUM')
     expect(result.requiresApproval).toBe(false)
+  })
+
+  it('a high-risk action in its own sentence is not hidden by a reminder in another sentence', () => {
+    const result = classifyRiskLexical('Remind me at 5pm. Also delete all my files')
+    expect(result.riskLevel).toBe('HIGH')
+    expect(result.requiresApproval).toBe(true)
+    expect(classifyRiskLexical('remind me to delete the old invoices. Thanks!').riskLevel).toBe('MEDIUM')
   })
 
   it('does not flag a "remind me" recall question as MEDIUM', () => {
