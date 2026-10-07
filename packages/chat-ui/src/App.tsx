@@ -269,11 +269,13 @@ async function createConfigStore(): Promise<ConfigStore> {
  * degrades to 'proxy' with a console warning rather than throwing an unhandled error the user
  * would just see as "Something went wrong" with no actionable cause.
  *
- * The three direct-API backends (anthropic/openai/openrouter) work identically on both
- * surfaces — `fetch()` to the provider is available in a plain browser tab and inside Tauri's
- * webview alike, so this is the one part of client selection that needs no isDesktop branch.
+ * The three direct-API backends (anthropic/openai/openrouter) and the proxy backend make HTTP
+ * calls through `fetchImpl`. In a plain browser tab that is the global `fetch` (undefined here).
+ * On desktop it is @tauri-apps/plugin-http's fetch (a request made from Rust): the webview's CSP
+ * (`connect-src 'self' ipc:`) blocks the global `fetch` to any remote host, so the desktop app
+ * must not use it.
  */
-function createLlmClient(config: AssistantConfig, { isDesktop, workspaceRoot }: { isDesktop: boolean; workspaceRoot: string }): ILLMClient {
+function createLlmClient(config: AssistantConfig, { isDesktop, workspaceRoot, fetchImpl }: { isDesktop: boolean; workspaceRoot: string; fetchImpl?: typeof fetch }): ILLMClient {
   // Test-only injection seam (the internal plan phase B1) — returns null in any
   // production build, so this is byte-identical to the switch below there.
   const testLlmClient = getAssistantTestHooks()?.makeLlmClient
@@ -282,20 +284,21 @@ function createLlmClient(config: AssistantConfig, { isDesktop, workspaceRoot }: 
     case 'claude-cli':
       if (isDesktop) return new TauriClaudeCliLLMClient({ fileTools: { workspaceRoot }, shellTools: config.enableShell })
       console.warn('llmBackend "claude-cli" isn\'t available in a plain browser tab (no way to run `claude -p`) — falling back to "proxy".')
-      return new LLMClient({ proxyUrl: config.proxyUrl, authToken: config.authToken })
+      return new LLMClient({ proxyUrl: config.proxyUrl, authToken: config.authToken, fetchImpl })
     case 'anthropic':
-      return new AnthropicLLMClient({ apiKey: config.apiKey ?? '' })
+      return new AnthropicLLMClient({ apiKey: config.apiKey ?? '', fetchImpl })
     case 'openai':
-      return new OpenAICompatibleLLMClient({ apiKey: config.apiKey ?? '', baseUrl: OPENAI_BASE_URL, defaultModel: OPENAI_DEFAULT_MODEL })
+      return new OpenAICompatibleLLMClient({ apiKey: config.apiKey ?? '', baseUrl: OPENAI_BASE_URL, defaultModel: OPENAI_DEFAULT_MODEL, fetchImpl })
     case 'openrouter':
       return new OpenAICompatibleLLMClient({
         apiKey: config.apiKey ?? '',
         baseUrl: OPENROUTER_BASE_URL,
         defaultModel: OPENROUTER_DEFAULT_MODEL,
         extraHeaders: OPENROUTER_EXTRA_HEADERS,
+        fetchImpl,
       })
     case 'proxy':
-      return new LLMClient({ proxyUrl: config.proxyUrl, authToken: config.authToken })
+      return new LLMClient({ proxyUrl: config.proxyUrl, authToken: config.authToken, fetchImpl })
   }
 }
 
@@ -338,9 +341,11 @@ async function createTauriBackedAssistant(config: AssistantConfig): Promise<Pers
   const backend = createTauriFsBackend()
   const workspaceRoot = config.workspaceRoot ?? (await invoke<string>('get_dev_workspace_root'))
   const workspaceBackend = createTauriWorkspaceFsBackend(workspaceRoot)
+  // The webview's CSP blocks the global fetch to remote hosts, so LLM calls go through the Rust-side HTTP plugin (scoped by the http:default capability).
+  const { fetch: tauriFetch } = await import('@tauri-apps/plugin-http')
 
   return PersonalAssistant.create({
-    llmClient: createLlmClient(config, { isDesktop: true, workspaceRoot }),
+    llmClient: createLlmClient(config, { isDesktop: true, workspaceRoot, fetchImpl: tauriFetch }),
     model: config.model,
     // M6 — same AssistantConfig seam as the CLI's buildAssistant (it already passed memoryBudgetChars; the browser build did not).
     memoryBudgetChars: config.memoryBudgetChars,

@@ -9,6 +9,8 @@ const DEFAULT_MAX_TOKENS = 4096
 
 export interface AnthropicLLMClientOptions {
   apiKey: string
+  /** Injectable fetch — the Tauri webview's CSP blocks the global fetch to remote hosts, so the desktop app passes @tauri-apps/plugin-http's fetch here. Defaults to the global fetch. */
+  fetchImpl?: typeof fetch
 }
 
 /**
@@ -28,9 +30,11 @@ export interface AnthropicLLMClientOptions {
  */
 export class AnthropicLLMClient implements ILLMClient {
   private readonly apiKey: string
+  private readonly fetchImpl: typeof fetch
 
-  constructor({ apiKey }: AnthropicLLMClientOptions) {
+  constructor({ apiKey, fetchImpl }: AnthropicLLMClientOptions) {
     this.apiKey = apiKey
+    this.fetchImpl = fetchImpl ?? ((...args: Parameters<typeof fetch>) => fetch(...args))
   }
 
   private headers(): Record<string, string> {
@@ -49,7 +53,7 @@ export class AnthropicLLMClient implements ILLMClient {
 
   async *callChat(messages: ChatMessage[], options: ChatOptions = {}): AsyncIterable<string> {
     const { system, messages: anthropicMessages } = buildAnthropicMessages(messages)
-    const response = await fetch(ANTHROPIC_API_URL, {
+    const response = await this.fetchImpl(ANTHROPIC_API_URL, {
       method: 'POST',
       headers: this.headers(),
       body: JSON.stringify({
@@ -131,7 +135,7 @@ export class AnthropicLLMClient implements ILLMClient {
       body.tools = tools.map(t => ({ name: t.name, description: t.description, input_schema: t.input_schema }))
     }
 
-    const response = await fetch(ANTHROPIC_API_URL, { method: 'POST', headers: this.headers(), body: JSON.stringify(body) })
+    const response = await this.fetchImpl(ANTHROPIC_API_URL, { method: 'POST', headers: this.headers(), body: JSON.stringify(body) })
     if (!response.ok) {
       throw new FlowExecutionError({ nodeId: 'anthropic-client', message: await this.errorMessage(response), cause: { status: response.status } })
     }
