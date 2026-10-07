@@ -76,6 +76,8 @@ const RATE_LIMIT_ENV_VARS = [
   'WEB_GRANT_REQUESTS_PER_HOUR',
   'WEB_GUARD_REJECT_ALERT_THRESHOLD',
   'BRAVE_API_KEY',
+  'TRUST_PROXY_HEADERS',
+  'AUTH_FAILS_PER_HOUR',
 ]
 
 beforeEach(() => {
@@ -409,10 +411,18 @@ describe('/web/* quotas + observability (W4)', () => {
     expect(json).toMatchObject({ error: 'destination host rate limit exceeded' })
   })
 
+  it('/web/grant refuses to sign a structurally unfetchable URL (IP literal, credentials, odd port)', async () => {
+    const token = await getAuthToken()
+    for (const url of ['http://127.0.0.1/', 'http://user:pw@public.example/', 'https://public.example:8443/', 'http://localhost/']) {
+      expect((await grant(url, token)).status).toBe(400)
+    }
+  })
+
   it('applies a stricter per-IP ceiling in front of the per-sub one', async () => {
     process.env.WEB_PER_IP_REQUESTS_PER_HOUR = '1'
     const token = await getAuthToken()
     const url = 'http://user-pasted.example/'
+    process.env.TRUST_PROXY_HEADERS = '1'
     const ipHeaders = { 'x-forwarded-for': '203.0.113.5' }
     const first = await grant(url, token, ipHeaders)
     expect(first.status).toBe(200)

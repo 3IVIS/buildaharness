@@ -41,3 +41,14 @@ describe('assertPublicHttpUrl resolved-address ranges', () => {
     await expect(assertPublicHttpUrl('https://example.test/', async () => ['93.184.216.34', '2606:2800:220:1::1'])).resolves.toBeUndefined()
   })
 })
+
+describe('fetchTextSafely body timeout', () => {
+  it('aborts a response whose body stalls after the headers', async () => {
+    const dns = fakeDns({ 'slow.example': ['93.184.216.34'] })
+    const fetchImpl = (async () => {
+      const body = new ReadableStream<Uint8Array>({ start(c) { c.enqueue(new TextEncoder().encode('partial')) } })
+      return new Response(body, { status: 200, headers: { 'content-type': 'text/plain' } })
+    }) as typeof fetch
+    await expect(fetchTextSafely({ url: 'http://slow.example/', dns, fetchImpl, timeoutMs: 50 })).rejects.toThrow(/Timed out/)
+  })
+})

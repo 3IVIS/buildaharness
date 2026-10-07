@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { ConcurrencyTracker, WindowCounter, recordGuardRejection, guardRejectCounter, resetWebRateLimitState } from './rate-limit'
+import { clientIp, ConcurrencyTracker, WindowCounter, recordGuardRejection, guardRejectCounter, resetWebRateLimitState } from './rate-limit'
 
 describe('WindowCounter', () => {
   it('allows requests under the limit and denies once the limit is reached', () => {
@@ -75,5 +75,28 @@ describe('recordGuardRejection', () => {
     expect(guardRejectCounter.currentCount('sub:sub-a', 60 * 60 * 1000, 1_000_000)).toBe(5)
     expect(warnSpy).toHaveLength(1)
     expect(JSON.parse(warnSpy[0])).toMatchObject({ alert: 'repeated_guard_rejections', sub: 'sub-a', count: 3 })
+  })
+})
+
+describe('clientIp', () => {
+  const h = (o: Record<string, string>) => ({ get: (n: string) => o[n] ?? null })
+  it('ignores forwarding headers unless trusted, falling back to the peer address', () => {
+    const headers = h({ 'cf-connecting-ip': '9.9.9.9', 'x-forwarded-for': '8.8.8.8', 'x-real-ip': '7.7.7.7' })
+    expect(clientIp(headers)).toBe('unknown')
+    expect(clientIp(headers, { remoteAddress: '10.1.1.1' })).toBe('10.1.1.1')
+  })
+  it('honours cf-connecting-ip only when trustCloudflare', () => {
+    expect(clientIp(h({ 'cf-connecting-ip': '9.9.9.9' }), { trustCloudflare: true })).toBe('9.9.9.9')
+  })
+  it('uses the last x-forwarded-for entry (the trusted proxy\'s) when trustForwarded', () => {
+    expect(clientIp(h({ 'x-forwarded-for': 'spoofed, 5.5.5.5' }), { trustForwarded: true })).toBe('5.5.5.5')
+  })
+})
+
+describe('WindowCounter memory bound', () => {
+  it('does not grow without limit when keys are sprayed', () => {
+    const counter = new WindowCounter()
+    for (let i = 0; i < 60_000; i++) counter.consume(`k${i}`, 1, 5, 3_600_000, 1000)
+    expect((counter as unknown as { windows: Map<string, unknown> }).windows.size).toBeLessThanOrEqual(50_000)
   })
 })

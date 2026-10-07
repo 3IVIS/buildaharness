@@ -1,12 +1,14 @@
 // @vitest-environment node
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 import app from './index'
+import { resetWebRateLimitState } from './rate-limit'
 
 // We test using Hono's built-in app.request() to avoid starting a real HTTP server.
 
 const TEST_SECRET = 'test-proxy-secret-12345'
 
 beforeEach(() => {
+  resetWebRateLimitState()
   process.env.PROXY_SECRET = TEST_SECRET
   process.env.ALLOWED_ORIGIN = 'http://localhost:5173'
   // Clear API keys so /llm/chat returns 500 (api key not configured)
@@ -28,6 +30,42 @@ describe('GET /health', () => {
     expect(res.status).toBe(200)
     const json = await res.json()
     expect(json).toEqual({ status: 'ok' })
+  })
+})
+
+describe('POST /auth/token throttle', () => {
+  const attempt = (secret: unknown, headers: Record<string, string> = {}) =>
+    app.request('/auth/token', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', ...headers },
+      body: JSON.stringify({ secret }),
+    })
+
+  it('429s after repeated failed attempts from one client, even with the right secret', async () => {
+    process.env.AUTH_FAILS_PER_HOUR = '3'
+    try {
+      for (let i = 0; i < 3; i++) expect((await attempt('wrong')).status).toBe(401)
+      expect((await attempt('wrong')).status).toBe(429)
+      expect((await attempt(TEST_SECRET)).status).toBe(429)
+    } finally {
+      delete process.env.AUTH_FAILS_PER_HOUR
+    }
+  })
+
+  it('a spoofed x-forwarded-for does not dodge the throttle unless TRUST_PROXY_HEADERS is set', async () => {
+    process.env.AUTH_FAILS_PER_HOUR = '2'
+    try {
+      expect((await attempt('wrong', { 'x-forwarded-for': '1.1.1.1' })).status).toBe(401)
+      expect((await attempt('wrong', { 'x-forwarded-for': '2.2.2.2' })).status).toBe(401)
+      expect((await attempt('wrong', { 'x-forwarded-for': '3.3.3.3' })).status).toBe(429)
+    } finally {
+      delete process.env.AUTH_FAILS_PER_HOUR
+    }
+  })
+
+  it('rejects a non-string secret', async () => {
+    expect((await attempt(12345)).status).toBe(401)
+    expect((await attempt(null)).status).toBe(401)
   })
 })
 

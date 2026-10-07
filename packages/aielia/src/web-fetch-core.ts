@@ -65,6 +65,7 @@ function isPrivateIPv4(ip: string): boolean {
   if (a === 192 && b === 168) return true // RFC1918
   if (a === 169 && b === 254) return true // link-local, includes the 169.254.169.254 cloud metadata endpoint
   if (a === 100 && b >= 64 && b <= 127) return true // carrier-grade NAT (100.64.0.0/10), also used for some cloud-internal services
+  if (a === 192 && b === 0 && parts[2] === 0) return true // 192.0.0.0/24 IETF protocol assignments
   if (a === 198 && (b === 18 || b === 19)) return true // benchmarking (198.18.0.0/15)
   if (a >= 224) return true // multicast, reserved, broadcast
   if (a === 0) return true // "this network"
@@ -104,6 +105,7 @@ function isPrivateIPv6(ip: string): boolean {
   if (firstFiveZero && (groups[5] === 0xffff || groups[5] === 0)) return isPrivateIPv4(embeddedV4)
   if (groups[0] === 0x64 && groups[1] === 0xff9b && groups.slice(2, 6).every((g) => g === 0)) return isPrivateIPv4(embeddedV4)
   if ((groups[0] & 0xffc0) === 0xfe80) return true // link-local, fe80::/10
+  if ((groups[0] & 0xffc0) === 0xfec0) return true // site-local, fec0::/10 (deprecated)
   if ((groups[0] & 0xfe00) === 0xfc00) return true // unique local, fc00::/7
   if ((groups[0] & 0xff00) === 0xff00) return true // multicast
   return false
@@ -242,7 +244,7 @@ function concatUint8Arrays(chunks: Uint8Array[]): Uint8Array {
   return merged
 }
 
-function readOrAbort(reader: ReadableStreamDefaultReader<Uint8Array>, signal?: AbortSignal): Promise<ReadableStreamReadResult<Uint8Array>> {
+function readOrAbort(reader: ReadableStreamDefaultReader<Uint8Array>, signal?: AbortSignal): Promise<Awaited<ReturnType<ReadableStreamDefaultReader<Uint8Array>["read"]>>> {
   if (!signal) return reader.read()
   return new Promise((resolve, reject) => {
     const onAbort = (): void => reject(new Error('aborted'))

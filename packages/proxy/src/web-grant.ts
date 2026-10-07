@@ -1,6 +1,7 @@
 import type { Context } from 'hono'
 import { signFetchTag } from './web-fetch-tag'
 import { getWebRateLimitConfig, grantCounter, HOUR_MS, logWebRequest } from './rate-limit'
+import { assertPublicHttpUrl, PrivateNetworkTargetError } from './web-fetch-core'
 import { subjectOf } from './web-quota-middleware'
 
 /**
@@ -44,6 +45,17 @@ export async function handleWebGrant(c: Context): Promise<Response> {
   if (!body || typeof body.url !== 'string' || !body.url.trim() || !isHttpUrl(body.url)) {
     logWebRequest({ ts: new Date().toISOString(), sub, route: '/web/grant', status: 400 })
     return c.json({ error: 'missing or invalid url field' }, 400)
+  }
+
+  // Structural pre-check (scheme, credentials, port, localhost/raw-IP literals) so the oracle never
+  // signs a target /web/fetch would refuse anyway. DNS is stubbed: resolution is re-checked, with the
+  // real resolver, on every /web/fetch hop.
+  try {
+    await assertPublicHttpUrl(body.url, async () => ['93.184.216.34'])
+  } catch (err) {
+    if (!(err instanceof PrivateNetworkTargetError)) throw err
+    logWebRequest({ ts: new Date().toISOString(), sub, route: '/web/grant', status: 400, guardRejectReason: err.detail })
+    return c.json({ error: err.detail }, 400)
   }
 
   // createAuthMiddleware() already 500'd if this were missing, so it's guaranteed present here.
