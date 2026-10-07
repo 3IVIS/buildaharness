@@ -173,7 +173,7 @@ These variables are read by the `@buildaharness/proxy` Hono app — either the C
 | `AUTH_FAILS_PER_HOUR` | No | Public | Failed `POST /auth/token` attempts allowed per client IP per hour before the proxy answers 429 with `Retry-After`. Default `10`. |
 | `TRUST_PROXY_HEADERS` | No | Public | Set `1`/`true`/`yes`/`on` only behind a reverse proxy that overwrites `X-Forwarded-For` / `X-Real-IP` (the last `X-Forwarded-For` entry is used). Unset: on Node the TCP peer address is the client IP; on the Cloudflare Worker `CF-Connecting-IP` is trusted. |
 | `ALLOWED_ORIGIN` | Yes | Public | URL of your frontend app (e.g. `https://app.example.com`), used as the CORS origin. Set it explicitly: if it is unset the code falls back to `*`. |
-| `PORT` | No | Public | Port the Node.js server listens on. Defaults to `3001`. Ignored by the Cloudflare Worker. |
+| `PORT` | No | Public | Port the Node.js server listens on. Defaults to `8787`. Ignored by the Cloudflare Worker. |
 | `BRAVE_API_KEY` | No | Secret | Fallback Brave Search API key for a self-hosted shared deployment. Not required for normal use — the browser client sends its own key with every `POST /web/search` request instead (see that route's `braveApiKey` body field). |
 | `WEB_REQUESTS_PER_HOUR` | No | Public | Per-JWT-`sub` requests/hour ceiling shared across all of `/web/*`. Default `120`. |
 | `WEB_BYTES_PER_HOUR` | No | Public | Per-`sub` cumulative response-bytes/hour ceiling for `/web/fetch`, checked before each fetch and charged after it completes. Default `2000000` (~2MB). |

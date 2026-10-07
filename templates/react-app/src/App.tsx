@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef } from 'react'
 import { useHarness } from '@buildaharness/react'
 
-const PROXY_URL = import.meta.env.VITE_PROXY_URL ?? 'http://localhost:3001'
+const PROXY_URL = import.meta.env.VITE_PROXY_URL ?? 'http://localhost:8787'
 const AUTH_TOKEN = import.meta.env.VITE_AUTH_TOKEN ?? ''
 
 export default function App() {
