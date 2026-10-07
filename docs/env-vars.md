@@ -92,7 +92,7 @@ Set these in `.env` to override defaults. All are optional.
 | `OPENAI_BASE_URL` | `http://litellm:4000` | Base URL for LLM calls. Override to `http://host.docker.internal:11434/v1` to bypass LiteLLM and call Ollama directly. |
 | `QDRANT_URL` | `http://qdrant:6333` | Qdrant vector store URL. Used by RAG flows. |
 | `EMBED_BASE_URL` | `http://litellm:4000` | Base URL for embedding API calls. Kept separate from `OPENAI_BASE_URL` so embeddings always route through LiteLLM (and appear in Langfuse) even when LLM calls bypass it. |
-| `EMBED_MODEL` | `nomic-embed-text` | Default embedding model. Must be registered in `adapter/litellm_config.yaml`. |
+| `EMBED_MODEL` | `nomic-embed-text` | Read only by `scripts/ingest_rag_data.py` (adapters take the model from each memory store's `embedding_model`, default `nomic-embed-text`). Must be registered in `adapter/litellm_config.yaml`. |
 | `ADAPTER_LOG_LEVEL` | `INFO` | `DEBUG`, `INFO`, `WARNING` or `ERROR`; anything else falls back to `INFO`. |
 | `ADAPTER_LOG_FORMAT` | `text` | Set `json` for one JSON object per log line. |
 | `ADAPTER_LOG_FILE` | — | Also write logs to this file path. |
