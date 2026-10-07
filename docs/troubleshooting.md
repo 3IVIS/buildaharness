@@ -42,14 +42,14 @@ Followed shortly by Redis authentication errors in the adapter or Langfuse logs.
 
 **Cause**
 
-`REDIS_PASSWORD` is missing from your `.env` file. Docker Compose passes it to `redis-server --requirepass` and to all consumers. Without it, Redis starts without auth enforcement but the consumers (which construct `redis://:@redis:6379/1`) still send an empty password — and depending on Redis version this either works silently or fails.
+`REDIS_PASSWORD` is missing from your `.env` file. Docker Compose passes it to `redis-server --requirepass` and to all consumers. With it blank, the Redis container and the consumers (which construct `redis://:@redis:6379/1`) get an empty password, which breaks authentication.
 
 **Fix**
 
 Add `REDIS_PASSWORD` to your `.env`:
 
 ```bash
-echo "REDIS_PASSWORD=$(openssl rand -base64 24)" >> .env
+echo "REDIS_PASSWORD=$(openssl rand -base64 24 | tr -d '=+/')" >> .env
 ```
 
 Then restart:
@@ -97,7 +97,7 @@ docker compose logs adapter --tail 50
 
 Common causes:
 - Alembic migration failed (Postgres not ready yet, or migration error) — look for `alembic upgrade head` in the logs
-- A required secret is missing or still at its placeholder value — the adapter logs `FATAL: required secrets missing or insecure` and exits immediately
+- `JWT_SECRET` is missing or still at its placeholder value — the adapter logs `FATAL: required secrets missing or insecure` and exits immediately (the other secrets are checked by `scripts/check-env.sh` and by the services that use them)
 - Postgres or Redis not healthy yet — the adapter has `depends_on: condition: service_healthy` but health checks can still race on slow machines; try `docker compose up` again
 
 ---
@@ -150,14 +150,14 @@ docker compose up
 
 ## `mastra-runner` lockfile missing
 
-**Symptom:** Docker build for `mastra-runner` fails with `npm ci` error about missing `package-lock.json`.
+**Symptom:** Docker build for `mastra-runner` fails with `npm ci` error about missing `package-lock.json`. (The lockfile is normally committed; this only happens if it was deleted or not checked out.)
 
 ```bash
 cd mastra-runner && npm install && cd ..
 docker compose build mastra-runner
 ```
 
-This is a one-time step. Commit `mastra-runner/package-lock.json` so teammates don't need to repeat it.
+Commit `mastra-runner/package-lock.json` so teammates don't need to repeat this.
 
 ---
 
@@ -182,7 +182,7 @@ docker compose down --volumes --remove-orphans
 docker compose up
 ```
 
-`--volumes` removes all named volumes. The next `docker compose up` reinitialises everything from scratch.
+`--volumes` removes all named volumes (including `minio_data` and `qdrant_data`; re-run `python scripts/ingest_rag_data.py` afterwards to re-seed RAG). The next `docker compose up` reinitialises everything from scratch.
 
 ---
 
