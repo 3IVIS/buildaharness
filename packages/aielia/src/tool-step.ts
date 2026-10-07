@@ -60,3 +60,19 @@ export function summarizeToolStep(tool: string, input: Record<string, unknown>):
       return `Calling ${tool}`
   }
 }
+
+/**
+ * The same step once its turn has finished: a write or command that was only "proposed" while the model was working is
+ * reported as done ("Wrote …", "Ran: …"), so the transcript never says "Proposing" about something that already happened.
+ * Only call this for a step of a completed turn that was not denied (`deniedReason` unset); every other tool reads the same.
+ */
+export function summarizeSettledToolStep(tool: string, input: Record<string, unknown>): string {
+  switch (tool) {
+    case 'write_file':
+      return `Wrote ${input.path ?? '?'}`
+    case 'run_shell_command':
+      return `Ran: ${input.command ?? '?'}`
+    default:
+      return summarizeToolStep(tool, input)
+  }
+}

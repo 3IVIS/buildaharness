@@ -67,11 +67,18 @@ export const referenceNavigator: Navigator = {
       return { cur: m.taskOrder[(i + (key === 'tab' ? 1 : -1) + n) % n], k: 0 }
     }
     if (key === 'up' || key === 'down') {
-      const origin = st.lastKey === key && st.lastFrom !== undefined ? st.lastFrom : st.cur
-      const cands = byX(m, key === 'up' ? m.deps[origin] : m.dependents[origin])
+      let origin = st.lastKey === key && st.lastFrom !== undefined ? st.lastFrom : st.cur
+      let cands = byX(m, key === 'up' ? m.deps[origin] : m.dependents[origin])
+      // Repeating a vertical key cycles siblings only when there is something to cycle; with a single candidate it moves on from the current node instead of re-selecting it.
+      let repeating = st.lastKey === key
+      if (repeating && cands.length < 2) {
+        origin = st.cur
+        cands = byX(m, key === 'up' ? m.deps[origin] : m.dependents[origin])
+        repeating = false
+      }
       if (!cands.length) return st
       const nearest = [...cands].sort((a, b) => Math.abs(m.x[a] - m.x[origin]) - Math.abs(m.x[b] - m.x[origin]) || (a < b ? -1 : 1))[0]
-      const k = st.lastKey === key ? (st.k + 1) % cands.length : 0
+      const k = repeating ? (st.k + 1) % cands.length : 0
       return { cur: cands[(cands.indexOf(nearest) + k) % cands.length], lastKey: key, lastFrom: origin, k }
     }
     const rank = byX(m, m.ids.filter((id) => m.y[id] === m.y[st.cur]))

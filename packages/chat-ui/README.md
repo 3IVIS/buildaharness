@@ -64,18 +64,18 @@ timeout), and, on the Tauri desktop build only, Workspace (a
 native folder picker, via the Rust `pick_workspace_directory` command in
 `packages/desktop/src-tauri`).
 
-The Provider section's backend picker (`llmBackend`) offers four values —
-`proxy`, `anthropic`, `openai`, `openrouter` (see `App.tsx`'s
+The Provider section's backend picker (`llmBackend`) offers `proxy`, `anthropic`,
+`openai`, `openrouter` and — desktop build only — `claude-cli` (see `App.tsx`'s
 `createLlmClient`). Fields below the
 picker change per backend: Proxy URL + Auth token only for `proxy`; a single
-masked API key field (plus a plaintext-storage warning, same styling as the
-`dangerouslySkipPermissions` callout) for `anthropic`/`openai`/`openrouter`. A free-text Model field is always
+masked API key field (plus a storage note: a plaintext-storage warning in the browser build, a short
+"stored in your OS keychain" line on desktop) for `anthropic`/`openai`/`openrouter`. A free-text Model field is always
 shown, with a backend-specific placeholder (e.g. `gpt-4o-mini` for `openai`) —
 leaving it blank falls through to that backend's own hardcoded default rather
 than writing a value into the form.
 
 `createLlmClient` (`App.tsx`) is shared between the plain-browser and desktop
-build paths, so desktop can use any of the 4 backends, and the three direct-API ones (`anthropic`/`openai`/`openrouter`)
+build paths, so desktop can use any of the 5 backends (`claude-cli` is desktop-only), and the three direct-API ones (`anthropic`/`openai`/`openrouter`)
 behave identically on both surfaces since they're just `fetch()` calls to the
 provider, which works the same inside Tauri's webview as in a browser tab.
 
@@ -129,11 +129,13 @@ browser)"):
 `run_shell_command` command, gated the same way the CLI gates it) — see
 `packages/desktop/README.md`'s Shell section; it remains a no-op in a plain
 browser tab, which has no way to execute anything at all. Secrets
-(`authToken`, `apiKey`, `braveApiKey`) are stored in plaintext (`localStorage`
-or an unencrypted JSON file), same trust boundary as the CLI's `config.json`
-— not an OS keychain. `apiKey` is a real Anthropic/OpenAI/OpenRouter
+(`authToken`, `braveApiKey`) are stored in plaintext (`localStorage`
+or an unencrypted JSON file), same trust boundary as the CLI's `config.json`.
+On the desktop build `apiKey` goes to the OS keychain (a pre-existing plaintext
+key is migrated on first launch); in the browser build it is plaintext too.
+`apiKey` is a real Anthropic/OpenAI/OpenRouter
 provider key rather than a self-hosted proxy token, so that plaintext-storage
-tradeoff is materially bigger here than for `authToken` — the Settings screen
+tradeoff is materially bigger here than for `authToken` in the browser build — the Settings screen
 says so next to the field.
 
 ## Session actions & Diagnostics

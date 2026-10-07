@@ -62,7 +62,7 @@ export interface AssistantTurnResult {
    * passes through this exactly once, regardless of risk (no risk-tiered skip — see
    * PlanApprovalService's doc comment).
    */
-  status: 'ok' | 'needs_approval' | 'escalated' | 'needs_clarification' | 'needs_plan_approval'
+  status: 'ok' | 'needs_approval' | 'escalated' | 'needs_clarification' | 'needs_plan_approval' | 'cancelled'
   reply: string | null
   /**
    * Up to three concrete next steps proposed after a full (non-trivial, `ok`) turn, most confident

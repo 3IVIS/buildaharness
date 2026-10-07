@@ -84,6 +84,12 @@ describe('SettingsScreen', () => {
     expect(screen.getByText('Workspace')).toBeInTheDocument()
   })
 
+  it('shows the 30 s default shell timeout and a truthful approval-mode line', () => {
+    renderSettings({ config: { ...DEFAULT_CONFIG, enableShell: true, shellTimeoutMs: undefined, dangerouslySkipPermissions: false } })
+    expect(screen.getByDisplayValue('30000')).toBeInTheDocument()
+    expect(screen.getByText(/Each command asks for your approval/)).toBeInTheDocument()
+  })
+
   it('shows the plaintext warning (not the keychain one) for apiKey on the browser path', () => {
     renderSettings({ isDesktop: false, config: { ...DEFAULT_CONFIG, llmBackend: 'anthropic' } })
     expect(screen.getByText(/Stored in plain text on this device, not an OS keychain/)).toBeInTheDocument()
@@ -129,10 +135,32 @@ describe('SettingsScreen', () => {
     expect(onSave).toHaveBeenCalledWith({ proxyUrl: 'http://changed:1' })
   })
 
-  it('Save is disabled while a turn is in flight (busy)', () => {
-    renderSettings({ busy: true })
-    expect(screen.getByRole('button', { name: 'Save' })).toBeDisabled()
-    expect(screen.getByRole('button', { name: 'Cancel' })).toBeDisabled()
+  it('stays usable while a turn is in flight: Back/Cancel work and Save is deferred, with a note', async () => {
+    const user = userEvent.setup()
+    const { onSave, onCancel } = renderSettings({ busy: true })
+    expect(screen.getByText(/still replying/i)).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Save after reply' })).toBeEnabled()
+    await user.click(screen.getByRole('button', { name: '← Back' }))
+    await user.click(screen.getByRole('button', { name: 'Cancel' }))
+    expect(onCancel).toHaveBeenCalledTimes(2)
+    expect(onSave).not.toHaveBeenCalled()
+  })
+
+  it('shows the app version in Diagnostics only when the desktop shell provides one', () => {
+    const { unmount } = renderSettings({ appVersion: '0.1.3' })
+    expect(screen.getByText('Aielia 0.1.3')).toBeInTheDocument()
+    unmount()
+    renderSettings()
+    expect(screen.queryByText(/^Aielia \d/)).toBeNull()
+  })
+
+  it('saves a chosen theme', async () => {
+    const user = userEvent.setup()
+    const { onSave } = renderSettings()
+    expect(screen.getByRole('combobox', { name: 'Theme' })).toHaveValue('system')
+    await user.selectOptions(screen.getByRole('combobox', { name: 'Theme' }), 'light')
+    await user.click(screen.getByRole('button', { name: 'Save' }))
+    expect(onSave).toHaveBeenCalledWith({ theme: 'light' })
   })
 
   it('Cancel discards edits without calling onSave', async () => {
@@ -272,7 +300,7 @@ describe('SettingsScreen', () => {
         lastTurnUsage: { inputTokens: 100, outputTokens: 50 },
         sessionUsage: { inputTokens: 100, outputTokens: 50 },
       })
-      expect(screen.getByText(/100 in \/ 50 out tokens/)).toBeInTheDocument()
+      expect(screen.getAllByText(/100 in \/ 50 out tokens/)).toHaveLength(2)
     })
   })
 

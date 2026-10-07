@@ -4,8 +4,6 @@ import {
   ConfigValidationError,
   CONFIG_KEYS,
   formatMemorySummary,
-  formatCostSummary,
-  formatDoctorReport,
   LAYER_SETTINGS,
   isToggleable,
   type AssistantConfig,
@@ -35,6 +33,9 @@ const MODEL_PLACEHOLDER: Record<AssistantConfig['llmBackend'], string> = {
 /** The three backends where the user pastes in their own provider key — see config.ts's AssistantConfig.apiKey doc comment for the trust-boundary tradeoff this implies. */
 const DIRECT_API_BACKENDS: ReadonlySet<AssistantConfig['llmBackend']> = new Set(['anthropic', 'openai', 'openrouter'])
 
+/** Shell command timeout used when `shellTimeoutMs` is unset (matches the plan's documented 30 s default). */
+const DEFAULT_SHELL_TIMEOUT_MS = 30_000
+
 interface Props {
   config: AssistantConfig
   overriddenKeys: ReadonlySet<keyof AssistantConfig>
@@ -52,6 +53,8 @@ interface Props {
   onPickWorkspaceDirectory?: () => Promise<string | null>
   /** GUI equivalents of the CLI's /status (transcript length), /memory, /cost, and /doctor — App.tsx populates these when Settings opens (see loadDiagnostics). null/undefined means "still loading", not "empty". */
   transcriptLength: number
+  /** Desktop app version (from the Tauri shell); absent in a browser tab, where no About line is shown. */
+  appVersion?: string
   memorySummary: MemorySummary | null
   lastTurnUsage?: TokenUsage
   sessionUsage?: TokenUsage
@@ -74,6 +77,63 @@ function FieldRow({ label, pinnedBy, children }: { label: string; pinnedBy?: str
   )
 }
 
+
+function usageTokens(u: TokenUsage): string {
+  return `${u.inputTokens.toLocaleString()} in / ${u.outputTokens.toLocaleString()} out tokens`
+}
+
+function usageCost(u: TokenUsage): string {
+  return u.costUsd !== undefined ? `~$${u.costUsd.toFixed(4)}` : '—'
+}
+
+/** Usage as a small table (tokens + estimated cost per row); the footnote and empty-state wording match formatCostSummary's so Settings and /cost never disagree. */
+function UsageTable({ lastTurn, session, backend }: { lastTurn?: TokenUsage; session: TokenUsage; backend: AssistantConfig['llmBackend'] }): React.JSX.Element {
+  if (!lastTurn && session.inputTokens === 0 && session.outputTokens === 0) {
+    return <div className="settings__diagnostics-block">No usage yet this session.</div>
+  }
+  const rows: Array<[string, TokenUsage]> = []
+  if (lastTurn) rows.push(['Last turn', lastTurn])
+  rows.push(['This session', session])
+  return (
+    <>
+      <table className="settings__usage-table">
+        <thead>
+          <tr><th scope="col">&nbsp;</th><th scope="col">Tokens</th><th scope="col">Cost</th></tr>
+        </thead>
+        <tbody>
+          {rows.map(([label, u]) => (
+            <tr key={label}>
+              <th scope="row">{label}</th>
+              <td>{usageTokens(u)}</td>
+              <td>{usageCost(u)}</td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+      {(backend === 'claude-cli' || session.costUsd !== undefined) && (
+        <div className="settings__hint">
+          {backend === 'claude-cli'
+            ? 'Cost is real usage from your Claude Code session — may read $0 on a Pro/Max subscription.'
+            : 'Cost is an approximate estimate from a static pricing table, not real billing data.'}
+        </div>
+      )}
+    </>
+  )
+}
+
+function HealthList({ checks }: { checks: DoctorCheck[] | null }): React.JSX.Element {
+  if (!checks) return <div className="settings__diagnostics-block">Checking…</div>
+  return (
+    <ul className="settings__health-list">
+      {checks.map((c) => (
+        <li key={c.label} className={c.ok ? 'settings__health--ok' : 'settings__health--fail'}>
+          <span className="settings__health-icon" aria-label={c.ok ? 'OK' : 'Failed'}>{c.ok ? '✓' : '✗'}</span>
+          <span>{c.label}{!c.ok && c.detail ? ` — ${c.detail}` : ''}</span>
+        </li>
+      ))}
+    </ul>
+  )
+}
 export function SettingsScreen({
   config,
   overriddenKeys,
@@ -85,6 +145,7 @@ export function SettingsScreen({
   onCancel,
   onPickWorkspaceDirectory,
   transcriptLength,
+  appVersion,
   memorySummary,
   lastTurnUsage,
   sessionUsage,
@@ -142,12 +203,13 @@ export function SettingsScreen({
     if (path) set('workspaceRoot', path)
   }
 
-  const disabled = saving || busy
+  // A running turn no longer locks the screen: it can be opened, edited and left, and Save is deferred until the turn ends.
+  const disabled = saving
 
   return (
     <div className="settings">
       <div className="settings__header">
-        <button type="button" className="settings__back" onClick={onCancel} disabled={disabled}>← Back</button>
+        <button type="button" className="settings__back" onClick={onCancel}>← Back</button>
         <div className="settings__title">Settings</div>
       </div>
 
@@ -192,9 +254,8 @@ export function SettingsScreen({
                 />
               </FieldRow>
               {isDesktop ? (
-                <p className="settings__warning">
-                  Stored in your OS keychain (Keychain on macOS, Secret Service on Linux, DPAPI-protected on
-                  Windows) — not in the plaintext settings file the other fields on this screen use.
+                <p className="settings__info">
+                  Stored in your OS keychain, not in the plaintext settings file.
                 </p>
               ) : (
                 <p className="settings__warning">
@@ -205,7 +266,7 @@ export function SettingsScreen({
                 </p>
               )}
               {isDesktop && apiKeyMigrationNotice && (
-                <p className="settings__warning">
+                <p className="settings__info">
                   Your previously saved API key has been moved into your OS keychain — it no longer lives in the
                   plaintext settings file.
                 </p>
@@ -274,19 +335,49 @@ export function SettingsScreen({
 
         <section className="settings__section">
           <h2>Shell</h2>
-          <FieldRow label="Enable shell commands (approval-gated)">
+          <FieldRow label="Enable shell commands">
             <input type="checkbox" checked={form.enableShell} disabled={disabled} onChange={(e) => set('enableShell', e.target.checked)} />
           </FieldRow>
+          <p className="settings__info">
+            {form.dangerouslySkipPermissions
+              ? 'Approvals are off (see Advanced) — commands run without asking first.'
+              : 'Each command asks for your approval before it runs.'}
+          </p>
           {form.enableShell && (
-            <FieldRow label="Timeout (ms)">
+            <FieldRow label="Timeout (milliseconds)">
               <input
                 type="number"
-                value={form.shellTimeoutMs ?? ''}
+                min={1}
+                step={1000}
+                value={form.shellTimeoutMs ?? DEFAULT_SHELL_TIMEOUT_MS}
                 disabled={disabled}
-                onChange={(e) => set('shellTimeoutMs', e.target.value ? Number(e.target.value) : undefined)}
+                onChange={(e) => {
+                  const n = Number(e.target.value)
+                  set('shellTimeoutMs', e.target.value && Number.isFinite(n) && n > 0 ? n : undefined)
+                }}
               />
+              <span className="settings__hint-inline">
+                {(form.shellTimeoutMs ?? DEFAULT_SHELL_TIMEOUT_MS) / 1000} s
+                {form.shellTimeoutMs === undefined ? ' (default)' : ''}
+              </span>
             </FieldRow>
           )}
+        </section>
+
+        <section className="settings__section">
+          <h2>Appearance</h2>
+          <FieldRow label="Theme">
+            <select
+              aria-label="Theme"
+              value={form.theme ?? 'system'}
+              disabled={disabled}
+              onChange={(e) => set('theme', e.target.value as NonNullable<AssistantConfig['theme']>)}
+            >
+              <option value="system">System</option>
+              <option value="dark">Dark</option>
+              <option value="light">Light</option>
+            </select>
+          </FieldRow>
         </section>
 
         <section className="settings__section">
@@ -323,7 +414,7 @@ export function SettingsScreen({
         <section className="settings__section">
           <h2>Reasoning layers</h2>
           <p className="settings__hint">
-            Extra checks that run on top of the assistant. Each costs extra model calls when it fires; the audit found limited benefit for
+            Extra checks that run on top of Aielia. Each costs extra model calls when it fires; the audit found limited benefit for
             some. Safety layers (approvals, tool policy, verification) are always on and not listed.
           </p>
           {LAYER_SETTINGS.filter(isToggleable).map((layer) => {
@@ -352,6 +443,7 @@ export function SettingsScreen({
 
         <section className="settings__section">
           <h2>Diagnostics</h2>
+          {appVersion && <p className="settings__info">Aielia {appVersion}</p>}
           <div className="settings__field-label">Session</div>
           <pre className="settings__diagnostics-block">{transcriptLength} message{transcriptLength === 1 ? '' : 's'} this session</pre>
 
@@ -359,26 +451,21 @@ export function SettingsScreen({
           <pre className="settings__diagnostics-block">{memorySummary ? formatMemorySummary(memorySummary) : 'Loading…'}</pre>
 
           <div className="settings__field-label">Usage</div>
-          <pre className="settings__diagnostics-block">
-            {formatCostSummary({
-              lastTurn: lastTurnUsage,
-              session: sessionUsage ?? { inputTokens: 0, outputTokens: 0 },
-              backend: config.llmBackend,
-            })}
-          </pre>
+          <UsageTable lastTurn={lastTurnUsage} session={sessionUsage ?? { inputTokens: 0, outputTokens: 0 }} backend={config.llmBackend} />
 
           <div className="settings__field-label">Health</div>
-          <pre className="settings__diagnostics-block">{healthChecks ? formatDoctorReport(healthChecks) : 'Checking…'}</pre>
+          <HealthList checks={healthChecks} />
         </section>
 
         {error && <div className="settings__error">{error}</div>}
+        {busy && <p className="settings__info">Aielia is still replying. Changes are saved as soon as the reply finishes.</p>}
       </div>
 
       <div className="settings__footer">
         <button type="button" className="settings__save" onClick={() => void handleSave()} disabled={disabled}>
-          {saving ? 'Saving…' : 'Save'}
+          {saving ? 'Saving…' : busy ? 'Save after reply' : 'Save'}
         </button>
-        <button type="button" onClick={onCancel} disabled={disabled}>Cancel</button>
+        <button type="button" className="settings__cancel" onClick={onCancel}>Cancel</button>
       </div>
     </div>
   )

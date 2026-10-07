@@ -10,7 +10,7 @@ import type { ProposerKind } from './assistant-types.js'
  */
 export type TraceEvent =
   | { kind: 'turn_start'; sessionId: string; message: string }
-  | { kind: 'turn_end'; sessionId: string; status: 'ok' | 'needs_approval' | 'escalated' | 'needs_clarification' | 'needs_plan_approval' }
+  | { kind: 'turn_end'; sessionId: string; status: 'ok' | 'needs_approval' | 'escalated' | 'needs_clarification' | 'needs_plan_approval' | 'cancelled' }
   | { kind: 'risk_classified'; riskLevel: RiskLevel; requiresApproval: boolean }
   | { kind: 'triviality_classified'; isTrivial: boolean }
   | { kind: 'plan_classified'; isCandidate: boolean; matchedTemplate: string | null }

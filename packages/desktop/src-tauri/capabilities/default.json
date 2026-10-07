@@ -11,6 +11,7 @@
     "fs:allow-applocaldata-write-recursive",
     "dialog:allow-open",
     "log:default",
+    "window-state:default",
     {
       "identifier": "http:default",
       "allow": [

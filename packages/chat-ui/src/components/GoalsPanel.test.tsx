@@ -55,8 +55,9 @@ describe('GoalsPanel', () => {
       ],
     }
     render(<GoalsPanel state={state} onCancel={vi.fn()} />)
-    expect(screen.getByText('ACTIVE', { selector: '.goals-panel__status' })).toBeInTheDocument()
+    expect(screen.getAllByText('ACTIVE')).toHaveLength(1)
     expect(screen.getByText('ACTIVE', { selector: '.goals-panel__active-badge' })).toBeInTheDocument()
+    expect(screen.queryByText(/2026-01-02T/)).not.toBeInTheDocument()
     expect(screen.getByText('Ship the launch.')).toBeInTheDocument()
     expect(screen.getByText('Carried over')).toBeInTheDocument()
     expect(screen.getByText(/1\/3 complete/)).toBeInTheDocument()
@@ -74,9 +75,10 @@ describe('GoalsPanel', () => {
       ],
     }
     render(<GoalsPanel state={state} onCancel={vi.fn()} />)
-    expect(screen.getByText('Freshly computed')).toBeInTheDocument()
+    expect(screen.queryByText('Freshly computed')).not.toBeInTheDocument()
     expect(screen.getByText('Carried over')).toBeInTheDocument()
-    expect(screen.getByText('Done', { selector: '.goals-panel__visibility' })).toBeInTheDocument()
+    expect(screen.getByText('DONE')).toBeInTheDocument()
+    expect(screen.queryByText('Done')).not.toBeInTheDocument()
     expect(screen.getByText('Suggested, not committed')).toBeInTheDocument()
   })
 

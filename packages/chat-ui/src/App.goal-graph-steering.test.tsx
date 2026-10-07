@@ -83,7 +83,7 @@ describe('App — mid-task steering composer (Phase 3, hierarchical_goal_tree_an
     const user = userEvent.setup()
     render(<App />)
 
-    const input = screen.getByPlaceholderText('Message the assistant…')
+    const input = screen.getByPlaceholderText('Message Aielia…')
     await user.type(input, 'first message')
     await user.click(screen.getByRole('button', { name: 'Send' }))
 
@@ -122,7 +122,7 @@ describe('App — mid-task steering composer (Phase 3, hierarchical_goal_tree_an
     const user = userEvent.setup()
     render(<App />)
 
-    const input = screen.getByPlaceholderText('Message the assistant…')
+    const input = screen.getByPlaceholderText('Message Aielia…')
     await user.type(input, 'first message')
     await user.click(screen.getByRole('button', { name: 'Send' }))
 
@@ -147,13 +147,15 @@ describe('App — mid-task steering composer (Phase 3, hierarchical_goal_tree_an
     const user = userEvent.setup()
     render(<App />)
 
-    const input = screen.getByPlaceholderText('Message the assistant…')
+    const input = screen.getByPlaceholderText('Message Aielia…')
     await user.type(input, 'first message')
     await user.click(screen.getByRole('button', { name: 'Send' }))
 
     await waitFor(() => expect(screen.getByText('first message')).toBeInTheDocument())
     expect(input).toBeDisabled()
-    expect(screen.getByRole('button', { name: 'Send' })).toBeDisabled()
+    // The disabled Send is replaced by Stop while the turn runs (phase 5); nothing can be sent.
+    expect(screen.queryByRole('button', { name: 'Send' })).toBeNull()
+    expect(screen.getByRole('button', { name: 'Stop' })).toBeEnabled()
 
     deferred.release()
     await waitFor(() => expect(screen.getByText('echo: first message')).toBeInTheDocument())

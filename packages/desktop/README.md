@@ -52,7 +52,8 @@ explicitly, so both sides of a turn agree on the same directory.
 
 ## LLM backend
 
-The desktop build supports all 4 `llmBackend` values — `App.tsx`'s
+The desktop build supports all 5 `llmBackend` values (the four below plus `claude-cli`, which
+shells out to the local `claude` CLI and is desktop-only) — `App.tsx`'s
 `createLlmClient()` is shared between the plain-browser and desktop build
 paths, and picks the `ILLMClient` from `config.llmBackend` the same way on
 both, so they behave identically to the browser build:
@@ -117,7 +118,7 @@ In practice:
 
 - **macOS**: Gatekeeper blocks the app as "damaged" or "from an unidentified
   developer." Right-click → Open, or `xattr -d com.apple.quarantine
-  /Applications/buildaharness-assistant.app` once downloaded.
+  /Applications/Aielia.app` once downloaded.
 - **Windows**: SmartScreen warns on first run. "More info" → "Run anyway."
 - **Linux**: no warning — nothing to bypass.
 
