@@ -5,7 +5,7 @@ import { fileURLToPath } from 'node:url'
 import { InMemoryAdapter, InMemoryReminderStore } from '@buildaharness/runtime'
 import { InMemoryExperienceStore } from '@buildaharness/harness'
 import {
-  MemoryService, admitCandidate, excludeInjectedBlock,
+  MemoryService, admitCandidate, renderFactsBlock, excludeInjectedBlock,
   DURABLE_FACTS_KEY, PENDING_CONFIRMATION_KEY, AUDIT_LOG_KEY, REJECTED_FACTS_KEY, type AuditEntry, type PendingFact,
 } from './memory-service.js'
 import { tierForFact, type UserFact } from './fact-extraction.js'
@@ -149,5 +149,35 @@ describe('M2 write gate', () => {
     const { service, memory } = makeService()
     await service.recordFacts('s', 'hi', [judged('the user likes tea')])
     expect(await memory.get(AUDIT_LOG_KEY)).toBeUndefined()
+  })
+})
+
+describe('audit log and render robustness', () => {
+  beforeEach(() => { process.env.AUDIT_MEMORY_AUDIT_LOG = '1' })
+  afterEach(() => { delete process.env.AUDIT_MEMORY_AUDIT_LOG })
+
+  it('concurrent audit appends keep every entry with distinct sequence numbers', async () => {
+    const base = new InMemoryAdapter()
+    const slow = Object.create(base) as InMemoryAdapter
+    slow.get = async (k: string) => { const v = await base.get(k); await new Promise((r) => setTimeout(r, 2)); return v }
+    const { service, memory } = makeService(slow)
+    const append = (service as unknown as { appendAudit(d: unknown[]): Promise<void> }).appendAudit.bind(service)
+    const draft = (n: number) => ({ op: 'add', factId: `f${n}`, store: 'durable', writer: 'w', turn: 't' })
+    await Promise.all([append([draft(1)]), append([draft(2)]), append([draft(3)])])
+    const log = (await memory.get(AUDIT_LOG_KEY)) as AuditEntry[]
+    expect(log.map((e) => e.seq)).toEqual([1, 2, 3])
+  })
+
+  it('a confirmed retire proposal whose target vanished says nothing was changed', async () => {
+    const { service, memory } = makeService()
+    const fact = { text: 'x', extractedAt: 't', sourceTurn: 's', source: 'model_inferred', category: 'other', proposedOp: 'retire', retireTargetId: 'gone|t' }
+    await memory.set(PENDING_CONFIRMATION_KEY, [fact])
+    const out = await service.confirmPendingFact(0)
+    expect(out?.conflictNotice).toMatch(/nothing was changed/)
+  })
+
+  it('a hand-edited fact without extractedAt does not crash the render', () => {
+    const facts = [{ text: 'a', durable: true, source: 'user_asserted' }, { text: 'b', durable: true, source: 'user_asserted', extractedAt: 'z' }] as unknown as UserFact[]
+    expect(renderFactsBlock(facts, 1000).shown).toHaveLength(2)
   })
 })

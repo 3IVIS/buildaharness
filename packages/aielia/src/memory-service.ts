@@ -319,7 +319,7 @@ export function renderFactsBlock(inScope: UserFact[], budgetChars: number): Rend
     .map((f, i) => ({ f, i, p: f.durable ? (TIER_PRIORITY[tierForFact(f)] ?? 1) : 2 }))
     .sort((a, b) =>
       a.p - b.p
-      || b.f.extractedAt.localeCompare(a.f.extractedAt)
+      || (b.f.extractedAt ?? '').localeCompare(a.f.extractedAt ?? '')
       || (b.f.lastInjectedAt ?? '').localeCompare(a.f.lastInjectedAt ?? '')
       || b.i - a.i)
   const header = '\nKnown facts about the user:\n'
@@ -672,8 +672,23 @@ export class MemoryService {
     await this.appendAudit(drafts)
   }
 
-  private async appendAudit(drafts: AuditDraft[]): Promise<void> {
-    if (drafts.length === 0 || !memoryAuditLogEnabled()) return
+  /** Tail of the in-process chain serialising the audit log's read-modify-write (concurrent appends lost entries and reused seq numbers). */
+  private auditChain: Promise<unknown> = Promise.resolve()
+  /** Same for the usage flush's read-modify-write of the fact stores. */
+  private flushChain: Promise<unknown> = Promise.resolve()
+
+  private serialized<T>(chain: 'auditChain' | 'flushChain', task: () => Promise<T>): Promise<T> {
+    const run = this[chain].then(task, task)
+    this[chain] = run.catch(() => undefined)
+    return run
+  }
+
+  private appendAudit(drafts: AuditDraft[]): Promise<void> {
+    if (drafts.length === 0 || !memoryAuditLogEnabled()) return Promise.resolve()
+    return this.serialized('auditChain', () => this.appendAuditNow(drafts))
+  }
+
+  private async appendAuditNow(drafts: AuditDraft[]): Promise<void> {
     const log = ((await this.memory.get(AUDIT_LOG_KEY)) as AuditEntry[] | undefined) ?? []
     let seq = log.length > 0 ? log[log.length - 1].seq : 0
     const at = this.clock()
@@ -1298,7 +1313,12 @@ export class MemoryService {
   }
 
   /** Writes the batched `injectedCount`/`lastInjectedAt` updates collected by budgeted renders, to whichever store(s) hold each fact. A no-op (no writes) when nothing was rendered. */
-  private async flushInjectionUsage(sessionId: string): Promise<void> {
+  private flushInjectionUsage(sessionId: string): Promise<void> {
+    if (this.pendingInjections.size === 0) return Promise.resolve()
+    return this.serialized('flushChain', () => this.flushInjectionUsageNow(sessionId))
+  }
+
+  private async flushInjectionUsageNow(sessionId: string): Promise<void> {
     if (this.pendingInjections.size === 0) return
     const pending = this.pendingInjections
     this.pendingInjections = new Map()
@@ -1405,7 +1425,9 @@ export class MemoryService {
         await this.memory.set(RETIRED_FACTS_KEY, [...retired, { ...target, retiredAt: this.clock() }])
         await this.commitDurable(durableFacts.filter((f) => f !== target), [{ op: 'retire', factId: factId(target), before: target, index: durableFacts.indexOf(target), store: 'durable', writer: 'confirm:reviewer-retire', turn: 'memory' }])
       }
-      return { fact: { ...unflagged, source: 'externally_verified', confidence: undefined }, conflictNotice: contradictions[0]?.description }
+      // The target is gone (already retired or removed since the proposal was staged): nothing happened, so say so rather than report a clean confirm.
+      const vanished = target ? undefined : 'The fact this proposal would have retired no longer exists, so nothing was changed.'
+      return { fact: { ...unflagged, source: 'externally_verified', confidence: undefined }, conflictNotice: vanished ?? contradictions[0]?.description }
     }
     const confirmed: UserFact = { ...unflagged, source: 'externally_verified', confidence: undefined }
     // M4: a confirmed keyed upsert replaces the live entry with the same key (M1 supersession), keeping the old one in the retired store.
