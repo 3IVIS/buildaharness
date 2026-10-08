@@ -727,7 +727,7 @@ describe('classifyTurnIntent — changing attributes under AUDIT_MEMORY_BUDGETED
   })
 })
 
-describe('a stalled classification is asked again once before the turn falls back to UNKNOWN risk (T1)', () => {
+describe('a failed classification falls back to UNKNOWN risk; asking a stalled call again is the side-call policy\'s job (T1)', () => {
   const GOOD = response()
   class SequencedLLM implements ILLMClient {
     calls = 0
@@ -740,23 +740,16 @@ describe('a stalled classification is asked again once before the turn falls bac
       return { content: step }
     }
   }
-  const timeout = () => new FlowExecutionError({ nodeId: 'openai-compatible-client', message: 'LLM request timed out after 120s waiting for the model to respond', cause: { timeout: true } })
+  const timeout = () => new FlowExecutionError({ nodeId: 'openai-compatible-client', message: 'LLM request timed out after 45s waiting for the model to respond', cause: { timeout: true } })
 
-  it('retries once after a timeout and uses the second answer', async () => {
+  it('makes exactly one call (no second retry on top of the side-call policy) and falls back to UNKNOWN after a timeout', async () => {
     const llm = new SequencedLLM([timeout(), GOOD])
     const result = await classifyTurnIntent('what does it say?', llm, NO_PLAN)
-    expect(llm.calls).toBe(2)
-    expect(result.riskLevel).toBe('LOW')
-  })
-
-  it('falls back to UNKNOWN when the retry times out as well, after exactly two attempts', async () => {
-    const llm = new SequencedLLM([timeout(), timeout(), GOOD])
-    const result = await classifyTurnIntent('what does it say?', llm, NO_PLAN)
-    expect(llm.calls).toBe(2)
+    expect(llm.calls).toBe(1)
     expect(result.riskLevel).toBe('UNKNOWN')
   })
 
-  it('does not retry any other failure', async () => {
+  it('falls back to UNKNOWN on any other failure too', async () => {
     const llm = new SequencedLLM([new Error('proxy unreachable'), GOOD])
     const result = await classifyTurnIntent('what does it say?', llm, NO_PLAN)
     expect(llm.calls).toBe(1)

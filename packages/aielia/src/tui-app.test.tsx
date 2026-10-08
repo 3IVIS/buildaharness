@@ -273,6 +273,31 @@ describe('TuiApp', () => {
     expect(strip(idleFrame)).not.toMatch(/Working…|Thinking…/)
   })
 
+  it('brings the liveness line back under a streamed reply once the stream has gone quiet (the audit, retry and next-step calls still run), and removes it when the turn ends', async () => {
+    vi.useFakeTimers({ toFake: ['Date'] })
+    try {
+      vi.setSystemTime(10_000)
+      const { eventLog, instance } = setup()
+      await type(instance, 'hi')
+      await key(instance, ENTER)
+      eventLog.handleEvent({ type: 'token', text: '\nAielia> The answer is 4.' })
+      await sleep(120)
+      // Just streamed: no line yet.
+      expect(strip(instance.lastFrame())).not.toMatch(/Thinking…|Working…/)
+      // 40 s of silence later the reply is still on screen and the line says the turn is still working.
+      vi.setSystemTime(50_000)
+      await sleep(200)
+      const frame = strip(instance.lastFrame())
+      expect(frame).toContain('The answer is 4.')
+      expect(frame).toContain('Working… 40s')
+      eventLog.endTurn()
+      await sleep()
+      expect(strip(instance.lastFrame())).not.toContain('Working…')
+    } finally {
+      vi.useRealTimers()
+    }
+  })
+
   it('hides the liveness line while a reply is streaming and while an approval prompt waits for the user', async () => {
     const { eventLog, prompt, instance } = setup()
     await type(instance, 'hi')

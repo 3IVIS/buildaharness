@@ -1,4 +1,5 @@
 import { auditReply, replyAuditNotice, replyAuditEnabled, auditRetryNudge } from './reply-audit.js'
+import { withSideCallPolicy } from './side-call-policy.js'
 import { containsActionRecord, stripActionRecord, FORGED_ACTION_RECORD_NOTE } from './action-record.js'
 import { deriveConsequentialTools } from '@buildaharness/harness'
 import { TOOL_EFFECT_CLASS } from './tool-effect-class.js'
@@ -449,6 +450,8 @@ export class PersonalAssistant {
   private replyLoggedEarly = false
   /** Automatic correction retries still allowed for the current user message; resumed (approval) turns share it so a retry cannot chain. */
   private auditRetryBudget = 1
+  /** The session of the turn in progress, for log lines written by code that has no session of its own (the side-call retry note). */
+  private lastSessionId = 'default'
   /** Files, directories and pages each session's turns have read (tool and target, oldest first, capped): the reply audit needs reads from EARLIER turns too, or a correct answer about a file read last turn looks like an unverified outside fact (V1). In memory only; cleared with the session. */
   private readonly sourcesReadBySession = new Map<string, string[]>()
   /** Index into the action list where the current user message's actions start; an approval resume is a separate turn() call but the same user message. */
@@ -464,7 +467,11 @@ export class PersonalAssistant {
   private readonly askClarification: AskClarificationService
 
   constructor(options: PersonalAssistantOptions) {
-    this.llmClient = gateLlmClient(options.llmClient, this.abortGate)
+    // Inside the abort gate: a stopped turn must not wait out a retry. The note is what makes a slow endpoint visible in the activity log.
+    this.llmClient = gateLlmClient(
+      withSideCallPolicy(options.llmClient, ({ timeoutMs }) => this.onDebugLog?.({ kind: 'note', sessionId: this.lastSessionId, content: `a model side call timed out after ${Math.round(timeoutMs / 1000)}s; asking again` })),
+      this.abortGate,
+    )
     this.model = options.model
     this.activeProject = options.activeProject
     this.memoryBudgetChars = options.memoryBudgetChars
@@ -638,6 +645,7 @@ export class PersonalAssistant {
    */
   async turn(userMessage: string, options: TurnOptions = {}): Promise<AssistantTurnResult> {
     const sessionId = options.sessionId ?? 'default'
+    this.lastSessionId = sessionId
     // Reset per turn — runTurn flips it to 'flat-oneloop'/'batch-oneloop' only on the flag-ON
     // paths that actually defer the tool loop into a harness-driven proposer.
     this.lastProposerKind = 'posthoc'
@@ -1461,7 +1469,10 @@ export class PersonalAssistant {
     // Phase 4 — see TurnOptions.steeringChannel's doc comment. Built fresh each turn (cheap: no
     // LLM/IO cost until channel.poll() actually classifies a drained message) rather than reused
     // across turns, since goal-graph state itself is loaded fresh from `memory` on each poll().
-    const steeringAdapter = options.steeringChannel
+    // Not for the audit retry: it is the correction of a reply that is already delivered, and a message the user queued while the
+    // flagged turn ran must stay queued for the caller's post-turn drain. Reconciled here it was classified as a new goal and
+    // deferred, and only started after the retry's own audit and next-step calls (benchmark scenario 05 turn 6: minutes later).
+    const steeringAdapter = options.steeringChannel && !options.auditRetry
       ? createSteeringReconcileChannel({
           steeringChannel: options.steeringChannel,
           sessionId,
@@ -1630,7 +1641,9 @@ export class PersonalAssistant {
     // resolved. (`approved` alone is not a resume marker: front ends pass `approved: false` on every
     // ordinary turn, and a message-level approval re-runs a message that never got a thread.)
     // Trivial one-liners returned just above, so they never create a thread or make this call.
-    const isContinuation = options.pendingActionId !== undefined || options.pendingClarificationId !== undefined || options.planApprovalId !== undefined
+    // The automatic audit nudge is not something the user asked: it continues the flagged turn's thread (it used to mint a goal thread
+    // named "[automatic reply check] ...").
+    const isContinuation = options.pendingActionId !== undefined || options.pendingClarificationId !== undefined || options.planApprovalId !== undefined || options.auditRetry === true
     if (options.steeringChannel && this.memory && !isContinuation) {
       goalThreadId = (await resolveTurnGoalThread({
         userMessage,

@@ -2,7 +2,7 @@ import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 import type { ChatMessage, ChatOptions, ILLMClient, ToolDefinition, LLMStructuredResponse, FsBackend, TokenUsage, MemoryAdapter } from '@buildaharness/runtime'
 import type { AssistantProgress } from './assistant-types.js'
 import type { TraceEvent } from './trace-events.js'
-import { InMemoryAdapter, InMemoryReminderStore } from '@buildaharness/runtime'
+import { InMemoryAdapter, InMemoryReminderStore, FlowExecutionError } from '@buildaharness/runtime'
 import { createPlanRecord, savePlan } from './plan-store.js'
 import { HarnessRuntime, saveHarnessCheckpoint, loadHarnessCheckpoint, InMemoryExperienceStore, type Task } from '@buildaharness/harness'
 import { LiveSteeringChannel } from './live-steering-channel.js'
@@ -605,6 +605,36 @@ describe('PersonalAssistant', () => {
       expect(users.filter((c) => c === 'change the file')).toHaveLength(1)
     })
 
+    it('leaves a message the user queued during the audit retry for the post-turn drain and mints no goal thread for the nudge (benchmark scenario 05, turn 6)', async () => {
+      let audits = 0
+      const channel = new LiveSteeringChannel()
+      const replies = ['Done, I changed the file.', 'I did not change anything; no write was made.']
+      class RetryLLM extends FakeLLMClient {
+        async callChatStructured(messages: ChatMessage[], tools?: ToolDefinition[], options?: ChatOptions): Promise<LLMStructuredResponse> {
+          if (String(messages[0]?.content).includes('You audit one reply')) {
+            audits++
+            return { content: audits <= 2 ? '{"claimsUnrecordedWork": true, "promisesWorkNotDone": false, "unverifiedOutsideFacts": false}' : '{"claimsUnrecordedWork": false, "promisesWorkNotDone": false, "unverifiedOutsideFacts": false}' }
+          }
+          return super.callChatStructured(messages, tools, options)
+        }
+        async callChatSync(): Promise<string> { return replies.shift() ?? '' }
+        async *callChat(): AsyncIterable<string> {
+          const reply = replies.shift() ?? ''
+          // The user types the next question while the correction retry is running (the original reply is already delivered).
+          if (reply.startsWith('I did not')) channel.enqueue('anything you would flag as a risk?')
+          yield reply
+        }
+      }
+      const assistant = new PersonalAssistant({ llmClient: new RetryLLM(), replyAudit: true })
+      const result = await assistant.turn('change the file', { sessionId: 'audit-retry-steer', steeringChannel: channel })
+      expect(result.reply).toContain('did not change anything')
+      // Still queued, untouched: the caller's drain runs it as an ordinary turn instead of the retry swallowing it.
+      expect(channel.pendingCount).toBe(1)
+      expect(channel.poll().map((e) => e.message)).toEqual(['anything you would flag as a risk?'])
+      const state = await assistant.getGoalGraphState('audit-retry-steer')
+      expect(state.threads.map((t) => t.successCriteria)).toEqual(['change the file'])
+    })
+
     it('logs why a turn is asking for approval when the risk classification failed or timed out (T1)', async () => {
       class BrokenClassifier extends FakeLLMClient {
         async callChatStructured(messages: ChatMessage[], tools?: ToolDefinition[], options?: ChatOptions): Promise<LLMStructuredResponse> {
@@ -618,6 +648,25 @@ describe('PersonalAssistant', () => {
       expect(result.status).toBe('needs_approval')
       const note = logs.find((e) => e.kind === 'note' && e.content.includes('risk classification'))
       expect(note?.content).toMatch(/failed or timed out/)
+    })
+
+    it('asks a risk classification that timed out once more, so a one-off stall neither delays the turn for minutes nor forces an approval, and logs the retry (T1)', async () => {
+      let classifications = 0
+      class StallOnceClassifier extends FakeLLMClient {
+        async callChatStructured(messages: ChatMessage[], tools?: ToolDefinition[], options?: ChatOptions): Promise<LLMStructuredResponse> {
+          if (isTurnIntentRequest(messages) && ++classifications === 1) {
+            throw new FlowExecutionError({ nodeId: 'openai-compatible-client', message: 'LLM request timed out after 45s waiting for the model to respond', cause: { timeout: true } })
+          }
+          return super.callChatStructured(messages, tools, options)
+        }
+      }
+      const logs: { kind: string; content: string }[] = []
+      const assistant = new PersonalAssistant({ llmClient: new StallOnceClassifier(), onDebugLog: (e) => logs.push(e) })
+      const result = await assistant.turn('what time is it in Tokyo?', { sessionId: 'stall-once' })
+      expect(classifications).toBe(2)
+      expect(result.status).toBe('ok')
+      expect(logs.some((e) => e.content.includes('risk classification failed or timed out'))).toBe(false)
+      expect(logs.find((e) => e.kind === 'note' && e.content.includes('side call timed out'))?.content).toBe('a model side call timed out after 45s; asking again')
     })
 
     it('decides whether a reply is an unfinished announcement from the audit alone, never from how the text ends', async () => {

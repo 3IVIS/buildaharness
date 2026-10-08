@@ -53,6 +53,10 @@ describe('audit retry nudge', () => {
     expect(auditRetryNudge({ ...clean, claimsUnrecordedWork: true }, [])).toContain('no write or command was carried out')
     expect(auditRetryNudge({ ...clean, promisesWorkNotDone: true }, ['wrote a.py'])).toContain('announcement of work to come')
     expect(auditRetryNudge({ ...clean, contradictsCommandOutput: true }, [])).toContain('do not match what the command actually printed')
+    // The correction names what was recorded, so it cannot talk the model into disowning real work (scenario 05, turn 5).
+    expect(auditRetryNudge({ ...clean, contradictsCommandOutput: true }, ['wrote README.md'])).toContain('only this was carried out this turn: wrote README.md')
+    expect(auditRetryNudge({ ...clean, contradictsCommandOutput: true }, ['wrote README.md'])).toContain('Do not deny or withdraw work that is in that record')
+    expect(auditRetryNudge({ ...clean, leaksSelfCorrection: true }, ['wrote README.md'])).toContain('wrote README.md')
     expect(auditRetryNudge({ ...clean, unverifiedOutsideFacts: true }, [])).toContain('outside sources')
     expect(auditRetryNudge({ ...clean, contradictsRecordedWork: true }, ['wrote a.py'])).toContain('was in fact done')
     expect(auditRetryNudge({ ...clean, contradictsRecordedWork: true }, ['wrote a.py'])).toContain('wrote a.py')

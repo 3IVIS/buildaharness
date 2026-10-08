@@ -630,15 +630,19 @@ export function formatLivenessLabel(elapsedMs: number, hasProgress: boolean): st
  * one — to a person and to a screen-quiet detector alike, since the spinner frame and the elapsed
  * counter both keep changing. Replaces the former first-output-only "Thinking…" (report finding:
  * "nothing shows... no spinner, no status line, unlike Pi/Codex"); it stays under the progress line
- * rather than hiding when one arrives. Stops the moment the reply starts streaming, a prompt needs
- * the user, or the turn ends (see `EventLogBridge.endTurn`).
+ * rather than hiding when one arrives. Waits while a reply is streaming (it reappears once the stream has been quiet
+ * for a few seconds, for the turn's post-reply work), and stops when a prompt needs the user or the turn ends (see `EventLogBridge.endTurn`).
  */
-function Spinner({ since, hasProgress }: { since: number | undefined; hasProgress: boolean }): React.JSX.Element {
+function Spinner({ since, hasProgress, quietOnly = false }: { since: number | undefined; hasProgress: boolean; quietOnly?: boolean }): React.JSX.Element | null {
   const [frame, setFrame] = useState(0)
   useEffect(() => {
     const id = setInterval(() => setFrame((f) => (f + 1) % SPINNER_FRAMES.length), SPINNER_INTERVAL_MS)
     return () => clearInterval(id)
   }, [])
+  // While reply text is on screen the line stays away until the stream has been silent for a moment: the reply is shown as it
+  // streams, but the turn is not over until its audit, any correction retry and the next-step call have returned, and that
+  // stretch used to look like a finished turn (benchmark scenarios 05, 10: 90+ s of nothing under the last line of the reply).
+  if (quietOnly && since !== undefined && Date.now() - since < LIVENESS_COUNTER_AFTER_S * 1000) return null
   return (
     <Text dimColor>
       {SPINNER_FRAMES[frame]} {formatLivenessLabel(since === undefined ? 0 : Date.now() - since, hasProgress)}
@@ -733,8 +737,8 @@ export function TuiApp(props: TuiAppProps): React.JSX.Element {
   }, [planGraph])
 
   const hasTransient = log.progressText.length > 0 || log.transientText.length > 0
-  // Alive-but-quiet: a turn is in flight, no reply is streaming, and nobody is being asked a question.
-  const showSpinner = (log.turnInFlight || log.waitingForOutput) && log.transientText.length === 0 && !pending
+  // Alive-but-quiet: a turn is in flight and nobody is being asked a question. While a reply is streaming the line waits for a pause (see Spinner).
+  const showSpinner = (log.turnInFlight || log.waitingForOutput) && !pending
 
   const staticItems = graphView.mode === 'chat' ? log.lines : log.lines.slice(0, frozenLines.current)
   // One row short of the viewport on purpose: Ink treats a frame as fullscreen at height >= rows, and leaving fullscreen emits
@@ -766,7 +770,7 @@ export function TuiApp(props: TuiAppProps): React.JSX.Element {
           {log.transientText.length > 0 && <Text>{stripAssistantLabel(log.transientText)}</Text>}
         </Box>
       )}
-      {showSpinner && <Spinner since={log.lastActivityAt} hasProgress={log.progressText.length > 0} />}
+      {showSpinner && <Spinner since={log.lastActivityAt} hasProgress={log.progressText.length > 0} quietOnly={log.transientText.length > 0} />}
       <Text dimColor>{'─'.repeat(Math.max(1, width))}</Text>
       {pending?.options ? (
         <SelectPrompt question={pending.question} options={pending.options} onSubmit={handleSubmitPrompt} armDelayMs={SELECT_ARM_DELAY_MS} />
