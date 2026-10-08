@@ -633,6 +633,30 @@ describe('PersonalAssistant', () => {
       expect(classifications).toEqual(['change the file'])
     })
 
+    it('returns a correction retry that pauses for the user\'s approval (a staged write) as before, instead of dropping it for the flagged reply (benchmark scenario 10 turn 1)', async () => {
+      const backend = makeFakeBackend()
+      const inner = scriptedResponses([
+        { content: 'Done, I wrote a.md.' },
+        { content: '', toolCalls: [{ id: 'toolu_1', name: 'write_file', input: { path: 'a.md', content: 'A' } }] },
+      ])
+      let audits = 0
+      const llm: ILLMClient = {
+        callChat: () => inner.callChat(),
+        callChatSync: (m, o) => inner.callChatSync(m, o),
+        callChatStructured: async (messages, tools, options) => {
+          if (String(messages[0]?.content).includes('You audit one reply')) {
+            audits++
+            return { content: audits <= 2 ? '{"claimsUnrecordedWork": true, "promisesWorkNotDone": false, "unverifiedOutsideFacts": false}' : '{"claimsUnrecordedWork": false, "promisesWorkNotDone": false, "unverifiedOutsideFacts": false}' }
+          }
+          return inner.callChatStructured(messages, tools, options)
+        },
+      }
+      const assistant = new PersonalAssistant({ llmClient: llm, fileTools: { backend, workspaceRoot: '/workspace' }, replyAudit: true })
+      const result = await assistant.turn('Write a.md', { sessionId: 'audit-retry-pauses' })
+      expect(result.status).toBe('needs_approval')
+      expect(result.pendingActionId).toBeTruthy()
+    })
+
     it('keeps the flagged reply, with the audit notice, when the correction retry cannot run (it throws), instead of replacing it with a failure', async () => {
       let audits = 0
       let mainCalls = 0

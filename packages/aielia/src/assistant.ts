@@ -758,7 +758,8 @@ export class PersonalAssistant {
           } catch (err) {
             this.onDebugLog?.({ kind: 'note', sessionId, content: `the audit retry failed (${err instanceof Error ? err.message : String(err)}); keeping the flagged reply with the audit notice` })
           }
-          if (retried?.status === 'ok') return retried
+          // A retry that pauses for the user (a command or write that needs their approval, a question) is a normal correction in progress: it is returned as before.
+          if (retried && (retried.status === 'ok' || retried.status === 'needs_approval' || retried.status === 'needs_clarification' || retried.status === 'needs_plan_approval')) return retried
           if (retried) this.onDebugLog?.({ kind: 'note', sessionId, content: `the audit retry did not complete (${retried.status}); keeping the flagged reply with the audit notice` })
           if (auditNotice) {
             result.auditNotice = result.auditNotice ? `${result.auditNotice}\n${auditNotice}` : auditNotice
