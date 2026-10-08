@@ -199,7 +199,16 @@ export function replyAuditEnabled(env?: Record<string, string | undefined>): boo
  * did not record asks for the work to be done now or the claim withdrawn; details that disagree with the command output
  * or outside facts stated as verified ask for a corrected answer.
  */
-export function auditRetryNudge(audit: ReplyAudit, recorded: string[]): string | undefined {
+export function auditRetryNudge(audit: ReplyAudit, recorded: string[], userMessage?: string): string | undefined {
+  const nudge = auditRetryNudgeBody(audit, recorded)
+  if (!nudge || !userMessage?.trim()) return nudge
+  // The correction must answer the user's request again, not respond to the check itself: without this a retry argued with the nudge as if
+  // it were a rule the user had set, and never re-answered the review that was asked for (benchmark scenario 03 turn 1).
+  const asked = userMessage.trim().replace(/\s+/g, ' ').slice(0, 400)
+  return `${nudge} This check is automatic and is not from the user; the user's message you are answering is: "${asked}". Reply to that message.`
+}
+
+function auditRetryNudgeBody(audit: ReplyAudit, recorded: string[]): string | undefined {
   const what = recorded.length > 0 ? `only this was carried out this turn: ${recorded.join('; ')}` : 'no write or command was carried out this turn'
   if (audit.claimsUnrecordedWork) {
     return `[automatic reply check] Your last reply says you changed files or ran something, but ${what}. Do the missing work now with your tools if it is still wanted; otherwise say plainly what you have not done. Do not claim work you did not do.`

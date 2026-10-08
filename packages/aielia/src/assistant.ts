@@ -452,6 +452,8 @@ export class PersonalAssistant {
   private auditRetryBudget = 1
   /** The session of the turn in progress, for log lines written by code that has no session of its own (the side-call retry note). */
   private lastSessionId = 'default'
+  /** The last real (not fail-safe) risk classification of a user message, per session, for the audit retry that may correct its reply. */
+  private readonly lastClassifiedBySession = new Map<string, TurnIntentClassification>()
   /** Files, directories and pages each session's turns have read (tool and target, oldest first, capped): the reply audit needs reads from EARLIER turns too, or a correct answer about a file read last turn looks like an unverified outside fact (V1). In memory only; cleared with the session. */
   private readonly sourcesReadBySession = new Map<string, string[]>()
   /** Index into the action list where the current user message's actions start; an approval resume is a separate turn() call but the same user message. */
@@ -467,9 +469,9 @@ export class PersonalAssistant {
   private readonly askClarification: AskClarificationService
 
   constructor(options: PersonalAssistantOptions) {
-    // Inside the abort gate: a stopped turn must not wait out a retry. The note is what makes a slow endpoint visible in the activity log.
+    // Inside the abort gate: a stopped turn must not wait out a hedged attempt. The note is what makes a slow endpoint visible in the activity log.
     this.llmClient = gateLlmClient(
-      withSideCallPolicy(options.llmClient, ({ timeoutMs }) => this.onDebugLog?.({ kind: 'note', sessionId: this.lastSessionId, content: `a model side call timed out after ${Math.round(timeoutMs / 1000)}s; asking again` })),
+      withSideCallPolicy(options.llmClient, { onHedge: ({ afterMs }) => this.onDebugLog?.({ kind: 'note', sessionId: this.lastSessionId, content: `a model side call had not answered after ${Math.round(afterMs / 1000)}s; asked a second time beside it` }) }),
       this.abortGate,
     )
     this.model = options.model
@@ -742,13 +744,30 @@ export class PersonalAssistant {
         if (!auditNotice) this.onDebugLog?.({ kind: 'note', sessionId, content: `reply audit: clean (recorded ${recorded.length} action(s), ${this.actionApproval.recentCommandOutputs.length} command output(s) checked)` })
         // One automatic correction: the reply claimed or promised work with no recorded action, or stated outside
         // facts as verified. The model gets a nudge to do the work with its tools or to say plainly that it did not.
-        const nudge = options.auditRetry || this.auditRetryBudget <= 0 ? undefined : auditRetryNudge(audit, recorded)
+        const nudge = options.auditRetry || this.auditRetryBudget <= 0 ? undefined : auditRetryNudge(audit, recorded, userMessage)
         if (nudge) {
           this.auditRetryBudget--
           this.onDebugLog?.({ kind: 'note', sessionId, content: `reply audit: ${auditNotice ?? 'flagged'} — retrying once with a nudge` })
           // The flagged turn is a finished, billed turn: record what it and its audit cost before the retry runs (the early return skips recordSpend below).
           await this.session.recordSpend(sessionId, sumUsage([result.usage, ...auditUsage]))
-          return await this.turn(nudge, { ...options, sessionId, auditRetry: true, approved: undefined, pendingActionId: undefined, pendingClarificationId: undefined, planApprovalId: undefined })
+          // The flagged reply is already delivered. If the correction cannot run (it comes back as an escalation, an approval request or an
+          // error, or throws), the flagged reply stands with the audit's notice instead of being replaced by that failure (benchmark scenario 10 turn 2).
+          let retried: AssistantTurnResult | undefined
+          try {
+            retried = await this.turn(nudge, { ...options, sessionId, auditRetry: true, approved: undefined, pendingActionId: undefined, pendingClarificationId: undefined, planApprovalId: undefined })
+          } catch (err) {
+            this.onDebugLog?.({ kind: 'note', sessionId, content: `the audit retry failed (${err instanceof Error ? err.message : String(err)}); keeping the flagged reply with the audit notice` })
+          }
+          if (retried?.status === 'ok') return retried
+          if (retried) this.onDebugLog?.({ kind: 'note', sessionId, content: `the audit retry did not complete (${retried.status}); keeping the flagged reply with the audit notice` })
+          if (auditNotice) {
+            result.auditNotice = result.auditNotice ? `${result.auditNotice}\n${auditNotice}` : auditNotice
+            this.onDebugLog?.({ kind: 'note', sessionId, content: `reply audit: ${auditNotice}` })
+          }
+          // Spend was recorded above; the flagged reply is the turn's answer, so close the turn the way the normal path does.
+          result.proposerKind = this.lastProposerKind
+          this.onTrace?.({ kind: 'turn_end', sessionId, status: result.status })
+          return result
         }
         if (auditNotice) {
           result.auditNotice = result.auditNotice ? `${result.auditNotice}\n${auditNotice}` : auditNotice
@@ -1341,6 +1360,7 @@ export class PersonalAssistant {
       approved: (options.approved ?? false) || options.auditRetry === true,
       dangerouslySkipPermissions: this.dangerouslySkipPermissions,
       onUsage: accumulateUsage,
+      inheritedClassification: options.auditRetry ? this.lastClassifiedBySession.get(sessionId) : undefined,
       recentTranscript: transcript,
       standingConstraints: semanticConstraintCheckEnabled() ? await this.session.getStandingConstraints(sessionId) : undefined,
       knownFactKeys,
@@ -1355,6 +1375,8 @@ export class PersonalAssistant {
     }
 
     this.onTrace?.({ kind: 'risk_classified', riskLevel: interpretation.classification.riskLevel, requiresApproval: interpretation.classification.requiresApproval })
+    // What an automatic audit retry of this message will run under (see classificationForAuditRetry); a failed classification is never passed on.
+    if (!options.auditRetry && interpretation.classification.riskLevel !== 'UNKNOWN') this.lastClassifiedBySession.set(sessionId, interpretation.classification)
     // UNKNOWN is only ever the fail-safe: the classifier call errored, timed out or returned something unusable. Say so in the log, or the approval it forces looks unexplained (benchmark scenarios 06 and 13: minutes of silence, then an UNKNOWN gate).
     if (interpretation.classification.riskLevel === 'UNKNOWN') this.onDebugLog?.({ kind: 'note', sessionId, content: 'risk classification failed or timed out; asking for approval' })
 

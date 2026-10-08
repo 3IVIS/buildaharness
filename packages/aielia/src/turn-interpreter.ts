@@ -3,7 +3,7 @@ import type { Task } from '@buildaharness/harness'
 import type { ILLMClient, TokenUsage, ReminderStore, ChatMessage } from '@buildaharness/runtime'
 import { checkRequestAmbiguity } from './ambiguity-guard.js'
 import type { AmbiguityGuardMode } from './ambiguity-guard-flag.js'
-import { classifyTurnIntent, type TurnIntentClassification } from './turn-intent-classifier.js'
+import { classifyTurnIntent, classificationForAuditRetry, type TurnIntentClassification } from './turn-intent-classifier.js'
 import { evaluateTurnPolicy, evaluateAbandonPolicy } from './turn-policy.js'
 import { looksLikeCodingFact } from './contradiction-checker.js'
 import { reframeTaskDescriptionWithLLM } from './decomposition-classifier.js'
@@ -100,8 +100,10 @@ export class TurnInterpreter {
     standingConstraints?: string[]
     /** Keyed facts already stored; shown to the classifier so it reuses their keys. */
     knownFactKeys?: { key: string; text: string }[]
+    /** An automatic audit retry passes the classification of the turn it corrects, so its own nudge is not classified (see classificationForAuditRetry). */
+    inheritedClassification?: TurnIntentClassification
   }): Promise<TurnInterpretation> {
-    const { userMessage, sessionId, toolLoopWillRun, approved, dangerouslySkipPermissions, onUsage, recentTranscript, standingConstraints, knownFactKeys } = params
+    const { userMessage, sessionId, toolLoopWillRun, approved, dangerouslySkipPermissions, onUsage, recentTranscript, standingConstraints, knownFactKeys, inheritedClassification } = params
 
     // Per-task plan cancellation ("cancel the daily-budget task", "skip the research step") is
     // internal bookkeeping — it never touches anything outside this session's own plan state,
@@ -147,7 +149,9 @@ export class TurnInterpreter {
     // Single consolidated LLM call replacing the former classifyRisk/classifyTriviality/
     // classifyDecompositionCandidate/isAbandonPhrase/classifyPlanningCandidate chain — see
     // turn-intent-classifier.ts.
-    const classification = await classifyTurnIntent(userMessage, this.llmClient, { hasActivePlan: planForCancelCheck !== null, standingConstraints, knownFactKeys }, this.model(), onUsage)
+    const classification = inheritedClassification
+      ? classificationForAuditRetry(inheritedClassification)
+      : await classifyTurnIntent(userMessage, this.llmClient, { hasActivePlan: planForCancelCheck !== null, standingConstraints, knownFactKeys }, this.model(), onUsage)
 
     // Phase D3: the authoritative approval decision — recomputed from classification's own
     // riskLevel/isBulkReminderRequest signals via turn-policy.ts rather than trusted directly off

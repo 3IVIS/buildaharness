@@ -605,6 +605,55 @@ describe('PersonalAssistant', () => {
       expect(users.filter((c) => c === 'change the file')).toHaveLength(1)
     })
 
+    it('runs the audit retry under the classification of the turn it corrects: the nudge is never classified, so a stalled or failed classification cannot turn the correction into an escalation (benchmark scenario 10 turn 2)', async () => {
+      let audits = 0
+      let classifications: string[] = []
+      const replies = ['Done, I changed the file.', 'I did not change anything; no write was made.']
+      class RetryLLM extends FakeLLMClient {
+        async callChatStructured(messages: ChatMessage[], tools?: ToolDefinition[], options?: ChatOptions): Promise<LLMStructuredResponse> {
+          if (String(messages[0]?.content).includes('You audit one reply')) {
+            audits++
+            return { content: audits <= 2 ? '{"claimsUnrecordedWork": true, "promisesWorkNotDone": false, "unverifiedOutsideFacts": false}' : '{"claimsUnrecordedWork": false, "promisesWorkNotDone": false, "unverifiedOutsideFacts": false}' }
+          }
+          if (isTurnIntentRequest(messages)) {
+            const asked = String(messages.find((m) => m.role === 'user')?.content)
+            classifications.push(asked)
+            // Any classification of the nudge would fail, as it did in the benchmark.
+            if (asked.startsWith('[automatic reply check]')) return { content: 'not json' }
+          }
+          return super.callChatStructured(messages, tools, options)
+        }
+        async callChatSync(): Promise<string> { return replies.shift() ?? '' }
+        async *callChat(): AsyncIterable<string> { yield replies.shift() ?? '' }
+      }
+      const assistant = new PersonalAssistant({ llmClient: new RetryLLM(), replyAudit: true })
+      const result = await assistant.turn('change the file', { sessionId: 'audit-retry-class' })
+      expect(result.status).toBe('ok')
+      expect(result.reply).toContain('did not change anything')
+      expect(classifications).toEqual(['change the file'])
+    })
+
+    it('keeps the flagged reply, with the audit notice, when the correction retry cannot run (it throws), instead of replacing it with a failure', async () => {
+      let audits = 0
+      let mainCalls = 0
+      class FailingRetryLLM extends FakeLLMClient {
+        async callChatStructured(messages: ChatMessage[], tools?: ToolDefinition[], options?: ChatOptions): Promise<LLMStructuredResponse> {
+          if (String(messages[0]?.content).includes('You audit one reply')) { audits++; return { content: '{"claimsUnrecordedWork": true, "promisesWorkNotDone": false, "unverifiedOutsideFacts": false}' } }
+          return super.callChatStructured(messages, tools, options)
+        }
+        async callChatSync(): Promise<string> { if (++mainCalls > 1) throw new Error('model unreachable'); return 'Done, I changed the file.' }
+        async *callChat(): AsyncIterable<string> { if (++mainCalls > 1) throw new Error('model unreachable'); yield 'Done, I changed the file.' }
+      }
+      const logs: { kind: string; content: string }[] = []
+      const assistant = new PersonalAssistant({ llmClient: new FailingRetryLLM(), replyAudit: true, onDebugLog: (e) => logs.push(e) })
+      const result = await assistant.turn('change the file', { sessionId: 'audit-retry-fails' })
+      expect(audits).toBeGreaterThanOrEqual(2)
+      expect(result.status).toBe('ok')
+      expect(result.reply).toContain('Done, I changed the file.')
+      expect(result.auditNotice).toContain('did not record')
+      expect(logs.some((e) => e.kind === 'note' && /audit retry (failed|did not complete)/.test(e.content))).toBe(true)
+    })
+
     it('leaves a message the user queued during the audit retry for the post-turn drain and mints no goal thread for the nudge (benchmark scenario 05, turn 6)', async () => {
       let audits = 0
       const channel = new LiveSteeringChannel()
@@ -650,7 +699,7 @@ describe('PersonalAssistant', () => {
       expect(note?.content).toMatch(/failed or timed out/)
     })
 
-    it('asks a risk classification that timed out once more, so a one-off stall neither delays the turn for minutes nor forces an approval, and logs the retry (T1)', async () => {
+    it('asks a risk classification that timed out once more, so a one-off stall neither delays the turn for minutes nor forces an approval, and logs it (T1)', async () => {
       let classifications = 0
       class StallOnceClassifier extends FakeLLMClient {
         async callChatStructured(messages: ChatMessage[], tools?: ToolDefinition[], options?: ChatOptions): Promise<LLMStructuredResponse> {
@@ -666,7 +715,7 @@ describe('PersonalAssistant', () => {
       expect(classifications).toBe(2)
       expect(result.status).toBe('ok')
       expect(logs.some((e) => e.content.includes('risk classification failed or timed out'))).toBe(false)
-      expect(logs.find((e) => e.kind === 'note' && e.content.includes('side call timed out'))?.content).toBe('a model side call timed out after 45s; asking again')
+      expect(logs.find((e) => e.kind === 'note' && e.content.includes('side call'))?.content).toBe('a model side call had not answered after 25s; asked a second time beside it')
     })
 
     it('decides whether a reply is an unfinished announcement from the audit alone, never from how the text ends', async () => {

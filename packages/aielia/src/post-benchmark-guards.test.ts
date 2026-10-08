@@ -57,6 +57,12 @@ describe('audit retry nudge', () => {
     expect(auditRetryNudge({ ...clean, contradictsCommandOutput: true }, ['wrote README.md'])).toContain('only this was carried out this turn: wrote README.md')
     expect(auditRetryNudge({ ...clean, contradictsCommandOutput: true }, ['wrote README.md'])).toContain('Do not deny or withdraw work that is in that record')
     expect(auditRetryNudge({ ...clean, leaksSelfCorrection: true }, ['wrote README.md'])).toContain('wrote README.md')
+    // The correction is anchored to the user's request and says the check is not from the user (scenario 03 turn 1: the retry argued with the nudge as if it were a user rule).
+    const anchored = auditRetryNudge({ ...clean, leaksSelfCorrection: true }, [], 'review my uncommitted changes\nfor correctness')!
+    expect(anchored).toContain('automatic and is not from the user')
+    expect(anchored).toContain('"review my uncommitted changes for correctness"')
+    expect(auditRetryNudge(clean, [], 'anything')).toBeUndefined()
+    expect(auditRetryNudge({ ...clean, claimsUnrecordedWork: true }, [])).not.toContain('not from the user')
     expect(auditRetryNudge({ ...clean, unverifiedOutsideFacts: true }, [])).toContain('outside sources')
     expect(auditRetryNudge({ ...clean, contradictsRecordedWork: true }, ['wrote a.py'])).toContain('was in fact done')
     expect(auditRetryNudge({ ...clean, contradictsRecordedWork: true }, ['wrote a.py'])).toContain('wrote a.py')

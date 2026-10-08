@@ -221,6 +221,23 @@ function failSafeClassification(cause?: unknown): TurnIntentClassification {
   }
 }
 
+/**
+ * The classification an automatic audit retry runs under: the one of the turn it corrects. The retry's message is the system's own
+ * nudge, not something the user asked, so classifying it is a wasted model call that can stall for a minute or fail (benchmark
+ * scenario 10: the nudge's classification failed, the UNKNOWN risk level then made every tool call of the retry require approval,
+ * and the turn came back as an escalation instead of a correction). Only the risk and grounding signals carry over; whatever the
+ * original message said about plans, tasks, facts or constraints belongs to that message and is cleared.
+ */
+export function classificationForAuditRetry(prior: TurnIntentClassification): TurnIntentClassification {
+  return {
+    ...failSafeClassification(),
+    riskLevel: prior.riskLevel,
+    riskReason: prior.riskReason,
+    requiresApproval: prior.requiresApproval,
+    needsGrounding: prior.needsGrounding,
+  }
+}
+
 const TASK_SCHEMA = {
   type: 'object',
   properties: {
