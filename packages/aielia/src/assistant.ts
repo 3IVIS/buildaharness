@@ -708,7 +708,9 @@ export class PersonalAssistant {
       if (result.sources) result.sources = result.sources.map(({ excerpt: _excerpt, ...source }) => source)
       // The system's own action record goes into the stored transcript only, never into the reply that is shown. A marker in the
       // reply is the model imitating it (it claimed writes and test runs that never happened in benchmark scenarios 05 and 13).
+      let forgedRecord = false
       if (result.reply && containsActionRecord(result.reply)) {
+        forgedRecord = true
         this.onDebugLog?.({ kind: 'note', sessionId, content: 'the reply contained a forged "Recorded by the system" action list; removed' })
         result.reply = stripActionRecord(result.reply)
         result.auditNotice = FORGED_ACTION_RECORD_NOTE
@@ -748,6 +750,11 @@ export class PersonalAssistant {
           (u) => auditUsage.push(u),
           { checkNonAnswer: true },
         )
+        // Only the system writes the action record, so a model that wrote one into a turn that recorded no action was presenting work or
+        // results nothing produced (benchmark scenario 09 turn 3: five invented commits for "git log -5", no command run, and the audit
+        // called it clean). That is a claim of unrecorded work whatever the audit says; it gets the same correction retry. This keys on the
+        // system's own marker, not on the reply's wording.
+        if (forgedRecord && recorded.length === 0) audit.claimsUnrecordedWork = true
         const auditNotice = replyAuditNotice(audit, recorded)
         if (!auditNotice) this.onDebugLog?.({ kind: 'note', sessionId, content: `reply audit: clean (recorded ${recorded.length} action(s), ${this.actionApproval.recentCommandOutputs.length} command output(s) checked)` })
         // One automatic correction: the reply claimed or promised work with no recorded action, or stated outside
