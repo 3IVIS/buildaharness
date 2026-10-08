@@ -1,5 +1,5 @@
 import { FlowExecutionError } from './errors'
-import { DEFAULT_REQUEST_TIMEOUT_MS, withRequestTimeout } from './request-timeout'
+import { DEFAULT_REQUEST_TIMEOUT_MS, DEFAULT_STRUCTURED_REQUEST_TIMEOUT_MS, withRequestTimeout } from './request-timeout'
 import type { ChatMessage, ChatOptions, ILLMClient, LLMStructuredResponse, ToolCallResult, ToolDefinition } from './llm-client'
 
 export interface OpenAICompatibleLLMClientOptions {
@@ -13,6 +13,8 @@ export interface OpenAICompatibleLLMClientOptions {
   fetchImpl?: typeof fetch
   /** Longest a single wait on the endpoint may take (headers, a whole non-streamed body, or the gap between streamed chunks) before the call fails with a timeout error. Defaults to DEFAULT_REQUEST_TIMEOUT_MS. */
   requestTimeoutMs?: number
+  /** The same bound for a structuredOutput call (the small JSON side calls), which a healthy endpoint answers in seconds. Defaults to DEFAULT_STRUCTURED_REQUEST_TIMEOUT_MS. A per-call `ChatOptions.timeoutMs` overrides both. */
+  structuredRequestTimeoutMs?: number
 }
 
 /**
@@ -133,9 +135,11 @@ export class OpenAICompatibleLLMClient implements ILLMClient {
   private readonly extraHeaders: Record<string, string>
   private readonly fetchImpl: typeof fetch
   private readonly requestTimeoutMs: number
+  private readonly structuredRequestTimeoutMs: number
 
-  constructor({ apiKey, baseUrl, defaultModel, extraHeaders = {}, fetchImpl, requestTimeoutMs = DEFAULT_REQUEST_TIMEOUT_MS }: OpenAICompatibleLLMClientOptions) {
+  constructor({ apiKey, baseUrl, defaultModel, extraHeaders = {}, fetchImpl, requestTimeoutMs = DEFAULT_REQUEST_TIMEOUT_MS, structuredRequestTimeoutMs = DEFAULT_STRUCTURED_REQUEST_TIMEOUT_MS }: OpenAICompatibleLLMClientOptions) {
     this.requestTimeoutMs = requestTimeoutMs
+    this.structuredRequestTimeoutMs = structuredRequestTimeoutMs
     this.apiKey = apiKey
     this.baseUrl = baseUrl
     this.defaultModel = defaultModel
@@ -144,11 +148,11 @@ export class OpenAICompatibleLLMClient implements ILLMClient {
   }
 
   /** One POST to chat/completions whose wait for the response headers is bounded; the request is aborted on timeout. */
-  private async post(body: Record<string, unknown>): Promise<Response> {
+  private async post(body: Record<string, unknown>, timeoutMs: number): Promise<Response> {
     const controller = new AbortController()
     return withRequestTimeout(
       this.fetchImpl(`${this.baseUrl}/chat/completions`, { method: 'POST', headers: this.headers(), body: JSON.stringify(body), signal: controller.signal }),
-      this.requestTimeoutMs, 'openai-compatible-client', 'waiting for the model to respond', () => controller.abort(),
+      timeoutMs, 'openai-compatible-client', 'waiting for the model to respond', () => controller.abort(),
     )
   }
 
@@ -202,7 +206,7 @@ export class OpenAICompatibleLLMClient implements ILLMClient {
         stream_options: { include_usage: true },
         ...(options.maxTokens ? { max_tokens: options.maxTokens } : {}),
         ...(options.temperature !== undefined ? { temperature: options.temperature } : {}),
-      })
+      }, options.timeoutMs ?? this.requestTimeoutMs)
 
     if (!response.ok) {
       throw new FlowExecutionError({ nodeId: 'openai-compatible-client', message: await this.errorMessage(response), cause: { status: response.status } })
@@ -222,7 +226,7 @@ export class OpenAICompatibleLLMClient implements ILLMClient {
 
     try {
     while (true) {
-      const { done, value } = await withRequestTimeout(reader.read(), this.requestTimeoutMs, 'openai-compatible-client', 'while streaming the reply')
+      const { done, value } = await withRequestTimeout(reader.read(), options.timeoutMs ?? this.requestTimeoutMs, 'openai-compatible-client', 'while streaming the reply')
       if (done) break
       buffer += decoder.decode(value, { stream: true })
       const lines = buffer.split('\n')
@@ -279,12 +283,14 @@ export class OpenAICompatibleLLMClient implements ILLMClient {
       body.response_format = { type: 'json_object' }
     }
 
-    const response = await this.post(body)
+    // A structuredOutput call is one of the small JSON side calls: it gets the shorter bound unless the caller sets its own.
+    const timeoutMs = options.timeoutMs ?? (options.structuredOutput ? this.structuredRequestTimeoutMs : this.requestTimeoutMs)
+    const response = await this.post(body, timeoutMs)
     if (!response.ok) {
       throw new FlowExecutionError({ nodeId: 'openai-compatible-client', message: await this.errorMessage(response), cause: { status: response.status } })
     }
 
-    const json = (await withRequestTimeout(response.json(), this.requestTimeoutMs, 'openai-compatible-client', 'while reading the reply')) as {
+    const json = (await withRequestTimeout(response.json(), timeoutMs, 'openai-compatible-client', 'while reading the reply')) as {
       choices?: Array<{ message?: { content?: string; tool_calls?: unknown } }>
       usage?: { prompt_tokens?: number; completion_tokens?: number; prompt_tokens_details?: { cached_tokens?: number } }
     }

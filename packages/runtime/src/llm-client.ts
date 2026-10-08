@@ -17,6 +17,13 @@ export interface ChatOptions {
   maxTokens?: number
   structuredOutput?: { schema: Record<string, unknown> }
   /**
+   * Longest this one call may wait on the endpoint (response headers, a whole non-streamed body, or the gap between
+   * streamed chunks) before it fails with a timeout error. Absent: the client's own bound, which for a structuredOutput call
+   * (the small JSON side calls: classifier, audit, next steps, ...) is shorter than for a main chat call. Honoured by
+   * OpenAICompatibleLLMClient; other backends ignore it.
+   */
+  timeoutMs?: number
+  /**
    * Called once per tool call as a backend's own internal agentic loop makes it — only
    * meaningful for a backend whose tool loop is otherwise invisible to the caller, e.g.
    * Claude Code's own loop resolving read_file/list_directory/etc. autonomously inside a

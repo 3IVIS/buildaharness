@@ -33,3 +33,4 @@ export { FileSystemExperienceStore } from './experience-store/filesystem-experie
 export type { FileSystemExperienceStoreOptions } from './experience-store/filesystem-experience-store'
 export { InMemoryReminderStore } from './reminders/reminder-store'
 export type { ReminderStore, ReminderRecord } from './reminders/reminder-store'
+export { DEFAULT_REQUEST_TIMEOUT_MS, DEFAULT_STRUCTURED_REQUEST_TIMEOUT_MS, withRequestTimeout, isRequestTimeout } from './request-timeout'
