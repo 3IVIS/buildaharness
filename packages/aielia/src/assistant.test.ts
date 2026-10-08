@@ -572,7 +572,7 @@ describe('PersonalAssistant', () => {
       const logs: { kind: string; content: string }[] = []
       const assistant = new PersonalAssistant({ llmClient: new RetryLLM(), replyAudit: true, onDebugLog: (e) => logs.push(e) })
       const result = await assistant.turn('change the file', { sessionId: 'audit-retry' })
-      expect(audits).toBe(3) // the flag, its confirmation, then the clean retry turn
+      expect(audits).toBe(4) // two audit calls agree on the flag, then two on the clean retry turn
       expect(logs.filter((e) => e.kind === 'user_message')).toHaveLength(1)
       expect(logs.some((e) => e.kind === 'note' && e.content.includes('retrying once with a nudge'))).toBe(true)
       expect(result.auditNotice).toBeUndefined()
@@ -1624,7 +1624,7 @@ describe('PersonalAssistant file tools', () => {
     const done = await assistant.turn('Write a.md and b.md', { approved: true, pendingActionId: second.pendingActionId })
 
     expect(done.status).toBe('ok')
-    expect(payloads).toHaveLength(1)
+    expect(payloads).toHaveLength(2) // one audit = two identical calls
     expect(payloads[0].actions).toEqual(['wrote a.md', 'wrote b.md'])
     expect(payloads[0].earlierActions).toEqual([])
   })
@@ -1654,12 +1654,12 @@ describe('PersonalAssistant file tools', () => {
     await assistant.turn('What does notes.txt say?', { sessionId: 'v1' })
     await assistant.turn('And what was the ingredient again?', { sessionId: 'v1' })
 
-    expect(payloads).toHaveLength(2)
+    expect(payloads).toHaveLength(4) // two audit calls per turn
     expect(payloads[0].sourcesRead).toEqual(['read_file: notes.txt'])
     expect(payloads[0].earlierSourcesRead).toEqual([])
     // Turn 2 made no tool call, but the file read in turn 1 is still something the session read.
-    expect(payloads[1].sourcesRead).toEqual([])
-    expect(payloads[1].earlierSourcesRead).toEqual(['read_file: notes.txt'])
+    expect(payloads[2].sourcesRead).toEqual([])
+    expect(payloads[2].earlierSourcesRead).toEqual(['read_file: notes.txt'])
   })
 
   it('gives the reply audit what each recorded write changed, so a reply that denies the change can be caught (W1)', async () => {
@@ -1686,7 +1686,7 @@ describe('PersonalAssistant file tools', () => {
     const staged = await assistant.turn('fix f in calc.py', { sessionId: 'w1' })
     await assistant.turn('fix f in calc.py', { sessionId: 'w1', approved: true, pendingActionId: staged.pendingActionId })
 
-    expect(payloads).toHaveLength(1)
+    expect(payloads).toHaveLength(2) // one audit = two identical calls
     expect(payloads[0].actions).toEqual(['wrote calc.py'])
     expect(payloads[0].actionDetails).toHaveLength(1)
     expect(payloads[0].actionDetails[0]).toContain('wrote calc.py')

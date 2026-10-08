@@ -36,15 +36,32 @@ describe('reply audit', () => {
     b.claimsUnrecordedWork = true
     expect(CLEAN_AUDIT.claimsUnrecordedWork).toBe(false)
   })
-  it('asks a second time only when the first call flags, and keeps only what both raise', async () => {
-    const clean = new SequenceLLM([NONE, FLAG_C])
+  it('asks two calls at once, a third only when they disagree, and keeps a category that at least two of the calls raise', async () => {
+    const clean = new SequenceLLM([NONE, NONE, FLAG_C])
     expect(await auditReply(base, clean)).toEqual(CLEAN_AUDIT)
-    expect(clean.calls).toBe(1)
-    const confirmed = new SequenceLLM([FLAG_C, FLAG_C])
-    expect((await auditReply(base, confirmed)).claimsUnrecordedWork).toBe(true)
-    expect(confirmed.calls).toBe(2)
-    expect(await auditReply(base, new SequenceLLM([FLAG_C, NONE]))).toEqual(CLEAN_AUDIT)
-    expect(await auditReply(base, new SequenceLLM([FLAG_C, FLAG_U]))).toEqual(CLEAN_AUDIT)
+    expect(clean.calls).toBe(2)
+    const agreed = new SequenceLLM([FLAG_C, FLAG_C, NONE])
+    expect((await auditReply(base, agreed)).claimsUnrecordedWork).toBe(true)
+    expect(agreed.calls).toBe(2)
+    // One miss no longer lets a flagged reply through: the third call decides.
+    const rescued = new SequenceLLM([NONE, FLAG_C, FLAG_C])
+    expect((await auditReply(base, rescued)).claimsUnrecordedWork).toBe(true)
+    expect(rescued.calls).toBe(3)
+    const lone = new SequenceLLM([FLAG_C, NONE, NONE])
+    expect(await auditReply(base, lone)).toEqual(CLEAN_AUDIT)
+    expect(lone.calls).toBe(3)
+    // Different categories from two calls: each needs a second vote of its own.
+    expect(await auditReply(base, new SequenceLLM([FLAG_C, FLAG_U, NONE]))).toEqual(CLEAN_AUDIT)
+    expect(await auditReply(base, new SequenceLLM([FLAG_C, FLAG_U, FLAG_C]))).toEqual({ ...CLEAN_AUDIT, claimsUnrecordedWork: true })
+  })
+  it('returns a clean audit when fewer than two of the first calls give a usable answer', async () => {
+    class Flaky implements ILLMClient {
+      calls = 0
+      async *callChat(): AsyncIterable<string> { yield '' }
+      async callChatSync(): Promise<string> { return '' }
+      async callChatStructured(): Promise<LLMStructuredResponse> { if (this.calls++ === 0) throw new Error('timeout'); return { content: FLAG_C } }
+    }
+    expect(await auditReply(base, new Flaky())).toEqual(CLEAN_AUDIT)
   })
   it('passes what the system recorded to the model and reads the three flags', async () => {
     const llm = new AuditLLM('{"claimsUnrecordedWork": true, "promisesWorkNotDone": false, "unverifiedOutsideFacts": false}')
@@ -54,13 +71,13 @@ describe('reply audit', () => {
     expect(payload.actions).toEqual(['wrote a.py'])
     expect(payload.lookupUnavailable).toBe(true)
   })
-  it('reads the flag for a reply that denies recorded work, and the flag for a reply that corrects itself, each kept only when both calls raise it (W1, U1)', async () => {
+  it('reads the flag for a reply that denies recorded work, and the flag for a reply that corrects itself, each kept only when at least two calls raise it (W1, U1)', async () => {
     const DENIES = '{"claimsUnrecordedWork": false, "promisesWorkNotDone": false, "unverifiedOutsideFacts": false, "contradictsCommandOutput": false, "contradictsRecordedWork": true, "leaksSelfCorrection": false}'
     const LEAKS = '{"claimsUnrecordedWork": false, "promisesWorkNotDone": false, "unverifiedOutsideFacts": false, "contradictsCommandOutput": false, "contradictsRecordedWork": false, "leaksSelfCorrection": true}'
     expect(await auditReply(base, new SequenceLLM([DENIES, DENIES]))).toEqual({ ...CLEAN_AUDIT, contradictsRecordedWork: true })
     expect(await auditReply(base, new SequenceLLM([LEAKS, LEAKS]))).toEqual({ ...CLEAN_AUDIT, leaksSelfCorrection: true })
-    expect(await auditReply(base, new SequenceLLM([DENIES, NONE]))).toEqual(CLEAN_AUDIT)
-    expect(await auditReply(base, new SequenceLLM([DENIES, LEAKS]))).toEqual(CLEAN_AUDIT)
+    expect(await auditReply(base, new SequenceLLM([DENIES, NONE, NONE]))).toEqual(CLEAN_AUDIT)
+    expect(await auditReply(base, new SequenceLLM([DENIES, LEAKS, NONE]))).toEqual(CLEAN_AUDIT)
   })
   it('gives the model every read of the session so far, so a statement about which tools were used can be checked (U1)', async () => {
     const llm = new AuditLLM(NONE)
