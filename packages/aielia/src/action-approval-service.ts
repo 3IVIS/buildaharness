@@ -37,6 +37,9 @@ export interface ResumeOptions {
 /** How many prior transcript messages the fallback synthesis call sees. */
 const SYNTHESIS_HISTORY_MESSAGES = 20
 
+/** How many diff lines of one write the reply audit is shown. */
+const AUDIT_DIFF_MAX_LINES = 14
+
 /** One short clause for an applied action, for the turn's action record. */
 function describeAppliedAction(applied: { kind: string; path?: string; command?: string; to?: string; subject?: string; execution?: { exitCode?: number | null } }): string | undefined {
   if (applied.kind === 'write') return `wrote ${applied.path}`
@@ -71,6 +74,8 @@ export class ActionApprovalService {
 
   /** Every write, command and email carried out through an approval, in order (a turn's slice is what the system recorded for it). */
   readonly appliedActions: string[] = []
+  /** Parallel to appliedActions (same indices): for a write, the lines it changed as a short diff, so the reply audit can tell whether a reply's account of the file is true (W1); the same clause as appliedActions for every other kind. */
+  readonly appliedActionDetails: string[] = []
   /** The command and the start/end of the output of each shell command run through an approval (for the reply audit). */
   readonly recentCommandOutputs: { command: string; output: string }[] = []
   /** Sessions in which a command got the network-containment refusal. */
@@ -313,7 +318,10 @@ export class ActionApprovalService {
     // Hand the result back to the model inside the loop that asked for it, so the turn carries on
     // (more reads, further approvals, a real final answer) instead of ending on one command.
     const thisAction = describeAppliedAction(applied)
-    if (thisAction) this.appliedActions.push(thisAction)
+    if (thisAction) {
+      this.appliedActions.push(thisAction)
+      this.appliedActionDetails.push(applied.kind === 'write' ? `${thisAction}:\n${formatWriteDiff((applied as { previousContent?: string }).previousContent, (applied as { content: string }).content, AUDIT_DIFF_MAX_LINES)}` : thisAction)
+    }
     if (applied.kind === 'shell' && applied.execution) {
       const out = applied.execution.output ?? ''
       this.recentCommandOutputs.push({ command: applied.command, output: out.length > 8000 ? `${out.slice(0, 4000)}\n[… middle of the output not shown …]\n${out.slice(-4000)}` : out })

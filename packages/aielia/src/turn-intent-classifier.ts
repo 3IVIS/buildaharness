@@ -1,4 +1,4 @@
-import type { ILLMClient, TokenUsage } from '@buildaharness/runtime'
+import { isRequestTimeout, type ILLMClient, type TokenUsage } from '@buildaharness/runtime'
 import { listTemplateNames } from './plan-templates/index.js'
 import type { DecomposedTaskSpec } from './decomposition-classifier.js'
 import { classifyError } from './error-classifier.js'
@@ -663,7 +663,7 @@ export async function classifyTurnIntent(
         '\nWhen a fact in statesDurableFacts gives a new value for the SAME attribute as one of these (even if worded differently, ' +
         'e.g. a new city for a stored home city), reuse that exact key. Use a new key only for an attribute not listed here.'
       : ''
-    const response = await llmClient.callChatStructured(
+    const ask = () => llmClient.callChatStructured(
       [
         { role: 'system', content: `${turnIntentSystemPrompt()}\n\n${contextNote}${standingNote}${knownKeysNote}` },
         { role: 'user', content: message },
@@ -671,6 +671,12 @@ export async function classifyTurnIntent(
       undefined,
       { model, onUsage, structuredOutput: { schema: turnIntentSchema() } },
     )
+    // A stalled call is usually a one-off (benchmark: about a quarter of calls took over 3 minutes while the rest took seconds), and a
+    // failed classification costs the user an approval prompt, so a request that timed out is asked once more. Any other failure is not.
+    const response = await ask().catch((err: unknown) => {
+      if (!isRequestTimeout(err)) throw err
+      return ask()
+    })
     return parseTurnIntent(response.content, context) ?? failSafeClassification()
   } catch (err) {
     return failSafeClassification(err)

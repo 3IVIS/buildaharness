@@ -97,16 +97,6 @@ export function fallbackFinalReply(actions: string[] | undefined): string {
   return 'I could not produce an answer to that — the model returned an empty reply twice. Please try again or rephrase.'
 }
 
-/**
- * A final reply that only announces the next step ("Alright, let me verify the final state of the diff:") and then ends.
- * After approved actions it tells the user nothing about what changed, so it is replaced like an empty reply (benchmark
- * scenario 03). Short and ending in a colon or an ellipsis; a real summary is longer or ends in a sentence.
- */
-export function isDanglingAnnouncement(text: string): boolean {
-  const t = text.trim()
-  return t.length > 0 && t.length <= 200 && /[:…]$|\.\.\.$/.test(t)
-}
-
 export const toolLoopPendingKey = (pendingActionId: string): string => `loop-pending:${pendingActionId}`
 
 /**
@@ -810,7 +800,7 @@ export class AgentLoop {
   /** Replaces an empty final answer (the model returned nothing twice) with fallbackFinalReply, shown through onToken like any answer. */
   private withFallbackReply(result: ToolLoopResult, actions: string[] | undefined, onToken?: (token: string) => void): ToolLoopResult {
     if (result.kind !== 'final') return result
-    if (result.content.trim() !== '' && !(actions && actions.length > 0 && isDanglingAnnouncement(result.content))) return result
+    if (result.content.trim() !== '') return result
     const content = fallbackFinalReply(actions)
     onToken?.(content)
     return { ...result, content }

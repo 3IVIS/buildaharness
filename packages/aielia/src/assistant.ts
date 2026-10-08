@@ -52,7 +52,7 @@ import { episodicDigestEnabled, type SessionDigest } from './episodic-digest.js'
 import { recallPointerBlock, storeDigestReader } from './recall-tool.js'
 import { semanticCompactionEnabled, summarizeOlderMessages } from './semantic-compaction.js'
 import { MemoryReviewer, memoryReviewerEnabled } from './memory-reviewer.js'
-import { AgentLoop, OneLoopPause, isDanglingAnnouncement, type BatchBudgetTrace, type ToolLoopResult } from './agent-loop.js'
+import { AgentLoop, OneLoopPause, type BatchBudgetTrace, type ToolLoopResult } from './agent-loop.js'
 import type { TurnIntentClassification, FactCategory } from './turn-intent-classifier.js'
 import { ActionApprovalService, type ResumeOptions } from './action-approval-service.js'
 import { PlanService } from './plan-service.js'
@@ -449,6 +449,8 @@ export class PersonalAssistant {
   private replyLoggedEarly = false
   /** Automatic correction retries still allowed for the current user message; resumed (approval) turns share it so a retry cannot chain. */
   private auditRetryBudget = 1
+  /** Files, directories and pages each session's turns have read (tool and target, oldest first, capped): the reply audit needs reads from EARLIER turns too, or a correct answer about a file read last turn looks like an unverified outside fact (V1). In memory only; cleared with the session. */
+  private readonly sourcesReadBySession = new Map<string, string[]>()
   /** Index into the action list where the current user message's actions start; an approval resume is a separate turn() call but the same user message. */
   private userMessageActionsStart = 0
   private readonly replyAuditOn: boolean
@@ -682,6 +684,9 @@ export class PersonalAssistant {
       if (signal?.aborted) throw new TurnAbortedError()
       turnWork = this.runTurn(userMessage, options, sessionId)
       const result = await (signal ? raceAbort(turnWork, signal) : turnWork)
+      // Reads from earlier turns, as the reply audit must see them; this turn's own reads join the record after the snapshot.
+      const earlierSourcesRead = this.sourcesReadBySession.get(sessionId) ?? []
+      this.noteSourcesRead(sessionId, result.sources)
       // `excerpt` is raw tool text kept only for the grounding check; some paths (the approval-resume loop) hand sources back unstripped.
       if (result.sources) result.sources = result.sources.map(({ excerpt: _excerpt, ...source }) => source)
       // The system's own action record goes into the stored transcript only, never into the reply that is shown. A marker in the
@@ -714,18 +719,17 @@ export class PersonalAssistant {
             userMessage,
             reply: result.reply,
             actions: recorded,
+            actionDetails: this.actionApproval.appliedActionDetails.slice(this.userMessageActionsStart),
             earlierActions: this.actionApproval.appliedActions.slice(0, this.userMessageActionsStart),
             recentCommandOutputs: this.actionApproval.recentCommandOutputs,
             sourcesRead: (result.sources ?? []).map((src) => `${src.tool}: ${src.path}`),
+            earlierSourcesRead,
             lookupUnavailable: this.actionApproval.networkDenied(sessionId),
           },
           this.llmClient,
           this.model,
           (u) => auditUsage.push(u),
         )
-        // Structural backstop for the model's judgement: a short reply that ends on a colon or ellipsis announces more
-        // and delivers none of it.
-        if (isDanglingAnnouncement(result.reply)) audit.promisesWorkNotDone = true
         const auditNotice = replyAuditNotice(audit, recorded)
         if (!auditNotice) this.onDebugLog?.({ kind: 'note', sessionId, content: `reply audit: clean (recorded ${recorded.length} action(s), ${this.actionApproval.recentCommandOutputs.length} command output(s) checked)` })
         // One automatic correction: the reply claimed or promised work with no recorded action, or stated outside
@@ -839,7 +843,19 @@ export class PersonalAssistant {
   }
 
   /** Ends the current conversation — see AssistantSession.clearSession's doc comment for exactly what is and isn't cleared. */
+  /** Remembers what a turn read (tool and target) for the reply audit of later turns; oldest entries drop first. */
+  private noteSourcesRead(sessionId: string, sources: AssistantSource[] | undefined): void {
+    if (!sources || sources.length === 0) return
+    const known = this.sourcesReadBySession.get(sessionId) ?? []
+    for (const src of sources) {
+      const entry = `${src.tool}: ${src.path}`
+      if (known[known.length - 1] !== entry) known.push(entry)
+    }
+    this.sourcesReadBySession.set(sessionId, known.slice(-60))
+  }
+
   async clearSession(sessionId: string): Promise<void> {
+    this.sourcesReadBySession.delete(sessionId)
     if (episodicDigestEnabled()) {
       try {
         await this.endSession(sessionId)
@@ -1331,6 +1347,8 @@ export class PersonalAssistant {
     }
 
     this.onTrace?.({ kind: 'risk_classified', riskLevel: interpretation.classification.riskLevel, requiresApproval: interpretation.classification.requiresApproval })
+    // UNKNOWN is only ever the fail-safe: the classifier call errored, timed out or returned something unusable. Say so in the log, or the approval it forces looks unexplained (benchmark scenarios 06 and 13: minutes of silence, then an UNKNOWN gate).
+    if (interpretation.classification.riskLevel === 'UNKNOWN') this.onDebugLog?.({ kind: 'note', sessionId, content: 'risk classification failed or timed out; asking for approval' })
 
     if (interpretation.kind === 'needs_question') {
       // AL3a — the question is an ordinary assistant reply: record it so the user's answer next turn

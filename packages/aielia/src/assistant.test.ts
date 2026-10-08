@@ -605,6 +605,48 @@ describe('PersonalAssistant', () => {
       expect(users.filter((c) => c === 'change the file')).toHaveLength(1)
     })
 
+    it('logs why a turn is asking for approval when the risk classification failed or timed out (T1)', async () => {
+      class BrokenClassifier extends FakeLLMClient {
+        async callChatStructured(messages: ChatMessage[], tools?: ToolDefinition[], options?: ChatOptions): Promise<LLMStructuredResponse> {
+          if (isTurnIntentRequest(messages)) throw new Error('LLM request timed out after 90s waiting for the model to respond')
+          return super.callChatStructured(messages, tools, options)
+        }
+      }
+      const logs: { kind: string; content: string }[] = []
+      const assistant = new PersonalAssistant({ llmClient: new BrokenClassifier(), onDebugLog: (e) => logs.push(e) })
+      const result = await assistant.turn('undo that', { sessionId: 'unknown-risk' })
+      expect(result.status).toBe('needs_approval')
+      const note = logs.find((e) => e.kind === 'note' && e.content.includes('risk classification'))
+      expect(note?.content).toMatch(/failed or timed out/)
+    })
+
+    it('decides whether a reply is an unfinished announcement from the audit alone, never from how the text ends', async () => {
+      const run = async (reply: string, auditAnswer: string) => {
+        const audits: string[] = []
+        class OneReplyLLM extends FakeLLMClient {
+          async callChatStructured(messages: ChatMessage[], tools?: ToolDefinition[], options?: ChatOptions): Promise<LLMStructuredResponse> {
+            if (String(messages[0]?.content).includes('You audit one reply')) { audits.push(auditAnswer); return { content: auditAnswer } }
+            return super.callChatStructured(messages, tools, options)
+          }
+          async callChatSync(): Promise<string> { return reply }
+          async *callChat(): AsyncIterable<string> { yield reply }
+        }
+        const logs: { kind: string; content: string }[] = []
+        const assistant = new PersonalAssistant({ llmClient: new OneReplyLLM(), replyAudit: true, onDebugLog: (e) => logs.push(e) })
+        const result = await assistant.turn('do the thing', { sessionId: 'announce-' + audits.length + reply.length })
+        return { result, logs }
+      }
+      const NONE = '{"claimsUnrecordedWork": false, "promisesWorkNotDone": false, "unverifiedOutsideFacts": false, "contradictsCommandOutput": false}'
+      const PROMISES = '{"claimsUnrecordedWork": false, "promisesWorkNotDone": true, "unverifiedOutsideFacts": false, "contradictsCommandOutput": false}'
+      // Ends in a colon and is short, but the audit says it is fine: nothing is flagged and no retry happens.
+      const colon = await run('Here is the result:', NONE)
+      expect(colon.result.auditNotice).toBeUndefined()
+      expect(colon.logs.some((e) => e.content.includes('retrying once'))).toBe(false)
+      // No colon or ellipsis at all, but the audit says it only announces work: it is flagged and retried.
+      const announce = await run('Let me verify the implementation state', PROMISES)
+      expect(announce.logs.some((e) => e.content.includes('retrying once'))).toBe(true)
+    })
+
     it('records the spend of the flagged turn before its audit retry runs', async () => {
       let audits = 0
       const replies = ['Done, I changed the file.', 'I did not change anything; no write was made.']
@@ -1536,6 +1578,71 @@ describe('PersonalAssistant file tools', () => {
     expect(payloads).toHaveLength(1)
     expect(payloads[0].actions).toEqual(['wrote a.md', 'wrote b.md'])
     expect(payloads[0].earlierActions).toEqual([])
+  })
+
+  it('gives the reply audit the files read in earlier turns, so an answer about them is not taken for an outside fact (V1)', async () => {
+    const backend = makeFakeBackend()
+    await backend.writeTextFile(`${ROOT}/notes.txt`, 'the secret ingredient is basil')
+    const inner = scriptedResponses([
+      { content: '', toolCalls: [{ id: 'toolu_1', name: 'read_file', input: { path: 'notes.txt' } }] },
+      { content: 'The secret ingredient is basil.' },
+      { content: 'As notes.txt says, it is basil.' },
+    ])
+    const payloads: { sourcesRead: string[]; earlierSourcesRead: string[] }[] = []
+    const llm: ILLMClient = {
+      callChat: () => inner.callChat(),
+      callChatSync: (m, o) => inner.callChatSync(m, o),
+      callChatStructured: async (messages, tools, options) => {
+        if (String(messages[0]?.content).includes('You audit one reply')) {
+          payloads.push(JSON.parse(String(messages[1]?.content)))
+          return { content: '{"claimsUnrecordedWork": false, "promisesWorkNotDone": false, "unverifiedOutsideFacts": false, "contradictsCommandOutput": false}' }
+        }
+        return inner.callChatStructured(messages, tools, options)
+      },
+    }
+    const assistant = new PersonalAssistant({ llmClient: llm, fileTools: { backend, workspaceRoot: ROOT }, replyAudit: true })
+
+    await assistant.turn('What does notes.txt say?', { sessionId: 'v1' })
+    await assistant.turn('And what was the ingredient again?', { sessionId: 'v1' })
+
+    expect(payloads).toHaveLength(2)
+    expect(payloads[0].sourcesRead).toEqual(['read_file: notes.txt'])
+    expect(payloads[0].earlierSourcesRead).toEqual([])
+    // Turn 2 made no tool call, but the file read in turn 1 is still something the session read.
+    expect(payloads[1].sourcesRead).toEqual([])
+    expect(payloads[1].earlierSourcesRead).toEqual(['read_file: notes.txt'])
+  })
+
+  it('gives the reply audit what each recorded write changed, so a reply that denies the change can be caught (W1)', async () => {
+    const backend = makeFakeBackend()
+    await backend.writeTextFile(`${ROOT}/calc.py`, 'def f(x):\n    return x - 1\n')
+    const inner = scriptedResponses([
+      { content: '', toolCalls: [{ id: 'toolu_1', name: 'write_file', input: { path: 'calc.py', content: 'def f(x):\n    return x + 1\n' } }] },
+      { content: 'Fixed.' },
+    ])
+    const payloads: { actions: string[]; actionDetails: string[] }[] = []
+    const llm: ILLMClient = {
+      callChat: () => inner.callChat(),
+      callChatSync: (m, o) => inner.callChatSync(m, o),
+      callChatStructured: async (messages, tools, options) => {
+        if (String(messages[0]?.content).includes('You audit one reply')) {
+          payloads.push(JSON.parse(String(messages[1]?.content)))
+          return { content: '{"claimsUnrecordedWork": false, "promisesWorkNotDone": false, "unverifiedOutsideFacts": false, "contradictsCommandOutput": false}' }
+        }
+        return inner.callChatStructured(messages, tools, options)
+      },
+    }
+    const assistant = new PersonalAssistant({ llmClient: llm, fileTools: { backend, workspaceRoot: ROOT }, replyAudit: true })
+
+    const staged = await assistant.turn('fix f in calc.py', { sessionId: 'w1' })
+    await assistant.turn('fix f in calc.py', { sessionId: 'w1', approved: true, pendingActionId: staged.pendingActionId })
+
+    expect(payloads).toHaveLength(1)
+    expect(payloads[0].actions).toEqual(['wrote calc.py'])
+    expect(payloads[0].actionDetails).toHaveLength(1)
+    expect(payloads[0].actionDetails[0]).toContain('wrote calc.py')
+    expect(payloads[0].actionDetails[0]).toContain('return x - 1')
+    expect(payloads[0].actionDetails[0]).toContain('return x + 1')
   })
 
   it('declining a pending write discards it — the file still does not exist', async () => {
