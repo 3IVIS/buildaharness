@@ -23,7 +23,7 @@ import type { TurnIntentClassification, RiskLevel } from './turn-intent-classifi
 import { evaluateToolPolicy } from './tool-policy.js'
 import { createTurnControlPlaneState, recordToolOutcome, moreRestrictiveControlState, controlStateToolPolicyEnabled, type TurnControlPlaneState } from './tool-control-plane.js'
 import { classifyToolYield, type ToolYield } from './tool-yield-classifier.js'
-import { FILE_TOOLS, executeFileTool, readCurrentFileContent, ToolNotFoundError, type FileToolsContext } from './file-tools.js'
+import { FILE_TOOLS, executeFileTool, readCurrentFileContent, workspaceRelative, ToolNotFoundError, type FileToolsContext } from './file-tools.js'
 import { formatWriteDiff } from './diff-format.js'
 import { WEB_TOOLS, executeWebTool, type WebToolsContext } from './web-tools.js'
 import { SHELL_TOOLS, executeShellTool, commandMayLeaveWorkspace, type ShellToolsContext } from './shell-tools.js'
@@ -957,6 +957,28 @@ export class AgentLoop {
    * the result, since it's a plain accumulator shared by reference across every step call for
    * the same loop.
    */
+  /**
+   * The tool error for a write_file over an existing file the session has not read, or undefined when the write may go ahead (a new
+   * file, or one this session read or wrote). Benchmark scenario 13 turn 4: after a turn with no tool call at all, the model answered
+   * "fix that too" with a write_file that replaced `calculate_priority` with an invented function of a different signature, never having
+   * read the file. A write is a full replacement, so it has to be based on what the file really holds.
+   */
+  private async unreadExistingFile(sessionId: string, input: Record<string, unknown>, turnSources: AssistantSource[]): Promise<string | undefined> {
+    if (!this.fileTools || typeof input.path !== 'string') return undefined
+    let existing: string | undefined
+    try {
+      existing = await readCurrentFileContent(this.fileTools.backend, this.fileTools.workspaceRoot, input.path)
+    } catch {
+      return undefined // an out-of-workspace path is rejected by the executor with its own message
+    }
+    if (existing === undefined) return undefined
+    const root = this.fileTools.workspaceRoot
+    const relative = workspaceRelative(root, input.path)
+    if (turnSources.some((src) => src.tool === 'read_file' && workspaceRelative(root, src.path) === relative)) return undefined
+    if (this.sessionKnowsFile?.(sessionId, relative)) return undefined
+    return `"${input.path}" already exists and has not been read in this conversation, so a write would replace it with contents you have not seen. Read it with read_file first, then write the full updated content.`
+  }
+
   private async runToolIterationStep(
     messages: ChatMessage[],
     tools: ToolDefinition[],
@@ -1225,6 +1247,8 @@ export class AgentLoop {
         reportStep('write_file', writeCall.input)
         // Stop immediately — don't execute any other tool calls from this same
         // response — and stage the write rather than ever touching real disk.
+        const unread = await this.unreadExistingFile(sessionId, writeCall.input, sources)
+        if (unread) return this.stagingRejected(messages, response, writeCall, new Error(unread), controlPlaneState)
         let result: Awaited<ReturnType<typeof executeFileTool>>
         try {
           result = await executeFileTool(this.fileTools, 'write_file', writeCall.input)
@@ -1676,6 +1700,11 @@ export class AgentLoop {
   injectionDetectionGate?: () => boolean
   /** Episodic digest source for `recall_memory` (M3); set by the assistant. The tool is offered only when this is set AND AUDIT_RECALL_TOOL is on. */
   digestReader?: DigestReader
+  /**
+   * Set by the assistant: whether this session has already read (or itself written) a workspace file. A write over an existing file
+   * that the session never read is refused (see unreadExistingFile), so the model cannot replace a file with contents it guessed.
+   */
+  sessionKnowsFile?: (sessionId: string, workspaceRelativePath: string) => boolean
   private recallTools(): ToolDefinition[] {
     return this.digestReader && recallToolEnabled() ? RECALL_TOOLS : []
   }

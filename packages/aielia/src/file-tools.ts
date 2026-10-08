@@ -122,6 +122,14 @@ export async function readCurrentFileContent(backend: FsBackend, workspaceRoot: 
   return backend.readTextFile(resolved)
 }
 
+/** A workspace file path in one comparable form: relative to the workspace root, no leading "./" or "/". Absolute paths inside the workspace and relative ones name the same file. */
+export function workspaceRelative(workspaceRoot: string, requestedPath: string): string {
+  const root = workspaceRoot.replace(/\/+$/, '')
+  let p = requestedPath.trim()
+  if (root && (p === root || p.startsWith(root + '/'))) p = p.slice(root.length)
+  return p.replace(/^(\.\/|\/)+/, '').replace(/\/{2,}/g, '/')
+}
+
 export const READ_FILE_TOOL: ToolDefinition = {
   name: 'read_file',
   description:

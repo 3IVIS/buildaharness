@@ -1624,6 +1624,7 @@ describe('PersonalAssistant file tools', () => {
     const backend = makeFakeBackend()
     await backend.writeTextFile(`${ROOT}/summary.md`, 'line1\nline2\nline3\n')
     const llm = scriptedResponses([
+      { content: '', toolCalls: [{ id: 'toolu_0', name: 'read_file', input: { path: 'summary.md' } }] },
       { content: '', toolCalls: [{ id: 'toolu_1', name: 'write_file', input: { path: 'summary.md', content: 'line1\nCHANGED\nline3\n' } }] },
     ])
     const assistant = new PersonalAssistant({ llmClient: llm, fileTools: { backend, workspaceRoot: ROOT } })
@@ -1636,6 +1637,49 @@ describe('PersonalAssistant file tools', () => {
     const applied = await assistant.turn('Update summary.md', { approved: true, pendingActionId: staged.pendingActionId })
     expect(applied.reply).toBe('Wrote "summary.md" (3 lines, 20 bytes).')
     expect(applied.reply).not.toContain('CHANGED')
+  })
+
+  describe('a write over an existing file the session has not read is refused with a tool error the model can act on (benchmark scenario 13 turn 4)', () => {
+    it('rejects the guess, lets the model read the file, and stages the write that follows', async () => {
+      const backend = makeFakeBackend()
+      await backend.writeTextFile(`${ROOT}/calc.py`, 'def f(x):\n    return x - 1\n')
+      const llm = scriptedResponses([
+        { content: '', toolCalls: [{ id: 'g', name: 'write_file', input: { path: 'calc.py', content: 'def f(a, b):\n    return a * b\n' } }] }, // invented contents
+        { content: '', toolCalls: [{ id: 'r', name: 'read_file', input: { path: 'calc.py' } }] },
+        { content: '', toolCalls: [{ id: 'w', name: 'write_file', input: { path: 'calc.py', content: 'def f(x):\n    return x + 1\n' } }] },
+      ])
+      const assistant = new PersonalAssistant({ llmClient: llm, fileTools: { backend, workspaceRoot: ROOT } })
+      const staged = await assistant.turn('fix f in calc.py', { sessionId: 'unread-1' })
+      expect(staged.status).toBe('needs_approval')
+      expect(staged.reason).toContain('+    return x + 1')
+      expect(staged.reason).not.toContain('a * b')
+      const toolErrors = llm.receivedMessages.flat().filter((m) => m.role === 'tool' && /has not been read in this conversation/.test(m.content))
+      expect(toolErrors.length).toBeGreaterThan(0)
+      expect(await backend.readTextFile(`${ROOT}/calc.py`)).toContain('x - 1') // nothing was replaced
+    })
+
+    it('needs no read for a new file', async () => {
+      const backend = makeFakeBackend()
+      const llm = scriptedResponses([{ content: '', toolCalls: [{ id: 'n', name: 'write_file', input: { path: 'fresh.md', content: 'hello' } }] }])
+      const assistant = new PersonalAssistant({ llmClient: llm, fileTools: { backend, workspaceRoot: ROOT } })
+      const staged = await assistant.turn('create fresh.md', { sessionId: 'unread-2' })
+      expect(staged.status).toBe('needs_approval')
+    })
+
+    it('counts a file read in an earlier turn of the session (absolute or relative path alike) as known', async () => {
+      const backend = makeFakeBackend()
+      await backend.writeTextFile(`${ROOT}/calc.py`, 'def f(x):\n    return x - 1\n')
+      const llm = scriptedResponses([
+        { content: '', toolCalls: [{ id: 'r', name: 'read_file', input: { path: `${ROOT}/calc.py` } }] },
+        { content: 'It subtracts one.' },
+        { content: '', toolCalls: [{ id: 'w', name: 'write_file', input: { path: './calc.py', content: 'def f(x):\n    return x + 1\n' } }] },
+      ])
+      const assistant = new PersonalAssistant({ llmClient: llm, fileTools: { backend, workspaceRoot: ROOT } })
+      await assistant.turn('what does calc.py do?', { sessionId: 'unread-3' })
+      const staged = await assistant.turn('fix it', { sessionId: 'unread-3' })
+      expect(staged.status).toBe('needs_approval')
+      expect(staged.reason).toContain('+    return x + 1')
+    })
   })
 
   it('dangerouslySkipPermissions auto-applies a staged write_file with no needs_approval round trip', async () => {
@@ -1739,6 +1783,7 @@ describe('PersonalAssistant file tools', () => {
     const backend = makeFakeBackend()
     await backend.writeTextFile(`${ROOT}/calc.py`, 'def f(x):\n    return x - 1\n')
     const inner = scriptedResponses([
+      { content: '', toolCalls: [{ id: 'toolu_0', name: 'read_file', input: { path: 'calc.py' } }] },
       { content: '', toolCalls: [{ id: 'toolu_1', name: 'write_file', input: { path: 'calc.py', content: 'def f(x):\n    return x + 1\n' } }] },
       { content: 'Fixed.' },
     ])

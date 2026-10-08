@@ -28,7 +28,7 @@ import { AbortGate, gateLlmClient, raceAbort, TurnAbortedError } from './turn-ab
 import { detectHomogeneousBatchList } from './batch-list-detector.js'
 import { classifyAndTraceExecutionMode } from './execution-mode.js'
 import { evaluateTurnPolicy } from './turn-policy.js'
-import type { FileToolsContext } from './file-tools.js'
+import { workspaceRelative, type FileToolsContext } from './file-tools.js'
 import type { UndoLogEntry } from './action-snapshot.js'
 import type { WebToolsContext } from './web-tools.js'
 import type { ShellToolsContext } from './shell-tools.js'
@@ -525,6 +525,12 @@ export class PersonalAssistant {
     )
     // M3: recall_memory reads episodic digests through the memory service's DigestStore (offered only under AUDIT_RECALL_TOOL).
     this.agentLoop.digestReader = storeDigestReader(this.memoryService.digests)
+    // A write over an existing file is refused unless this session read it or wrote it itself (see AgentLoop.unreadExistingFile).
+    this.agentLoop.sessionKnowsFile = (sessionId, relative) => {
+      const root = fileTools?.workspaceRoot ?? ''
+      if ((this.sourcesReadBySession.get(sessionId) ?? []).some((entry) => entry.startsWith('read_file: ') && workspaceRelative(root, entry.slice('read_file: '.length)) === relative)) return true
+      return this.actionApproval.appliedActions.some((action) => action.startsWith('wrote ') && workspaceRelative(root, action.slice('wrote '.length)) === relative)
+    }
     // Plan mode's P5 file-backed persistence reuses AssistantSession's existing
     // write_file/run_shell_command workspace lookup rather than re-deriving fileTools/
     // shellTools/actionTools precedence a second time here — `undefined` on a surface with no
