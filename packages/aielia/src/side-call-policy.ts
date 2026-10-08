@@ -11,11 +11,21 @@ import { isRequestTimeout, type ChatMessage, type ChatOptions, type ILLMClient, 
  *
  * So the call is hedged instead of cut off: when the first attempt has not answered after HEDGE_AFTER_MS a second identical attempt
  * starts beside it, and whichever answers first is used. A slow answer is never discarded, a hung call costs about the hedge delay
- * plus a normal response, and each attempt keeps its own hard bound. Only a timeout is hedged on the failure path: a refusal or a
- * malformed answer would come back the same, so it is returned at once.
+ * plus a normal response, and each attempt keeps its own hard bound. A failure waits for the other attempt if one is running; after that a
+ * transient one (a timeout, 408, 429, 5xx: benchmark scenarios 02, 08 and 10 each ended a classification on "The LLM proxy returned an error")
+ * gets one more attempt, while a refusal or a malformed answer would come back the same and is returned at once.
  */
 export const SIDE_CALL_HEDGE_AFTER_MS = 25_000
 export const SIDE_CALL_TIMEOUT_MS = 120_000
+
+/** A failure worth one more attempt: a request that timed out, or an endpoint status that comes and goes (408, 429, any 5xx). A 4xx refusal or a bad answer is final. */
+export function isTransientFailure(err: unknown): boolean {
+  if (isRequestTimeout(err)) return true
+  const status = typeof err === 'object' && err !== null && typeof (err as { cause?: { status?: unknown } }).cause === 'object'
+    ? ((err as { cause?: { status?: unknown } }).cause as { status?: unknown } | null)?.status
+    : undefined
+  return typeof status === 'number' && (status === 408 || status === 429 || status >= 500)
+}
 
 export interface SideCallPolicyOptions {
   /** Called once when a second attempt is started because the first has not answered yet. */
@@ -48,12 +58,11 @@ export function withSideCallPolicy(client: ILLMClient, policy: SideCallPolicyOpt
             (err: unknown) => {
               running--
               if (settled) return
-              // A failure that is not a timeout is final (a second attempt would get the same refusal). After a timeout the other attempt
-              // may still answer, so only the last one standing rejects.
-              if (!isRequestTimeout(err)) { done(); reject(err); return }
+              // The other attempt may still answer, so a failure only counts once no attempt is left running.
               if (running > 0) return
-              // The only attempt timed out before the hedge delay: it still gets its one more attempt.
-              if (started < 2) { policy.onHedge?.({ afterMs: hedgeAfterMs }); start(); return }
+              // A transient failure (a timeout, or an error status that comes and goes) gets its one more attempt; anything else is a refusal
+              // a second attempt would meet again.
+              if (isTransientFailure(err) && started < 2) { policy.onHedge?.({ afterMs: hedgeAfterMs }); start(); return }
               done(); reject(err)
             },
           )

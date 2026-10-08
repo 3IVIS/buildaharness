@@ -72,6 +72,42 @@ describe('side-call policy (hedged side calls)', () => {
     expect(inner.calls).toHaveLength(2)
   })
 
+  const upstream = (status: number) => new FlowExecutionError({ nodeId: 'openai-compatible-client', message: 'The LLM proxy returned an error. Try again in a moment.', cause: { status } })
+
+  it('asks again at once after a transient upstream error (5xx, 429) before the hedge delay', async () => {
+    vi.useFakeTimers()
+    const inner = new ScriptedClient([{ after: 2_000, result: upstream(502) }, { after: 3_000, result: 'second' }])
+    const p = withSideCallPolicy(inner).callChatStructured([], undefined, schema)
+    await vi.advanceTimersByTimeAsync(5_000)
+    expect((await p).content).toBe('second')
+    expect(inner.calls).toHaveLength(2)
+  })
+
+  it('does not fail the call when one attempt errors while the hedged one is still running (the second answers)', async () => {
+    vi.useFakeTimers()
+    const inner = new ScriptedClient([{ after: 40_000, result: upstream(502) }, { after: 20_000, result: 'second' }])
+    const p = withSideCallPolicy(inner).callChatStructured([], undefined, schema)
+    await vi.advanceTimersByTimeAsync(SIDE_CALL_HEDGE_AFTER_MS + 20_000)
+    expect((await p).content).toBe('second')
+    expect(inner.calls).toHaveLength(2)
+  })
+
+  it('gives up after two transient failures, and treats a 4xx as final at once', async () => {
+    vi.useFakeTimers()
+    const twice = new ScriptedClient([{ after: 1_000, result: upstream(503) }, { after: 1_000, result: upstream(503) }, { after: 1, result: 'third' }])
+    const p = withSideCallPolicy(twice).callChatStructured([], undefined, schema)
+    const caught = p.then(() => 'resolved', (e: Error) => e.message)
+    await vi.advanceTimersByTimeAsync(5_000)
+    expect(await caught).toMatch(/returned an error/)
+    expect(twice.calls).toHaveLength(2)
+    const refused = new ScriptedClient([{ after: 500, result: upstream(401) }, { after: 1, result: 'later' }])
+    const p2 = withSideCallPolicy(refused).callChatStructured([], undefined, schema)
+    const caught2 = p2.then(() => 'resolved', (e: Error) => e.message)
+    await vi.advanceTimersByTimeAsync(60_000)
+    expect(await caught2).toMatch(/returned an error/)
+    expect(refused.calls).toHaveLength(1)
+  })
+
   it('returns a refusal or any other failure at once, without a second attempt', async () => {
     vi.useFakeTimers()
     const inner = new ScriptedClient([{ after: 500, result: new Error('proxy unreachable') }, { after: 1, result: 'later' }])
