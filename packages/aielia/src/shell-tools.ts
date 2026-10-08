@@ -67,7 +67,9 @@ export const RUN_SHELL_COMMAND_TOOL: ToolDefinition = {
     "If a command's output shows a 403 (or a connection failure) for an external host, treat that as this local " +
     "containment blocking the request, not as the remote server's own response — do not describe it as the destination " +
     'declining or rejecting the request. Every call always stages a fresh approval — even an identical repeat of an ' +
-    'earlier command, since its result may no longer reflect current state.',
+    'earlier command, since its result may no longer reflect current state. Keep every command inside the workspace: do not read, ' +
+    'copy or install from other places on this machine (other projects, benchmark or result folders, system directories) and do ' +
+    'not use sudo or system-wide installs to get around a missing dependency or a blocked network; say what is missing instead.',
   input_schema: {
     type: 'object',
     properties: {

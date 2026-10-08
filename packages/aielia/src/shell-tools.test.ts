@@ -134,6 +134,13 @@ describe('discardPendingAction (kind: shell)', () => {
 })
 
 describe('run_shell_command tool description', () => {
+  it('tells the model to keep commands inside the workspace and not to work around a missing dependency (benchmark scenario 07)', () => {
+    const d = RUN_SHELL_COMMAND_TOOL.description
+    expect(d).toContain('Keep every command inside the workspace')
+    expect(d).toContain('other projects, benchmark or result folders, system directories')
+    expect(d).toContain('sudo or system-wide installs')
+  })
+
   it('tells the model where a command starts, so it does not cd to a guessed absolute path (benchmark logs: `cd /workspace && ...` proposals failed with "no such directory")', () => {
     const props = RUN_SHELL_COMMAND_TOOL.input_schema.properties as Record<string, { description: string }>
     expect(props.command.description).toMatch(/starts in the workspace root/)
