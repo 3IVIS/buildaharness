@@ -663,7 +663,8 @@ export class PersonalAssistant {
     this.onTrace?.({ kind: 'turn_start', sessionId, message: userMessage })
     this.replyLoggedEarly = false
     if (!options.pendingActionId && !options.auditRetry && !(options.approved === true && !options.pendingClarificationId && !options.planApprovalId)) {
-      this.auditRetryBudget = 1
+      // Two attempts at most: the first for any finding, the second only when the correction itself came back unfinished or as a non-answer.
+      this.auditRetryBudget = 2
       this.userMessageActionsStart = this.actionApproval.appliedActions.length
     }
     // A pendingActionId call resumes a turn whose user message was already logged when it first
@@ -751,7 +752,10 @@ export class PersonalAssistant {
         if (!auditNotice) this.onDebugLog?.({ kind: 'note', sessionId, content: `reply audit: clean (recorded ${recorded.length} action(s), ${this.actionApproval.recentCommandOutputs.length} command output(s) checked)` })
         // One automatic correction: the reply claimed or promised work with no recorded action, or stated outside
         // facts as verified. The model gets a nudge to do the work with its tools or to say plainly that it did not.
-        const nudge = options.auditRetry || this.auditRetryBudget <= 0 ? undefined : auditRetryNudge(audit, recorded, userMessage)
+        // A correction that is itself an announcement with nothing after it, or a non-answer, has corrected nothing (benchmark scenario 02 turn 2:
+        // "Let me check only those directly:" and then nothing), so it earns the one further attempt; any other finding on a retry is final.
+        const retryMayRetry = !options.auditRetry || audit.promisesWorkNotDone || audit.nonAnswer
+        const nudge = !retryMayRetry || this.auditRetryBudget <= 0 ? undefined : auditRetryNudge(audit, recorded, userMessage)
         if (nudge) {
           this.auditRetryBudget--
           this.onDebugLog?.({ kind: 'note', sessionId, content: `reply audit: ${auditNotice ?? 'flagged'} — retrying once with a nudge` })

@@ -244,7 +244,9 @@ export class ActionApprovalService {
           '\n\n[network-containment note: outbound network access from this command is denied by default ' +
           '(no hosts on the configured allowlist) — any HTTP response code or connection failure shown above for ' +
           'an external host came from this local restriction, not from the destination itself. If the task needs live information ' +
-          'from the network, tell the user you could not look it up; do not answer from memory as if it had been verified, and do not cite this command as the source of any fact.]'
+          'from the network, tell the user you could not look it up; do not answer from memory as if it had been verified, and do not cite this command as the source of any fact. ' +
+          'If the task needs something downloaded or installed, tell the user it could not be fetched; do not look for a copy elsewhere on this machine ' +
+          '(other projects, result or build folders, system directories) and do not install anything system-wide (sudo, --break-system-packages) to get around the restriction.]'
       }
       const injection = await detectInjectionLikelyWithLLM(rawOutput, this.llmClient, this.model(), accumulateLocalUsage)
       const body = injection.flagged
