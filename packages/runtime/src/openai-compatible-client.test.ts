@@ -486,3 +486,35 @@ describe('request timeout (a stalled request must not freeze a turn)', () => {
     await expect(client.callChatStructured(user)).resolves.toMatchObject({ content: 'ok' })
   })
 })
+
+describe('shorter bound for structured side calls (a stalled classifier or audit must not hold a turn for minutes)', () => {
+  const user = [{ role: 'user' as const, content: 'hi' }]
+  const never = (() => new Promise(() => {})) as unknown as typeof fetch
+  const answers = (afterMs: number): typeof fetch => (async () => {
+    await new Promise((r) => setTimeout(r, afterMs))
+    return new Response(JSON.stringify({ choices: [{ message: { content: 'ok' } }] }), { status: 200 })
+  }) as unknown as typeof fetch
+  const make = (fetchImpl: typeof fetch, extra: Record<string, number> = {}) =>
+    new OpenAICompatibleLLMClient({ apiKey: API_KEY, baseUrl: OPENAI_BASE_URL, defaultModel: 'm', fetchImpl, requestTimeoutMs: 600, structuredRequestTimeoutMs: 40, ...extra })
+
+  it('gives a structuredOutput call the short bound', async () => {
+    const t0 = Date.now()
+    await expect(make(never).callChatStructured(user, undefined, { structuredOutput: { schema: {} } })).rejects.toThrow(/timed out/)
+    expect(Date.now() - t0).toBeLessThan(400)
+  })
+
+  it('keeps the long bound for a call without structuredOutput, which may legitimately take longer', async () => {
+    await expect(make(answers(150)).callChatStructured(user)).resolves.toMatchObject({ content: 'ok' })
+  })
+
+  it('lets a call override its own bound', async () => {
+    await expect(make(answers(150)).callChatStructured(user, undefined, { structuredOutput: { schema: {} }, timeoutMs: 600 })).resolves.toMatchObject({ content: 'ok' })
+    await expect(make(never).callChatStructured(user, undefined, { timeoutMs: 30 })).rejects.toThrow(/timed out/)
+  })
+
+  it('defaults a structured bound of 120 s and a main bound of 300 s', async () => {
+    const client = new OpenAICompatibleLLMClient({ apiKey: API_KEY, baseUrl: OPENAI_BASE_URL, defaultModel: 'm', fetchImpl: never }) as unknown as { requestTimeoutMs: number; structuredRequestTimeoutMs: number }
+    expect(client.requestTimeoutMs).toBe(300_000)
+    expect(client.structuredRequestTimeoutMs).toBe(120_000)
+  })
+})

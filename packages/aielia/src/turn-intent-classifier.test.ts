@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import type { ChatMessage, ChatOptions, ILLMClient, LLMStructuredResponse, ToolDefinition } from '@buildaharness/runtime'
+import { FlowExecutionError, type ChatMessage, type ChatOptions, type ILLMClient, type LLMStructuredResponse, type ToolDefinition } from '@buildaharness/runtime'
 import { classifyTurnIntent, type TurnIntentContext } from './turn-intent-classifier.js'
 
 class StructuredOnlyLLMClient implements ILLMClient {
@@ -724,5 +724,42 @@ describe('classifyTurnIntent — changing attributes under AUDIT_MEMORY_BUDGETED
     const system = await systemFor('1')
     expect(system).not.toContain('false for something expected to change')
     expect(system).toContain('team size) that you give a `key` is also `durable: true`')
+  })
+})
+
+describe('a stalled classification is asked again once before the turn falls back to UNKNOWN risk (T1)', () => {
+  const GOOD = response()
+  class SequencedLLM implements ILLMClient {
+    calls = 0
+    constructor(private readonly steps: (Error | string)[]) {}
+    async *callChat(): AsyncIterable<string> { yield '' }
+    async callChatSync(): Promise<string> { return '' }
+    async callChatStructured(): Promise<LLMStructuredResponse> {
+      const step = this.steps[Math.min(this.calls++, this.steps.length - 1)]
+      if (step instanceof Error) throw step
+      return { content: step }
+    }
+  }
+  const timeout = () => new FlowExecutionError({ nodeId: 'openai-compatible-client', message: 'LLM request timed out after 120s waiting for the model to respond', cause: { timeout: true } })
+
+  it('retries once after a timeout and uses the second answer', async () => {
+    const llm = new SequencedLLM([timeout(), GOOD])
+    const result = await classifyTurnIntent('what does it say?', llm, NO_PLAN)
+    expect(llm.calls).toBe(2)
+    expect(result.riskLevel).toBe('LOW')
+  })
+
+  it('falls back to UNKNOWN when the retry times out as well, after exactly two attempts', async () => {
+    const llm = new SequencedLLM([timeout(), timeout(), GOOD])
+    const result = await classifyTurnIntent('what does it say?', llm, NO_PLAN)
+    expect(llm.calls).toBe(2)
+    expect(result.riskLevel).toBe('UNKNOWN')
+  })
+
+  it('does not retry any other failure', async () => {
+    const llm = new SequencedLLM([new Error('proxy unreachable'), GOOD])
+    const result = await classifyTurnIntent('what does it say?', llm, NO_PLAN)
+    expect(llm.calls).toBe(1)
+    expect(result.riskLevel).toBe('UNKNOWN')
   })
 })

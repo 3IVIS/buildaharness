@@ -198,3 +198,33 @@ describe('AnthropicLLMClient', () => {
     })
   })
 })
+
+describe('request timeout (a stalled request must not freeze a turn)', () => {
+  const user = [{ role: 'user' as const, content: 'hi' }]
+  const never = (() => new Promise(() => {})) as unknown as typeof fetch
+  const make = (fetchImpl: typeof fetch) => new AnthropicLLMClient({ apiKey: API_KEY, fetchImpl, requestTimeoutMs: 600, structuredRequestTimeoutMs: 40 })
+
+  it('rejects a call whose fetch never resolves, with the short bound for a structuredOutput call', async () => {
+    const t0 = Date.now()
+    await expect(make(never).callChatStructured(user, undefined, { structuredOutput: { schema: {} } })).rejects.toBeInstanceOf(FlowExecutionError)
+    expect(Date.now() - t0).toBeLessThan(400)
+  })
+
+  it('rejects a body that never finishes', async () => {
+    const stalled = new Response(new ReadableStream<Uint8Array>({ start() {} }), { status: 200 })
+    await expect(make((async () => stalled) as unknown as typeof fetch).callChatStructured(user, undefined, { timeoutMs: 40 })).rejects.toThrow(/timed out/)
+  })
+
+  it('rejects a streamed reply that stalls after its first chunk', async () => {
+    const encoder = new TextEncoder()
+    const stream = new ReadableStream<Uint8Array>({ start(c) { c.enqueue(encoder.encode('data: {"type":"content_block_delta","delta":{"type":"text_delta","text":"par"}}\n')) } })
+    const client = new AnthropicLLMClient({ apiKey: API_KEY, fetchImpl: (async () => new Response(stream, { status: 200 })) as unknown as typeof fetch, requestTimeoutMs: 40 })
+    const run = (async () => { for await (const _ of client.callChat(user)) { /* drain */ } })()
+    await expect(run).rejects.toThrow(/timed out/)
+  })
+
+  it('leaves a call that answers in time alone', async () => {
+    const body = { content: [{ type: 'text', text: 'ok' }] }
+    await expect(make((async () => new Response(JSON.stringify(body), { status: 200 })) as unknown as typeof fetch).callChatStructured(user)).resolves.toMatchObject({ content: 'ok' })
+  })
+})

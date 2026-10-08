@@ -49,10 +49,25 @@ describe('reply audit', () => {
   it('passes what the system recorded to the model and reads the three flags', async () => {
     const llm = new AuditLLM('{"claimsUnrecordedWork": true, "promisesWorkNotDone": false, "unverifiedOutsideFacts": false}')
     const audit = await auditReply({ ...base, actions: ['wrote a.py'], lookupUnavailable: true }, llm)
-    expect(audit).toEqual({ claimsUnrecordedWork: true, promisesWorkNotDone: false, unverifiedOutsideFacts: false, contradictsCommandOutput: false })
+    expect(audit).toEqual({ ...CLEAN_AUDIT, claimsUnrecordedWork: true })
     const payload = JSON.parse(String(llm.seen[0][1].content))
     expect(payload.actions).toEqual(['wrote a.py'])
     expect(payload.lookupUnavailable).toBe(true)
+  })
+  it('reads the flag for a reply that denies recorded work, and the flag for a reply that corrects itself, each kept only when both calls raise it (W1, U1)', async () => {
+    const DENIES = '{"claimsUnrecordedWork": false, "promisesWorkNotDone": false, "unverifiedOutsideFacts": false, "contradictsCommandOutput": false, "contradictsRecordedWork": true, "leaksSelfCorrection": false}'
+    const LEAKS = '{"claimsUnrecordedWork": false, "promisesWorkNotDone": false, "unverifiedOutsideFacts": false, "contradictsCommandOutput": false, "contradictsRecordedWork": false, "leaksSelfCorrection": true}'
+    expect(await auditReply(base, new SequenceLLM([DENIES, DENIES]))).toEqual({ ...CLEAN_AUDIT, contradictsRecordedWork: true })
+    expect(await auditReply(base, new SequenceLLM([LEAKS, LEAKS]))).toEqual({ ...CLEAN_AUDIT, leaksSelfCorrection: true })
+    expect(await auditReply(base, new SequenceLLM([DENIES, NONE]))).toEqual(CLEAN_AUDIT)
+    expect(await auditReply(base, new SequenceLLM([DENIES, LEAKS]))).toEqual(CLEAN_AUDIT)
+  })
+  it('gives the model every read of the session so far, so a statement about which tools were used can be checked (U1)', async () => {
+    const llm = new AuditLLM(NONE)
+    await auditReply({ ...base, sourcesRead: ['read_file: a.py'], earlierSourcesRead: ['list_directory: .', 'read_file: README.md'] }, llm)
+    const payload = JSON.parse(String(llm.seen[0][1].content))
+    expect(payload.sourcesRead).toEqual(['read_file: a.py'])
+    expect(payload.earlierSourcesRead).toEqual(['list_directory: .', 'read_file: README.md'])
   })
   it('never flags a reply when the check fails or answers nonsense', async () => {
     expect(await auditReply(base, new AuditLLM(new Error('boom')))).toEqual(CLEAN_AUDIT)
@@ -61,10 +76,12 @@ describe('reply audit', () => {
   })
   it('builds one note from the flags, and none for a clean audit', () => {
     expect(replyAuditNotice(CLEAN_AUDIT, [])).toBeUndefined()
-    const n = replyAuditNotice({ claimsUnrecordedWork: true, promisesWorkNotDone: true, unverifiedOutsideFacts: true, contradictsCommandOutput: true }, ['wrote a.py'])!
+    const n = replyAuditNotice({ claimsUnrecordedWork: true, promisesWorkNotDone: true, unverifiedOutsideFacts: true, contradictsCommandOutput: true, contradictsRecordedWork: true, leaksSelfCorrection: true }, ['wrote a.py'])!
     expect(n).toContain('recorded: wrote a.py')
     expect(n).toContain('nothing was done this turn')
     expect(n).toContain('unverified')
+    expect(n).toContain('denies or contradicts')
+    expect(n).toContain('corrects itself')
     expect(replyAuditNotice({ ...CLEAN_AUDIT, claimsUnrecordedWork: true }, [])).toContain('recorded: nothing')
   })
   it('is on by default and off for falsy env values', () => {
