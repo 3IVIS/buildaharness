@@ -644,6 +644,7 @@ describe('PersonalAssistant', () => {
         callChat: () => inner.callChat(),
         callChatSync: (m, o) => inner.callChatSync(m, o),
         callChatStructured: async (messages, tools, options) => {
+          if (String(messages[0]?.content).includes('responds to the user')) return { content: '{"respondsToMessage": true}' }
           if (String(messages[0]?.content).includes('You audit one reply')) {
             audits++
             return { content: audits <= 2 ? '{"claimsUnrecordedWork": true, "promisesWorkNotDone": false, "unverifiedOutsideFacts": false}' : '{"claimsUnrecordedWork": false, "promisesWorkNotDone": false, "unverifiedOutsideFacts": false}' }

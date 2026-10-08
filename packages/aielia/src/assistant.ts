@@ -745,6 +745,7 @@ export class PersonalAssistant {
           this.llmClient,
           this.model,
           (u) => auditUsage.push(u),
+          { checkNonAnswer: true },
         )
         const auditNotice = replyAuditNotice(audit, recorded)
         if (!auditNotice) this.onDebugLog?.({ kind: 'note', sessionId, content: `reply audit: clean (recorded ${recorded.length} action(s), ${this.actionApproval.recentCommandOutputs.length} command output(s) checked)` })

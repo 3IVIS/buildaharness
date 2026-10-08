@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest'
 import type { ChatMessage, ILLMClient, LLMStructuredResponse } from '@buildaharness/runtime'
-import { auditReply, replyAuditNotice, replyAuditEnabled, CLEAN_AUDIT } from './reply-audit.js'
+import { auditReply, replyAuditNotice, replyAuditEnabled, CLEAN_AUDIT, NON_ANSWER_CHECK_MAX_CHARS } from './reply-audit.js'
 
 class AuditLLM implements ILLMClient {
   seen: ChatMessage[][] = []
@@ -79,6 +79,38 @@ describe('reply audit', () => {
     expect(await auditReply(base, new SequenceLLM([DENIES, NONE, NONE]))).toEqual(CLEAN_AUDIT)
     expect(await auditReply(base, new SequenceLLM([DENIES, LEAKS, NONE]))).toEqual(CLEAN_AUDIT)
   })
+  it('checks a short reply for being a non-answer with its own small call, kept only when at least two calls say so (scenario 13 turn 3)', async () => {
+    const answers = (responds: boolean[]) => {
+      let i = 0
+      return new (class implements ILLMClient {
+        mainCalls = 0
+        respondsCalls = 0
+        async *callChat(): AsyncIterable<string> { yield '' }
+        async callChatSync(): Promise<string> { return '' }
+        async callChatStructured(messages: ChatMessage[]): Promise<LLMStructuredResponse> {
+          if (String(messages[0]?.content).includes('responds to the user')) { this.respondsCalls++; return { content: JSON.stringify({ respondsToMessage: responds[Math.min(i++, responds.length - 1)] }) } }
+          this.mainCalls++
+          return { content: NONE }
+        }
+      })()
+    }
+    const junk = { ...base, reply: '{"favorite_marble":"... the response ..."}' }
+    const both = answers([false, false])
+    expect(await auditReply(junk, both, undefined, undefined, { checkNonAnswer: true })).toEqual({ ...CLEAN_AUDIT, nonAnswer: true })
+    expect(both.respondsCalls).toBe(2)
+    const split = answers([false, true, true])
+    expect(await auditReply(junk, split, undefined, undefined, { checkNonAnswer: true })).toEqual(CLEAN_AUDIT)
+    expect(split.respondsCalls).toBe(3)
+    const rescued = answers([true, false, false])
+    expect((await auditReply(junk, rescued, undefined, undefined, { checkNonAnswer: true })).nonAnswer).toBe(true)
+    // Off unless asked for, and never for a long reply.
+    const off = answers([false, false])
+    expect((await auditReply(junk, off)).nonAnswer).toBe(false)
+    expect(off.respondsCalls).toBe(0)
+    const long = answers([false, false])
+    expect((await auditReply({ ...base, reply: 'x'.repeat(NON_ANSWER_CHECK_MAX_CHARS + 1) }, long, undefined, undefined, { checkNonAnswer: true })).nonAnswer).toBe(false)
+    expect(long.respondsCalls).toBe(0)
+  })
   it('gives the model every read of the session so far, so a statement about which tools were used can be checked (U1)', async () => {
     const llm = new AuditLLM(NONE)
     await auditReply({ ...base, sourcesRead: ['read_file: a.py'], earlierSourcesRead: ['list_directory: .', 'read_file: README.md'] }, llm)
@@ -93,12 +125,13 @@ describe('reply audit', () => {
   })
   it('builds one note from the flags, and none for a clean audit', () => {
     expect(replyAuditNotice(CLEAN_AUDIT, [])).toBeUndefined()
-    const n = replyAuditNotice({ claimsUnrecordedWork: true, promisesWorkNotDone: true, unverifiedOutsideFacts: true, contradictsCommandOutput: true, contradictsRecordedWork: true, leaksSelfCorrection: true }, ['wrote a.py'])!
+    const n = replyAuditNotice({ claimsUnrecordedWork: true, promisesWorkNotDone: true, unverifiedOutsideFacts: true, contradictsCommandOutput: true, contradictsRecordedWork: true, leaksSelfCorrection: true, nonAnswer: true }, ['wrote a.py'])!
     expect(n).toContain('recorded: wrote a.py')
     expect(n).toContain('nothing was done this turn')
     expect(n).toContain('unverified')
     expect(n).toContain('denies or contradicts')
     expect(n).toContain('corrects itself')
+    expect(n).toContain('does not answer your message')
     expect(replyAuditNotice({ ...CLEAN_AUDIT, claimsUnrecordedWork: true }, [])).toContain('recorded: nothing')
   })
   it('is on by default and off for falsy env values', () => {
