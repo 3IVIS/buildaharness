@@ -1659,6 +1659,37 @@ describe('PersonalAssistant file tools', () => {
       expect(await backend.readTextFile(`${ROOT}/calc.py`)).toContain('x - 1') // nothing was replaced
     })
 
+    it('keeps the end-of-file newline of the file it rewrites, so a revert is byte-identical (benchmark scenario 06)', async () => {
+      const backend = makeFakeBackend()
+      const original = 'def f(x):\n    return x - 1\n'
+      await backend.writeTextFile(`${ROOT}/calc.py`, original)
+      const llm = scriptedResponses([
+        { content: '', toolCalls: [{ id: 'r', name: 'read_file', input: { path: 'calc.py' } }] },
+        { content: '', toolCalls: [{ id: 'w', name: 'write_file', input: { path: 'calc.py', content: 'def f(x):\n    return x + 1' } }] }, // the model dropped the final newline
+      ])
+      const assistant = new PersonalAssistant({ llmClient: llm, fileTools: { backend, workspaceRoot: ROOT } })
+      const staged = await assistant.turn('fix f in calc.py', { sessionId: 'eof-1' })
+      await assistant.turn('fix f in calc.py', { sessionId: 'eof-1', approved: true, pendingActionId: staged.pendingActionId })
+      expect(await backend.readTextFile(`${ROOT}/calc.py`)).toBe('def f(x):\n    return x + 1\n')
+    })
+
+    it('leaves a file without a trailing newline, and a new file, exactly as the model wrote them', async () => {
+      const backend = makeFakeBackend()
+      await backend.writeTextFile(`${ROOT}/no-eol.txt`, 'one')
+      const llm = scriptedResponses([
+        { content: '', toolCalls: [{ id: 'r', name: 'read_file', input: { path: 'no-eol.txt' } }] },
+        { content: '', toolCalls: [{ id: 'w1', name: 'write_file', input: { path: 'no-eol.txt', content: 'two' } }] },
+        { content: '', toolCalls: [{ id: 'w2', name: 'write_file', input: { path: 'new.txt', content: 'fresh' } }] },
+        { content: 'ok' },
+      ])
+      const assistant = new PersonalAssistant({ llmClient: llm, fileTools: { backend, workspaceRoot: ROOT } })
+      const s1 = await assistant.turn('edit both', { sessionId: 'eof-2' })
+      const s2 = await assistant.turn('edit both', { sessionId: 'eof-2', approved: true, pendingActionId: s1.pendingActionId })
+      await assistant.turn('edit both', { sessionId: 'eof-2', approved: true, pendingActionId: s2.pendingActionId })
+      expect(await backend.readTextFile(`${ROOT}/no-eol.txt`)).toBe('two')
+      expect(await backend.readTextFile(`${ROOT}/new.txt`)).toBe('fresh')
+    })
+
     it('needs no read for a new file', async () => {
       const backend = makeFakeBackend()
       const llm = scriptedResponses([{ content: '', toolCalls: [{ id: 'n', name: 'write_file', input: { path: 'fresh.md', content: 'hello' } }] }])

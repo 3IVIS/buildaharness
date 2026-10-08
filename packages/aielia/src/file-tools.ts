@@ -215,10 +215,14 @@ export async function executeFileTool(ctx: FileToolsContext, toolName: string, i
     }
     case 'write_file': {
       const path = requireStringArg(input, 'path')
-      const content = requireStringArg(input, 'content')
+      let content = requireStringArg(input, 'content')
       // Validate now — a proposal for an out-of-scope path fails immediately
       // rather than getting staged for approval.
-      await resolveAndVerify(ctx, path)
+      const resolved = await resolveAndVerify(ctx, path)
+      // Keep the file's end-of-file newline: model output routinely drops the last "\n", so a rewrite of a file that ended with one would
+      // silently change its last line (benchmark scenario 06: a "reverted" file differed from the original by that one byte).
+      const existing = await ctx.backend.readTextFile(resolved)
+      if (existing !== undefined && existing.endsWith('\n') && content !== '' && !content.endsWith('\n')) content += '\n'
       const { id } = await stagePendingAction(ctx.backend, ctx.workspaceRoot, { kind: 'write', path, content })
       return { kind: 'staged_write', id, path, content }
     }
