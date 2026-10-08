@@ -2814,6 +2814,10 @@ describe('PersonalAssistant shell tools', () => {
       const nudged = llm.receivedMessages.at(-1) ?? []
       expect(nudged.at(-1)?.role).toBe('user')
       expect(nudged.at(-1)?.content).toMatch(/was empty/)
+      // The nudge says it is automatic, does not demand a summary of work that may not exist, and quotes the user's message (scenario 12 turn 1).
+      expect(nudged.at(-1)?.content).toMatch(/not from the user/)
+      expect(nudged.at(-1)?.content).toMatch(/if the message needs no work, just answer it/)
+      expect(nudged.at(-1)?.content).toContain('fix the issues')
       expect(logs.some((e) => e.kind === 'note' && /retrying once/.test(e.content))).toBe(true)
       expect((await assistant.getTranscript('empty-1')).at(-1)?.content.startsWith('Fixed a.py and b.py.')).toBe(true)
     })

@@ -85,7 +85,18 @@ export const RECORD_ONLY_REPLY_NUDGE =
   'Your last reply held only a line shaped like the system\'s action record, no answer, and the system ran nothing it listed. Do what the user asked now with your tools if it is still wanted, then reply in plain text with what you did and found. Never write a "Recorded by the system" line yourself.'
 
 export const EMPTY_REPLY_NUDGE =
-  'Your last reply was empty. Reply now with your final answer to the user in plain text: summarize what you did and what you found. Do not call a tool unless something is still unfinished.'
+  'Your last reply was empty. This check is automatic and is not from the user. Answer the user\'s message now in plain text: if you did work this turn, say what you did and what you found; if the message needs no work, just answer it. Do not call a tool unless something is still unfinished.'
+
+/** The nudge with the user's message quoted, so the model answers that message and not the nudge (benchmark scenario 12 turn 1: told to "summarize", it answered a summary request the user never made). */
+export function withUserMessage(nudge: string, userMessage: string): string {
+  const asked = userMessage.trim().replace(/\s+/g, ' ').slice(0, 400)
+  return asked ? `${nudge} The user's message you are answering: "${asked}".` : nudge
+}
+
+/** True for a nudge this loop sent itself (the quoted user message varies, so the constant is matched as a prefix). */
+function isOwnReplyNudge(content: string): boolean {
+  return content.startsWith(EMPTY_REPLY_NUDGE) || content.startsWith(RECORD_ONLY_REPLY_NUDGE)
+}
 
 /** Sent when a turn used all its tool steps, before the one tool-less summary call. */
 export const OUT_OF_STEPS_NUDGE =
@@ -1092,12 +1103,12 @@ export class AgentLoop {
           // An empty (or reasoning-only) completion is not an answer. Ask once more with a nudge; a second empty
           // one ends the loop with an empty final, which the caller replaces with a fallback (fallbackFinalReply).
           const last = messages[messages.length - 1]
-          if (last?.role === 'user' && (last.content === EMPTY_REPLY_NUDGE || last.content === RECORD_ONLY_REPLY_NUDGE)) {
+          if (last?.role === 'user' && isOwnReplyNudge(last.content)) {
             this.onDebugLog?.({ kind: 'note', sessionId, content: `the model returned ${recordOnly ? 'only a forged action record' : 'an empty final reply'} again after a nudge; using a fallback reply` })
             return { done: true, result: { kind: 'final', content: '', sources } }
           }
           this.onDebugLog?.({ kind: 'note', sessionId, content: recordOnly ? 'the reply was only a forged action record and nothing it listed was run; retrying once with a nudge' : 'the model returned an empty final reply; retrying once with a nudge' })
-          messages.push({ role: 'user', content: recordOnly ? RECORD_ONLY_REPLY_NUDGE : EMPTY_REPLY_NUDGE })
+          messages.push({ role: 'user', content: withUserMessage(recordOnly ? RECORD_ONLY_REPLY_NUDGE : EMPTY_REPLY_NUDGE, userMessage) })
           return { done: false, dispatchedAnyToolCall }
         }
         if (looksLikeUnparsedToolCall(response.content)) {
