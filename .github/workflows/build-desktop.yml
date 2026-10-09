@@ -105,7 +105,7 @@ jobs:
         with:
           projectPath: packages/desktop
           tagName: ${{ github.ref_name }}
-          releaseName: 'Aielia desktop ${{ github.ref_name }}'
+          releaseName: 'Aielia desktop v__VERSION__'
           releaseBody: 'Unsigned build — macOS/Windows will show a security warning on first launch. Install steps: https://myaielia.com/install'
           releaseDraft: true
           prerelease: false
