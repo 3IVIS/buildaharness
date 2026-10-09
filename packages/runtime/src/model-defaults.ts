@@ -24,8 +24,29 @@ export const ANTHROPIC_DEFAULT_MODEL = 'claude-sonnet-5'
 export const OPENAI_DEFAULT_MODEL = 'gpt-5-mini'
 
 /**
- * OpenRouter slug. Verified live against OpenRouter's /models endpoint — OpenRouter drops
- * slugs for decommissioned snapshots as models are retired, so this needs occasional
- * re-verification, not a "set once and forget" constant.
+ * OpenRouter slug. Verified live against OpenRouter's /models endpoint (2026-10-09: 1M context,
+ * tool calling supported) — OpenRouter drops slugs for decommissioned snapshots as models are
+ * retired, so this needs occasional re-verification, not a "set once and forget" constant.
+ * Deliberately not a Claude model: OpenRouter's pitch is cheap access to many models, and the
+ * setup wizard points newcomers here. Anyone wanting Claude sets `model` (e.g. `anthropic/claude-sonnet-5`).
  */
-export const OPENROUTER_DEFAULT_MODEL = 'anthropic/claude-sonnet-5'
+export const OPENROUTER_DEFAULT_MODEL = 'deepseek/deepseek-v4-flash'
+
+/**
+ * The model a backend actually runs when `config.model` is unset, so callers that need to *name*
+ * it (spend/cost estimates, the model shown to the user) don't assume the Anthropic default.
+ * `undefined` for backends with no fixed default (claude-cli uses the user's own Claude Code default).
+ */
+export function defaultModelForBackend(backend: string): string | undefined {
+  switch (backend) {
+    case 'anthropic':
+    case 'proxy':
+      return ANTHROPIC_DEFAULT_MODEL
+    case 'openai':
+      return OPENAI_DEFAULT_MODEL
+    case 'openrouter':
+      return OPENROUTER_DEFAULT_MODEL
+    default:
+      return undefined
+  }
+}

@@ -45,6 +45,7 @@ import {
   OPENROUTER_BASE_URL,
   OPENROUTER_DEFAULT_MODEL,
   OPENROUTER_EXTRA_HEADERS,
+  defaultModelForBackend,
   FileSystemAdapter,
   FileSystemExperienceStore,
   type ILLMClient,
@@ -348,7 +349,8 @@ async function createTauriBackedAssistant(config: AssistantConfig): Promise<Pers
 
   return PersonalAssistant.create({
     llmClient: createLlmClient(config, { isDesktop: true, workspaceRoot, fetchImpl: tauriFetch }),
-    model: config.model,
+    // Name the backend's real default when none is set, so spend tracking prices the model that actually runs.
+    model: config.model ?? defaultModelForBackend(config.llmBackend),
     // M6 — same AssistantConfig seam as the CLI's buildAssistant (it already passed memoryBudgetChars; the browser build did not).
     memoryBudgetChars: config.memoryBudgetChars,
     memoryWriteMode: config.memoryWriteMode,
@@ -383,7 +385,8 @@ async function buildAssistant(config: AssistantConfig): Promise<PersonalAssistan
   const testFsBackend = getAssistantTestHooks()?.makeFsBackend
   return PersonalAssistant.create({
     llmClient: createLlmClient(config, { isDesktop: false, workspaceRoot: '' }),
-    model: config.model,
+    // Name the backend's real default when none is set, so spend tracking prices the model that actually runs.
+    model: config.model ?? defaultModelForBackend(config.llmBackend),
     memoryBudgetChars: config.memoryBudgetChars,
     memoryWriteMode: config.memoryWriteMode,
     // No fileTools/shellTools in a plain browser build (no filesystem/process access at all) —
@@ -543,7 +546,7 @@ export function App(): React.JSX.Element {
    */
   function withCostEstimate(usage: TokenUsage): TokenUsage {
     if (config.llmBackend === 'claude-cli' || usage.costUsd !== undefined) return usage
-    const estimated = estimateCostUsd(config.model ?? DEFAULT_PROXY_MODEL, usage)
+    const estimated = estimateCostUsd(config.model ?? defaultModelForBackend(config.llmBackend) ?? DEFAULT_PROXY_MODEL, usage)
     return estimated !== undefined ? { ...usage, costUsd: estimated } : usage
   }
 

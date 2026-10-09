@@ -794,7 +794,7 @@ keychain — so treat that file accordingly. When
 `ASSISTANT_MODEL`/`/config set model` isn't set, each backend falls back to the
 current-generation default id exported from `@buildaharness/runtime`'s
 `model-defaults.ts` (`openai` → `gpt-5-mini`, `openrouter` →
-`anthropic/claude-sonnet-5`, `anthropic` and `proxy` → `claude-sonnet-5`).
+`deepseek/deepseek-v4-flash`, `anthropic` and `proxy` → `claude-sonnet-5`).
 
 Transcript, learned experience, reminders, and any in-flight turn's checkpoint
 persist as real files under `~/.buildaharness/personal-assistant/`

@@ -15,6 +15,7 @@ import {
   OPENAI_DEFAULT_MODEL,
   OPENROUTER_BASE_URL,
   OPENROUTER_DEFAULT_MODEL,
+  defaultModelForBackend,
   OPENROUTER_EXTRA_HEADERS,
   FileSystemAdapter,
   FileSystemExperienceStore,
@@ -183,7 +184,8 @@ async function buildAssistant(config: AssistantConfig, { backend, dataDir, remin
 
   return PersonalAssistant.create({
     llmClient,
-    model: config.model,
+    // Name the backend's real default when none is set, so spend tracking prices the model that actually runs (not the Anthropic default).
+    model: config.model ?? defaultModelForBackend(config.llmBackend),
     // config.activeProject (set via /project <name>) overrides the default of "the workspace
     // I'm running in" — see PersonalAssistantOptions.activeProject's doc comment.
     activeProject: config.activeProject || workspaceRoot,
