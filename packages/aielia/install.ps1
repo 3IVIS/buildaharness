@@ -31,6 +31,22 @@ function Install-Aielia {
     throw "Refusing non-HTTPS URL: $Url"
   }
 
+  # No release to install (none published yet, a manifest naming a removed release, a network problem).
+  # Prints a plain message and lets the caller `return` — never `exit`, which would close the user's
+  # PowerShell window under `irm | iex`, and never throw, which prints a stack trace. Integrity
+  # failures (checksum mismatch) still throw: those are not "try again later".
+  function Write-Unavailable([string]$Reason) {
+    Write-Host "aielia install: $Reason" -ForegroundColor Red
+    Write-Host ''
+    Write-Host 'No downloadable Aielia release could be found. This usually means a new release is still being'
+    Write-Host 'published, so trying again in a few minutes often works. In the meantime you can:'
+    Write-Host ''
+    Write-Host '  - run it without installing (needs Node.js):  npx @buildaharness/aielia'
+    Write-Host '  - follow the step-by-step guide:              https://myaielia.com/install'
+    Write-Host '  - see all releases:                           https://github.com/3IVIS/buildaharness/releases'
+    $global:LASTEXITCODE = 1
+  }
+
   function Get-Sha256([string]$Path) {
     (Get-FileHash -Algorithm SHA256 -LiteralPath $Path).Hash.ToLowerInvariant()
   }
@@ -56,14 +72,15 @@ function Install-Aielia {
     if ($manifest -is [byte[]]) { $manifest = [Text.Encoding]::UTF8.GetString($manifest) }
     $manifest = $manifest | ConvertFrom-Json
   } catch {
-    throw "Could not download or parse $manifestUrl : $($_.Exception.Message)"
+    Write-Unavailable "could not download or parse the release manifest ($manifestUrl): $($_.Exception.Message)"
+    return
   }
 
   $tag = [string]$manifest.tag
   $version = [string]$manifest.version
-  if (-not $tag.StartsWith('aielia-v')) { throw "Manifest carries an unexpected tag: '$tag'" }
+  if (-not $tag.StartsWith('aielia-v')) { Write-Unavailable "the release manifest lists no release (tag: '$tag')"; return }
   $asset = $manifest.assets.$platformKey
-  if (-not $asset -or -not $asset.url) { throw "Release $tag has no binary for $platformKey" }
+  if (-not $asset -or -not $asset.url) { Write-Unavailable "release $tag has no binary for $platformKey"; return }
   $expected = ([string]$asset.sha256).ToLowerInvariant()
   if ($expected -notmatch '^[0-9a-f]{64}$') { throw "Manifest has no valid sha256 for $platformKey" }
   $assetUrl = [string]$asset.url
@@ -93,7 +110,12 @@ function Install-Aielia {
   try {
     $download = Join-Path $tmp 'aielia.exe'
     Write-Host "Downloading $assetUrl"
-    Invoke-WebRequest -UseBasicParsing -Uri $assetUrl -OutFile $download
+    try {
+      Invoke-WebRequest -UseBasicParsing -Uri $assetUrl -OutFile $download
+    } catch {
+      Write-Unavailable "could not download release $tag ($assetUrl); it may have been removed or is not published yet. $($_.Exception.Message)"
+      return
+    }
 
     $actual = Get-Sha256 $download
     if ($actual -ne $expected) { throw "Checksum mismatch (manifest $expected, downloaded $actual) - download discarded" }
