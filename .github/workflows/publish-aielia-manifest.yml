@@ -38,8 +38,14 @@ jobs:
       contents: read
 
     steps:
-      - name: Checkout buildaharness
+      # The installers and manifest generator come from main, not from the release's tag: a tag is
+      # cut before later installer fixes land, and publishing it must not copy older install.sh /
+      # install.ps1 over the site's newer ones (it did exactly that for aielia-v0.3.6). The release
+      # ASSETS are still fetched by tag below.
+      - name: Checkout buildaharness (main)
         uses: actions/checkout@v4
+        with:
+          ref: main
 
       - name: Check deploy key is present
         run: |
