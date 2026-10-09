@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, afterEach } from 'vitest'
-import { ANTHROPIC_DEFAULT_MODEL, OPENAI_DEFAULT_MODEL, OPENROUTER_DEFAULT_MODEL } from './model-defaults'
+import { ANTHROPIC_DEFAULT_MODEL, OPENAI_DEFAULT_MODEL, OPENROUTER_DEFAULT_MODEL, defaultModelForBackend } from './model-defaults'
 import { AnthropicLLMClient } from './anthropic-client'
 import { LLMClient } from './llm-client'
 
@@ -21,6 +21,22 @@ describe('model-defaults', () => {
 
   it('ANTHROPIC_DEFAULT_MODEL is a Claude Sonnet 5-generation id', () => {
     expect(ANTHROPIC_DEFAULT_MODEL).toBe('claude-sonnet-5')
+  })
+
+  it('OPENROUTER_DEFAULT_MODEL is DeepSeek V4 Flash, not a Claude model', () => {
+    expect(OPENROUTER_DEFAULT_MODEL).toBe('deepseek/deepseek-v4-flash')
+  })
+
+  it('defaultModelForBackend names the model each backend actually runs when none is configured', () => {
+    expect(defaultModelForBackend('anthropic')).toBe(ANTHROPIC_DEFAULT_MODEL)
+    expect(defaultModelForBackend('proxy')).toBe(ANTHROPIC_DEFAULT_MODEL)
+    expect(defaultModelForBackend('openai')).toBe(OPENAI_DEFAULT_MODEL)
+    expect(defaultModelForBackend('openrouter')).toBe(OPENROUTER_DEFAULT_MODEL)
+  })
+
+  it('defaultModelForBackend has no default for claude-cli or an unknown backend', () => {
+    expect(defaultModelForBackend('claude-cli')).toBeUndefined()
+    expect(defaultModelForBackend('something-else')).toBeUndefined()
   })
 
   it('AnthropicLLMClient sends ANTHROPIC_DEFAULT_MODEL when no model is given (structured path)', async () => {
