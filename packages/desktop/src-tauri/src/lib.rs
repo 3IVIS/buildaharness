@@ -723,6 +723,7 @@ async fn dns_lookup(hostname: String) -> Result<Vec<String>, String> {
 // mirrors T5's own precedent of shelling out to existing OS binaries (`kill`/`taskkill`)
 // rather than adding a crate — the same tradeoff, just for keychain access instead of
 // process-group signaling.
+// Storage identifier, not a display name: renaming it would orphan API keys users already saved.
 const KEYCHAIN_SERVICE: &str = "com.buildaharness.assistant";
 const KEYCHAIN_ACCOUNT: &str = "apiKey";
 
@@ -772,7 +773,7 @@ fn keychain_delete_impl() -> Result<(), String> {
 fn keychain_set_impl(secret: &str) -> Result<(), String> {
   use std::io::Write;
   let mut child = Command::new("secret-tool")
-    .args(["store", "--label", "buildaharness Assistant API key", "service", KEYCHAIN_SERVICE, "account", KEYCHAIN_ACCOUNT])
+    .args(["store", "--label", "Aielia API key", "service", KEYCHAIN_SERVICE, "account", KEYCHAIN_ACCOUNT])
     .stdin(Stdio::piped())
     .spawn()
     .map_err(|e| format!("Couldn't run \"secret-tool\" (is libsecret-tools installed, and a Secret Service provider running?): {e}"))?;
@@ -820,6 +821,7 @@ fn keychain_delete_impl() -> Result<(), String> {
 #[cfg(target_os = "windows")]
 fn keychain_file_path() -> Result<PathBuf, String> {
   let local_app_data = std::env::var("LOCALAPPDATA").map_err(|_| "LOCALAPPDATA is not set".to_string())?;
+  // Folder name kept as-is on purpose: it already holds users' stored keys (renaming would orphan them).
   let dir = PathBuf::from(local_app_data).join("buildaharness-assistant");
   std::fs::create_dir_all(&dir).map_err(|e| format!("Couldn't create the keychain directory: {e}"))?;
   Ok(dir.join("apikey.dpapi"))
