@@ -1,8 +1,8 @@
 [package]
-name = "buildaharness-assistant"
+name = "aielia-desktop"
 version = "0.1.4"
-description = "Desktop shell for the buildaharness personal assistant"
-authors = ["buildaharness"]
+description = "Aielia desktop app"
+authors = ["3IVIS"]
 license = ""
 repository = ""
 edition = "2021"

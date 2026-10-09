@@ -15,6 +15,10 @@ macOS that's `~/Library/Application Support/com.buildaharness.assistant/`. The
 `fs` plugin is registered in `src-tauri/src/lib.rs` and scoped in
 `src-tauri/capabilities/default.json` via the `fs:allow-applocaldata-*-recursive`
 permission sets. See Phase 3 of the internal plan.
+**Naming:** the app, installers and binary are all `Aielia` / `aielia-desktop`. The bundle identifier
+(`com.buildaharness.assistant`), the keychain service name and the Windows key folder
+(`%LOCALAPPDATA%\buildaharness-assistant`) keep the old name on purpose — they are storage locations,
+and renaming them would orphan users' saved chats and API keys without a migration.
 The window (1100x760, minimum 520x420) saves and restores its position via
 `tauri-plugin-window-state`.
 

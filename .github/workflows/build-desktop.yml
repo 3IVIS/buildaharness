@@ -111,8 +111,8 @@ jobs:
           prerelease: false
           args: ${{ matrix.args }}
 
-      # ── Guard: every installer the release gets must be called Aielia*, never the Cargo
-      #    package name (buildaharness-assistant). Fails the job before the draft is published.
+      # ── Guard: every installer the release gets must be called Aielia*, never the old
+      #    Cargo package name (buildaharness-assistant). Fails the job before the draft is published.
       - name: Check artifact names
         shell: bash
         env:
