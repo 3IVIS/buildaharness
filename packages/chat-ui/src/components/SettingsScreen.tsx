@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useRef, useState } from 'react'
 import {
   validateConfig,
   ConfigValidationError,
@@ -153,6 +153,7 @@ export function SettingsScreen({
 }: Props): React.JSX.Element {
   const [form, setForm] = useState<AssistantConfig>(config)
   const [error, setError] = useState<string | null>(null)
+  const errorRef = useRef<HTMLDivElement>(null)
   const [saving, setSaving] = useState(false)
 
   function set<K extends keyof AssistantConfig>(key: K, value: AssistantConfig[K]): void {
@@ -175,18 +176,26 @@ export function SettingsScreen({
 
   async function handleSave(): Promise<void> {
     setError(null)
-    try {
-      validateConfig(form, config)
-    } catch (err) {
-      setError(err instanceof ConfigValidationError ? err.message : 'Invalid settings.')
-      return
-    }
 
     // Only the keys that actually changed — pinned fields render disabled inputs above, so
     // form[key] never diverges from config[key] for those; this patch can never touch them.
     const patch: Partial<AssistantConfig> = {}
     for (const key of CONFIG_KEYS) {
       if (form[key] !== config[key]) Object.assign(patch, { [key]: form[key] })
+    }
+
+    // Validate what the user changed, not what the build shipped with. The hosted /try build turns web
+    // search on by default but has no Brave key, so validating the untouched web fields blocked every
+    // unrelated save (e.g. picking a model) with an error that sat far below the Save button. The web
+    // rule still applies the moment the edit touches web search or the Brave key.
+    const touchesWeb = 'enableWeb' in patch || 'braveApiKey' in patch
+    try {
+      validateConfig(patch, touchesWeb ? config : { ...config, enableWeb: false })
+    } catch (err) {
+      setError(err instanceof ConfigValidationError ? err.message : 'Invalid settings.')
+      // The form is long and Save sits in the footer: bring the message into view so a failed save is never silent.
+      setTimeout(() => errorRef.current?.scrollIntoView?.({ block: 'center', behavior: 'smooth' }), 0)
+      return
     }
 
     setSaving(true)
@@ -457,7 +466,7 @@ export function SettingsScreen({
           <HealthList checks={healthChecks} />
         </section>
 
-        {error && <div className="settings__error">{error}</div>}
+        {error && <div className="settings__error" role="alert" ref={errorRef}>{error}</div>}
         {busy && <p className="settings__info">Aielia is still replying. Changes are saved as soon as the reply finishes.</p>}
       </div>
 

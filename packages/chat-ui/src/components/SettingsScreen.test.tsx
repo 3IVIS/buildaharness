@@ -4,6 +4,7 @@ import userEvent from '@testing-library/user-event'
 import { DEFAULT_CONFIG, type AssistantConfig } from '@buildaharness/aielia'
 import { ANTHROPIC_DEFAULT_MODEL, OPENAI_DEFAULT_MODEL } from '@buildaharness/runtime'
 import { SettingsScreen } from './SettingsScreen'
+import { OPENROUTER_DEFAULT_MODEL } from '@buildaharness/runtime'
 
 function renderSettings(overrides: Partial<React.ComponentProps<typeof SettingsScreen>> = {}) {
   const onSave = vi.fn(async () => {})
@@ -205,12 +206,22 @@ describe('SettingsScreen', () => {
     })
   })
 
-  it('an invalid combination (web search enabled, no key) shows a validation error and does not call onSave', async () => {
+  it('turning web search on without a Brave key shows a validation error and does not call onSave', async () => {
     const user = userEvent.setup()
-    const { onSave } = renderSettings({ config: { ...DEFAULT_CONFIG, enableWeb: true } })
+    const { onSave } = renderSettings({ config: { ...DEFAULT_CONFIG, enableWeb: false } })
+    await user.click(screen.getByLabelText(/Enable web search/i))
     await user.click(screen.getByRole('button', { name: 'Save' }))
-    expect(screen.getByText(/requires braveApiKey/)).toBeInTheDocument()
+    expect(screen.getByRole('alert')).toHaveTextContent(/requires braveApiKey/)
     expect(onSave).not.toHaveBeenCalled()
+  })
+
+  it('an unrelated edit still saves when the build shipped with web search on and no Brave key (hosted /try)', async () => {
+    const user = userEvent.setup()
+    const { onSave } = renderSettings({ config: { ...DEFAULT_CONFIG, llmBackend: 'openrouter', apiKey: 'sk-or-v1-x', enableWeb: true } })
+    await user.type(screen.getByPlaceholderText(OPENROUTER_DEFAULT_MODEL), 'deepseek/deepseek-v4-flash')
+    await user.click(screen.getByRole('button', { name: 'Save' }))
+    expect(screen.queryByRole('alert')).toBeNull()
+    expect(onSave).toHaveBeenCalledWith({ model: 'deepseek/deepseek-v4-flash' })
   })
 
   describe('Provider backend selection', () => {
