@@ -6,7 +6,10 @@ name: Build desktop app
 #
 # Builds unsigned installers for macOS (universal), Linux (.deb/.rpm/.AppImage),
 # and Windows (.msi/.exe) via tauri-apps/tauri-action, and attaches them to a
-# draft GitHub Release. Unsigned means macOS/Windows show a security warning on
+# draft GitHub Release. The Linux leg runs on ubuntu-22.04 (not ubuntu-latest) on purpose: the
+# bundles link against the build machine's glibc, so building on the oldest base that ships
+# WebKitGTK 4.1 (Ubuntu 22.04 / Debian 12) is what lets them run on those and anything newer.
+# Every installer must be named Aielia* (see the "Check artifact names" step). Unsigned means macOS/Windows show a security warning on
 # first launch (Gatekeeper / SmartScreen) — signing is a distribution decision
 # for later, not an engineering blocker. See the internal plan Phase 4.
 
@@ -42,7 +45,7 @@ jobs:
         include:
           - platform: 'macos-latest'
             args: '--target universal-apple-darwin'
-          - platform: 'ubuntu-latest'
+          - platform: 'ubuntu-22.04'
             args: ''
           - platform: 'windows-latest'
             args: ''
@@ -54,7 +57,7 @@ jobs:
 
       # ── Linux system deps (WebKitGTK etc.) ───────────────────────────────────
       - name: Install Linux dependencies
-        if: matrix.platform == 'ubuntu-latest'
+        if: matrix.platform == 'ubuntu-22.04'
         run: |
           sudo apt-get update
           sudo apt-get install -y libwebkit2gtk-4.1-dev libappindicator3-dev librsvg2-dev patchelf xdg-utils
@@ -96,13 +99,29 @@ jobs:
 
       # ── Build + publish release ──────────────────────────────────────────────
       - uses: tauri-apps/tauri-action@v0
+        id: tauri
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         with:
           projectPath: packages/desktop
           tagName: ${{ github.ref_name }}
-          releaseName: 'buildaharness assistant ${{ github.ref_name }}'
-          releaseBody: 'Unsigned build — macOS/Windows will show a security warning on first launch. See packages/desktop/README.md.'
+          releaseName: 'Aielia desktop ${{ github.ref_name }}'
+          releaseBody: 'Unsigned build — macOS/Windows will show a security warning on first launch. Install steps: https://myaielia.com/install'
           releaseDraft: true
           prerelease: false
           args: ${{ matrix.args }}
+
+      # ── Guard: every installer the release gets must be called Aielia*, never the Cargo
+      #    package name (buildaharness-assistant). Fails the job before the draft is published.
+      - name: Check artifact names
+        shell: bash
+        env:
+          ARTIFACT_PATHS: ${{ steps.tauri.outputs.artifactPaths }}
+        run: |
+          echo "$ARTIFACT_PATHS" | node -e '
+            const paths = JSON.parse(require("fs").readFileSync(0, "utf8"));
+            const names = paths.map((p) => p.split(/[\\/]/).pop());
+            console.log(names.join("\n"));
+            const bad = names.filter((n) => !n.startsWith("Aielia"));
+            if (!names.length || bad.length) { console.error("Unexpected or missing artifacts: " + (bad.join(", ") || "none produced")); process.exit(1); }
+          '
