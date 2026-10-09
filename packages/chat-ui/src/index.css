@@ -825,6 +825,50 @@ body {
   font-size: 12.5px;
 }
 
+.key-notice {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  margin: 12px 20px 0;
+  padding: 14px 16px;
+  border: 1px solid var(--accent-a35);
+  border-radius: 10px;
+  background: var(--accent-a10);
+}
+
+.key-notice__text {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  font-size: 14px;
+  color: var(--text);
+}
+
+.key-notice__text span {
+  color: var(--muted);
+  font-size: 13px;
+}
+
+.key-notice__button {
+  flex-shrink: 0;
+  background: var(--accent-solid);
+  border: none;
+  border-radius: 8px;
+  color: var(--on-accent);
+  padding: 10px 16px;
+  font-size: 14px;
+  cursor: pointer;
+}
+
+@media (max-width: 560px) {
+  .key-notice {
+    flex-direction: column;
+    align-items: stretch;
+    margin: 12px 12px 0;
+  }
+}
+
 .app__demo {
   display: flex;
   flex-direction: column;

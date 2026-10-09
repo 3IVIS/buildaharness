@@ -61,6 +61,8 @@ import { EscalationBanner } from './components/EscalationBanner'
 import { shouldRenderAskQuestionCard } from './ask-question-render'
 import { SettingsScreen } from './components/SettingsScreen'
 import { SetupWizard } from './components/SetupWizard'
+import { KeyNotice } from './components/KeyNotice'
+import { isKeyMissing, requiresOwnKey } from './key-gate'
 import { SearchPanel } from './components/SearchPanel'
 import { GoalsPanel } from './components/GoalsPanel'
 import { MemoryPanel, type MemoryPanelData } from './components/MemoryPanel'
@@ -446,6 +448,9 @@ export function App(): React.JSX.Element {
   // comment). Default OFF: the composer/Send button stay disabled while busy, byte-identical to
   // today (INV-43).
   const goalGraphModeEnabled = isGoalGraphEnabled(config.goalGraphMode)
+  // Hosted /try only (VITE_ASSISTANT_REQUIRE_KEY): until the visitor adds their own key, steer them to add it
+  // instead of letting a message go to a model that can't answer. False on every other build.
+  const keyMissing = isKeyMissing(requiresOwnKey(import.meta.env), isTauri(), config)
   // P4 of plans/plan_visualization_plan.html — read-only plan graph drawer. Default OFF: no button, no
   // panel, no asset loaded (the viewer is imported lazily by PlanVizPanel, which only mounts when open).
   const planGraphModeEnabled = isPlanGraphEnabled(config.planGraphMode)
@@ -988,6 +993,10 @@ export function App(): React.JSX.Element {
   }
 
   function submitMessage(): void {
+    if (keyMissing) {
+      setNeedsSetup(true)
+      return
+    }
     const message = input.trim()
     if (!message) return
     if (busy) {
@@ -1026,6 +1035,10 @@ export function App(): React.JSX.Element {
   async function handleSketchPlan(): Promise<void> {
     const request = input.trim()
     if (!request || busy) return
+    if (keyMissing) {
+      setNeedsSetup(true)
+      return
+    }
     const assistant = assistantRef.current
     if (!assistant) {
       setEntries((prev) => [...prev, { id: newId(), kind: 'error', content: 'Aielia is still starting up — try again in a moment.', retryable: false, retryMessage: request, retryApproved: false }])
@@ -1240,6 +1253,7 @@ export function App(): React.JSX.Element {
           onClose={() => setPlanVizOpenPersisted(false)}
         />
       )}
+      {keyMissing && <KeyNotice onAddKey={() => setNeedsSetup(true)} />}
       <div className="app__messages">
         {showDemo && entries.length === 0 && (
           <div className="app__demo">
@@ -1403,7 +1417,7 @@ export function App(): React.JSX.Element {
           value={input}
           onChange={handleComposerInput}
           onKeyDown={handleComposerKeyDown}
-          placeholder={planState?.mode === 'drafting' ? 'Refine the plan…' : 'Message Aielia…'}
+          placeholder={keyMissing ? 'Add your AI key to chat…' : planState?.mode === 'drafting' ? 'Refine the plan…' : 'Message Aielia…'}
           rows={1}
           disabled={!goalGraphModeEnabled && busy}
         />
@@ -1411,7 +1425,7 @@ export function App(): React.JSX.Element {
           <button type="button" className="app__stop" aria-label="Stop" title="Stop this reply" onClick={() => turnAbortRef.current?.abort()}>Stop</button>
         )}
         {(!busy || !stoppable || goalGraphModeEnabled) && (
-          <button type="submit" disabled={(!goalGraphModeEnabled && busy) || !input.trim()}>Send</button>
+          <button type="submit" disabled={!keyMissing && ((!goalGraphModeEnabled && busy) || !input.trim())}>{keyMissing ? 'Add your key' : 'Send'}</button>
         )}
       </form>
       <div className="app__composer-disclaimer">Alpha software. Aielia uses AI models and can make mistakes — verify anything important.</div>

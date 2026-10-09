@@ -66,6 +66,10 @@ jobs:
           VITE_ASSISTANT_PROXY_URL: https://buildaharness-proxy.buildaharness.workers.dev
           VITE_ASSISTANT_ENABLE_WEB: 'true'
           VITE_ASSISTANT_WEB_BACKEND: proxy
+          # This build has no model of its own: visitors bring their own API key. Turns on the
+          # "Bring your own AI key" notice and makes Send open key setup until a key is saved
+          # (packages/chat-ui/src/key-gate.ts). Unset for every other build.
+          VITE_ASSISTANT_REQUIRE_KEY: 'true'
         run: npm run build --workspace=packages/chat-ui
 
       - name: Check deploy key is present

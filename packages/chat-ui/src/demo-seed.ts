@@ -1,7 +1,7 @@
 /**
  * First-load demo for the hosted browser trial (myaielia.com/try).
  *
- * A visitor lands with no API key configured. Before asking them to paste one,
+ * A visitor lands with no API key configured. Alongside the "add your key" notice (KeyNotice),
  * show the single most distinctive thing Aielia does: a consequential request
  * pauses for approval *before* any model call is made. This is a static
  * illustration — `ApprovalCard illustrative` renders an explanatory line rather
@@ -18,4 +18,4 @@ export const DEMO_APPROVAL_REASON =
   'your approval to proceed.'
 
 export const DEMO_NOTE =
-  "Example — this is what a visitor sees first, before adding a key. Send your own message to clear it."
+  "Example — here is how Aielia handles a risky request. It clears when you send your own message."
