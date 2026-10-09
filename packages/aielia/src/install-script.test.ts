@@ -12,13 +12,20 @@ import { fileURLToPath } from 'node:url'
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it } from 'vitest'
 
 const SCRIPT = join(dirname(fileURLToPath(import.meta.url)), '..', 'install.sh')
+// The script must run under whatever /bin/sh the user has: dash (Debian/Ubuntu), busybox ash (Alpine,
+// containers), bash in POSIX mode (macOS's /bin/sh is bash 3.2 in that mode). Shells that aren't
+// installed are skipped; AIELIA_TEST_SHELLS overrides the list (comma-separated argv, e.g. "zsh --emulate sh").
+const SHELLS: string[][] = (process.env.AIELIA_TEST_SHELLS
+  ? process.env.AIELIA_TEST_SHELLS.split(',').map((x) => x.trim().split(/\s+/))
+  : [['sh'], ['dash'], ['bash', '--posix'], ['busybox', 'sh']]
+).filter((argv) => spawnSync(argv[0], [...argv.slice(1), '-c', 'exit 0'], { stdio: 'ignore' }).status === 0)
 const platformKey = `${process.platform}-${process.arch}`
 const supported = ['linux-x64', 'darwin-arm64', 'darwin-x64'].includes(platformKey) && process.platform !== 'win32'
 
 const fakeBinary = (version: string) => `#!/bin/sh\necho ${version}\n`
 const sha = (s: string) => createHash('sha256').update(s).digest('hex')
 
-describe.skipIf(!supported)('install.sh', () => {
+for (const shell of SHELLS) describe.skipIf(!supported)(`install.sh under ${shell.join(' ')}`, () => {
   let server: Server
   let base: string
   // path → body; mutated per test
@@ -61,7 +68,7 @@ describe.skipIf(!supported)('install.sh', () => {
   // Async on purpose: a sync spawn would block this process's event loop, and with it the mock server.
   function run(args: string[] = [], env: Record<string, string> = {}): Promise<{ code: number | null; out: string }> {
     return new Promise((resolve) => {
-      const child = spawn('sh', [SCRIPT, ...args], {
+      const child = spawn(shell[0], [...shell.slice(1), SCRIPT, ...args], {
         env: {
           PATH: process.env.PATH ?? '',
           HOME: work,
@@ -195,7 +202,7 @@ describe.skipIf(!supported)('install.sh', () => {
     routes['/aielia-latest.json'] = routes['/aielia-latest.json'].replace('"tag": "aielia-v0.4.0"', '"tag": "desktop-v0.4.0"')
     const r = await run()
     expect(r.code).not.toBe(0)
-    expect(r.out).toContain('unexpected tag')
+    expect(r.out).toContain('lists no release')
   })
 
   it('works against a file:// manifest override', async () => {
@@ -205,6 +212,45 @@ describe.skipIf(!supported)('install.sh', () => {
     const r = await run([], { AIELIA_MANIFEST_URL: `file://${manifestFile}` })
     expect(r.code).toBe(0)
     expect(installedVersion()).toBe('0.4.0')
+  })
+
+  describe('when there is no release to install', () => {
+    const hint = 'npx @buildaharness/aielia'
+
+    it('fails gracefully when the manifest cannot be downloaded (nothing published yet)', async () => {
+      const r = await run()
+      expect(r.code).toBe(1)
+      expect(r.out).toContain('could not download the release manifest')
+      expect(r.out).toContain(hint)
+      expect(r.out).toContain('https://myaielia.com/install')
+      expect(existsSync(target())).toBe(false)
+    })
+
+    it('fails gracefully when the manifest names a release whose binary has been removed (404)', async () => {
+      publish()
+      delete routes['/asset']
+      const r = await run()
+      expect(r.code).toBe(1)
+      expect(r.out).toContain('may have been removed or is not published yet')
+      expect(r.out).toContain(hint)
+      expect(existsSync(target())).toBe(false)
+    })
+
+    it('fails gracefully on an empty or non-manifest response', async () => {
+      routes['/aielia-latest.json'] = '<html>not json</html>'
+      const r = await run()
+      expect(r.code).toBe(1)
+      expect(r.out).toContain('lists no release')
+      expect(r.out).toContain(hint)
+    })
+
+    it('still fails plainly (no "try again later" advice) on a checksum mismatch', async () => {
+      publish({ manifestSha: sha('something else') })
+      const r = await run()
+      expect(r.code).toBe(1)
+      expect(r.out).toContain('checksum mismatch')
+      expect(r.out).not.toContain(hint)
+    })
   })
 
   it('--help prints usage and exits 0; an unknown flag exits non-zero', async () => {

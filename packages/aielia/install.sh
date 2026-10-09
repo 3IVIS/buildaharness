@@ -27,6 +27,24 @@ DEFAULT_MANIFEST_URL='https://myaielia.com/aielia-latest.json'
 say() { printf '%s\n' "$*"; }
 die() { printf 'aielia install: %s\n' "$*" >&2; exit 1; }
 
+# unavailable <what went wrong>: there is no release to install (none published yet, a manifest that
+# names a release that has been removed, a platform the release has no binary for, or a network
+# problem). Unlike die, this ends with the ways forward. Integrity failures (checksum mismatch)
+# stay on die: those are not "try again later".
+unavailable() {
+  printf 'aielia install: %s\n' "$*" >&2
+  cat >&2 <<'MSG'
+
+No downloadable Aielia release could be found. This usually means a new release is still being
+published, so trying again in a few minutes often works. In the meantime you can:
+
+  - run it without installing (needs Node.js):  npx @buildaharness/aielia
+  - follow the step-by-step guide:              https://myaielia.com/install
+  - see all releases:                           https://github.com/3IVIS/buildaharness/releases
+MSG
+  exit 1
+}
+
 usage() {
   cat <<'EOF'
 Usage: install.sh [--force] [--help]
@@ -161,15 +179,15 @@ main() {
   trap 'exit 143' TERM
 
   say "Fetching the Aielia release manifest…"
-  fetch "$manifest_url" "$tmp/manifest.json" || die "could not download $manifest_url"
+  fetch "$manifest_url" "$tmp/manifest.json" || unavailable "could not download the release manifest ($manifest_url)"
 
   tag=$(manifest_top_field "$tmp/manifest.json" tag)
   version=$(manifest_top_field "$tmp/manifest.json" version)
   asset_url=$(manifest_field "$tmp/manifest.json" "$PLATFORM_KEY" url)
   expected=$(manifest_field "$tmp/manifest.json" "$PLATFORM_KEY" sha256)
 
-  case "$tag" in aielia-v*) ;; *) die "manifest carries an unexpected tag: '${tag:-<none>}'" ;; esac
-  [ -n "$asset_url" ] || die "release $tag has no binary for $PLATFORM_KEY"
+  case "$tag" in aielia-v*) ;; *) unavailable "the release manifest lists no release (tag: '${tag:-<none>}')" ;; esac
+  [ -n "$asset_url" ] || unavailable "release $tag has no binary for $PLATFORM_KEY"
   case "$expected" in
     *[!0-9a-fA-F]*|'') die "manifest has no valid sha256 for $PLATFORM_KEY" ;;
   esac
@@ -203,7 +221,7 @@ main() {
   fi
 
   say "Downloading $asset_url"
-  fetch "$asset_url" "$tmp/aielia" || die "download failed: $asset_url"
+  fetch "$asset_url" "$tmp/aielia" || unavailable "could not download release $tag ($asset_url); it may have been removed or is not published yet"
 
   actual=$(sha256_of "$tmp/aielia")
   [ "$actual" = "$expected" ] || die "checksum mismatch (manifest $expected, downloaded $actual) — download discarded"
