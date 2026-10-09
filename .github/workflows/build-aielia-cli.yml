@@ -51,7 +51,7 @@ jobs:
             asset: aielia-darwin-arm64
           - runner: macos-15-intel     # Intel Mac. macos-13 (the label the plan was drafted with) has been retired by GitHub; verify this label still exists on the first real tag push.
             asset: aielia-darwin-x64
-          - runner: ubuntu-latest
+          - runner: ubuntu-22.04       # oldest glibc we ship against (2.35): the SEA binary links the build machine's glibc, so ubuntu-latest would exclude Ubuntu 22.04 / Debian 12
             asset: aielia-linux-x64
           - runner: windows-latest
             asset: aielia-win32-x64.exe

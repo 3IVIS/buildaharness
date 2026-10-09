@@ -1,3 +1,4 @@
+import { containsActionRecord, stripActionRecord } from './action-record.js'
 import {
   Budget,
   validateInvestigationTools,
@@ -22,7 +23,7 @@ import type { TurnIntentClassification, RiskLevel } from './turn-intent-classifi
 import { evaluateToolPolicy } from './tool-policy.js'
 import { createTurnControlPlaneState, recordToolOutcome, moreRestrictiveControlState, controlStateToolPolicyEnabled, type TurnControlPlaneState } from './tool-control-plane.js'
 import { classifyToolYield, type ToolYield } from './tool-yield-classifier.js'
-import { FILE_TOOLS, executeFileTool, readCurrentFileContent, ToolNotFoundError, type FileToolsContext } from './file-tools.js'
+import { FILE_TOOLS, executeFileTool, readCurrentFileContent, workspaceRelative, ToolNotFoundError, type FileToolsContext } from './file-tools.js'
 import { formatWriteDiff } from './diff-format.js'
 import { WEB_TOOLS, executeWebTool, type WebToolsContext } from './web-tools.js'
 import { SHELL_TOOLS, executeShellTool, commandMayLeaveWorkspace, type ShellToolsContext } from './shell-tools.js'
@@ -79,8 +80,23 @@ export interface ToolLoopPendingState {
 }
 
 /** Sent when the model returns an empty final answer, before the one retry. */
+/** For a reply that held only a line shaped like the system's action record: the actions it listed were not run, so unlike the blank-reply nudge this one sends the model back to its tools. */
+export const RECORD_ONLY_REPLY_NUDGE =
+  'Your last reply held only a line shaped like the system\'s action record, no answer, and the system ran nothing it listed. Do what the user asked now with your tools if it is still wanted, then reply in plain text with what you did and found. Never write a "Recorded by the system" line yourself.'
+
 export const EMPTY_REPLY_NUDGE =
-  'Your last reply was empty. Reply now with your final answer to the user in plain text: summarize what you did and what you found. Do not call a tool unless something is still unfinished.'
+  'Your last reply was empty. This check is automatic and is not from the user. Answer the user\'s message now in plain text: if you did work this turn, say what you did and what you found; if the message needs no work, just answer it. Do not call a tool unless something is still unfinished.'
+
+/** The nudge with the user's message quoted, so the model answers that message and not the nudge (benchmark scenario 12 turn 1: told to "summarize", it answered a summary request the user never made). */
+export function withUserMessage(nudge: string, userMessage: string): string {
+  const asked = userMessage.trim().replace(/\s+/g, ' ').slice(0, 400)
+  return asked ? `${nudge} The user's message you are answering: "${asked}".` : nudge
+}
+
+/** True for a nudge this loop sent itself (the quoted user message varies, so the constant is matched as a prefix). */
+function isOwnReplyNudge(content: string): boolean {
+  return content.startsWith(EMPTY_REPLY_NUDGE) || content.startsWith(RECORD_ONLY_REPLY_NUDGE)
+}
 
 /** Sent when a turn used all its tool steps, before the one tool-less summary call. */
 export const OUT_OF_STEPS_NUDGE =
@@ -952,6 +968,28 @@ export class AgentLoop {
    * the result, since it's a plain accumulator shared by reference across every step call for
    * the same loop.
    */
+  /**
+   * The tool error for a write_file over an existing file the session has not read, or undefined when the write may go ahead (a new
+   * file, or one this session read or wrote). Benchmark scenario 13 turn 4: after a turn with no tool call at all, the model answered
+   * "fix that too" with a write_file that replaced `calculate_priority` with an invented function of a different signature, never having
+   * read the file. A write is a full replacement, so it has to be based on what the file really holds.
+   */
+  private async unreadExistingFile(sessionId: string, input: Record<string, unknown>, turnSources: AssistantSource[]): Promise<string | undefined> {
+    if (!this.fileTools || typeof input.path !== 'string') return undefined
+    let existing: string | undefined
+    try {
+      existing = await readCurrentFileContent(this.fileTools.backend, this.fileTools.workspaceRoot, input.path)
+    } catch {
+      return undefined // an out-of-workspace path is rejected by the executor with its own message
+    }
+    if (existing === undefined) return undefined
+    const root = this.fileTools.workspaceRoot
+    const relative = workspaceRelative(root, input.path)
+    if (turnSources.some((src) => src.tool === 'read_file' && workspaceRelative(root, src.path) === relative)) return undefined
+    if (this.sessionKnowsFile?.(sessionId, relative)) return undefined
+    return `"${input.path}" already exists and has not been read in this conversation, so a write would replace it with contents you have not seen. Read it with read_file first, then write the full updated content.`
+  }
+
   private async runToolIterationStep(
     messages: ChatMessage[],
     tools: ToolDefinition[],
@@ -1057,16 +1095,20 @@ export class AgentLoop {
       })
 
       if (!response.toolCalls || response.toolCalls.length === 0) {
-        if (response.content.trim() === '') {
+        // A reply that is only a forged "Recorded by the system" line is as empty as a blank one: the line is removed before the
+        // user sees it, and nothing it lists was run (benchmark scenario 09 turn 3, "now git log -5": the model wrote the line instead of
+        // calling the tool, the stripped reply was blank, and no audit ran on it).
+        const recordOnly = response.content.trim() !== '' && containsActionRecord(response.content) && stripActionRecord(response.content).trim() === ''
+        if (response.content.trim() === '' || recordOnly) {
           // An empty (or reasoning-only) completion is not an answer. Ask once more with a nudge; a second empty
           // one ends the loop with an empty final, which the caller replaces with a fallback (fallbackFinalReply).
           const last = messages[messages.length - 1]
-          if (last?.role === 'user' && last.content === EMPTY_REPLY_NUDGE) {
-            this.onDebugLog?.({ kind: 'note', sessionId, content: 'the model returned an empty final reply again after a nudge; using a fallback reply' })
+          if (last?.role === 'user' && isOwnReplyNudge(last.content)) {
+            this.onDebugLog?.({ kind: 'note', sessionId, content: `the model returned ${recordOnly ? 'only a forged action record' : 'an empty final reply'} again after a nudge; using a fallback reply` })
             return { done: true, result: { kind: 'final', content: '', sources } }
           }
-          this.onDebugLog?.({ kind: 'note', sessionId, content: 'the model returned an empty final reply; retrying once with a nudge' })
-          messages.push({ role: 'user', content: EMPTY_REPLY_NUDGE })
+          this.onDebugLog?.({ kind: 'note', sessionId, content: recordOnly ? 'the reply was only a forged action record and nothing it listed was run; retrying once with a nudge' : 'the model returned an empty final reply; retrying once with a nudge' })
+          messages.push({ role: 'user', content: withUserMessage(recordOnly ? RECORD_ONLY_REPLY_NUDGE : EMPTY_REPLY_NUDGE, userMessage) })
           return { done: false, dispatchedAnyToolCall }
         }
         if (looksLikeUnparsedToolCall(response.content)) {
@@ -1216,6 +1258,8 @@ export class AgentLoop {
         reportStep('write_file', writeCall.input)
         // Stop immediately — don't execute any other tool calls from this same
         // response — and stage the write rather than ever touching real disk.
+        const unread = await this.unreadExistingFile(sessionId, writeCall.input, sources)
+        if (unread) return this.stagingRejected(messages, response, writeCall, new Error(unread), controlPlaneState)
         let result: Awaited<ReturnType<typeof executeFileTool>>
         try {
           result = await executeFileTool(this.fileTools, 'write_file', writeCall.input)
@@ -1667,6 +1711,11 @@ export class AgentLoop {
   injectionDetectionGate?: () => boolean
   /** Episodic digest source for `recall_memory` (M3); set by the assistant. The tool is offered only when this is set AND AUDIT_RECALL_TOOL is on. */
   digestReader?: DigestReader
+  /**
+   * Set by the assistant: whether this session has already read (or itself written) a workspace file. A write over an existing file
+   * that the session never read is refused (see unreadExistingFile), so the model cannot replace a file with contents it guessed.
+   */
+  sessionKnowsFile?: (sessionId: string, workspaceRelativePath: string) => boolean
   private recallTools(): ToolDefinition[] {
     return this.digestReader && recallToolEnabled() ? RECALL_TOOLS : []
   }

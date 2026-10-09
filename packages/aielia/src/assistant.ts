@@ -1,4 +1,5 @@
 import { auditReply, replyAuditNotice, replyAuditEnabled, auditRetryNudge } from './reply-audit.js'
+import { withSideCallPolicy } from './side-call-policy.js'
 import { containsActionRecord, stripActionRecord, FORGED_ACTION_RECORD_NOTE } from './action-record.js'
 import { deriveConsequentialTools } from '@buildaharness/harness'
 import { TOOL_EFFECT_CLASS } from './tool-effect-class.js'
@@ -27,7 +28,7 @@ import { AbortGate, gateLlmClient, raceAbort, TurnAbortedError } from './turn-ab
 import { detectHomogeneousBatchList } from './batch-list-detector.js'
 import { classifyAndTraceExecutionMode } from './execution-mode.js'
 import { evaluateTurnPolicy } from './turn-policy.js'
-import type { FileToolsContext } from './file-tools.js'
+import { workspaceRelative, type FileToolsContext } from './file-tools.js'
 import type { UndoLogEntry } from './action-snapshot.js'
 import type { WebToolsContext } from './web-tools.js'
 import type { ShellToolsContext } from './shell-tools.js'
@@ -449,6 +450,10 @@ export class PersonalAssistant {
   private replyLoggedEarly = false
   /** Automatic correction retries still allowed for the current user message; resumed (approval) turns share it so a retry cannot chain. */
   private auditRetryBudget = 1
+  /** The session of the turn in progress, for log lines written by code that has no session of its own (the side-call retry note). */
+  private lastSessionId = 'default'
+  /** The last real (not fail-safe) risk classification of a user message, per session, for the audit retry that may correct its reply. */
+  private readonly lastClassifiedBySession = new Map<string, TurnIntentClassification>()
   /** Files, directories and pages each session's turns have read (tool and target, oldest first, capped): the reply audit needs reads from EARLIER turns too, or a correct answer about a file read last turn looks like an unverified outside fact (V1). In memory only; cleared with the session. */
   private readonly sourcesReadBySession = new Map<string, string[]>()
   /** Index into the action list where the current user message's actions start; an approval resume is a separate turn() call but the same user message. */
@@ -464,7 +469,11 @@ export class PersonalAssistant {
   private readonly askClarification: AskClarificationService
 
   constructor(options: PersonalAssistantOptions) {
-    this.llmClient = gateLlmClient(options.llmClient, this.abortGate)
+    // Inside the abort gate: a stopped turn must not wait out a hedged attempt. The note is what makes a slow endpoint visible in the activity log.
+    this.llmClient = gateLlmClient(
+      withSideCallPolicy(options.llmClient, { onHedge: ({ afterMs }) => this.onDebugLog?.({ kind: 'note', sessionId: this.lastSessionId, content: `a model side call had not answered after ${Math.round(afterMs / 1000)}s; asked a second time beside it` }) }),
+      this.abortGate,
+    )
     this.model = options.model
     this.activeProject = options.activeProject
     this.memoryBudgetChars = options.memoryBudgetChars
@@ -516,6 +525,12 @@ export class PersonalAssistant {
     )
     // M3: recall_memory reads episodic digests through the memory service's DigestStore (offered only under AUDIT_RECALL_TOOL).
     this.agentLoop.digestReader = storeDigestReader(this.memoryService.digests)
+    // A write over an existing file is refused unless this session read it or wrote it itself (see AgentLoop.unreadExistingFile).
+    this.agentLoop.sessionKnowsFile = (sessionId, relative) => {
+      const root = fileTools?.workspaceRoot ?? ''
+      if ((this.sourcesReadBySession.get(sessionId) ?? []).some((entry) => entry.startsWith('read_file: ') && workspaceRelative(root, entry.slice('read_file: '.length)) === relative)) return true
+      return this.actionApproval.appliedActions.some((action) => action.startsWith('wrote ') && workspaceRelative(root, action.slice('wrote '.length)) === relative)
+    }
     // Plan mode's P5 file-backed persistence reuses AssistantSession's existing
     // write_file/run_shell_command workspace lookup rather than re-deriving fileTools/
     // shellTools/actionTools precedence a second time here — `undefined` on a surface with no
@@ -638,6 +653,7 @@ export class PersonalAssistant {
    */
   async turn(userMessage: string, options: TurnOptions = {}): Promise<AssistantTurnResult> {
     const sessionId = options.sessionId ?? 'default'
+    this.lastSessionId = sessionId
     // Reset per turn — runTurn flips it to 'flat-oneloop'/'batch-oneloop' only on the flag-ON
     // paths that actually defer the tool loop into a harness-driven proposer.
     this.lastProposerKind = 'posthoc'
@@ -647,7 +663,8 @@ export class PersonalAssistant {
     this.onTrace?.({ kind: 'turn_start', sessionId, message: userMessage })
     this.replyLoggedEarly = false
     if (!options.pendingActionId && !options.auditRetry && !(options.approved === true && !options.pendingClarificationId && !options.planApprovalId)) {
-      this.auditRetryBudget = 1
+      // Two attempts at most: the first for any finding, the second only when the correction itself came back unfinished or as a non-answer.
+      this.auditRetryBudget = 2
       this.userMessageActionsStart = this.actionApproval.appliedActions.length
     }
     // A pendingActionId call resumes a turn whose user message was already logged when it first
@@ -691,7 +708,9 @@ export class PersonalAssistant {
       if (result.sources) result.sources = result.sources.map(({ excerpt: _excerpt, ...source }) => source)
       // The system's own action record goes into the stored transcript only, never into the reply that is shown. A marker in the
       // reply is the model imitating it (it claimed writes and test runs that never happened in benchmark scenarios 05 and 13).
+      let forgedRecord = false
       if (result.reply && containsActionRecord(result.reply)) {
+        forgedRecord = true
         this.onDebugLog?.({ kind: 'note', sessionId, content: 'the reply contained a forged "Recorded by the system" action list; removed' })
         result.reply = stripActionRecord(result.reply)
         result.auditNotice = FORGED_ACTION_RECORD_NOTE
@@ -729,18 +748,45 @@ export class PersonalAssistant {
           this.llmClient,
           this.model,
           (u) => auditUsage.push(u),
+          { checkNonAnswer: true },
         )
+        // Only the system writes the action record, so a model that wrote one into a turn that recorded no action was presenting work or
+        // results nothing produced (benchmark scenario 09 turn 3: five invented commits for "git log -5", no command run, and the audit
+        // called it clean). That is a claim of unrecorded work whatever the audit says; it gets the same correction retry. This keys on the
+        // system's own marker, not on the reply's wording.
+        if (forgedRecord && recorded.length === 0) audit.claimsUnrecordedWork = true
         const auditNotice = replyAuditNotice(audit, recorded)
         if (!auditNotice) this.onDebugLog?.({ kind: 'note', sessionId, content: `reply audit: clean (recorded ${recorded.length} action(s), ${this.actionApproval.recentCommandOutputs.length} command output(s) checked)` })
         // One automatic correction: the reply claimed or promised work with no recorded action, or stated outside
         // facts as verified. The model gets a nudge to do the work with its tools or to say plainly that it did not.
-        const nudge = options.auditRetry || this.auditRetryBudget <= 0 ? undefined : auditRetryNudge(audit, recorded)
+        // A correction that is itself an announcement with nothing after it, or a non-answer, has corrected nothing (benchmark scenario 02 turn 2:
+        // "Let me check only those directly:" and then nothing), so it earns the one further attempt; any other finding on a retry is final.
+        const retryMayRetry = !options.auditRetry || audit.promisesWorkNotDone || audit.nonAnswer
+        const nudge = !retryMayRetry || this.auditRetryBudget <= 0 ? undefined : auditRetryNudge(audit, recorded, userMessage)
         if (nudge) {
           this.auditRetryBudget--
           this.onDebugLog?.({ kind: 'note', sessionId, content: `reply audit: ${auditNotice ?? 'flagged'} — retrying once with a nudge` })
           // The flagged turn is a finished, billed turn: record what it and its audit cost before the retry runs (the early return skips recordSpend below).
           await this.session.recordSpend(sessionId, sumUsage([result.usage, ...auditUsage]))
-          return await this.turn(nudge, { ...options, sessionId, auditRetry: true, approved: undefined, pendingActionId: undefined, pendingClarificationId: undefined, planApprovalId: undefined })
+          // The flagged reply is already delivered. If the correction cannot run (it comes back as an escalation, an approval request or an
+          // error, or throws), the flagged reply stands with the audit's notice instead of being replaced by that failure (benchmark scenario 10 turn 2).
+          let retried: AssistantTurnResult | undefined
+          try {
+            retried = await this.turn(nudge, { ...options, sessionId, auditRetry: true, approved: undefined, pendingActionId: undefined, pendingClarificationId: undefined, planApprovalId: undefined })
+          } catch (err) {
+            this.onDebugLog?.({ kind: 'note', sessionId, content: `the audit retry failed (${err instanceof Error ? err.message : String(err)}); keeping the flagged reply with the audit notice` })
+          }
+          // A retry that pauses for the user (a command or write that needs their approval, a question) is a normal correction in progress: it is returned as before.
+          if (retried && (retried.status === 'ok' || retried.status === 'needs_approval' || retried.status === 'needs_clarification' || retried.status === 'needs_plan_approval')) return retried
+          if (retried) this.onDebugLog?.({ kind: 'note', sessionId, content: `the audit retry did not complete (${retried.status}); keeping the flagged reply with the audit notice` })
+          if (auditNotice) {
+            result.auditNotice = result.auditNotice ? `${result.auditNotice}\n${auditNotice}` : auditNotice
+            this.onDebugLog?.({ kind: 'note', sessionId, content: `reply audit: ${auditNotice}` })
+          }
+          // Spend was recorded above; the flagged reply is the turn's answer, so close the turn the way the normal path does.
+          result.proposerKind = this.lastProposerKind
+          this.onTrace?.({ kind: 'turn_end', sessionId, status: result.status })
+          return result
         }
         if (auditNotice) {
           result.auditNotice = result.auditNotice ? `${result.auditNotice}\n${auditNotice}` : auditNotice
@@ -1333,6 +1379,7 @@ export class PersonalAssistant {
       approved: (options.approved ?? false) || options.auditRetry === true,
       dangerouslySkipPermissions: this.dangerouslySkipPermissions,
       onUsage: accumulateUsage,
+      inheritedClassification: options.auditRetry ? this.lastClassifiedBySession.get(sessionId) : undefined,
       recentTranscript: transcript,
       standingConstraints: semanticConstraintCheckEnabled() ? await this.session.getStandingConstraints(sessionId) : undefined,
       knownFactKeys,
@@ -1347,6 +1394,8 @@ export class PersonalAssistant {
     }
 
     this.onTrace?.({ kind: 'risk_classified', riskLevel: interpretation.classification.riskLevel, requiresApproval: interpretation.classification.requiresApproval })
+    // What an automatic audit retry of this message will run under (see classificationForAuditRetry); a failed classification is never passed on.
+    if (!options.auditRetry && interpretation.classification.riskLevel !== 'UNKNOWN') this.lastClassifiedBySession.set(sessionId, interpretation.classification)
     // UNKNOWN is only ever the fail-safe: the classifier call errored, timed out or returned something unusable. Say so in the log, or the approval it forces looks unexplained (benchmark scenarios 06 and 13: minutes of silence, then an UNKNOWN gate).
     if (interpretation.classification.riskLevel === 'UNKNOWN') this.onDebugLog?.({ kind: 'note', sessionId, content: 'risk classification failed or timed out; asking for approval' })
 
@@ -1461,7 +1510,10 @@ export class PersonalAssistant {
     // Phase 4 — see TurnOptions.steeringChannel's doc comment. Built fresh each turn (cheap: no
     // LLM/IO cost until channel.poll() actually classifies a drained message) rather than reused
     // across turns, since goal-graph state itself is loaded fresh from `memory` on each poll().
-    const steeringAdapter = options.steeringChannel
+    // Not for the audit retry: it is the correction of a reply that is already delivered, and a message the user queued while the
+    // flagged turn ran must stay queued for the caller's post-turn drain. Reconciled here it was classified as a new goal and
+    // deferred, and only started after the retry's own audit and next-step calls (benchmark scenario 05 turn 6: minutes later).
+    const steeringAdapter = options.steeringChannel && !options.auditRetry
       ? createSteeringReconcileChannel({
           steeringChannel: options.steeringChannel,
           sessionId,
@@ -1630,7 +1682,9 @@ export class PersonalAssistant {
     // resolved. (`approved` alone is not a resume marker: front ends pass `approved: false` on every
     // ordinary turn, and a message-level approval re-runs a message that never got a thread.)
     // Trivial one-liners returned just above, so they never create a thread or make this call.
-    const isContinuation = options.pendingActionId !== undefined || options.pendingClarificationId !== undefined || options.planApprovalId !== undefined
+    // The automatic audit nudge is not something the user asked: it continues the flagged turn's thread (it used to mint a goal thread
+    // named "[automatic reply check] ...").
+    const isContinuation = options.pendingActionId !== undefined || options.pendingClarificationId !== undefined || options.planApprovalId !== undefined || options.auditRetry === true
     if (options.steeringChannel && this.memory && !isContinuation) {
       goalThreadId = (await resolveTurnGoalThread({
         userMessage,

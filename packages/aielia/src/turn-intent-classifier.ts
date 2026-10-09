@@ -1,4 +1,4 @@
-import { isRequestTimeout, type ILLMClient, type TokenUsage } from '@buildaharness/runtime'
+import type { ILLMClient, TokenUsage } from '@buildaharness/runtime'
 import { listTemplateNames } from './plan-templates/index.js'
 import type { DecomposedTaskSpec } from './decomposition-classifier.js'
 import { classifyError } from './error-classifier.js'
@@ -218,6 +218,23 @@ function failSafeClassification(cause?: unknown): TurnIntentClassification {
     statesConstraint: false,
     statedConstraints: [],
     liftedConstraints: [],
+  }
+}
+
+/**
+ * The classification an automatic audit retry runs under: the one of the turn it corrects. The retry's message is the system's own
+ * nudge, not something the user asked, so classifying it is a wasted model call that can stall for a minute or fail (benchmark
+ * scenario 10: the nudge's classification failed, the UNKNOWN risk level then made every tool call of the retry require approval,
+ * and the turn came back as an escalation instead of a correction). Only the risk and grounding signals carry over; whatever the
+ * original message said about plans, tasks, facts or constraints belongs to that message and is cleared.
+ */
+export function classificationForAuditRetry(prior: TurnIntentClassification): TurnIntentClassification {
+  return {
+    ...failSafeClassification(),
+    riskLevel: prior.riskLevel,
+    riskReason: prior.riskReason,
+    requiresApproval: prior.requiresApproval,
+    needsGrounding: prior.needsGrounding,
   }
 }
 
@@ -671,12 +688,9 @@ export async function classifyTurnIntent(
       undefined,
       { model, onUsage, structuredOutput: { schema: turnIntentSchema() } },
     )
-    // A stalled call is usually a one-off (benchmark: about a quarter of calls took over 3 minutes while the rest took seconds), and a
-    // failed classification costs the user an approval prompt, so a request that timed out is asked once more. Any other failure is not.
-    const response = await ask().catch((err: unknown) => {
-      if (!isRequestTimeout(err)) throw err
-      return ask()
-    })
+    // A stalled call is asked once more by the assistant's side-call policy (side-call-policy.ts), not here: a second retry in this
+    // function would multiply the waits. A failure that gets this far falls back to the UNKNOWN gate.
+    const response = await ask()
     return parseTurnIntent(response.content, context) ?? failSafeClassification()
   } catch (err) {
     return failSafeClassification(err)
