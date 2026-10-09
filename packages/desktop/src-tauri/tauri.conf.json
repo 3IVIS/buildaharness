@@ -2,7 +2,7 @@
   "$schema": "../node_modules/@tauri-apps/cli/config.schema.json",
   "productName": "Aielia",
   "mainBinaryName": "aielia-desktop",
-  "version": "0.1.3",
+  "version": "0.1.4",
   "identifier": "com.buildaharness.assistant",
   "build": {
     "frontendDist": "../../chat-ui/dist",
