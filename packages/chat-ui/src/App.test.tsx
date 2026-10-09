@@ -134,6 +134,7 @@ describe('App', () => {
   afterEach(() => {
     localStorage.clear()
     vi.unstubAllGlobals()
+    vi.unstubAllEnvs()
   })
 
   it('sends a message and renders the assistant reply', async () => {
@@ -290,6 +291,54 @@ describe('App', () => {
     await waitFor(() => expect(screen.getByPlaceholderText('Message Aielia…')).toBeInTheDocument())
     expect(JSON.parse(localStorage.getItem('buildaharness.personal-assistant.config') ?? '{}')).toMatchObject({
       proxyUrl: 'http://saved-proxy:9',
+    })
+  })
+
+  describe('hosted trial (VITE_ASSISTANT_REQUIRE_KEY)', () => {
+    it('with no key, shows the bring-your-own-key notice and Send opens key setup instead of sending', async () => {
+      vi.stubEnv('VITE_ASSISTANT_REQUIRE_KEY', 'true')
+      const user = userEvent.setup()
+      render(<App />)
+
+      expect(await screen.findByText('Bring your own AI key to chat.')).toBeInTheDocument()
+      const input = screen.getByPlaceholderText('Add your AI key to chat…')
+      await user.type(input, 'hello there')
+      // One "Add your key" button is the notice's, the other replaces Send in the composer.
+      const buttons = screen.getAllByRole('button', { name: 'Add your key' })
+      expect(buttons).toHaveLength(2)
+      await user.click(buttons[buttons.length - 1])
+
+      expect(await screen.findByText('Welcome to Aielia 👋')).toBeInTheDocument()
+      expect(screen.queryByText('hello there')).toBeNull()
+      expect(screen.queryByText('echo: hello there')).toBeNull()
+    })
+
+    it('the notice button opens the same key setup', async () => {
+      vi.stubEnv('VITE_ASSISTANT_REQUIRE_KEY', 'true')
+      const user = userEvent.setup()
+      render(<App />)
+
+      await user.click((await screen.findAllByRole('button', { name: 'Add your key' }))[0])
+      expect(await screen.findByText('Welcome to Aielia 👋')).toBeInTheDocument()
+    })
+
+    it('with a key saved, chat is normal and the notice is gone', async () => {
+      vi.stubEnv('VITE_ASSISTANT_REQUIRE_KEY', 'true')
+      localStorage.setItem('buildaharness.personal-assistant.config', JSON.stringify({ llmBackend: 'anthropic', apiKey: 'sk-ant-test' }))
+      const user = userEvent.setup()
+      render(<App />)
+
+      const input = await screen.findByPlaceholderText('Message Aielia…')
+      expect(screen.queryByText('Bring your own AI key to chat.')).toBeNull()
+      await user.type(input, 'hello there{Enter}')
+      await waitFor(() => expect(screen.getByText('echo: hello there')).toBeInTheDocument())
+    })
+
+    it('builds without the flag are unchanged: no notice and a normal Send button', async () => {
+      render(<App />)
+      expect(await screen.findByPlaceholderText('Message Aielia…')).toBeInTheDocument()
+      expect(screen.queryByText('Bring your own AI key to chat.')).toBeNull()
+      expect(screen.getByRole('button', { name: 'Send' })).toBeInTheDocument()
     })
   })
 
