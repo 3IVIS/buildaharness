@@ -881,7 +881,7 @@ mode flags take `enabled`/`disabled`):
 | `askMode` (`ASSISTANT_ASK_MODE`) | `disabled` | See "Clarifying questions" |
 | `planMode` (`ASSISTANT_PLAN_MODE`) | `legacy` | `gated` or `legacy` plan rollout |
 | `ambiguityGuardMode` (`ASSISTANT_AMBIGUITY_GUARD`) | `disabled` | Ambiguity guard |
-| `tuiMode` (`ASSISTANT_TUI`) | `disabled` | Full-screen terminal UI (Ink); only on a real TTY |
+| `tuiMode` (`ASSISTANT_TUI`) | `enabled` | Full-screen terminal UI (Ink); only on a real TTY |
 | `updateCheck` (`ASSISTANT_UPDATE_CHECK`) | `enabled` | Passive update check |
 | `activeProject` (`ASSISTANT_ACTIVE_PROJECT`) | none | Project new project-scoped facts are tagged with (`/project`) |
 | `goalGraphMode`, `goalGraphSuggestMode` (`ASSISTANT_GOAL_GRAPH`, `ASSISTANT_GOAL_GRAPH_SUGGEST`) | `enabled` in the CLI | Goal tree, steering and next-step options |

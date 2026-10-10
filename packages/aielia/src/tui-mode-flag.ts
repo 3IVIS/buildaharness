@@ -6,7 +6,7 @@
  *
  * Phase 4 of the internal plan — the rollout flag gating
  * whether `cli.ts`'s `main()` launches the Phase 3 Ink shell (`runTuiApp()`) instead of
- * today's plain `readline`-based `runCli()` loop. 'disabled' (the default, for this plan's
+ * today's plain `readline`-based `runCli()` loop. 'disabled' (the previous default, for this plan's
  * whole rollout window, per `DEFAULT_TUI_MODE`) means `main()` behaves exactly as it does
  * today, byte-for-byte — the Ink shell is never constructed. 'enabled' only takes effect when
  * `main()` also confirms a real interactive TTY on both stdio streams (see cli.ts); it never
@@ -15,7 +15,7 @@
  */
 export type TuiMode = 'enabled' | 'disabled'
 
-export const DEFAULT_TUI_MODE: TuiMode = 'disabled'
+export const DEFAULT_TUI_MODE: TuiMode = 'enabled'
 
 /**
  * Value-level resolver: `resolveTuiMode` (CLI, reads `process.env.ASSISTANT_TUI`). Unlike

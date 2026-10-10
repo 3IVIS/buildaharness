@@ -109,6 +109,33 @@ describe('App — mid-task steering composer (Phase 3, hierarchical_goal_tree_an
     await waitFor(() => expect(screen.getByText('echo: second message')).toBeInTheDocument())
   })
 
+  it('a message sent mid-turn appears below the reply of the turn it was sent during, not above it', async () => {
+    vi.stubEnv('VITE_ASSISTANT_GOAL_GRAPH', 'enabled')
+    vi.resetModules()
+
+    const deferred = createDeferredAssistant()
+    vi.doMock('@buildaharness/aielia', async () => {
+      const actual = await vi.importActual<typeof import('@buildaharness/aielia')>('@buildaharness/aielia')
+      return { ...actual, PersonalAssistant: { create: vi.fn(async () => deferred.assistant) } }
+    })
+
+    const { App } = await import('./App')
+    const user = userEvent.setup()
+    render(<App />)
+
+    const input = screen.getByPlaceholderText('Message Aielia…')
+    await user.type(input, 'first message')
+    await user.click(screen.getByRole('button', { name: 'Send' }))
+    await waitFor(() => expect(screen.getByText('first message')).toBeInTheDocument())
+    await user.type(input, 'second message')
+    await user.click(screen.getByRole('button', { name: 'Send' }))
+
+    deferred.release()
+    const reply = await screen.findByText('echo: first message')
+    const second = await screen.findByText('second message')
+    expect(reply.compareDocumentPosition(second) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
+  })
+
   it('goalGraphMode unset (the default is now enabled): composer and Send stay enabled while a turn is running', async () => {
     vi.resetModules()
 

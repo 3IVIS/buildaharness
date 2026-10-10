@@ -15,7 +15,7 @@
   },
   "dependencies": {
     "@buildaharness/aielia": "^0.3.6",
-    "@buildaharness/runtime": "^0.3.2",
+    "@buildaharness/runtime": "^0.3.3",
     "@dagrejs/dagre": "^3.0.0",
     "@tauri-apps/api": "^2.0.0",
     "@tauri-apps/plugin-fs": "^2.0.0",

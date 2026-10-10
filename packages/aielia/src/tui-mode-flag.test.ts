@@ -6,9 +6,9 @@ describe('resolveTuiMode', () => {
     vi.restoreAllMocks()
   })
 
-  it('defaults to disabled when ASSISTANT_TUI is unset', () => {
-    expect(resolveTuiMode({})).toBe('disabled')
-    expect(DEFAULT_TUI_MODE).toBe('disabled')
+  it('defaults to enabled when ASSISTANT_TUI is unset', () => {
+    expect(resolveTuiMode({})).toBe('enabled')
+    expect(DEFAULT_TUI_MODE).toBe('enabled')
   })
 
   it('honors an explicit "enabled"', () => {
