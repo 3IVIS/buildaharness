@@ -109,6 +109,7 @@ body {
   display: flex;
   flex-direction: column;
   height: 100vh;
+  height: 100dvh;
   width: 100%;
   max-width: min(1400px, 94vw);
   margin: 0 auto;
@@ -1246,6 +1247,7 @@ body {
   display: flex;
   flex-direction: column;
   height: 100vh;
+  height: 100dvh;
   width: 100%;
   max-width: min(1100px, 92vw);
   margin: 0 auto;
@@ -1441,6 +1443,7 @@ body {
   display: flex;
   flex-direction: column;
   height: 100vh;
+  height: 100dvh;
   width: 100%;
   max-width: min(1100px, 92vw);
   margin: 0 auto;
@@ -1576,6 +1579,7 @@ body {
   display: flex;
   flex-direction: column;
   height: 100vh;
+  height: 100dvh;
   width: 100%;
   max-width: min(1100px, 92vw);
   margin: 0 auto;
@@ -1678,6 +1682,7 @@ body {
   display: flex;
   flex-direction: column;
   height: 100vh;
+  height: 100dvh;
   width: 100%;
   max-width: min(1100px, 92vw);
   margin: 0 auto;
@@ -1844,6 +1849,7 @@ body {
 /* First-launch setup wizard (SetupWizard.tsx) */
 .setup {
   min-height: 100vh;
+  min-height: 100dvh;
   display: flex;
   align-items: center;
   justify-content: center;
