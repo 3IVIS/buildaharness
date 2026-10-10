@@ -150,7 +150,7 @@ export interface AssistantConfig {
    * Phase 4 of the internal plan — the rollout flag for the
    * Ink-driven pinned-bottom-input interactive shell (tui-app.ts's runTuiApp()). Undefined (the
    * default, for this plan's whole rollout window) means cli.ts's main() falls back to
-   * DEFAULT_TUI_MODE ('disabled') — today's plain readline-based REPL, byte-for-byte. Mirrors
+   * DEFAULT_TUI_MODE ('enabled'); 'disabled' is the plain readline-based REPL. Mirrors
    * oneLoopMode/askMode/planMode's exact chain: env override (ASSISTANT_TUI, cli-config.ts) and
    * a package-owned default kept out of DEFAULT_CONFIG so an unset value stays undefined. Unlike
    * those three, this has no chat-ui/desktop build-time counterpart — there's no terminal to pin

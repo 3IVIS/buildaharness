@@ -229,7 +229,7 @@ Aielia reads its own variables, separate from the Docker stack. In the CLI they 
 | `ASSISTANT_GOAL_GRAPH` (V), `ASSISTANT_GOAL_GRAPH_SUGGEST` (V) | `enabled` | Goal tree and next-step options. |
 | `ASSISTANT_PLAN_GRAPH` (V) | `disabled` | Read-only plan graph view. |
 | `ASSISTANT_LAYER_POLICY` (V) | `static` | Layer policy mode. |
-| `ASSISTANT_TUI` | `disabled` | Terminal UI mode. |
+| `ASSISTANT_TUI` | `enabled` | Terminal UI mode; `disabled` gives the plain readline CLI. |
 | `ASSISTANT_UPDATE_CHECK` | `enabled` | `disabled` turns off the CLI update check. |
 | `ASSISTANT_ACTIVE_PROJECT` | — | Active project name. |
 | `ASSISTANT_LEXICAL_MODE`, `ASSISTANT_LEXICAL_ON=<family,...>`, `ASSISTANT_LEXICAL_OFF=<family,...>`, `HARNESS_LEXICAL_MODE`/`_ON`/`_OFF` | `disabled` | Every lexical (regex/keyword) family is off by default; `enabled` turns all on, `_ON` turns listed families on, `_OFF` wins over both (see `packages/aielia/src/lexical/lexical-mode.ts`). |

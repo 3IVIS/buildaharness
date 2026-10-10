@@ -58,7 +58,7 @@ import { isGoalGraphSuggestEnabled } from './goal-graph-suggest-flag.js'
 import type { NextStepSuggestion } from './next-step-proposer.js'
 import { maybeRunFirstRunSetup } from './first-run.js'
 import { testApiKey, type KeyedBackend, type KeyTestResult } from './provider-setup.js'
-import { shouldLaunchTuiApp } from './tui-mode-flag.js'
+import { DEFAULT_TUI_MODE, shouldLaunchTuiApp } from './tui-mode-flag.js'
 import { ICONS, toolStepIcon, PLAN_LINE_PREFIX } from './cli-icons.js'
 import { parseCliArgs, cliHelpText } from './cli-args.js'
 import {
@@ -2158,7 +2158,7 @@ async function mainInner(argv: readonly string[]): Promise<void> {
     })
   }
 
-  if (shouldLaunchTuiApp(config.tuiMode ?? 'disabled', Boolean(process.stdout.isTTY), Boolean(process.stdin.isTTY))) {
+  if (shouldLaunchTuiApp(config.tuiMode ?? DEFAULT_TUI_MODE, Boolean(process.stdout.isTTY), Boolean(process.stdin.isTTY))) {
     const { runTuiApp } = await import('./tui-app.js')
     await runTuiApp()
     return

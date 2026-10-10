@@ -423,6 +423,9 @@ export function App(): React.JSX.Element {
   const [input, setInput] = useState('')
   const [appVersion, setAppVersion] = useState<string | undefined>(undefined)
   const [busy, setBusy] = useState(false)
+  // Messages sent mid-turn (goal-graph steering). They show below the live reply, and join the transcript only once the turn's reply has been added, so they never appear above the reply they were sent during.
+  const [queuedUserMessages, setQueuedUserMessages] = useState<{ id: string; content: string }[]>([])
+  const queuedUserMessagesRef = useRef<{ id: string; content: string }[]>([])
   // Stop: the running turn's controller (cleared when it ends). `stoppable` is false while resuming a staged action,
   // because that applies something the user already approved and must not be half-done.
   const turnAbortRef = useRef<AbortController | null>(null)
@@ -976,6 +979,13 @@ export function App(): React.JSX.Element {
       setProgress(null)
       setStreamingText(null)
       setLiveToolSteps([])
+      // The turn's reply entry is already queued above, so these land after it.
+      const queuedMessages = queuedUserMessagesRef.current
+      if (queuedMessages.length > 0) {
+        queuedUserMessagesRef.current = []
+        setQueuedUserMessages([])
+        setEntries((prev) => [...prev, ...queuedMessages.map((m) => ({ id: m.id, kind: 'user' as const, content: m.content }))])
+      }
       const queued = queuedSettingsRef.current
       queuedSettingsRef.current = null
       if (queued) void handleSaveSettings(queued)
@@ -1010,7 +1020,9 @@ export function App(): React.JSX.Element {
       steeringChannelRef.current.enqueue(message)
       setInput('')
       if (composerRef.current) composerRef.current.style.height = 'auto'
-      setEntries((prev) => [...prev, { id: newId(), kind: 'user', content: message }])
+      const queuedMessage = { id: newId(), content: message }
+      queuedUserMessagesRef.current = [...queuedUserMessagesRef.current, queuedMessage]
+      setQueuedUserMessages(queuedUserMessagesRef.current)
       return
     }
     setShowDemo(false)
@@ -1385,6 +1397,9 @@ export function App(): React.JSX.Element {
             ))}
           </div>
         )}
+        {queuedUserMessages.map((m) => (
+          <ChatMessageBubble key={m.id} role="user" content={m.content} />
+        ))}
         <div ref={bottomRef} />
       </div>
       {/* Phase 3.2: persistent, visible only while a durable plan is actually active — chat-ui
