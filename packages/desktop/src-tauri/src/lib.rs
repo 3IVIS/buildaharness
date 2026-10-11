@@ -64,6 +64,14 @@ async fn check_claude_available() -> Result<bool, String> {
   .map_err(|e| format!("Internal error checking claude availability: {e}"))?
 }
 
+/// The raw `ASSISTANT_LLM_BACKEND` value, if set — the desktop counterpart of the aielia CLI's env
+/// var of the same name (cli-config.ts's envOverridesFromProcessEnv). Parsing/validation stays in
+/// the frontend (browser-config.ts's llmBackendFromEnvValue) so both surfaces share one rule.
+#[tauri::command]
+fn get_env_llm_backend() -> Option<String> {
+  std::env::var("ASSISTANT_LLM_BACKEND").ok()
+}
+
 /// Opens a native folder-picker dialog and returns the chosen path, or `None` if the user
 /// cancelled. Backs the settings screen's Workspace section (chat-ui's SettingsScreen) — the
 /// path returned here is what persists via tauri-config-store.ts's `workspaceRoot`, taking
@@ -1026,6 +1034,7 @@ pub fn run() {
       run_shell_command,
       get_dev_workspace_root,
       check_claude_available,
+      get_env_llm_backend,
       pick_workspace_directory,
       workspace_read_text_file,
       workspace_write_text_file,

@@ -70,8 +70,8 @@ aielia README's `/layers` section) and Diagnostics (below). Saving is deferred:
 edits apply when you press Save, not as you type.
 
 The Provider section's backend picker (`llmBackend`) offers `proxy`, `anthropic`,
-`openai`, `openrouter` and — desktop build only — `claude-cli` (see `App.tsx`'s
-`createLlmClient`). Fields below the
+`openai` and `openrouter` (see `App.tsx`'s `createLlmClient`). `claude-cli` is not offered
+in the Settings picker on either build; it is selected only through the `ASSISTANT_LLM_BACKEND` env var (aielia CLI, and the desktop app via its `get_env_llm_backend` Tauri command), and then shows read-only. Fields below the
 picker change per backend: Proxy URL + Auth token only for `proxy`; a single
 masked API key field (plus a storage note: a plaintext-storage warning in the browser build, a short
 "stored in your OS keychain" line on desktop) for `anthropic`/`openai`/`openrouter`. A free-text Model field is always
@@ -80,7 +80,7 @@ leaving it blank falls through to that backend's own hardcoded default rather
 than writing a value into the form.
 
 `createLlmClient` (`App.tsx`) is shared between the plain-browser and desktop
-build paths, so desktop can use any of the 5 backends (`claude-cli` is desktop-only), and the three direct-API ones (`anthropic`/`openai`/`openrouter`)
+build paths, so both can use the four backends the picker offers, and the three direct-API ones (`anthropic`/`openai`/`openrouter`)
 are plain `fetch()` calls to the provider, made the same way on both surfaces.
 (On desktop the webview's CSP, `packages/desktop/src-tauri/tauri.conf.json`, governs
 which origins that `fetch()` may reach; see `packages/desktop/README.md`.)

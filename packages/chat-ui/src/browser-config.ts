@@ -10,6 +10,7 @@ import { resolveMemoryWriteMode, MEMORY_WRITE_MODES, normalizeOneLoopMode, norma
 
 /** Which VITE_* build-time var, if any, can pin a given key — shown next to a read-only field in SettingsScreen. */
 export const ENV_VAR_FOR_CONFIG_KEY: Partial<Record<keyof AssistantConfig, string>> = {
+  llmBackend: 'ASSISTANT_LLM_BACKEND', // desktop only — read at runtime via the get_env_llm_backend Tauri command
   proxyUrl: 'VITE_ASSISTANT_PROXY_URL',
   authToken: 'VITE_ASSISTANT_PROXY_TOKEN',
   model: 'VITE_ASSISTANT_MODEL',
@@ -75,4 +76,23 @@ export function envOverridesFromImportMetaEnv(env: ImportMetaEnv): Partial<Assis
     overrides.memoryWriteMode = resolved
   }
   return overrides
+}
+
+/**
+ * Desktop only: turns the raw ASSISTANT_LLM_BACKEND value (App.tsx fetches it through the
+ * get_env_llm_backend Tauri command) into a config override, with the same rule as the aielia
+ * CLI's envOverridesFromProcessEnv — unset means no override; a recognized value is used as is;
+ * anything else (a typo included) falls back to 'proxy' rather than some other valid backend.
+ */
+export function llmBackendFromEnvValue(raw: string | null | undefined): Partial<AssistantConfig> {
+  if (raw === null || raw === undefined) return {}
+  switch (raw) {
+    case 'claude-cli':
+    case 'anthropic':
+    case 'openai':
+    case 'openrouter':
+      return { llmBackend: raw }
+    default:
+      return { llmBackend: 'proxy' }
+  }
 }

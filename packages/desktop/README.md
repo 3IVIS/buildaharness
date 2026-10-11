@@ -62,8 +62,10 @@ explicitly, so both sides of a turn agree on the same directory.
 
 ## LLM backend
 
-The desktop build supports all 5 `llmBackend` values (the four below plus `claude-cli`, which
-shells out to the local `claude` CLI and is desktop-only) — `App.tsx`'s
+The desktop Settings screen offers the four `llmBackend` values below. `claude-cli` (shells out to
+the local `claude` CLI) is deliberately not a pickable option in the desktop UI; it is selected only by
+setting `ASSISTANT_LLM_BACKEND=claude-cli` in the environment the app is launched from (read via the
+`get_env_llm_backend` command, same values and fallback as the aielia CLI), and Settings then shows it read-only. `App.tsx`'s
 `createLlmClient()` is shared between the plain-browser and desktop build
 paths, and picks the `ILLMClient` from `config.llmBackend` the same way on
 both, so they behave identically to the browser build:
