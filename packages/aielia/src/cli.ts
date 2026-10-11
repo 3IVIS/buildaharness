@@ -315,12 +315,6 @@ export interface CliInstance {
  * getting exactly today's behavior; every option here has a real-filesystem/real-stdio default.
  */
 export async function runCli(options: RunCliOptions = {}): Promise<CliInstance> {
-  // Printed before anything else — including first-run setup — so it's the very first thing a
-  // new or returning user sees, on every surface runCli() drives (plain REPL, piped/scripted
-  // input, and the Ink TUI shell, which captures this same console.log via startCapture — see
-  // tui-app.ts's own comment on why the banner isn't duplicated there).
-  printSafe('Aielia is alpha software — expect rough edges and breaking changes. It uses AI models and can make mistakes; verify anything important.\n')
-
   const dataDir = options.dataDir ?? defaultDataDir
   const configStore = options.configStore ?? defaultConfigStore
   const backend = options.backend ?? defaultBackend
@@ -430,24 +424,24 @@ export async function runCli(options: RunCliOptions = {}): Promise<CliInstance> 
     openai: OPENAI_DEFAULT_MODEL,
     openrouter: OPENROUTER_DEFAULT_MODEL,
   }
-  printSafe(`backend: ${config.llmBackend} (${config.model ?? backendDisplayModel[config.llmBackend]})`)
+  const backendLine = `${config.llmBackend} · ${config.model ?? backendDisplayModel[config.llmBackend]}`
 
   // No silent default: capabilities only appear in the banner when actually configured,
   // so the banner never implies something is available that isn't.
   const enabledCapabilities: string[] = []
   if (config.enableWeb) enabledCapabilities.push('web search/fetch (brave)')
   if (config.enableShell) enabledCapabilities.push(`shell commands (${config.dangerouslySkipPermissions ? 'NOT approval-gated' : 'approval-gated'})`)
-  const capabilitySuffix = enabledCapabilities.length > 0 ? ` — enabled: ${enabledCapabilities.join(', ')}` : ''
+  const capabilityRow = enabledCapabilities.length > 0 ? `\n  tools     ${enabledCapabilities.join(', ')}` : ''
   // Loud and separate from the capability list above (which is easy to skim past) —
   // this changes the trust model for every HIGH-risk action, not just shell.
   const dangerBanner = config.dangerouslySkipPermissions
-    ? '\n⚠ dangerouslySkipPermissions is ON — every approval prompt (risky messages, file writes, shell commands) is skipped automatically.\n'
+    ? '\n  ⚠ dangerouslySkipPermissions is ON — every approval prompt is skipped automatically.'
     : ''
   // Same "never silently in effect" reasoning as dangerBanner above — the opposite trust
   // direction (declines instead of skips), but just as important to surface up front.
   const nonInteractiveBanner =
     nonInteractiveApprovalMode === 'decline'
-      ? '\nASSISTANT_NON_INTERACTIVE_APPROVAL=decline is set — every approval prompt auto-declines.\n'
+      ? '\n  ⚠ ASSISTANT_NON_INTERACTIVE_APPROVAL=decline — every approval prompt auto-declines.'
       : ''
 
   // The undo-log persists across sessions (it's on disk under the workspace, not in-memory) —
@@ -457,11 +451,25 @@ export async function runCli(options: RunCliOptions = {}): Promise<CliInstance> 
   const undoableFromBefore = startupUndoLogEntries.filter((e) => e.undoable).length
   const undoBanner =
     undoableFromBefore > 0
-      ? `\n${undoableFromBefore} action${undoableFromBefore === 1 ? '' : 's'} from earlier sessions ${undoableFromBefore === 1 ? 'is' : 'are'} still revertible — see /undo-action.\n`
+      ? `\n  undo      ${undoableFromBefore} earlier action${undoableFromBefore === 1 ? '' : 's'} can be reverted with /undo-action`
       : ''
 
-  printSafe(`Aielia — your personal assistant on the 11-layer harness, one turn at a time. Ctrl+C to exit.${capabilitySuffix}\n${dangerBanner}${nonInteractiveBanner}${undoBanner}`)
-  printSafe('Type /help to see all commands, /config to view settings.\n')
+  // The ledger is lifetime-cumulative (persisted across runs), so the status line's "this session" figures are the delta from here.
+  const startupSpend = await assistant.getSpendState('cli')
+  const fmtUsage = (input: number, output: number, cost: number): string => `↑${input.toLocaleString()} ↓${output.toLocaleString()} tokens (~$${cost.toFixed(4)})`
+  const totalUsageRow = `\n  total     ${fmtUsage(startupSpend.cumulativeInputTokens, startupSpend.cumulativeOutputTokens, startupSpend.cumulativeCostUsd)} across all sessions`
+  printSafe(
+    [
+      `Aielia v${CLI_VERSION}`,
+      'Your personal assistant, one turn at a time.',
+      ' ',
+      `  backend   ${backendLine}${capabilityRow}${undoBanner}${totalUsageRow}${dangerBanner}${nonInteractiveBanner}`,
+      ' ',
+      '  /help commands   /config settings   Ctrl+C exit',
+      '  Alpha software: it can make mistakes, so verify anything important.',
+      ' ',
+    ].join('\n'),
+  )
   // M5: session start consolidates what earlier sessions left. Background, fail-open, a no-op unless AUDIT_MEMORY_CONSOLIDATION is on.
   void assistant.proposeMemoryConsolidation('cli').catch(() => undefined)
   rl.prompt()
@@ -2091,7 +2099,11 @@ export async function runCli(options: RunCliOptions = {}): Promise<CliInstance> 
       indicators.push(`Model: ${config.model ?? backendDisplayModel[config.llmBackend]}`)
       const spendState = await assistant.getSpendState('cli')
       indicators.push(
-        `↑${spendState.cumulativeInputTokens.toLocaleString()} ↓${spendState.cumulativeOutputTokens.toLocaleString()} tokens (~$${spendState.cumulativeCostUsd.toFixed(4)})`,
+        `This session: ${fmtUsage(
+          spendState.cumulativeInputTokens - startupSpend.cumulativeInputTokens,
+          spendState.cumulativeOutputTokens - startupSpend.cumulativeOutputTokens,
+          spendState.cumulativeCostUsd - startupSpend.cumulativeCostUsd,
+        )}`,
       )
       const spendCapLine = formatSpendCapStatus(spendState, { sessionCostLimitUsd: config.sessionCostLimitUsd, sessionCallLimit: config.sessionCallLimit })
       if (spendCapLine) indicators.push(spendCapLine)

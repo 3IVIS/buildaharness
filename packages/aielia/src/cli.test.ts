@@ -680,7 +680,7 @@ describe('getStatusIndicators — persistent model/token/cost chrome (aielia_cli
     const indicators = await cli.getStatusIndicators()
 
     expect(indicators.some((i) => i.startsWith('Model: '))).toBe(true)
-    expect(indicators).toContain('↑0 ↓0 tokens (~$0.0000)')
+    expect(indicators).toContain('This session: ↑0 ↓0 tokens (~$0.0000)')
   })
 
   it('token/cost indicator reflects accumulated spend after a turn, cross-turn like /cost', async () => {
@@ -703,7 +703,7 @@ describe('getStatusIndicators — persistent model/token/cost chrome (aielia_cli
     await cli.dispatchLine('hi')
     const indicators = await cli.getStatusIndicators()
 
-    expect(indicators).toContain('↑100 ↓100 tokens (~$2.0000)')
+    expect(indicators).toContain('This session: ↑100 ↓100 tokens (~$2.0000)')
   })
 })
 

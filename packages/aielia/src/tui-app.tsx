@@ -761,9 +761,16 @@ export function TuiApp(props: TuiAppProps): React.JSX.Element {
     )
   }
 
+  // Until the log fills the screen, push the live region down so the input box sits on the bottom rows, under the banner at the top.
+  const usedRows = staticItems.reduce((sum, line) => sum + Math.max(1, Math.ceil(line.text.length / Math.max(1, width))) + (line.kind === 'user' || line.kind === 'plan' || line.kind === 'approval' ? 2 : 0), 0)
+  const statusRows = Math.max(1, Math.ceil(statusIndicators.reduce((sum, indicator) => sum + indicator.length + 3, 0) / Math.max(1, width)) + 1)
+  const liveRows = (hasTransient ? 1 + log.progressText.split('\n').length + log.transientText.split('\n').length : 0) + 1 + 3 + statusRows
+  const fillerRows = Math.max(0, (windowSize.rows ?? 24) - 1 - usedRows - liveRows)
+
   return (
     <Box flexDirection="column">
       <Static items={staticItems}>{(line, index) => <LogLineText key={index} line={line} width={width} />}</Static>
+      {fillerRows > 0 && <Box height={fillerRows} />}
       {hasTransient && (
         <Box flexDirection="column">
           {log.progressText.length > 0 && <Text dimColor>{log.progressText}</Text>}
@@ -848,6 +855,12 @@ export async function runTuiApp(options: RunTuiAppOptions = {}): Promise<void> {
   // Captured before startCapture patches process.stdout.write — this is the pristine function
   // Ink itself will paint frames through (see createUnpatchedStdout's doc comment above).
   const originalWrite = process.stdout.write.bind(process.stdout)
+
+  // Start from a clean screen with the cursor at the top-left so the welcome banner is the first thing shown; TuiApp's filler pins
+  // the input box to the bottom. Scrollback is kept (no 3J).
+  if (process.stdout.isTTY) {
+    originalWrite('\x1b[2J\x1b[H')
+  }
 
   // Started before runCli() is ever called — runCli() itself prints the startup banner
   // (backend, capabilities, undo-log carryover) via plain console.log, which must land in the
