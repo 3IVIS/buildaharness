@@ -70,7 +70,7 @@ import { MemoryPanel, type MemoryPanelData } from './components/MemoryPanel'
 import { NextStepChips } from './components/NextStepChips'
 import { BrowserConfigStore } from './browser-config-store'
 import { TauriConfigStore } from './tauri-config-store'
-import { envOverridesFromImportMetaEnv } from './browser-config'
+import { envOverridesFromImportMetaEnv, llmBackendFromEnvValue } from './browser-config'
 import { applyBrowserLayerSettings } from './layer-env'
 import { getAssistantTestHooks } from './assistant-test-hooks'
 import { DEMO_USER_MESSAGE, DEMO_APPROVAL_REASON, DEMO_NOTE } from './demo-seed'
@@ -443,6 +443,8 @@ export function App(): React.JSX.Element {
   const [needsSetup, setNeedsSetup] = useState(false)
   // Optimistic default so Settings is usable immediately — refreshed to the real persisted
   // value once createConfigStore().load() resolves, a moment later (see the mount effect).
+  // Build-time overrides, plus (desktop only) ASSISTANT_LLM_BACKEND once the mount effect has read it from the host process.
+  const envOverridesRef = useRef<Partial<AssistantConfig>>(envOverrides)
   const initialResolved = resolveConfig({}, envOverrides)
   const [config, setConfig] = useState<AssistantConfig>(initialResolved.config)
   const [overriddenKeys, setOverriddenKeys] = useState<ReadonlySet<keyof AssistantConfig>>(initialResolved.overriddenKeys)
@@ -759,7 +761,15 @@ export function App(): React.JSX.Element {
     void (async () => {
       const store = await createConfigStore()
       const persisted = await store.load()
-      const resolved = resolveConfig(persisted, envOverrides)
+      if (isTauri()) {
+        try {
+          const envBackend = await invoke<string | null>('get_env_llm_backend')
+          envOverridesRef.current = { ...envOverrides, ...llmBackendFromEnvValue(envBackend) }
+        } catch (err) {
+          console.warn('Could not read ASSISTANT_LLM_BACKEND from the host environment:', err)
+        }
+      }
+      const resolved = resolveConfig(persisted, envOverridesRef.current)
       if (cancelled) return
       configStoreRef.current = store
       setConfig(resolved.config)
@@ -787,7 +797,7 @@ export function App(): React.JSX.Element {
     }
     await store.save(patch)
     const persisted = await store.load()
-    const resolved = resolveConfig(persisted, envOverrides)
+    const resolved = resolveConfig(persisted, envOverridesRef.current)
     setConfig(resolved.config)
     setOverriddenKeys(resolved.overriddenKeys)
     // Before the rebuild: layers read their flags per turn, but a hook wired at build time must see the new choice too.

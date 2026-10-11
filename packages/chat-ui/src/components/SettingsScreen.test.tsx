@@ -43,13 +43,24 @@ describe('SettingsScreen', () => {
     expect(screen.getByText('Provider')).toBeInTheDocument()
   })
 
-  it('offers "Claude CLI" as a backend option only on the desktop path', () => {
+  it('never offers "Claude CLI" as a backend option, on the browser or desktop path', () => {
     const { unmount } = renderSettings({ isDesktop: false })
     expect(screen.queryByRole('option', { name: /Claude CLI/ })).not.toBeInTheDocument()
     unmount()
 
     renderSettings({ isDesktop: true })
-    expect(screen.getByRole('option', { name: /Claude CLI/ })).toBeInTheDocument()
+    expect(screen.queryByRole('option', { name: /Claude CLI/ })).not.toBeInTheDocument()
+  })
+
+  it('shows "Claude CLI" read-only, not as a choice, when the env var set it', () => {
+    renderSettings({
+      isDesktop: true,
+      config: { ...DEFAULT_CONFIG, llmBackend: 'claude-cli' },
+      overriddenKeys: new Set(['llmBackend']),
+    })
+    expect(screen.getByLabelText('LLM backend')).toBeDisabled()
+    expect(screen.getByLabelText('LLM backend')).toHaveValue('claude-cli')
+    expect(screen.getByText(/ASSISTANT_LLM_BACKEND/)).toBeInTheDocument()
   })
 
   it('shows the Workspace section only on the desktop path', () => {
@@ -247,9 +258,7 @@ describe('SettingsScreen', () => {
     })
 
     it('shows no Proxy URL/Auth token/API key fields for "claude-cli" — relies on the host session', async () => {
-      const user = userEvent.setup()
-      renderSettings({ isDesktop: true })
-      await user.selectOptions(screen.getByLabelText('LLM backend'), 'claude-cli')
+      renderSettings({ isDesktop: true, config: { ...DEFAULT_CONFIG, llmBackend: 'claude-cli' } })
 
       expect(screen.queryByText('Proxy URL')).not.toBeInTheDocument()
       expect(screen.queryByText('Auth token')).not.toBeInTheDocument()

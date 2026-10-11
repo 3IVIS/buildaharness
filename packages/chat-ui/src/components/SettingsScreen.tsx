@@ -233,8 +233,8 @@ export function SettingsScreen({
               onChange={(e) => set('llmBackend', e.target.value as AssistantConfig['llmBackend'])}
             >
               <option value="proxy">{BACKEND_LABEL.proxy}</option>
-              {/* claude-cli needs a real host process to spawn `claude -p` — unavailable in a plain browser tab, see App.tsx's createLlmClient. */}
-              {isDesktop && <option value="claude-cli">{BACKEND_LABEL['claude-cli']}</option>}
+              {/* claude-cli is never a pickable choice (browser or desktop) — it's selected only via ASSISTANT_LLM_BACKEND. Shown, pinned, so the select isn't blank when the env var set it. */}
+              {form.llmBackend === 'claude-cli' && <option value="claude-cli">{BACKEND_LABEL['claude-cli']}</option>}
               <option value="anthropic">{BACKEND_LABEL.anthropic}</option>
               <option value="openai">{BACKEND_LABEL.openai}</option>
               <option value="openrouter">{BACKEND_LABEL.openrouter}</option>
