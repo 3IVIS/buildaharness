@@ -218,9 +218,10 @@ export class OpenAICompatibleLLMClient implements ILLMClient {
     let inputTokens: number | undefined
     let outputTokens: number | undefined
     let cachedInputTokens: number | undefined
+    let costUsd: number | undefined
     const reportUsage = (): void => {
       if (inputTokens !== undefined || outputTokens !== undefined) {
-        options.onUsage?.({ inputTokens: inputTokens ?? 0, outputTokens: outputTokens ?? 0, cachedInputTokens })
+        options.onUsage?.({ inputTokens: inputTokens ?? 0, outputTokens: outputTokens ?? 0, cachedInputTokens, ...(costUsd !== undefined ? { costUsd } : {}) })
       }
     }
 
@@ -243,6 +244,8 @@ export class OpenAICompatibleLLMClient implements ILLMClient {
           if (typeof parsed?.usage?.prompt_tokens === 'number') inputTokens = parsed.usage.prompt_tokens
           if (typeof parsed?.usage?.completion_tokens === 'number') outputTokens = parsed.usage.completion_tokens
           if (typeof parsed?.usage?.prompt_tokens_details?.cached_tokens === 'number') cachedInputTokens = parsed.usage.prompt_tokens_details.cached_tokens
+          // OpenRouter reports the real charged dollar cost on usage; OpenAI itself does not.
+          if (typeof parsed?.usage?.cost === 'number') costUsd = parsed.usage.cost
           const delta = parsed?.choices?.[0]?.delta?.content
           if (typeof delta === 'string') yield delta
         } catch {
@@ -292,7 +295,7 @@ export class OpenAICompatibleLLMClient implements ILLMClient {
 
     const json = (await withRequestTimeout(response.json(), timeoutMs, 'openai-compatible-client', 'while reading the reply')) as {
       choices?: Array<{ message?: { content?: string; tool_calls?: unknown } }>
-      usage?: { prompt_tokens?: number; completion_tokens?: number; prompt_tokens_details?: { cached_tokens?: number } }
+      usage?: { prompt_tokens?: number; completion_tokens?: number; prompt_tokens_details?: { cached_tokens?: number }; cost?: number }
     }
     const message = json.choices?.[0]?.message
     let toolCalls = parseToolCalls(message?.tool_calls)
@@ -309,6 +312,7 @@ export class OpenAICompatibleLLMClient implements ILLMClient {
         inputTokens: json.usage.prompt_tokens,
         outputTokens: json.usage.completion_tokens,
         cachedInputTokens: typeof json.usage.prompt_tokens_details?.cached_tokens === 'number' ? json.usage.prompt_tokens_details.cached_tokens : undefined,
+        ...(typeof json.usage.cost === 'number' ? { costUsd: json.usage.cost } : {}),
       })
     }
     return { content: options.structuredOutput ? stripJsonCodeFence(content) : content, toolCalls }

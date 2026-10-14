@@ -360,6 +360,14 @@ describe('formatCostSummary', () => {
     expect(output).toContain('real usage from your Claude Code session')
   })
 
+  it('says the cost is as reported by OpenRouter on the openrouter backend', () => {
+    const output = formatCostSummary({
+      session: { inputTokens: 100, outputTokens: 50, costUsd: 0.001 },
+      backend: 'openrouter',
+    })
+    expect(output).toContain('as reported by OpenRouter')
+  })
+
   it('shows the approximate-estimate caveat on the proxy backend only when a cost is present', () => {
     const withCost = formatCostSummary({
       session: { inputTokens: 100, outputTokens: 50, costUsd: 0.001 },
