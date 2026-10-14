@@ -1,16 +1,7 @@
 import type { AssistantConfig } from './config.js'
 import { CONFIG_KEYS } from './config.js'
-import { resolveOneLoopMode } from './one-loop-flag.js'
-import { resolveAskMode } from './ask-mode-flag.js'
-import { resolveAmbiguityGuardMode } from './ambiguity-guard-flag.js'
-import { resolvePlanMode } from './plan-mode-flag.js'
-import { resolveTuiMode } from './tui-mode-flag.js'
-import { resolveUpdateCheckMode } from './update-check-flag.js'
-import { resolveGoalGraphMode } from './goal-graph-flag.js'
-import { resolvePlanGraphMode } from './plan-graph-flag.js'
-import { resolveLayerPolicyMode, isLayerPolicyMode } from './layer-policy-flag.js'
-import { resolveGoalGraphSuggestMode } from './goal-graph-suggest-flag.js'
-import { resolveMemoryWriteMode, MEMORY_WRITE_MODES } from './memory-governance.js'
+import { redactUrlCredentials } from './redact-url.js'
+import { ENUM_CHOICES, envOverridesFrom, envVarFor, formatChoices, parseShellNetworkAllowlist } from './config-keys.js'
 
 /**
  * Pure logic backing cli.ts's /config command family — split out so it's unit-testable in
@@ -25,54 +16,10 @@ export { CONFIG_KEYS }
 export const SECRET_CONFIG_KEYS: ReadonlySet<keyof AssistantConfig> = new Set(['authToken', 'apiKey', 'braveApiKey', 'resendApiKey', 'smtpPass'])
 
 /** Which env var, if any, can pin a given key — shown next to a value in /config's listing when that var is set. */
-export const ENV_VAR_FOR_CONFIG_KEY: Partial<Record<keyof AssistantConfig, string>> = {
-  llmBackend: 'ASSISTANT_LLM_BACKEND',
-  proxyUrl: 'ASSISTANT_PROXY_URL',
-  authToken: 'ASSISTANT_PROXY_TOKEN',
-  apiKey: 'ASSISTANT_API_KEY',
-  model: 'ASSISTANT_MODEL',
-  enableWeb: 'ASSISTANT_ENABLE_WEB',
-  braveApiKey: 'BRAVE_SEARCH_API_KEY',
-  enableShell: 'ASSISTANT_ENABLE_SHELL',
-  shellTimeoutMs: 'ASSISTANT_SHELL_TIMEOUT_MS',
-  shellNetworkAllowlist: 'ASSISTANT_SHELL_NETWORK_ALLOWLIST',
-  workspaceRoot: 'ASSISTANT_WORKSPACE_DIR',
-  enableEmail: 'ASSISTANT_ENABLE_EMAIL',
-  emailProvider: 'ASSISTANT_EMAIL_PROVIDER',
-  emailFrom: 'ASSISTANT_EMAIL_FROM',
-  resendApiKey: 'ASSISTANT_RESEND_API_KEY',
-  smtpHost: 'ASSISTANT_SMTP_HOST',
-  smtpPort: 'ASSISTANT_SMTP_PORT',
-  smtpUser: 'ASSISTANT_SMTP_USER',
-  smtpPass: 'ASSISTANT_SMTP_PASS',
-  dangerouslySkipPermissions: 'ASSISTANT_DANGEROUSLY_SKIP_PERMISSIONS',
-  sessionCostLimitUsd: 'ASSISTANT_SESSION_COST_LIMIT_USD',
-  sessionCallLimit: 'ASSISTANT_SESSION_CALL_LIMIT',
-  memoryBudgetChars: 'ASSISTANT_MEMORY_BUDGET_CHARS',
-  memoryWriteMode: 'ASSISTANT_MEMORY_WRITE_MODE',
-  oneLoopMode: 'ASSISTANT_ONE_LOOP',
-  askMode: 'ASSISTANT_ASK_MODE',
-  planMode: 'ASSISTANT_PLAN_MODE',
-  ambiguityGuardMode: 'ASSISTANT_AMBIGUITY_GUARD',
-  tuiMode: 'ASSISTANT_TUI',
-  updateCheck: 'ASSISTANT_UPDATE_CHECK',
-  activeProject: 'ASSISTANT_ACTIVE_PROJECT',
-  goalGraphMode: 'ASSISTANT_GOAL_GRAPH',
-  planGraphMode: 'ASSISTANT_PLAN_GRAPH',
-  layerPolicyMode: 'ASSISTANT_LAYER_POLICY',
-  goalGraphSuggestMode: 'ASSISTANT_GOAL_GRAPH_SUGGEST',
-}
+export const ENV_VAR_FOR_CONFIG_KEY: Partial<Record<keyof AssistantConfig, string>> = envVarFor('cli')
 
 export function isConfigKey(key: string): key is keyof AssistantConfig {
   return (CONFIG_KEYS as readonly string[]).includes(key)
-}
-
-/** Shared by envOverridesFromProcessEnv and parseConfigValue for shellNetworkAllowlist's comma-separated hostname-list syntax. */
-function parseShellNetworkAllowlist(raw: string): string[] {
-  return raw
-    .split(',')
-    .map((host) => host.trim())
-    .filter((host) => host.length > 0)
 }
 
 /**
@@ -82,75 +29,7 @@ function parseShellNetworkAllowlist(raw: string): string[] {
  * before this module existed (ASSISTANT_ENABLE_WEB/ASSISTANT_ENABLE_SHELL must be exactly "1").
  */
 export function envOverridesFromProcessEnv(env: NodeJS.ProcessEnv): Partial<AssistantConfig> {
-  const overrides: Partial<AssistantConfig> = {}
-  if (env.ASSISTANT_LLM_BACKEND !== undefined) {
-    switch (env.ASSISTANT_LLM_BACKEND) {
-      case 'claude-cli':
-      case 'anthropic':
-      case 'openai':
-      case 'openrouter':
-        overrides.llmBackend = env.ASSISTANT_LLM_BACKEND
-        break
-      default:
-        // Unset or an unrecognized value (including a typo of a valid one) both fall back to
-        // 'proxy', the existing default — a typo must never silently resolve to some *other*
-        // valid-looking backend the user didn't ask for.
-        overrides.llmBackend = 'proxy'
-    }
-  }
-  if (env.ASSISTANT_PROXY_URL !== undefined) overrides.proxyUrl = env.ASSISTANT_PROXY_URL
-  if (env.ASSISTANT_PROXY_TOKEN !== undefined) overrides.authToken = env.ASSISTANT_PROXY_TOKEN
-  if (env.ASSISTANT_API_KEY !== undefined) overrides.apiKey = env.ASSISTANT_API_KEY
-  if (env.ASSISTANT_MODEL !== undefined) overrides.model = env.ASSISTANT_MODEL
-  if (env.ASSISTANT_ENABLE_WEB !== undefined) overrides.enableWeb = env.ASSISTANT_ENABLE_WEB === '1'
-  if (env.BRAVE_SEARCH_API_KEY !== undefined) overrides.braveApiKey = env.BRAVE_SEARCH_API_KEY
-  if (env.ASSISTANT_ENABLE_SHELL !== undefined) overrides.enableShell = env.ASSISTANT_ENABLE_SHELL === '1'
-  if (env.ASSISTANT_SHELL_TIMEOUT_MS !== undefined) overrides.shellTimeoutMs = Number(env.ASSISTANT_SHELL_TIMEOUT_MS)
-  if (env.ASSISTANT_SHELL_NETWORK_ALLOWLIST !== undefined) overrides.shellNetworkAllowlist = parseShellNetworkAllowlist(env.ASSISTANT_SHELL_NETWORK_ALLOWLIST)
-  if (env.ASSISTANT_WORKSPACE_DIR !== undefined) overrides.workspaceRoot = env.ASSISTANT_WORKSPACE_DIR
-  if (env.ASSISTANT_ENABLE_EMAIL !== undefined) overrides.enableEmail = env.ASSISTANT_ENABLE_EMAIL === '1'
-  if (env.ASSISTANT_EMAIL_PROVIDER !== undefined) overrides.emailProvider = env.ASSISTANT_EMAIL_PROVIDER === 'smtp' ? 'smtp' : 'resend'
-  if (env.ASSISTANT_EMAIL_FROM !== undefined) overrides.emailFrom = env.ASSISTANT_EMAIL_FROM
-  if (env.ASSISTANT_RESEND_API_KEY !== undefined) overrides.resendApiKey = env.ASSISTANT_RESEND_API_KEY
-  if (env.ASSISTANT_SMTP_HOST !== undefined) overrides.smtpHost = env.ASSISTANT_SMTP_HOST
-  if (env.ASSISTANT_SMTP_PORT !== undefined) overrides.smtpPort = Number(env.ASSISTANT_SMTP_PORT)
-  if (env.ASSISTANT_SMTP_USER !== undefined) overrides.smtpUser = env.ASSISTANT_SMTP_USER
-  if (env.ASSISTANT_SMTP_PASS !== undefined) overrides.smtpPass = env.ASSISTANT_SMTP_PASS
-  if (env.ASSISTANT_DANGEROUSLY_SKIP_PERMISSIONS !== undefined) overrides.dangerouslySkipPermissions = env.ASSISTANT_DANGEROUSLY_SKIP_PERMISSIONS === '1'
-  if (env.ASSISTANT_SESSION_COST_LIMIT_USD !== undefined) overrides.sessionCostLimitUsd = Number(env.ASSISTANT_SESSION_COST_LIMIT_USD)
-  if (env.ASSISTANT_SESSION_CALL_LIMIT !== undefined) overrides.sessionCallLimit = Number(env.ASSISTANT_SESSION_CALL_LIMIT)
-  if (env.ASSISTANT_MEMORY_BUDGET_CHARS !== undefined) overrides.memoryBudgetChars = Number(env.ASSISTANT_MEMORY_BUDGET_CHARS)
-  if (env.ASSISTANT_MEMORY_WRITE_MODE !== undefined) {
-    const resolved = resolveMemoryWriteMode(env.ASSISTANT_MEMORY_WRITE_MODE)
-    // Warn-and-default like every other mode flag: an unrecognised value must be visible, not silently a different mode.
-    if (!(MEMORY_WRITE_MODES as readonly string[]).includes(env.ASSISTANT_MEMORY_WRITE_MODE)) console.warn(`ASSISTANT_MEMORY_WRITE_MODE="${env.ASSISTANT_MEMORY_WRITE_MODE}" is not one of ${MEMORY_WRITE_MODES.join('/')}; using "${resolved}".`)
-    overrides.memoryWriteMode = resolved
-  }
-  // resolveOneLoopMode already warns-and-defaults on an unrecognized value, so an explicit
-  // ASSISTANT_ONE_LOOP always resolves to a concrete 'enabled'/'disabled' override here.
-  if (env.ASSISTANT_ONE_LOOP !== undefined) overrides.oneLoopMode = resolveOneLoopMode(env)
-  // resolveAskMode already warns-and-defaults on an unrecognized value, so an explicit
-  // ASSISTANT_ASK_MODE always resolves to a concrete 'enabled'/'disabled' override here.
-  if (env.ASSISTANT_ASK_MODE !== undefined) overrides.askMode = resolveAskMode(env)
-  if (env.ASSISTANT_AMBIGUITY_GUARD !== undefined) overrides.ambiguityGuardMode = resolveAmbiguityGuardMode(env)
-  // resolvePlanMode already warns-and-defaults on an unrecognized value, so an explicit
-  // ASSISTANT_PLAN_MODE always resolves to a concrete 'gated'/'legacy' override here.
-  if (env.ASSISTANT_PLAN_MODE !== undefined) overrides.planMode = resolvePlanMode(env)
-  // resolveTuiMode already warns-and-defaults on an unrecognized value, so an explicit
-  // ASSISTANT_TUI always resolves to a concrete 'enabled'/'disabled' override here.
-  if (env.ASSISTANT_TUI !== undefined) overrides.tuiMode = resolveTuiMode(env)
-  // resolveUpdateCheckMode warns-and-defaults on an unrecognized value, same as the flags above.
-  if (env.ASSISTANT_UPDATE_CHECK !== undefined) overrides.updateCheck = resolveUpdateCheckMode(env)
-  if (env.ASSISTANT_ACTIVE_PROJECT !== undefined) overrides.activeProject = env.ASSISTANT_ACTIVE_PROJECT
-  // resolveGoalGraphMode/resolveGoalGraphSuggestMode already warn-and-default on an unrecognized
-  // value, so an explicit ASSISTANT_GOAL_GRAPH(_SUGGEST) always resolves to a concrete
-  // 'enabled'/'disabled' override here — same pattern as ASSISTANT_ONE_LOOP/ASSISTANT_ASK_MODE above.
-  if (env.ASSISTANT_GOAL_GRAPH !== undefined) overrides.goalGraphMode = resolveGoalGraphMode(env)
-  if (env.ASSISTANT_PLAN_GRAPH !== undefined) overrides.planGraphMode = resolvePlanGraphMode(env)
-  if (env.ASSISTANT_GOAL_GRAPH_SUGGEST !== undefined) overrides.goalGraphSuggestMode = resolveGoalGraphSuggestMode(env)
-  // resolveLayerPolicyMode warns-and-defaults on an unrecognized value (AL7b).
-  if (env.ASSISTANT_LAYER_POLICY !== undefined) overrides.layerPolicyMode = resolveLayerPolicyMode(env)
-  return overrides
+  return envOverridesFrom(env, 'cli')
 }
 
 /**
@@ -211,9 +90,6 @@ export function parseConfigValue(key: keyof AssistantConfig, raw: string): unkno
       if (!Number.isFinite(n) || n <= 0 || !Number.isInteger(n)) throw new ConfigValueParseError('memoryBudgetChars must be a positive integer')
       return n
     }
-    case 'memoryWriteMode':
-      if (raw !== 'auto' && raw !== 'staged' && raw !== 'user_only') throw new ConfigValueParseError('memoryWriteMode must be "auto", "staged" or "user_only"')
-      return raw
     case 'sessionCallLimit': {
       const n = Number(raw)
       if (!Number.isFinite(n) || n <= 0 || !Number.isInteger(n)) throw new ConfigValueParseError('sessionCallLimit must be a positive integer')
@@ -224,59 +100,15 @@ export function parseConfigValue(key: keyof AssistantConfig, raw: string): unkno
         throw new ConfigValueParseError('llmBackend must be one of "proxy", "claude-cli", "anthropic", "openai", "openrouter"')
       }
       return raw
-    case 'oneLoopMode':
-      if (raw !== 'enabled' && raw !== 'disabled') throw new ConfigValueParseError('oneLoopMode must be "enabled" or "disabled"')
-      return raw
-    case 'askMode':
-      if (raw !== 'enabled' && raw !== 'disabled') throw new ConfigValueParseError('askMode must be "enabled" or "disabled"')
-      return raw
-    case 'ambiguityGuardMode':
-      if (raw !== 'enabled' && raw !== 'disabled') throw new ConfigValueParseError('ambiguityGuardMode must be "enabled" or "disabled"')
-      return raw
-    case 'planMode':
-      if (raw !== 'gated' && raw !== 'legacy') throw new ConfigValueParseError('planMode must be "gated" or "legacy"')
-      return raw
-    case 'tuiMode':
-      if (raw !== 'enabled' && raw !== 'disabled') throw new ConfigValueParseError('tuiMode must be "enabled" or "disabled"')
-      return raw
-    case 'updateCheck':
-      if (raw !== 'enabled' && raw !== 'disabled') throw new ConfigValueParseError('updateCheck must be "enabled" or "disabled"')
-      return raw
-    case 'theme':
-      if (raw !== 'system' && raw !== 'dark' && raw !== 'light') throw new ConfigValueParseError('theme must be "system", "dark" or "light"')
-      return raw
-    case 'goalGraphMode':
-      if (raw !== 'enabled' && raw !== 'disabled') throw new ConfigValueParseError('goalGraphMode must be "enabled" or "disabled"')
-      return raw
-    case 'planGraphMode':
-      if (raw !== 'enabled' && raw !== 'disabled') throw new ConfigValueParseError('planGraphMode must be "enabled" or "disabled"')
-      return raw
-    case 'layerPolicyMode':
-      if (!isLayerPolicyMode(raw)) throw new ConfigValueParseError('layerPolicyMode must be "static", "shadow" or "adaptive"')
-      return raw
     case 'layers':
       throw new ConfigValueParseError('layers is edited with /layers (e.g. /layers off decomposition_reframe), not /config set')
-    case 'goalGraphSuggestMode':
-      if (raw !== 'enabled' && raw !== 'disabled') throw new ConfigValueParseError('goalGraphSuggestMode must be "enabled" or "disabled"')
+    default: {
+      // The fixed-word keys (modes, theme) share their choices with the pickers: config-keys.ts's ENUM_CHOICES.
+      const choices = ENUM_CHOICES[key]
+      if (choices && !choices.includes(raw)) throw new ConfigValueParseError(`${key} must be ${formatChoices(choices)}`)
       return raw
-    default:
-      return raw
+    }
   }
-}
-
-/** A URL with any user:password, and every query-string value, masked, so a credential embedded in proxyUrl is never printed. Text that is not a URL is returned unchanged. */
-export function redactUrlCredentials(text: string): string {
-  let url: URL
-  try {
-    url = new URL(text)
-  } catch {
-    return text
-  }
-  if (!url.username && !url.password && !url.search) return text
-  if (url.username) url.username = '***'
-  if (url.password) url.password = '***'
-  for (const key of [...url.searchParams.keys()]) url.searchParams.set(key, '***')
-  return url.toString().split('%2A%2A%2A').join('***')
 }
 
 function formatConfigValue(key: keyof AssistantConfig, config: AssistantConfig): string {
@@ -299,3 +131,5 @@ export function formatConfigListing(config: AssistantConfig, overriddenKeys: Rea
   })
   return lines.join('\n')
 }
+
+export { redactUrlCredentials }

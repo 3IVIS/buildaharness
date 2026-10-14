@@ -7,7 +7,22 @@ import {
   nodeDisplayName,
   classifyError,
   resolveConfig,
-  estimateCostUsd,
+  withCostEstimate as sharedWithCostEstimate,
+  createLlmClient as createSharedLlmClient,
+  checkProxyHealth,
+  buildAssistantOptions,
+  EXPLAIN_COMMANDS,
+  presentTurnResult,
+  DEFAULT_ESCALATION_REASON,
+  parseProjectCommand,
+  parseUndoActionCommand,
+  formatUndoLogListing,
+  formatMemoryExport,
+  defaultMemoryExportFilename,
+  formatSpendCapStatus,
+  DESKTOP_FEATURES,
+  WEB_FEATURES,
+  planUndo,
   formatTranscriptMarkdown,
   defaultExportFilename,
   braveSearch,
@@ -34,19 +49,8 @@ import {
   isGoalGraphEnabled,
   isPlanGraphEnabled,
   planToSnapshot,
-  isGoalGraphSuggestEnabled,
 } from '@buildaharness/aielia'
 import {
-  LLMClient,
-  AnthropicLLMClient,
-  OpenAICompatibleLLMClient,
-  ANTHROPIC_DEFAULT_MODEL,
-  OPENAI_BASE_URL,
-  OPENAI_DEFAULT_MODEL,
-  OPENROUTER_BASE_URL,
-  OPENROUTER_DEFAULT_MODEL,
-  OPENROUTER_EXTRA_HEADERS,
-  defaultModelForBackend,
   FileSystemAdapter,
   FileSystemExperienceStore,
   type ILLMClient,
@@ -61,7 +65,6 @@ import { AskQuestionCard } from './components/AskQuestionCard'
 import { PlanVizPanel } from './components/PlanVizPanel'
 import { PlanApprovalCard } from './components/PlanApprovalCard'
 import { EscalationBanner } from './components/EscalationBanner'
-import { shouldRenderAskQuestionCard } from './ask-question-render'
 import { SettingsScreen } from './components/SettingsScreen'
 import { SetupWizard } from './components/SetupWizard'
 import { KeyNotice } from './components/KeyNotice'
@@ -76,11 +79,8 @@ import { envOverridesFromImportMetaEnv, llmBackendFromEnvValue } from './browser
 import { applyBrowserLayerSettings } from './layer-env'
 import { getAssistantTestHooks } from './assistant-test-hooks'
 import { DEMO_USER_MESSAGE, DEMO_APPROVAL_REASON, DEMO_NOTE } from './demo-seed'
-import { checkProxyReachable, checkWebSearchReachable, checkClaudeAvailable, checkWorkspaceConfigured, checkDataDirWritable } from './gui-doctor-checks'
+import { checkWebSearchReachable, checkClaudeAvailable, checkWorkspaceConfigured, checkDataDirWritable } from './gui-doctor-checks'
 import type { ChatEntry } from './types'
-
-/** Same fixed default the proxy backend's LLMClient itself falls back to (see @buildaharness/runtime's model-defaults.ts) — used only to pick a pricing tier when no model is explicitly configured. */
-const DEFAULT_PROXY_MODEL = ANTHROPIC_DEFAULT_MODEL
 
 /**
  * Full conversation content (user messages, assistant replies, real tool calls with their
@@ -299,26 +299,10 @@ function createLlmClient(config: AssistantConfig, { isDesktop, workspaceRoot, fe
   // production build, so this is byte-identical to the switch below there.
   const testLlmClient = getAssistantTestHooks()?.makeLlmClient
   if (testLlmClient) return testLlmClient(config)
-  switch (config.llmBackend) {
-    case 'claude-cli':
-      if (isDesktop) return new TauriClaudeCliLLMClient({ fileTools: { workspaceRoot }, shellTools: config.enableShell })
-      console.warn('llmBackend "claude-cli" isn\'t available in a plain browser tab (no way to run `claude -p`) — falling back to "proxy".')
-      return new LLMClient({ proxyUrl: config.proxyUrl, authToken: config.authToken, fetchImpl })
-    case 'anthropic':
-      return new AnthropicLLMClient({ apiKey: config.apiKey ?? '', fetchImpl })
-    case 'openai':
-      return new OpenAICompatibleLLMClient({ apiKey: config.apiKey ?? '', baseUrl: OPENAI_BASE_URL, defaultModel: OPENAI_DEFAULT_MODEL, fetchImpl })
-    case 'openrouter':
-      return new OpenAICompatibleLLMClient({
-        apiKey: config.apiKey ?? '',
-        baseUrl: OPENROUTER_BASE_URL,
-        defaultModel: OPENROUTER_DEFAULT_MODEL,
-        extraHeaders: OPENROUTER_EXTRA_HEADERS,
-        fetchImpl,
-      })
-    case 'proxy':
-      return new LLMClient({ proxyUrl: config.proxyUrl, authToken: config.authToken, fetchImpl })
-  }
+  return createSharedLlmClient(config, {
+    fetchImpl,
+    claudeCli: () => (isDesktop ? new TauriClaudeCliLLMClient({ fileTools: { workspaceRoot }, shellTools: config.enableShell }) : undefined),
+  })
 }
 
 /**
@@ -363,35 +347,22 @@ async function createTauriBackedAssistant(config: AssistantConfig): Promise<Pers
   // The webview's CSP blocks the global fetch to remote hosts, so LLM calls go through the Rust-side HTTP plugin (scoped by the http:default capability).
   const { fetch: tauriFetch } = await import('@tauri-apps/plugin-http')
 
-  return PersonalAssistant.create({
-    llmClient: createLlmClient(config, { isDesktop: true, workspaceRoot, fetchImpl: tauriFetch }),
-    // Name the backend's real default when none is set, so spend tracking prices the model that actually runs.
-    model: config.model ?? defaultModelForBackend(config.llmBackend),
-    // M6 — same AssistantConfig seam as the CLI's buildAssistant (it already passed memoryBudgetChars; the browser build did not).
-    memoryBudgetChars: config.memoryBudgetChars,
-    memoryWriteMode: config.memoryWriteMode,
-    memory: new FileSystemAdapter({ backend, baseDir, namespace: 'transcripts' }),
-    experienceStore: await FileSystemExperienceStore.create({ backend, baseDir, namespace: 'experience' }),
-    checkpointStore: new FileSystemAdapter({ backend, baseDir, namespace: 'checkpoints' }),
-    fileTools: { backend: workspaceBackend, workspaceRoot },
-    webTools: config.enableWeb ? await createWebTools(config, true) : undefined,
-    shellTools: config.enableShell
-      ? { backend: workspaceBackend, workspaceRoot, timeoutMs: config.shellTimeoutMs, executeCommand: tauriExecuteShellCommand }
-      : undefined,
-    dangerouslySkipPermissions: config.dangerouslySkipPermissions,
-    // R5 of the internal plan — resolved through the same AssistantConfig
-    // seam the CLI uses (here from the build-time VITE_ASSISTANT_ONE_LOOP via browser-config.ts, or
-    // a persisted oneLoopMode). Undefined → PersonalAssistant falls back to DEFAULT_ONE_LOOP_MODE.
-    oneLoopMode: config.oneLoopMode,
-    layerPolicyMode: config.layerPolicyMode,
-    // R7: turn-end next-step options + DONE-thread suggestions. Undefined config means the package
-    // default (enabled); PersonalAssistant itself defaults to disabled, so the front end opts in here.
-    goalGraphSuggestMode: isGoalGraphSuggestEnabled(config.goalGraphSuggestMode) ? 'enabled' : 'disabled',
-    // P11 of the internal plan — same seam, from VITE_ASSISTANT_PLAN_MODE
-    // via browser-config.ts, or a persisted planMode. Undefined → falls back to DEFAULT_PLAN_MODE.
-    planMode: config.planMode,
-    onDebugLog: debugLog,
-  })
+  return PersonalAssistant.create(
+    buildAssistantOptions(config, {
+      llmClient: createLlmClient(config, { isDesktop: true, workspaceRoot, fetchImpl: tauriFetch }),
+      workspaceRoot,
+      features: DESKTOP_FEATURES,
+      memory: new FileSystemAdapter({ backend, baseDir, namespace: 'transcripts' }),
+      experienceStore: await FileSystemExperienceStore.create({ backend, baseDir, namespace: 'experience' }),
+      checkpointStore: new FileSystemAdapter({ backend, baseDir, namespace: 'checkpoints' }),
+      fileTools: { backend: workspaceBackend, workspaceRoot },
+      webTools: config.enableWeb ? await createWebTools(config, true) : undefined,
+      shellTools: config.enableShell
+        ? { backend: workspaceBackend, workspaceRoot, timeoutMs: config.shellTimeoutMs, executeCommand: tauriExecuteShellCommand }
+        : undefined,
+      onDebugLog: debugLog,
+    }),
+  )
 }
 
 async function buildAssistant(config: AssistantConfig): Promise<PersonalAssistant> {
@@ -399,30 +370,16 @@ async function buildAssistant(config: AssistantConfig): Promise<PersonalAssistan
   // Test-only (phase B1): an injected in-memory FsBackend so the tool loop actually runs in a
   // plain-browser E2E turn. `getAssistantTestHooks()` is null in any production build.
   const testFsBackend = getAssistantTestHooks()?.makeFsBackend
-  return PersonalAssistant.create({
-    llmClient: createLlmClient(config, { isDesktop: false, workspaceRoot: '' }),
-    // Name the backend's real default when none is set, so spend tracking prices the model that actually runs.
-    model: config.model ?? defaultModelForBackend(config.llmBackend),
-    memoryBudgetChars: config.memoryBudgetChars,
-    memoryWriteMode: config.memoryWriteMode,
-    // No fileTools/shellTools in a plain browser build (no filesystem/process access at all) —
-    // still worth honoring dangerouslySkipPermissions for consistency with the desktop build,
-    // since it also affects the message-level risk gate, independent of file/shell tools.
-    fileTools: testFsBackend ? { backend: testFsBackend(), workspaceRoot: '/workspace' } : undefined,
-    webTools: config.enableWeb ? await createWebTools(config, false) : undefined,
-    dangerouslySkipPermissions: config.dangerouslySkipPermissions,
-    // R5 of the internal plan — same AssistantConfig seam as the desktop
-    // path above and the CLI. Undefined → PersonalAssistant falls back to DEFAULT_ONE_LOOP_MODE.
-    oneLoopMode: config.oneLoopMode,
-    layerPolicyMode: config.layerPolicyMode,
-    // R7: turn-end next-step options + DONE-thread suggestions. Undefined config means the package
-    // default (enabled); PersonalAssistant itself defaults to disabled, so the front end opts in here.
-    goalGraphSuggestMode: isGoalGraphSuggestEnabled(config.goalGraphSuggestMode) ? 'enabled' : 'disabled',
-    // P11 of the internal plan — same seam. Undefined → falls back to
-    // DEFAULT_PLAN_MODE.
-    planMode: config.planMode,
-    onDebugLog: debugLog,
-  })
+  return PersonalAssistant.create(
+    buildAssistantOptions(config, {
+      llmClient: createLlmClient(config, { isDesktop: false, workspaceRoot: '' }),
+      features: WEB_FEATURES,
+      // No fileTools/shellTools in a plain browser build (no filesystem/process access at all); the test hook injects an in-memory backend.
+      fileTools: testFsBackend ? { backend: testFsBackend(), workspaceRoot: '/workspace' } : undefined,
+      webTools: config.enableWeb ? await createWebTools(config, false) : undefined,
+      onDebugLog: debugLog,
+    }),
+  )
 }
 
 function formatElapsed(seconds: number): string {
@@ -502,6 +459,7 @@ export function App(): React.JSX.Element {
   const [sessionUsage, setSessionUsage] = useState<TokenUsage | undefined>(undefined)
   const [memorySummary, setMemorySummary] = useState<MemorySummary | null>(null)
   const [healthChecks, setHealthChecks] = useState<DoctorCheck[] | null>(null)
+  const [spendCapLine, setSpendCapLine] = useState<string | undefined>(undefined)
   // M6 — the Memory panel's data (GUI counterpart of the CLI's /memory family); null = still loading. Reloaded after every action so it never shows a stale queue.
   const [memoryPanelData, setMemoryPanelData] = useState<MemoryPanelData | null>(null)
   const [memoryPanelMessage, setMemoryPanelMessage] = useState<string | null>(null)
@@ -556,8 +514,8 @@ export function App(): React.JSX.Element {
       document.removeEventListener('mousedown', onPointerDown)
     }
   }, [headerMenuOpen])
-  // R1 (mid-task steering) — one channel per session, mirroring cli.ts's own module-scoped
-  // steeringChannel. A ref, not state: enqueue()/poll() mutate it directly and nothing here needs
+  // R1 (mid-task steering) — one channel per session (the CLI keeps its own in cli.ts: each surface owns its
+  // channel, the logic that drains it is in assistant.turn()). A ref, not state: enqueue()/poll() mutate it directly and nothing here needs
   // a re-render when its contents change (submitMessage already re-renders via setEntries).
   const steeringChannelRef = useRef(new LiveSteeringChannel())
 
@@ -568,10 +526,8 @@ export function App(): React.JSX.Element {
    * static-table estimate the CLI's /cost uses instead. Used to be gated on isTauri() alone,
    * back when desktop could only ever be running claude-cli; that's no longer true.
    */
-  function withCostEstimate(usage: TokenUsage): TokenUsage {
-    if (config.llmBackend === 'claude-cli' || usage.costUsd !== undefined) return usage
-    const estimated = estimateCostUsd(config.model ?? defaultModelForBackend(config.llmBackend) ?? DEFAULT_PROXY_MODEL, usage)
-    return estimated !== undefined ? { ...usage, costUsd: estimated } : usage
+  function priceUsage(usage: TokenUsage): TokenUsage {
+    return sharedWithCostEstimate(usage, { backend: config.llmBackend, model: config.model })
   }
 
   /** Runs the platform-appropriate health checks — proxy reachability in a plain browser, claude/workspace/data-dir on desktop (see gui-doctor-checks.ts). */
@@ -579,7 +535,7 @@ export function App(): React.JSX.Element {
     // M6: the same pure memory checks the CLI's /doctor shows (store vs budget, pending, last consolidation, audit log).
     const memoryChecks = assistantRef.current ? memoryStatusChecks(await assistantRef.current.getMemoryStatus(sessionIdRef.current)) : []
     if (!isTauri()) {
-      const checks = [await checkProxyReachable(config.proxyUrl)]
+      const checks = [await checkProxyHealth(config.proxyUrl)]
       if (config.enableWeb && config.webBackend === 'proxy') checks.push(await checkWebSearchReachable(config.proxyUrl, config.authToken))
       return [...checks, ...memoryChecks]
     }
@@ -602,11 +558,13 @@ export function App(): React.JSX.Element {
   async function loadDiagnostics(): Promise<void> {
     const assistant = assistantRef.current
     if (!assistant) return
-    const [summary, transcript, checks] = await Promise.all([
+    const [summary, transcript, checks, spendState] = await Promise.all([
       assistant.getMemorySummary(sessionIdRef.current),
       assistant.getTranscript(sessionIdRef.current),
       runHealthChecks(),
+      assistant.getSpendState(sessionIdRef.current),
     ])
+    setSpendCapLine(formatSpendCapStatus(spendState, { sessionCostLimitUsd: config.sessionCostLimitUsd, sessionCallLimit: config.sessionCallLimit }))
     setMemorySummary(summary)
     setTranscriptLength(transcript.length)
     setHealthChecks(checks)
@@ -665,6 +623,12 @@ export function App(): React.JSX.Element {
     onForgetDigests: (id?: string) => void runMemoryAction(async (a) => {
       const removed = await a.forgetDigests(id)
       return `Forgot ${removed} session digest${removed === 1 ? '' : 's'}.`
+    }),
+    // The Memory panel's counterpart of /memory export: the same JSON, as a download (D4).
+    onExport: () => void runMemoryAction(async (a) => {
+      const data = await a.exportMemory(sessionIdRef.current)
+      downloadBlob(new Blob([formatMemoryExport(data)], { type: 'application/json' }), defaultMemoryExportFilename())
+      return 'Exported learned memory.'
     }),
     onConsolidate: () => void runMemoryAction(async (a) => (await a.consolidateMemory(sessionIdRef.current)).message),
     onSetEnabled: (enabled: boolean) => void runMemoryAction(async (a) => {
@@ -747,7 +711,7 @@ export function App(): React.JSX.Element {
 
   /**
    * GUI equivalent of /undo — peeks the transcript before calling undoLastTurn to know which
-   * UI entries correspond to what just got removed (mirrors cli.ts's handleUndo): a completed
+   * UI entries correspond to what just got removed (planUndo, shared with the CLI's /undo, decides whether anything is there to remove): a completed
    * turn's last 'assistant' entry and the 'user' entry immediately before it, or — if the turn
    * was still awaiting approval — just the last 'approval' entry (no reply was ever appended).
    */
@@ -755,8 +719,9 @@ export function App(): React.JSX.Element {
     const assistant = assistantRef.current
     if (!assistant) return
     const transcriptBefore = await assistant.getTranscript(sessionIdRef.current)
-    if (transcriptBefore.length === 0) return
-    const wasPendingApproval = transcriptBefore[transcriptBefore.length - 1].role !== 'assistant'
+    const plan = planUndo(transcriptBefore)
+    if (plan.nothingToUndo) return
+    const { wasPendingApproval } = plan
 
     const result = await assistant.undoLastTurn(sessionIdRef.current)
     if (!result.undone) return
@@ -915,8 +880,8 @@ export function App(): React.JSX.Element {
           toolSteps.push(step)
           setLiveToolSteps((prev) => [...prev, step])
         },
-        // Phase 4 — mirrors cli.ts exactly (per this plan's standing "chat-ui must follow the
-        // same logic/wiring as the CLI" principle): passed unconditionally, since with
+        // Phase 4 — passed unconditionally, as the CLI does (platform plumbing: the channel is this
+        // surface's own, the absorption logic is in assistant.turn()), since with
         // goalGraphModeEnabled false the composer stays disabled while busy (see the JSX below)
         // so nothing ever reaches steeringChannelRef in the first place (INV-43).
         steeringChannel: steeringChannelRef.current,
@@ -930,14 +895,16 @@ export function App(): React.JSX.Element {
         void refreshPlanGraph()
       }
 
-      if (result.status === 'ok') {
+      // What to show is decided once, in turn-presentation.ts (the CLI prints the same decision); this only renders it.
+      const shown = presentTurnResult(result)
+      if (shown.kind === 'reply') {
         setEntries((prev) => [
           ...prev,
           {
             id: newId(),
             kind: 'assistant',
-            content: result.reply ?? '',
-            riskLevel: result.riskLevel,
+            content: shown.text,
+            riskLevel: shown.riskLevel,
             trace: result.trace,
             harnessSkipped: result.harnessSkipped,
             sources: result.sources,
@@ -947,67 +914,61 @@ export function App(): React.JSX.Element {
             answerClaim: result.answerClaim,
             memoryInjection: assistant.getLastMemoryInjection(),
             proposerKind: result.proposerKind,
-            contradictionNotice: result.contradictionNotice,
-            reviewNotice: result.reviewNotice,
+            contradictionNotice: shown.hints.contradictionNotice,
+            reviewNotice: shown.hints.reviewNotice,
+            auditNotice: shown.hints.auditNotice,
+            pausedNote: shown.hints.pausedNote,
           },
         ])
         setActivePlanStatus(result.planStatus)
         if (result.usage) {
-          const withCost = withCostEstimate(result.usage)
+          const withCost = priceUsage(result.usage)
           setLastTurnUsage(withCost)
           setSessionUsage((prev) => accumulateUsage(prev, withCost))
         } else {
           setLastTurnUsage(undefined)
         }
-      } else if (result.status === 'cancelled') {
+      } else if (shown.kind === 'cancelled') {
         setEntries((prev) => [...prev, { id: newId(), kind: 'stopped' }])
-      } else if (result.status === 'needs_approval') {
+      } else if (shown.kind === 'approval') {
         setEntries((prev) => [
           ...prev,
           {
             id: newId(),
             kind: 'approval',
             pendingMessage: message,
-            reason: result.reason ?? 'This action needs approval.',
-            riskLevel: result.riskLevel,
-            pendingActionId: result.pendingActionId,
-            pendingActionKind: result.pendingActionKind,
+            reason: shown.reason,
+            riskLevel: shown.riskLevel,
+            pendingActionId: shown.pendingActionId,
+            pendingActionKind: shown.pendingActionKind,
           },
         ])
-      } else if (result.status === 'needs_plan_approval' && result.planApprovalId && result.planApproval) {
-        const { planApprovalId, planApproval, riskLevel } = result
-        setEntries((prev) => [
-          ...prev,
-          {
-            id: newId(),
-            kind: 'plan_approval',
-            pendingMessage: message,
-            planApprovalId,
-            planApproval,
-            riskLevel,
-          },
-        ])
-      } else if (shouldRenderAskQuestionCard(result)) {
+      } else if (shown.kind === 'plan_approval' && shown.planApproval) {
+        const { planApprovalId, planApproval, riskLevel } = shown
+        setEntries((prev) => [...prev, { id: newId(), kind: 'plan_approval', pendingMessage: message, planApprovalId, planApproval, riskLevel }])
+      } else if (shown.kind === 'clarification') {
         setEntries((prev) => [
           ...prev,
           {
             id: newId(),
             kind: 'clarification',
             pendingMessage: message,
-            pendingClarificationId: result.pendingClarificationId,
-            questions: result.questions,
-            riskLevel: result.riskLevel,
+            pendingClarificationId: shown.pendingClarificationId,
+            questions: shown.questions,
+            riskLevel: shown.riskLevel,
           },
         ])
       } else {
-        setEntries((prev) => [...prev, { id: newId(), kind: 'escalation', reason: result.reason ?? 'Aielia halted and needs more information.', pendingMessage: message }])
+        // An escalation, or a plan approval whose tasks were not handed over (the card needs them to render).
+        const reason = shown.kind === 'escalation' ? shown.reason : (shown.reason ?? DEFAULT_ESCALATION_REASON)
+        setEntries((prev) => [...prev, { id: newId(), kind: 'escalation', reason, pendingMessage: message }])
       }
     } catch (err) {
       // classifyError maps to friendly copy for the UI, which is often too coarse to debug
       // from — the raw error (and on desktop, invoke() rejections carry only a string with
       // no code/name) is otherwise never surfaced anywhere, not even devtools. Log it.
       console.error('[assistant turn failed]', err)
-      const { message: errorMessage, retryable } = classifyError(err)
+      const { message: errorMessage, retryable } = classifyError(err, config.llmBackend)
       setEntries((prev) => [
         ...prev,
         { id: newId(), kind: 'error', content: errorMessage, retryable, retryMessage: message, retryApproved: approved, retryPendingActionId: pendingActionId },
@@ -1048,18 +1009,66 @@ export function App(): React.JSX.Element {
 
   /** /why, /layers, /sources, /steps and /plan: answered from the last turn on screen with the CLI's own text (run-explain.ts), never sent to the model. Returns whether `message` was one. */
   function showExplanation(message: string): boolean {
-    const lines = explainCommand(message, explainInputFromEntries(entries, { memoryInjection: assistantRef.current?.getLastMemoryInjection(), planStatus: activePlanStatus }))
-    if (!lines) return false
+    if (!(EXPLAIN_COMMANDS as readonly string[]).includes(message.trim())) return false
     setShowDemo(false)
     setInput('')
     if (composerRef.current) composerRef.current.style.height = 'auto'
-    setEntries((prev) => [...prev, { id: newId(), kind: 'explain', command: message.trim(), lines }])
+    void (async () => {
+      // /plan with no drafted plan says whether the request was worked as tracked goal tasks, which needs the goal graph (the CLI reads the same query).
+      const needsGoals = message.trim() === '/plan' && !activePlanStatus
+      const goalGraph = needsGoals ? await assistantRef.current?.getGoalGraphState(sessionIdRef.current) : undefined
+      const lines = explainCommand(message, explainInputFromEntries(entries, { memoryInjection: assistantRef.current?.getLastMemoryInjection(), planStatus: activePlanStatus, goalGraph }))
+      if (lines) setEntries((prev) => [...prev, { id: newId(), kind: 'explain', command: message.trim(), lines }])
+    })()
+    return true
+  }
+
+  /** /project [name | clear]: parsing and wording are the CLI's (project-command.ts); the choice is saved like any Settings change, which rebuilds the assistant. Returns whether `message` was one. */
+  function handleProjectCommand(message: string): boolean {
+    const [command, ...args] = message.trim().split(/\s+/)
+    if (command !== '/project') return false
+    const parsed = parseProjectCommand(args, assistantRef.current?.getActiveProject())
+    setShowDemo(false)
+    setInput('')
+    if (composerRef.current) composerRef.current.style.height = 'auto'
+    setEntries((prev) => [...prev, { id: newId(), kind: 'explain', command: message.trim(), lines: [parsed.message] }])
+    if (parsed.kind === 'set') void handleSaveSettings({ activeProject: parsed.project })
+    else if (parsed.kind === 'clear') void handleSaveSettings({ activeProject: undefined })
+    return true
+  }
+
+  /** /undo-action [id]: lists revertible edits, or stages a revert that goes through the ordinary approval card (and resumes like any staged action). Parsing and listing text are the CLI's. Returns whether `message` was one. */
+  function handleUndoActionCommand(message: string): boolean {
+    const [command, ...args] = message.trim().split(/\s+/)
+    if (command !== '/undo-action') return false
+    setShowDemo(false)
+    setInput('')
+    if (composerRef.current) composerRef.current.style.height = 'auto'
+    const show = (lines: string[]): void => setEntries((prev) => [...prev, { id: newId(), kind: 'explain', command: message.trim(), lines }])
+    const assistant = assistantRef.current
+    if (!assistant) {
+      show(['Aielia is still starting up — try again in a moment.'])
+      return true
+    }
+    void (async () => {
+      const parsed = parseUndoActionCommand(args)
+      // A plain browser tab has no file tools, so the list is empty and says there is nothing to revert.
+      if (parsed.kind === 'list') return show(formatUndoLogListing(await assistant.listUndoLogEntries()).split('\n'))
+      const staged = await assistant.stageUndoAction(parsed.id)
+      if (staged.status === 'error') return show([`✗ ${staged.message}`])
+      setEntries((prev) => [
+        ...prev,
+        { id: newId(), kind: 'approval', pendingMessage: '', reason: staged.reason, pendingActionId: staged.pendingActionId, pendingActionKind: 'revert' },
+      ])
+    })()
     return true
   }
 
   function submitMessage(): void {
     const message = input.trim()
     if (showExplanation(message)) return
+    if (handleProjectCommand(message)) return
+    if (handleUndoActionCommand(message)) return
     if (keyMissing) {
       setNeedsSetup(true)
       return
@@ -1132,7 +1141,7 @@ export function App(): React.JSX.Element {
         },
       ])
       if (result.usage) {
-        const withCost = withCostEstimate(result.usage)
+        const withCost = priceUsage(result.usage)
         setLastTurnUsage(withCost)
         setSessionUsage((prev) => accumulateUsage(prev, withCost))
       }
@@ -1254,6 +1263,7 @@ export function App(): React.JSX.Element {
         lastTurnUsage={lastTurnUsage}
         sessionUsage={sessionUsage}
         healthChecks={healthChecks}
+        spendCapLine={spendCapLine}
       />
     )
   }
@@ -1354,6 +1364,8 @@ export function App(): React.JSX.Element {
                 />
                 {entry.contradictionNotice && <p className="turn-notice" role="note">{entry.contradictionNotice}</p>}
                 {entry.reviewNotice && <p className="turn-notice" role="note">{entry.reviewNotice}</p>}
+                {entry.auditNotice && <p className="turn-notice" role="note">{entry.auditNotice}</p>}
+                {entry.pausedNote && <p className="turn-notice" role="note">{entry.pausedNote}</p>}
                 {/* R7: next-step options only under the newest reply, and only while nothing is in flight — picking one fills the composer as an editable draft, it never sends. */}
                 {entryIndex === entries.length - 1 && !busy && entry.nextSteps && entry.nextSteps.length > 0 && (
                   <NextStepChips

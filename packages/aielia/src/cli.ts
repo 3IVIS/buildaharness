@@ -7,16 +7,9 @@ import { homedir } from 'node:os'
 import { join, resolve as resolvePath } from 'node:path'
 import { pathToFileURL } from 'node:url'
 import {
-  LLMClient,
-  AnthropicLLMClient,
-  OpenAICompatibleLLMClient,
   ANTHROPIC_DEFAULT_MODEL,
-  OPENAI_BASE_URL,
   OPENAI_DEFAULT_MODEL,
-  OPENROUTER_BASE_URL,
   OPENROUTER_DEFAULT_MODEL,
-  defaultModelForBackend,
-  OPENROUTER_EXTRA_HEADERS,
   FileSystemAdapter,
   FileSystemExperienceStore,
   InMemoryReminderStore,
@@ -24,7 +17,16 @@ import {
   type TokenUsage,
   type FsBackend,
 } from '@buildaharness/runtime'
-import type { AskAnswer, AskQuestion, AskQuestionOption, AskResponse } from '@buildaharness/harness'
+import type { AskAnswer, AskQuestion, AskResponse } from '@buildaharness/harness'
+import { orderedOptions, draftToAnswer, emptyDraft, type QuestionDraft } from './ask-draft.js'
+import { parseProjectCommand } from './project-command.js'
+import { parseUndoActionCommand } from './undo-action-command.js'
+import { createLlmClient } from './llm-client-factory.js'
+import type { GoalGraphState } from './goal-graph-service.js'
+import { presentTurnResult, approvalLabels, NO_TRACE, DEFAULT_CLARIFICATION_REASON, MISSING_PLAN_APPROVAL_ID_REASON } from './turn-presentation.js'
+import { buildAssistantOptions, CLI_FEATURES } from './assistant-options.js'
+import { withCostEstimate as sharedWithCostEstimate } from './turn-cost.js'
+import { planUndo } from './undo-plan.js'
 import { PersonalAssistant, type AssistantProgress, type AssistantTrace, type AssistantSource, type AssistantTurnResult } from './assistant.js'
 import { memoryAuditLogEnabled } from './memory-service.js'
 import { activityLogEnabled, createActivityLogger } from './activity-log.js'
@@ -44,7 +46,6 @@ import { NodeConfigStore } from './node-config-store.js'
 import { applyLayerSettings, formatLayerListing, sanitizeLayerChoices, withLayerChoice, LayerSettingError } from './layer-settings.js'
 import { isConfigKey, findInvalidNumericSettings, envOverridesFromProcessEnv, parseConfigValue, ConfigValueParseError, formatConfigListing, ENV_VAR_FOR_CONFIG_KEY, CONFIG_KEYS } from './cli-config.js'
 import { stripTerminalControls, formatHelp, isQuitCommand, formatStatus, formatTranscriptMarkdown, defaultExportFilename, formatMemorySummary, formatMemoryExport, defaultMemoryExportFilename, formatSearchResults, formatGoalGraphState, formatNextSteps, formatCostSummary, formatDoctorReport, formatUndoLogListing, formatMemoryPendingOutcome, formatMemoryHistory, formatMemoryArchive, formatMemoryStatus } from './cli-session.js'
-import { estimateCostUsd } from './model-pricing.js'
 import { formatSpendCapStatus } from './spend-cap.js'
 import { checkProxyHealth, checkClaudeCli, checkWorkspaceRoot, checkDataDirWritable, checkMemoryHealth } from './doctor-checks.js'
 import { resolveNonInteractiveApprovalMode, type NonInteractiveApprovalMode } from './non-interactive-mode.js'
@@ -55,7 +56,7 @@ import { planToSnapshot } from './plan-viz/plan-snapshot.js'
 import { renderPlan } from './plan-viz/plan-raster.js'
 import type { VizNode } from './plan-viz/types.js'
 import type { TaskStatus } from '@buildaharness/harness'
-import { isGoalGraphSuggestEnabled } from './goal-graph-suggest-flag.js'
+import {  } from './goal-graph-suggest-flag.js'
 import type { NextStepSuggestion } from './next-step-proposer.js'
 import { maybeRunFirstRunSetup } from './first-run.js'
 import { testApiKey, type KeyedBackend, type KeyTestResult } from './provider-setup.js'
@@ -124,37 +125,23 @@ function buildEmailSender(config: AssistantConfig): SendEmail | undefined {
 }
 
 /**
- * Picks the ILLMClient for config.llmBackend — one branch per backend, shared in shape with
- * chat-ui's App.tsx createLlmClient() (both switch over the same 5 values), but this one stays
- * CLI-only: claude-cli here is a real node:child_process subprocess (ClaudeCliLLMClient), not
- * the Tauri-bridged equivalent chat-ui's desktop build uses, and it's the only backend always
- * available on this surface (no "unsupported on this platform" branch needed, unlike a plain
- * browser tab which can't spawn `claude` at all).
+ * Picks the ILLMClient for config.llmBackend. The switch over the five backends is the shared
+ * createLlmClient (llm-client-factory.ts); only claude-cli is supplied here, because on this
+ * surface it is a real node:child_process subprocess (ClaudeCliLLMClient), not the Tauri-bridged
+ * client chat-ui's desktop build supplies, and it is always available (a plain browser tab, which
+ * cannot spawn `claude`, returns undefined and gets the proxy fallback).
  */
 function buildLlmClient(config: AssistantConfig, workspaceRoot: string, remindersFile: string): ILLMClient {
-  switch (config.llmBackend) {
-    case 'claude-cli':
-      return new ClaudeCliLLMClient({
+  return createLlmClient(config, {
+    claudeCli: () =>
+      new ClaudeCliLLMClient({
         fileTools: { workspaceRoot },
         remindersFile,
         shellTools: config.enableShell ? { workspaceRoot } : undefined,
         webTools: config.enableWeb ? { braveApiKey: config.braveApiKey as string | undefined } : undefined,
         actionTools: config.enableEmail ? { workspaceRoot } : undefined,
-      })
-    case 'anthropic':
-      return new AnthropicLLMClient({ apiKey: config.apiKey ?? '' })
-    case 'openai':
-      return new OpenAICompatibleLLMClient({ apiKey: config.apiKey ?? '', baseUrl: OPENAI_BASE_URL, defaultModel: OPENAI_DEFAULT_MODEL })
-    case 'openrouter':
-      return new OpenAICompatibleLLMClient({
-        apiKey: config.apiKey ?? '',
-        baseUrl: OPENROUTER_BASE_URL,
-        defaultModel: OPENROUTER_DEFAULT_MODEL,
-        extraHeaders: OPENROUTER_EXTRA_HEADERS,
-      })
-    case 'proxy':
-      return new LLMClient({ proxyUrl: config.proxyUrl, authToken: config.authToken })
-  }
+      }),
+  })
 }
 
 /**
@@ -183,57 +170,32 @@ async function buildAssistant(config: AssistantConfig, { backend, dataDir, remin
   // now wires web_search on both backends.
   const llmClient = buildLlmClient(config, workspaceRoot, remindersFile)
 
-  return PersonalAssistant.create({
-    llmClient,
-    // Name the backend's real default when none is set, so spend tracking prices the model that actually runs (not the Anthropic default).
-    model: config.model ?? defaultModelForBackend(config.llmBackend),
-    // config.activeProject (set via /project <name>) overrides the default of "the workspace
-    // I'm running in" — see PersonalAssistantOptions.activeProject's doc comment.
-    activeProject: config.activeProject || workspaceRoot,
-    memoryBudgetChars: config.memoryBudgetChars,
-    memoryWriteMode: config.memoryWriteMode,
-    // M5: consolidation proposals are staged for /memory consolidate; the CLI has the controls, so it may raise them on /new.
-    consolidateOnNewSession: true,
-    memory: new FileSystemAdapter({ backend, baseDir: dataDir, namespace: 'transcripts' }),
-    experienceStore: await FileSystemExperienceStore.create({ backend, baseDir: dataDir, namespace: 'experience' }),
-    checkpointStore: new FileSystemAdapter({ backend, baseDir: dataDir, namespace: 'checkpoints' }),
-    reminderStore: new InMemoryReminderStore(new FileSystemAdapter({ backend, baseDir: dataDir, namespace: 'reminders' })),
-    fileTools: { backend, workspaceRoot },
-    webTools: config.enableWeb ? { search } : undefined,
-    // executeCommand is the real child_process.spawn-based implementation (shell-executor.ts) —
-    // wired in here, not inside assistant.ts, so the browser build never needs node:child_process.
-    shellTools: config.enableShell
-      ? { backend, workspaceRoot, timeoutMs: config.shellTimeoutMs, networkAllowlist: config.shellNetworkAllowlist, executeCommand: runApprovedShellCommand }
-      : undefined,
-    // The Resend/SMTP transport is wired in here, not inside assistant.ts, so the browser build
-    // never needs nodemailer or a mail server — same split as shellTools' executeCommand.
-    actionTools: (() => {
-      const sendEmail = buildEmailSender(config)
-      return sendEmail ? { backend, workspaceRoot, sendEmail } : undefined
-    })(),
-    dangerouslySkipPermissions: config.dangerouslySkipPermissions,
-    // Opt-in durable record of tool calls/results and approvals (see activity-log.ts).
-    onDebugLog: activityLogEnabled(process.env) ? createActivityLogger(join(dataDir, 'activity-log.jsonl')) : undefined,
-    spendCap:
-      config.sessionCostLimitUsd !== undefined || config.sessionCallLimit !== undefined
-        ? { sessionCostLimitUsd: config.sessionCostLimitUsd, sessionCallLimit: config.sessionCallLimit }
+  return PersonalAssistant.create(
+    buildAssistantOptions(config, {
+      llmClient,
+      workspaceRoot,
+      features: CLI_FEATURES,
+      memory: new FileSystemAdapter({ backend, baseDir: dataDir, namespace: 'transcripts' }),
+      experienceStore: await FileSystemExperienceStore.create({ backend, baseDir: dataDir, namespace: 'experience' }),
+      checkpointStore: new FileSystemAdapter({ backend, baseDir: dataDir, namespace: 'checkpoints' }),
+      reminderStore: new InMemoryReminderStore(new FileSystemAdapter({ backend, baseDir: dataDir, namespace: 'reminders' })),
+      fileTools: { backend, workspaceRoot },
+      webTools: config.enableWeb ? { search } : undefined,
+      // executeCommand is the real child_process.spawn-based implementation (shell-executor.ts) —
+      // wired in here, not inside assistant.ts, so the browser build never needs node:child_process.
+      shellTools: config.enableShell
+        ? { backend, workspaceRoot, timeoutMs: config.shellTimeoutMs, networkAllowlist: config.shellNetworkAllowlist, executeCommand: runApprovedShellCommand }
         : undefined,
-    // Resolved through the shared config seam (cli-config.ts's envOverridesFromProcessEnv reads
-    // ASSISTANT_ONE_LOOP into config.oneLoopMode; /config set oneLoopMode persists it) so the CLI,
-    // chat-ui, and the Tauri desktop build all decide this the same way. Undefined here means
-    // PersonalAssistant falls back to DEFAULT_ONE_LOOP_MODE.
-    oneLoopMode: config.oneLoopMode,
-    layerPolicyMode: config.layerPolicyMode,
-    // R7: turn-end next-step options and DONE-thread suggestions. Undefined config means the
-    // package default (enabled); PersonalAssistant itself defaults to disabled, so this is where
-    // the front end opts in.
-    goalGraphSuggestMode: isGoalGraphSuggestEnabled(config.goalGraphSuggestMode) ? 'enabled' : 'disabled',
-    // P11 of the internal plan — resolved through the same shared config
-    // seam as oneLoopMode above (ASSISTANT_PLAN_MODE / `/config set planMode`). Undefined here
-    // means PersonalAssistant falls back to DEFAULT_PLAN_MODE ('legacy').
-    planMode: config.planMode,
-    ambiguityGuardMode: config.ambiguityGuardMode,
-  })
+      // The Resend/SMTP transport is wired in here, not inside assistant.ts, so the browser build
+      // never needs nodemailer or a mail server — same split as shellTools' executeCommand.
+      actionTools: (() => {
+        const sendEmail = buildEmailSender(config)
+        return sendEmail ? { backend, workspaceRoot, sendEmail } : undefined
+      })(),
+      // Opt-in durable record of tool calls/results and approvals (see activity-log.ts).
+      onDebugLog: activityLogEnabled(process.env) ? createActivityLogger(join(dataDir, 'activity-log.jsonl')) : undefined,
+    }),
+  )
 }
 
 /**
@@ -295,6 +257,8 @@ export interface RunCliOptions {
 export interface CliInstance {
   /** Parses and dispatches one line of input exactly as the REPL's 'line' handler does (same dispatchQueue serialization) — the seam cli.test.ts drives command dispatch through without a live TTY. */
   dispatchLine(line: string): Promise<void>
+  /** Keys of the slash-command dispatch table; the parity test compares them with COMMAND_REGISTRY. */
+  commandNames: string[]
   close(): void
   /**
    * Additive, read-only accessor for the pinned-input TUI shell's status line
@@ -520,16 +484,14 @@ export async function runCli(options: RunCliOptions = {}): Promise<CliInstance> 
     { key: 'n', label: 'No' },
   ]
 
-  /** claude-cli (total_cost_usd) and openrouter (usage.cost) report a real dollar cost, which is kept as-is; every other case (proxy, anthropic, openai — token counts only) gets an approximate estimate instead, see model-pricing.ts. */
-  function withCostEstimate(usage: TokenUsage): TokenUsage {
-    if (config.llmBackend === 'claude-cli' || usage.costUsd !== undefined) return usage
-    const estimated = estimateCostUsd(config.model ?? ANTHROPIC_DEFAULT_MODEL, usage)
-    return estimated !== undefined ? { ...usage, costUsd: estimated } : usage
+  function priceUsage(usage: TokenUsage): TokenUsage {
+    return sharedWithCostEstimate(usage, { backend: config.llmBackend, model: config.model })
   }
 
-  function printPlan(): void {
+  function printPlan(goalGraph?: GoalGraphState): void {
     if (!lastPlanStatus) {
-      printSafe('\nNo active plan for this session.\n')
+      // No drafted plan: explainPlan says "No active plan", or that the request was worked as tracked goal tasks.
+      printSafe(`\n${explainPlan({ ...lastTurnExplainInput(), goalGraph }).join('\n')}\n`)
       return
     }
     // Phase 6 of the CLI formatting plan ("distinct plan-mode UI") — one combined console.log
@@ -568,7 +530,7 @@ export async function runCli(options: RunCliOptions = {}): Promise<CliInstance> 
     // '##'/'- [ ]' characters, the same gap the underlying report flagged for the legacy
     // (DEFAULT_PLAN_MODE) prose path specifically.
     console.log(stripTerminalControls(`Aielia> ${result.reply ?? '(no reply)'}\n`))
-    if (result.usage) lastTurnUsage = withCostEstimate(result.usage)
+    if (result.usage) lastTurnUsage = priceUsage(result.usage)
   }
 
   /**
@@ -663,7 +625,7 @@ export async function runCli(options: RunCliOptions = {}): Promise<CliInstance> 
     }
     pendingPlanApproval = undefined
     lastTrace = undefined
-    lastNoTraceReason = `No harness trace — the last turn staged a plan that was ${decision === 'decline' ? 'declined' : 'approved'} before the harness ran.`
+    lastNoTraceReason = NO_TRACE.planApproval(decision === 'decline' ? 'declined' : 'approved')
     await handleTurn(message, false, undefined, undefined, undefined, id, decision, edits)
   }
 
@@ -732,16 +694,8 @@ export async function runCli(options: RunCliOptions = {}): Promise<CliInstance> 
       printPlanApproval(pendingPlanApproval.snapshot)
       return
     }
-    // No drafted plan, but the request may still have been worked as tracked goal tasks: say so instead of "No active plan" next to a /goals that shows them.
-    if (!lastPlanStatus) {
-      const goals = await assistant.getGoalGraphState('cli')
-      const withTasks = goals.threads.filter((t) => t.tasks.total > 0)
-      if (withTasks.length > 0) {
-        printSafe(`\nNo drafted plan for this session. The request was worked as tracked goal tasks (/goals):\n${formatGoalGraphState({ ...goals, threads: withTasks })}\n`)
-        return
-      }
-    }
-    printPlan()
+    // No drafted plan, but the request may still have been worked as tracked goal tasks (explainPlan words that).
+    printPlan(lastPlanStatus ? undefined : await assistant.getGoalGraphState('cli'))
   }
 
   /** What the last turn left behind, in the shape the shared explainers (run-explain.ts) take — the same data chat-ui hands them, so /why, /layers, /sources, /steps and /plan read identically on both surfaces. */
@@ -874,12 +828,12 @@ export async function runCli(options: RunCliOptions = {}): Promise<CliInstance> 
    * the reminder went away too.
    */
   async function handleUndo(): Promise<void> {
-    const transcriptBefore = await assistant.getTranscript('cli')
-    if (transcriptBefore.length === 0) {
+    const plan = planUndo(await assistant.getTranscript('cli'))
+    if (plan.nothingToUndo) {
       printSafe('\nNothing to undo.\n')
       return
     }
-    const wasPendingApproval = transcriptBefore[transcriptBefore.length - 1].role !== 'assistant'
+    const { wasPendingApproval } = plan
     const undoneReminders = lastTurnToolSteps.filter((s) => s.tool === 'create_reminder')
 
     const result = await assistant.undoLastTurn('cli')
@@ -910,13 +864,14 @@ export async function runCli(options: RunCliOptions = {}): Promise<CliInstance> 
    * prompt is driven directly rather than via handleTurn's needs_approval branch.
    */
   async function handleUndoAction(args: string[]): Promise<void> {
-    if (args.length === 0) {
+    const command = parseUndoActionCommand(args)
+    if (command.kind === 'list') {
       const entries = await assistant.listUndoLogEntries()
       printSafe(`\n${formatUndoLogListing(entries)}\n`)
       return
     }
 
-    const staged = await assistant.stageUndoAction(args[0])
+    const staged = await assistant.stageUndoAction(command.id)
     if (staged.status === 'error') {
       printSafe(`\n✗ ${staged.message}\n`)
       return
@@ -925,7 +880,7 @@ export async function runCli(options: RunCliOptions = {}): Promise<CliInstance> 
     console.log(stripTerminalControls(`\n[needs approval — revert] ${staged.reason}`))
     const confirmed = await askYesNo('Apply this revert? (y/N) ')
     lastTrace = undefined
-    lastNoTraceReason = `No harness trace — the last turn was a staged revert that was ${confirmed ? 'approved' : 'declined'} before the harness ran.`
+    lastNoTraceReason = NO_TRACE.stagedAction('revert', confirmed ? 'approved' : 'declined')
     await handleTurn('', confirmed, staged.pendingActionId)
   }
 
@@ -1148,40 +1103,8 @@ export async function runCli(options: RunCliOptions = {}): Promise<CliInstance> 
     lastTurnToolSteps.push(step)
   }
 
-  /** One question's in-progress answer — the CLI's text-mode counterpart of AskQuestionCard.tsx's QuestionDraft (chat-ui's Q5 rendering). No `showEdit` flag: a note is only ever entered via the explicit `e<n>` command below, so its presence in `editText` already says whether one exists. */
-  interface ClarificationDraft {
-    selectedLabels: string[]
-    editText: string
-    freeText: string
-  }
-  function emptyClarificationDraft(): ClarificationDraft {
-    return { selectedLabels: [], editText: '', freeText: '' }
-  }
-
-  /** Recommended option(s) first, stable otherwise — mirrors AskQuestionCard.tsx's orderedOptions exactly, so the same question renders its options in the same order on both surfaces. */
-  function orderedAskOptions(question: AskQuestion): AskQuestionOption[] {
-    const options = question.options ?? []
-    return options
-      .map((option, index) => ({ option, index }))
-      .sort((a, b) => Number(b.option.recommended ?? false) - Number(a.option.recommended ?? false) || a.index - b.index)
-      .map(({ option }) => option)
-  }
-
-  /** Collapses one question's draft into the wire AskAnswer shape, or null while still unanswered (INV-28) — mirrors AskQuestionCard.tsx's draftToAnswer. */
-  function clarificationDraftToAnswer(questionId: string, draft: ClarificationDraft): AskAnswer | null {
-    if (draft.selectedLabels.length > 0) {
-      return draft.editText.trim()
-        ? { questionId, kind: 'selected_with_edit', selectedLabels: draft.selectedLabels, editText: draft.editText.trim() }
-        : { questionId, kind: 'selected', selectedLabels: draft.selectedLabels }
-    }
-    if (draft.freeText.trim()) {
-      return { questionId, kind: 'free_text', freeText: draft.freeText.trim() }
-    }
-    return null
-  }
-
-  function printClarificationQuestion(question: AskQuestion, draft: ClarificationDraft, index: number, total: number): void {
-    const options = orderedAskOptions(question)
+  function printClarificationQuestion(question: AskQuestion, draft: QuestionDraft, index: number, total: number): void {
+    const options = orderedOptions(question)
     const allowFreeText = question.allowFreeText !== false
     printSafe('')
     if (question.header) console.log(stripTerminalControls(`[${question.header}]`))
@@ -1219,12 +1142,13 @@ export async function runCli(options: RunCliOptions = {}): Promise<CliInstance> 
     const questions = result.questions ?? []
     const pendingClarificationId = result.pendingClarificationId
     if (questions.length === 0 || !pendingClarificationId) {
-      // Mirrors shouldRenderAskQuestionCard's guard in chat-ui — shouldn't happen in practice
+      // The same guard presentTurnResult applies for every surface — shouldn't happen in practice
       // (AskClarificationService always sets both together), but fails safe to the plain-text
       // escalation copy rather than entering a loop with nothing to ask.
       lastTrace = undefined
-      lastNoTraceReason = `No harness trace — the last turn needed clarification (${result.reason ?? 'no further detail'}) but had no answerable questions.`
-      console.log(stripTerminalControls(`\n[needs clarification] ${result.reason ?? 'This request needs clarification.'}\n`))
+      const unanswerable = presentTurnResult(result)
+      lastNoTraceReason = unanswerable.noTraceReason
+      console.log(stripTerminalControls(`\n[needs clarification] ${unanswerable.kind === 'escalation' ? unanswerable.reason : DEFAULT_CLARIFICATION_REASON}\n`))
       return
     }
 
@@ -1242,7 +1166,7 @@ export async function runCli(options: RunCliOptions = {}): Promise<CliInstance> 
     }
 
     printSafe(`\n[needs clarification] ${questions.length} question${questions.length === 1 ? '' : 's'} to answer.`)
-    const drafts = new Map<string, ClarificationDraft>(questions.map((q) => [q.id, emptyClarificationDraft()]))
+    const drafts = new Map<string, QuestionDraft>(questions.map((q) => [q.id, emptyDraft()]))
     let index = 0
 
     while (true) {
@@ -1260,7 +1184,7 @@ export async function runCli(options: RunCliOptions = {}): Promise<CliInstance> 
       }
 
       if (lower === 's' || lower === 'submit') {
-        const answers = questions.map((q) => clarificationDraftToAnswer(q.id, drafts.get(q.id)!))
+        const answers = questions.map((q) => draftToAnswer(q.id, drafts.get(q.id)!))
         const missing = questions.filter((q, i) => answers[i] === null)
         if (missing.length > 0) {
           printSafe(`\nStill need an answer for: ${missing.map((q) => q.question).join('; ')}\n`)
@@ -1293,7 +1217,7 @@ export async function runCli(options: RunCliOptions = {}): Promise<CliInstance> 
       }
       const editMatch = /^e(\d+)$/i.exec(token)
       if (editMatch) {
-        const options = orderedAskOptions(question)
+        const options = orderedOptions(question)
         const option = options[Number(editMatch[1]) - 1]
         if (!option) {
           printSafe(`\nNo option ${editMatch[1]}.\n`)
@@ -1309,7 +1233,7 @@ export async function runCli(options: RunCliOptions = {}): Promise<CliInstance> 
       }
       const toggleMatch = /^t(\d+)$/i.exec(token) ?? /^(\d+)$/.exec(token)
       if (toggleMatch) {
-        const options = orderedAskOptions(question)
+        const options = orderedOptions(question)
         const option = options[Number(toggleMatch[1]) - 1]
         if (!option) {
           printSafe(`\nNo option ${toggleMatch[1]}.\n`)
@@ -1405,22 +1329,7 @@ export async function runCli(options: RunCliOptions = {}): Promise<CliInstance> 
         // its own label and prompt — falling through to the 'write' case here would print
         // "[needs approval — write]" and "Apply this write?" over a message that's actually
         // about how many more searches a batch research turn is projected to need.
-        const kindLabel =
-          result.pendingActionKind === 'shell'
-            ? 'shell command'
-            : result.pendingActionKind === 'email'
-              ? 'send email'
-              : result.pendingActionKind === 'batch'
-                ? 'batch research'
-                : 'write'
-        const promptText =
-          result.pendingActionKind === 'shell'
-            ? 'Run this command?'
-            : result.pendingActionKind === 'email'
-              ? 'Send this email?'
-              : result.pendingActionKind === 'batch'
-                ? 'Continue?'
-                : 'Apply this write?'
+        const { kindLabel, promptText } = approvalLabels(result.pendingActionKind)
         console.log(stripTerminalControls(`\n[needs approval — ${kindLabel}] ${result.reason}`))
         let confirmed: boolean
         if (result.pendingActionKind && rememberedActionKinds.has(result.pendingActionKind)) {
@@ -1432,7 +1341,7 @@ export async function runCli(options: RunCliOptions = {}): Promise<CliInstance> 
           if (decision === 'a' && result.pendingActionKind) rememberedActionKinds.add(result.pendingActionKind)
         }
         lastTrace = undefined
-        lastNoTraceReason = `No harness trace — the last turn was a staged ${kindLabel} that was ${confirmed ? 'approved' : 'declined'} before the harness ran.`
+        lastNoTraceReason = NO_TRACE.stagedAction(kindLabel, confirmed ? 'approved' : 'declined')
         await handleTurn(message, confirmed, result.pendingActionId)
         return
       }
@@ -1458,7 +1367,7 @@ export async function runCli(options: RunCliOptions = {}): Promise<CliInstance> 
           // place and printWhy/printLayers displayed the wrong (already-finished) turn's
           // explanation instead of this decline's reason.
           lastTrace = undefined
-          lastNoTraceReason = 'No harness trace — the last turn was blocked on an approval gate and declined before the harness ran.'
+          lastNoTraceReason = NO_TRACE.messageApproval('declined')
           // Recorded now (not inside turn() itself) because the outcome is only known here —
           // see recordDeclinedRequest's doc comment for why this is safe unlike an eager append
           // inside runTurn. Without it, a later "did that actually happen?" question found no
@@ -1474,14 +1383,13 @@ export async function runCli(options: RunCliOptions = {}): Promise<CliInstance> 
         return
       }
 
-      // P2's whole-plan approval gate — the CLI surface for it, mirroring chat-ui's
-      // PlanApprovalCard + its approve/approve-with-edits/approve-trusted/decline handlers, all
-      // resolving through the same PlanApprovalService. Before this branch existed the CLI fell
+      // P2's whole-plan approval gate — the CLI surface for it; chat-ui's PlanApprovalCard offers the same
+      // approve/approve-with-edits/approve-trusted/decline choices, and both resolve through the same PlanApprovalService. Before this branch existed the CLI fell
       // through to the ordinary render below, so a staged plan (whose result carries reply: null)
       // printed as a bare "- null" and could not be approved, edited, or declined at all.
       if (result.status === 'needs_plan_approval') {
         if (!result.planApprovalId) {
-          printSafe(`\n[needs plan approval] ${result.reason ?? 'A plan is awaiting approval, but its approval id is missing.'}\n`)
+          printSafe(`\n[needs plan approval] ${result.reason ?? MISSING_PLAN_APPROVAL_ID_REASON}\n`)
           return
         }
         const id = result.planApprovalId
@@ -1492,7 +1400,7 @@ export async function runCli(options: RunCliOptions = {}): Promise<CliInstance> 
         // the job if the user picks "decide later" below.
         pendingPlanApproval = { id, message, snapshot }
         lastTrace = undefined
-        lastNoTraceReason = 'No harness trace — the last turn staged a plan for approval (pending /plan approve|decline|edit).'
+        lastNoTraceReason = NO_TRACE.planApproval(undefined, ' (pending /plan approve|decline|edit)')
         if (!snapshot) {
           printSafe('Decide with /plan approve or /plan decline.\n')
           return
@@ -1515,7 +1423,7 @@ export async function runCli(options: RunCliOptions = {}): Promise<CliInstance> 
         } else {
           decision = 'decline'
         }
-        lastNoTraceReason = `No harness trace — the last turn staged a plan that was ${decision === 'decline' ? 'declined' : 'approved'} before the harness ran.`
+        lastNoTraceReason = NO_TRACE.planApproval(decision === 'decline' ? 'declined' : 'approved')
         // Same originating message, so an approve falls through to the ordinary pipeline with the
         // now-active plan (see PlanApprovalService.resolvePendingPlanApproval's doc comment) exactly
         // the way a freshly template-matched plan already does.
@@ -1525,8 +1433,9 @@ export async function runCli(options: RunCliOptions = {}): Promise<CliInstance> 
 
       if (result.status === 'escalated') {
         lastTrace = undefined
-        lastNoTraceReason = `No harness trace — the last turn escalated (${result.reason}) before completing.`
-        console.log(stripTerminalControls(`\n[escalated] ${result.reason}\n`))
+        const escalation = presentTurnResult(result)
+        lastNoTraceReason = escalation.noTraceReason
+        console.log(stripTerminalControls(`\n[escalated] ${escalation.kind === 'escalation' ? escalation.reason : result.reason}\n`))
         return
       }
 
@@ -1549,9 +1458,7 @@ export async function runCli(options: RunCliOptions = {}): Promise<CliInstance> 
       if (!pendingActionId) {
         lastTrace = result.harnessSkipped ? undefined : result.trace
         lastAnswerClaim = result.answerClaim
-        lastNoTraceReason = result.harnessSkipped
-          ? 'No harness trace — the last turn was a simple, self-contained question answered directly without activating the harness (fast path).'
-          : undefined
+        lastNoTraceReason = result.harnessSkipped ? NO_TRACE.fastPath : undefined
       }
       lastSources = result.sources
       // A trivial fast-path turn never touches plan state at all (assistant.ts's triviality
@@ -1574,27 +1481,28 @@ export async function runCli(options: RunCliOptions = {}): Promise<CliInstance> 
       // harness-skipped turn with no planStatus (trivial fast path, plan sketch) still leaves the
       // last known plan untouched, and a non-skipped turn reporting none still clears it.
       if (!pendingActionId && (!result.harnessSkipped || result.planStatus)) lastPlanStatus = result.planStatus
-      lastTurnUsage = result.usage ? withCostEstimate(result.usage) : undefined
+      lastTurnUsage = result.usage ? priceUsage(result.usage) : undefined
+      const shown = presentTurnResult(result)
+      // status is 'ok' on this path (every other status returned above), so this is always a reply.
+      const hints = shown.kind === 'reply' ? shown.hints : {}
       const riskSuffix = result.riskLevel && result.riskLevel !== 'LOW' ? ` [risk: ${result.riskLevel}]` : ''
-      const sourcesHint = result.sources && result.sources.length > 0 ? ` (${result.sources.length} source${result.sources.length > 1 ? 's' : ''} — /sources)` : ''
-      const planHint = result.planStatus ? ` (plan: ${result.planStatus.completionPct.toFixed(0)}% — /plan)` : ''
-      // Printed as its own line, not folded into riskSuffix/sourcesHint/planHint's inline
-      // "${...}" style — this is a full sentence, not a short bracketed tag. Must be handled the
-      // same way in both branches below (like the other hints), since result.contradictionNotice
-      // is only known once HarnessRuntime.run() finishes, well after writeToken already streamed
-      // `reply` itself to the screen — see assistant.ts's findContradictionNotice doc comment.
-      const contradictionNotice = result.contradictionNotice ? `\n\n${result.contradictionNotice}` : ''
-      // Same treatment for the change reviewer's advisory notice (see AssistantTurnResult.reviewNotice).
-      const reviewNotice = (result.reviewNotice ? `\n\n${result.reviewNotice}` : '') + (result.auditNotice ? `\n\n${result.auditNotice}` : '')
+      const sourcesHint = hints.sourcesCount ? ` (${hints.sourcesCount} source${hints.sourcesCount > 1 ? 's' : ''} — /sources)` : ''
+      const planHint = hints.planCompletionPct !== undefined ? ` (plan: ${hints.planCompletionPct.toFixed(0)}% — /plan)` : ''
+      // Printed as their own lines, not folded into riskSuffix/sourcesHint/planHint's inline "${...}" style: these are
+      // full sentences. They are only known once HarnessRuntime.run() finishes, well after writeToken streamed the reply
+      // (see assistant.ts's findContradictionNotice doc comment), so both branches below print them.
+      const contradictionNotice = hints.contradictionNotice ? `\n\n${hints.contradictionNotice}` : ''
+      // The change reviewer's advisory notice and the reply audit's notice (see AssistantTurnResult.reviewNotice/auditNotice).
+      const reviewNotice = (hints.reviewNotice ? `\n\n${hints.reviewNotice}` : '') + (hints.auditNotice ? `\n\n${hints.auditNotice}` : '')
       // R7: the turn-end next-step options, under the reply. Remembered so a bare 1/2/3 typed as
       // the very next input runs that option (see dispatchOne); any other input clears them.
-      lastNextSteps = result.nextSteps && result.nextSteps.length > 0 ? result.nextSteps : undefined
+      lastNextSteps = hints.nextSteps
       const nextStepsBlock = lastNextSteps ? `\n\n${formatNextSteps(lastNextSteps)}` : ''
       if (streamedAnyTokens) {
         // The reply text is already on screen, printed token-by-token as it streamed in — but
         // onToken only ever saw draftReply, not a Phase 4.1 pausedNote appended afterward (see
         // AssistantTurnResult.pausedNote's doc comment), so that part still needs printing here.
-        const pausedNoteText = result.pausedNote ? `\n\n${result.pausedNote}` : ''
+        const pausedNoteText = hints.pausedNote ? `\n\n${hints.pausedNote}` : ''
         process.stdout.write(stripTerminalControls(`${pausedNoteText}${riskSuffix}${sourcesHint}${planHint}${contradictionNotice}${reviewNotice}${nextStepsBlock}\n\n`))
       } else {
         console.log(stripTerminalControls(`\nAielia>${riskSuffix} ${result.reply}${sourcesHint}${planHint}${contradictionNotice}${reviewNotice}${nextStepsBlock}\n`))
@@ -1845,15 +1753,10 @@ export async function runCli(options: RunCliOptions = {}): Promise<CliInstance> 
    * the assistant is built). /project clear reverts to that workspace-derived default.
    */
   async function handleProject(args: string[]): Promise<void> {
-    if (args.length === 0) {
-      printSafe(`\n${assistant.getActiveProject() || '(none)'}\n`)
-      return
-    }
-    if (args[0] === 'clear') {
-      await handleConfigCommand(['reset', 'activeProject'])
-      return
-    }
-    await handleConfigCommand(['set', 'activeProject', args.join(' ')])
+    const command = parseProjectCommand(args, assistant.getActiveProject())
+    if (command.kind === 'show') printSafe(`\n${command.message}\n`)
+    else if (command.kind === 'clear') await handleConfigCommand(['reset', 'activeProject'])
+    else await handleConfigCommand(['set', 'activeProject', command.project])
   }
 
   // Phase 3 of plans/hierarchical_goal_tree_and_steering_plan.html (R1, mid-task steering).
@@ -2007,6 +1910,7 @@ export async function runCli(options: RunCliOptions = {}): Promise<CliInstance> 
   rl.resume()
 
   return {
+    commandNames: Object.keys(commands),
     dispatchLine: async (line: string) => {
       const message = line.trim()
       if (!message) return

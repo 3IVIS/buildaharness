@@ -6,7 +6,8 @@ import type { MemorySummary, MemoryExport, TranscriptSearchHit, PendingFact, Fac
 import type { AuditEntry, MemoryStatus, MemoryInjection } from './memory-service.js'
 import type { GoalGraphState, GoalThreadView, GoalThreadVisibility } from './goal-graph-service.js'
 import type { UndoLogEntry } from './action-snapshot.js'
-import { certaintyLabel, type UserFact } from './fact-extraction.js'
+import { COMMAND_REGISTRY } from './commands.js'
+import { certaintyLabel, factStatusLabel, type UserFact } from './fact-extraction.js'
 
 /**
  * Pure formatting/logic backing cli.ts's session-level commands (/help, /status, /export,
@@ -35,7 +36,6 @@ export interface CliCommandHelp {
   description: string
 }
 
-/** Kept as a hand-maintained list rather than derived from cli.ts's dispatch table — see /help's task note on why this can drift and needs manual upkeep when a command is added. */
 const QUIT_WORDS: ReadonlySet<string> = new Set(['exit', 'quit', '/exit', '/quit'])
 
 /** A bare `exit` / `quit` (with or without a leading slash, any case) ends the session; anything longer is an ordinary message. An exact command match, not a reading of the message. */
@@ -43,43 +43,10 @@ export function isQuitCommand(message: string): boolean {
   return QUIT_WORDS.has(message.trim().toLowerCase())
 }
 
-export const CLI_COMMANDS_HELP: CliCommandHelp[] = [
-  { command: '/help', description: 'Show this list' },
-  { command: '/exit (/quit, exit, quit)', description: 'End the session' },
-  { command: '/clear (/new)', description: 'Start a fresh conversation' },
-  { command: '/status', description: 'Show current model, backend, workspace, and enabled capabilities' },
-  { command: '/export [file]', description: "Save this session's transcript to a markdown file" },
-  { command: '/undo', description: 'Remove the last exchange from conversation history — never reverses a real write_file/run_shell_command effect (see /undo-action)' },
-  { command: '/undo-action [id]', description: 'List revertible filesystem effects from approved actions, or stage a revert of one for approval' },
-  { command: '/memory', description: 'Show learned facts, reminders, pending-confirmation guesses, and experience-store content' },
-  { command: '/memory export [file]', description: 'Save the full, unbounded learned-experience contents (plus facts/reminders/pending) to a JSON file' },
-  { command: '/memory confirm <n|category>', description: 'Promote a pending-confirmation guess (or a whole category of them) to durable memory' },
-  { command: '/memory reject <n|category>', description: 'Discard a pending-confirmation guess (or a whole category of them)' },
-  { command: '/memory forget <n> [erase]', description: 'Remove an already-learned fact by its number in the "Facts I know" listing; `erase` also scrubs its text from the audit log (otherwise /memory undo can restore it)' },
-  { command: '/memory forget digest [id]', description: 'Erase one stored session digest (or, with no id, all of them)' },
-  { command: '/memory history', description: 'Show recent memory changes (needs AUDIT_MEMORY_AUDIT_LOG), with the number /memory undo takes' },
-  { command: '/memory undo <seq>', description: 'Restore the pre-image of one memory change (a whole consolidation at once)' },
-  { command: '/memory status', description: 'Memory store size vs budget, pending count, write mode, last consolidation' },
-  { command: '/memory archive [restore <n> | forget <n>]', description: 'List facts set aside (staged forgetting) or replaced by a newer statement; "restore" brings a set-aside one back, "forget" erases one for good' },
-  { command: '/memory consolidate [accept|dismiss <n>]', description: 'Propose merging/tightening overlapping facts and retiring stale ones (staged: nothing changes until you accept); needs AUDIT_MEMORY_CONSOLIDATION' },
-  { command: '/memory off | on', description: 'Stop (or resume) all memory writes for this install; existing facts stay readable and removable' },
-  { command: '/search <query>', description: 'Search past messages by content — ranked, not just exact-match' },
-  { command: '/model [name]', description: 'Show or switch the active model' },
-  { command: '/project [name]', description: 'Show or switch which project new project-scoped facts are tagged with (/project clear reverts to the workspace default)' },
-  { command: '/cost', description: 'Show token usage for the last turn and this session' },
-  { command: '/doctor', description: 'Check proxy/claude-cli/workspace/data-dir health' },
-  { command: '/why', description: 'Explain the last turn: how confident it was, whether it was checked against what was read, and which layers fired' },
-  { command: '/layers', description: 'Show all 11 harness layers — fired/skipped and why, for the last turn' },
-  { command: '/sources', description: 'List files/URLs the last turn actually consulted' },
-  { command: '/steps', description: 'List the tool calls the last turn made, in order' },
-  { command: '/plan', description: "Show the active structured plan's task status" },
-  { command: '/plan graph [thread-id]', description: 'Draw the active plan as a dependency graph (needs planGraphMode enabled)' },
-  { command: '/plan sketch <request>', description: 'One-shot, advisory plan sketch — no PlanRecord, nothing staged, cannot execute' },
-  { command: '/goals', description: 'Review every known goal thread this session — status, tasks, and visibility (freshly computed / carried over / done / suggested)' },
-  { command: '/config ...', description: 'View or change persisted settings' },
-  { command: '/layers settings', description: 'List reasoning layers with cost/evidence; /layers on|off|reset <id> to change' },
-  { command: '/checkpoint [clear]', description: 'Inspect, or clear, a stuck in-progress harness checkpoint' },
-]
+/** Projected from COMMAND_REGISTRY (commands.ts), in registry order — add a command there, not here. */
+export const CLI_COMMANDS_HELP: CliCommandHelp[] = COMMAND_REGISTRY
+  .filter((c) => c.surfaces !== 'gui-only')
+  .map((c) => ({ command: c.usage, description: c.description }))
 
 export function formatHelp(): string {
   const width = Math.max(...CLI_COMMANDS_HELP.map((c) => c.command.length))
@@ -137,8 +104,8 @@ function formatFactLine(f: UserFact, pending: PendingFact[] = []): string {
   chips.push(`established ${f.extractedAt.slice(0, 10)}`)
   if (f.project) chips.push(`project: ${f.project}`)
   // A guess held for this conversation is not saved: say so, so "Facts I know" never reads as a stored fact the assistant denied saving.
-  if (pending.some((p) => p.text === f.text)) chips.push('not saved yet: waiting in Pending confirmation')
-  else if (!f.durable) chips.push('this conversation only, not saved')
+  const status = factStatusLabel(f, pending)
+  if (status) chips.push(status)
   return `${f.text} (${chips.join(', ')})`
 }
 
@@ -399,7 +366,7 @@ function formatUsageLine(usage: TokenUsage): string {
   return usage.costUsd !== undefined ? `${tokens}  (~$${usage.costUsd.toFixed(4)})` : tokens
 }
 
-/** Renders /cost's output. The backend-specific footnote matters: claude-cli's cost is real (but may read $0 on a Pro/Max subscription, not API billing) and openrouter's is as reported by OpenRouter; every other backend's cost, when shown, is a static-table estimate (see cli.ts's withCostEstimate), never real billing data — see model-pricing.ts. */
+/** Renders /cost's output. The backend-specific footnote matters: claude-cli's cost is real (but may read $0 on a Pro/Max subscription, not API billing) and openrouter's is as reported by OpenRouter; every other backend's cost, when shown, is a static-table estimate (see turn-cost.ts's withCostEstimate), never real billing data — see model-pricing.ts. */
 export function formatCostSummary(info: CostSummaryInfo): string {
   if (!info.lastTurn && info.session.inputTokens === 0 && info.session.outputTokens === 0 && !info.spendCapLine) {
     return 'No usage yet this session.'

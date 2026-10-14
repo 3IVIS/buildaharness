@@ -13,6 +13,7 @@ import {
   parseClaudeCliOutput,
   ALREADY_STAGED_ACTION_TOOL,
   stagedActionInput,
+  stripJsonCodeFence,
   type PendingActionRecord,
 } from '@buildaharness/aielia'
 
@@ -33,7 +34,7 @@ export interface TauriClaudeCliLLMClientOptions {
   /**
    * When set (fileTools must also be set — the MCP server only starts at all when fileTools
    * is), passes `enable_shell_tools: true` to `run_claude_prompt_with_file_tools` so the MCP
-   * server also registers run_shell_command — mirrors ClaudeCliLLMClient's own `shellTools`
+   * server also registers run_shell_command — the platform counterpart of ClaudeCliLLMClient's own `shellTools`
    * option gating the same env var on its MCP subprocess. Absent by default.
    */
   shellTools?: boolean
@@ -73,7 +74,9 @@ export class TauriClaudeCliLLMClient implements ILLMClient {
 
   async callChatStructured(messages: ChatMessage[], tools?: ToolDefinition[], options: ChatOptions = {}): Promise<LLMStructuredResponse> {
     if (!tools || tools.length === 0) {
-      return { content: await this.callChatSync(messages, options) }
+      // claude has no schema-constrained output mode, so it often fences its JSON: strip it once here, as ClaudeCliLLMClient does.
+      const content = await this.callChatSync(messages, options)
+      return { content: options.structuredOutput ? stripJsonCodeFence(content) : content }
     }
     if (!this.fileTools) {
       throw new Error('TauriClaudeCliLLMClient does not support tool calls unless constructed with fileTools enabled')

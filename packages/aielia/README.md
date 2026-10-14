@@ -670,8 +670,10 @@ Set `ASSISTANT_ENABLE_WEB=1` (plus `BRAVE_SEARCH_API_KEY`) to give the model
 real `web_search`/`fetch_url` tools (no approval needed — see "Web access via
 tools" above) and `ASSISTANT_ENABLE_SHELL=1` to give it a real, approval-gated
 `run_shell_command` tool scoped to `ASSISTANT_WORKSPACE_DIR`. Both are off by
-default; `ASSISTANT_ENABLE_SHELL` must be exactly `"1"` (a stray
-`ASSISTANT_ENABLE_SHELL=0` left in an env file does not enable it). Optional
+default. Every on/off variable (`ASSISTANT_ENABLE_WEB`, `ASSISTANT_ENABLE_SHELL`,
+`ASSISTANT_ENABLE_EMAIL`, `ASSISTANT_DANGEROUSLY_SKIP_PERMISSIONS`) takes `1` or `true` for on and `0` or
+`false` for off; any other value (`yes`, `True`) is treated as off, with a warning that names the variable
+(a stray `ASSISTANT_ENABLE_SHELL=0` left in an env file does not enable it). Optional
 `ASSISTANT_SHELL_TIMEOUT_MS` (default 30000) tunes the shell timeout:
 
 ```bash

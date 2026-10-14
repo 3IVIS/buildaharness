@@ -26,6 +26,10 @@ export type ChatEntry =
       contradictionNotice?: string
       /** Advisory heads-up from the semantic change reviewer — see AssistantTurnResult.reviewNotice. Shown under the reply, same as the CLI prints it. */
       reviewNotice?: string
+      /** The reply audit's notice (AssistantTurnResult.auditNotice); the CLI prints it after the review notice. */
+      auditNotice?: string
+      /** Set when the turn was paused part-way (AssistantTurnResult.pausedNote). */
+      pausedNote?: string
     }
   | {
       id: string

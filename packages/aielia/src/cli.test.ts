@@ -8,6 +8,7 @@ import { createScriptedLLMClient } from './scripted-llm-client.js'
 import { runCli, StartupError, type RunCliOptions, type CliInstance } from './cli.js'
 import { DEFAULT_CONFIG, type ConfigStore, type AssistantConfig } from './config.js'
 import { classifyRiskLexical } from './risk-classifier.js'
+import { dispatchKeysFor } from './commands.js'
 import { PLAN_LINE_PREFIX } from './cli-icons.js'
 
 /**
@@ -345,6 +346,23 @@ describe('/config', () => {
 
     expect(lines.join('\n')).toContain('braveApiKey')
     expect(await configStore.load()).toEqual({})
+  })
+})
+
+describe('command registry parity', () => {
+  // exit/quit are intercepted before the dispatch table (isQuitCommand), so they are registry keys with no table entry.
+  const HANDLED_BEFORE_TABLE = ['/exit', '/quit']
+
+  it('every key of the dispatch table is in the registry', async () => {
+    const { cli } = await setupCli({ assistant: new PersonalAssistant({ llmClient: new FakeLLMClient() }) })
+    const registered = new Set(dispatchKeysFor('cli'))
+    expect(cli.commandNames.filter((k) => !registered.has(k))).toEqual([])
+  })
+
+  it('every registry command that includes the CLI is a key of the dispatch table', async () => {
+    const { cli } = await setupCli({ assistant: new PersonalAssistant({ llmClient: new FakeLLMClient() }) })
+    const handled = new Set([...cli.commandNames, ...HANDLED_BEFORE_TABLE])
+    expect(dispatchKeysFor('cli').filter((k) => !handled.has(k))).toEqual([])
   })
 })
 

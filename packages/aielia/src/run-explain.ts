@@ -3,7 +3,8 @@ import type { AnswerClaim } from './answer-claim.js'
 import type { MemoryInjection } from './memory-service.js'
 import type { AssistantToolStep } from './tool-step.js'
 import { summarizeSettledToolStep } from './tool-step.js'
-import { formatMemoryInjection } from './cli-session.js'
+import { formatMemoryInjection, formatGoalGraphState } from './cli-session.js'
+import type { GoalGraphState } from './goal-graph-service.js'
 import { lowerConfidenceSourceLines } from './source-reliability.js'
 import { buildWhyChain, LAYER_ORDER, LAYER_DISPLAY_NAME } from './node-display-names.js'
 
@@ -26,6 +27,8 @@ export interface TurnExplainInput {
   sources?: AssistantSource[]
   toolSteps?: AssistantToolStep[]
   planStatus?: AssistantTurnResult['planStatus']
+  /** The session's goal threads. When there is no drafted plan but threads have tasks, /plan says the request was worked as tracked goal tasks instead of "No active plan". */
+  goalGraph?: GoalGraphState
 }
 
 export const FAST_PATH_REASON =
@@ -34,6 +37,7 @@ export const GENERIC_NO_TRACE_REASON = 'No harness trace for the last turn (noth
 export const NO_SOURCES_TEXT = 'No sources for the last turn (it used no file/web tool calls).'
 export const NO_STEPS_TEXT = 'No tool steps for the last turn.'
 export const NO_PLAN_TEXT = 'No active plan for this session.'
+export const NO_DRAFTED_PLAN_BUT_GOAL_TASKS_TEXT = 'No drafted plan for this session. The request was worked as tracked goal tasks (/goals):'
 
 /** Slash commands that open the explanations. Shared so the CLI's dispatch table and chat-ui's composer recognise the same words. */
 export const EXPLAIN_COMMANDS = ['/why', '/layers', '/sources', '/steps', '/plan'] as const
@@ -158,7 +162,13 @@ export function explainSteps(input: TurnExplainInput): string[] {
 /** `/plan` — the active plan's task checklist. */
 export function explainPlan(input: TurnExplainInput): string[] {
   const plan = input.planStatus
-  if (!plan) return [NO_PLAN_TEXT]
+  if (!plan) {
+    const withTasks = (input.goalGraph?.threads ?? []).filter((t) => t.tasks.total > 0)
+    if (input.goalGraph && withTasks.length > 0) {
+      return [NO_DRAFTED_PLAN_BUT_GOAL_TASKS_TEXT, ...formatGoalGraphState({ ...input.goalGraph, threads: withTasks }).split('\n')]
+    }
+    return [NO_PLAN_TEXT]
+  }
   return [
     `Plan: ${plan.templateName ?? 'custom plan'} (${plan.completionPct.toFixed(1)}% complete)`,
     ...plan.tasks.flatMap((task) => [

@@ -1,5 +1,4 @@
-import type { AssistantConfig } from '@buildaharness/aielia'
-import { resolveMemoryWriteMode, MEMORY_WRITE_MODES, normalizeOneLoopMode, normalizeAskMode, normalizePlanMode, normalizeGoalGraphMode, normalizeGoalGraphSuggestMode, normalizeLayerPolicyMode, normalizePlanGraphMode } from '@buildaharness/aielia'
+import { envOverridesFrom, envVarFor, normalizeLlmBackend, type AssistantConfig } from '@buildaharness/aielia'
 
 /**
  * Browser-side companion to aielia's cli-config.ts — same idea (env-var-name map
@@ -9,73 +8,14 @@ import { resolveMemoryWriteMode, MEMORY_WRITE_MODES, normalizeOneLoopMode, norma
  */
 
 /** Which VITE_* build-time var, if any, can pin a given key — shown next to a read-only field in SettingsScreen. */
-export const ENV_VAR_FOR_CONFIG_KEY: Partial<Record<keyof AssistantConfig, string>> = {
-  llmBackend: 'ASSISTANT_LLM_BACKEND', // desktop only — read at runtime via the get_env_llm_backend Tauri command
-  proxyUrl: 'VITE_ASSISTANT_PROXY_URL',
-  authToken: 'VITE_ASSISTANT_PROXY_TOKEN',
-  model: 'VITE_ASSISTANT_MODEL',
-  oneLoopMode: 'VITE_ASSISTANT_ONE_LOOP',
-  askMode: 'VITE_ASSISTANT_ASK_MODE',
-  planMode: 'VITE_ASSISTANT_PLAN_MODE',
-  enableWeb: 'VITE_ASSISTANT_ENABLE_WEB',
-  webBackend: 'VITE_ASSISTANT_WEB_BACKEND',
-  goalGraphMode: 'VITE_ASSISTANT_GOAL_GRAPH',
-  planGraphMode: 'VITE_ASSISTANT_PLAN_GRAPH',
-  layerPolicyMode: 'VITE_ASSISTANT_LAYER_POLICY',
-  goalGraphSuggestMode: 'VITE_ASSISTANT_GOAL_GRAPH_SUGGEST',
-  memoryWriteMode: 'VITE_ASSISTANT_MEMORY_WRITE_MODE',
-}
+export const ENV_VAR_FOR_CONFIG_KEY: Partial<Record<keyof AssistantConfig, string>> = envVarFor('vite')
 
 /**
- * Builds the `overrides` argument for resolveConfig() from Vite's import.meta.env — only
- * includes a key when its build-time var is actually set (non-empty), matching App.tsx's
- * existing `?? default` / `|| undefined` fallbacks exactly, so this is a behavior-preserving
- * read of the same three vars it already read individually.
+ * Builds the `overrides` argument for resolveConfig() from Vite's import.meta.env. The key table and the way each
+ * value is read are shared with the CLI (config-keys.ts); a key is only included when its build-time var is set (non-empty).
  */
 export function envOverridesFromImportMetaEnv(env: ImportMetaEnv): Partial<AssistantConfig> {
-  const overrides: Partial<AssistantConfig> = {}
-  if (env.VITE_ASSISTANT_PROXY_URL) overrides.proxyUrl = env.VITE_ASSISTANT_PROXY_URL
-  if (env.VITE_ASSISTANT_PROXY_TOKEN) overrides.authToken = env.VITE_ASSISTANT_PROXY_TOKEN
-  if (env.VITE_ASSISTANT_MODEL) overrides.model = env.VITE_ASSISTANT_MODEL
-  // R5 of the internal plan — the browser/desktop counterpart of the
-  // CLI's ASSISTANT_ONE_LOOP. normalizeOneLoopMode warns-and-defaults on a typo, so a build that
-  // sets this at all always resolves to a concrete 'enabled'/'disabled'.
-  if (env.VITE_ASSISTANT_ONE_LOOP) overrides.oneLoopMode = normalizeOneLoopMode(env.VITE_ASSISTANT_ONE_LOOP, 'VITE_ASSISTANT_ONE_LOOP')
-  // Q2 of the internal plan — the browser/desktop counterpart of the
-  // CLI's ASSISTANT_ASK_MODE. normalizeAskMode warns-and-defaults on a typo, so a build that
-  // sets this at all always resolves to a concrete 'enabled'/'disabled'.
-  if (env.VITE_ASSISTANT_ASK_MODE) overrides.askMode = normalizeAskMode(env.VITE_ASSISTANT_ASK_MODE, 'VITE_ASSISTANT_ASK_MODE')
-  // P11 of the internal plan — the browser/desktop counterpart of the
-  // CLI's ASSISTANT_PLAN_MODE. normalizePlanMode warns-and-defaults on a typo, so a build that
-  // sets this at all always resolves to a concrete 'gated'/'legacy'.
-  if (env.VITE_ASSISTANT_PLAN_MODE) overrides.planMode = normalizePlanMode(env.VITE_ASSISTANT_PLAN_MODE, 'VITE_ASSISTANT_PLAN_MODE')
-  // W8 of the internal plan — lets a specific build (the hosted /try
-  // trial) default web tools on and routed through the proxy, without touching DEFAULT_CONFIG
-  // for every other build (dev, self-hosted, etc).
-  if (env.VITE_ASSISTANT_ENABLE_WEB) overrides.enableWeb = env.VITE_ASSISTANT_ENABLE_WEB === 'true'
-  if (env.VITE_ASSISTANT_WEB_BACKEND === 'proxy' || env.VITE_ASSISTANT_WEB_BACKEND === 'direct') {
-    overrides.webBackend = env.VITE_ASSISTANT_WEB_BACKEND
-  } else if (env.VITE_ASSISTANT_WEB_BACKEND) {
-    console.warn(`Unrecognized VITE_ASSISTANT_WEB_BACKEND "${env.VITE_ASSISTANT_WEB_BACKEND}" — ignoring, falling back to the default.`)
-  }
-  // Phase 8 of the hierarchical-goal-tree plan — the browser/desktop counterpart of the CLI's
-  // ASSISTANT_GOAL_GRAPH(_SUGGEST). normalizeGoalGraphMode/normalizeGoalGraphSuggestMode warn-and-
-  // default on a typo, so a build that sets either at all always resolves to a concrete
-  // 'enabled'/'disabled'.
-  if (env.VITE_ASSISTANT_GOAL_GRAPH) overrides.goalGraphMode = normalizeGoalGraphMode(env.VITE_ASSISTANT_GOAL_GRAPH, 'VITE_ASSISTANT_GOAL_GRAPH')
-  if (env.VITE_ASSISTANT_PLAN_GRAPH) overrides.planGraphMode = normalizePlanGraphMode(env.VITE_ASSISTANT_PLAN_GRAPH, 'VITE_ASSISTANT_PLAN_GRAPH')
-  if (env.VITE_ASSISTANT_GOAL_GRAPH_SUGGEST) {
-    overrides.goalGraphSuggestMode = normalizeGoalGraphSuggestMode(env.VITE_ASSISTANT_GOAL_GRAPH_SUGGEST, 'VITE_ASSISTANT_GOAL_GRAPH_SUGGEST')
-  }
-  // AL7b — normalizeLayerPolicyMode warns-and-defaults on a typo, so a build that sets it always resolves to a concrete mode.
-  if (env.VITE_ASSISTANT_LAYER_POLICY) overrides.layerPolicyMode = normalizeLayerPolicyMode(env.VITE_ASSISTANT_LAYER_POLICY, 'VITE_ASSISTANT_LAYER_POLICY')
-  // M6 — the browser/desktop counterpart of the CLI's ASSISTANT_MEMORY_WRITE_MODE. Warn-and-default on a typo.
-  if (env.VITE_ASSISTANT_MEMORY_WRITE_MODE) {
-    const resolved = resolveMemoryWriteMode(env.VITE_ASSISTANT_MEMORY_WRITE_MODE)
-    if (!(MEMORY_WRITE_MODES as readonly string[]).includes(env.VITE_ASSISTANT_MEMORY_WRITE_MODE)) console.warn(`Unrecognized VITE_ASSISTANT_MEMORY_WRITE_MODE "${env.VITE_ASSISTANT_MEMORY_WRITE_MODE}" — using "${resolved}".`)
-    overrides.memoryWriteMode = resolved
-  }
-  return overrides
+  return envOverridesFrom(env as unknown as Record<string, string | undefined>, 'vite')
 }
 
 /**
@@ -86,13 +26,5 @@ export function envOverridesFromImportMetaEnv(env: ImportMetaEnv): Partial<Assis
  */
 export function llmBackendFromEnvValue(raw: string | null | undefined): Partial<AssistantConfig> {
   if (raw === null || raw === undefined) return {}
-  switch (raw) {
-    case 'claude-cli':
-    case 'anthropic':
-    case 'openai':
-    case 'openrouter':
-      return { llmBackend: raw }
-    default:
-      return { llmBackend: 'proxy' }
-  }
+  return { llmBackend: normalizeLlmBackend(raw) }
 }

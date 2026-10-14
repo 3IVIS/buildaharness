@@ -254,6 +254,30 @@ is the design reference; keep it in sync with behaviour changes. Any change to
 risk classification, the tool-policy gate, or the approval flow needs a test that
 pins the new behaviour.
 
+### One implementation per feature (CLI and chat-ui)
+
+The CLI (`packages/aielia/src/cli.ts`) and the chat app (`packages/chat-ui`, the web build and the Tauri desktop app)
+run the same assistant, so a feature is written once, in `packages/aielia/src`, as a pure function or a small module with
+no `node:*` and no DOM imports (it is bundled into the browser build), and exported from `index.ts`. A surface contains
+only platform plumbing it must have (filesystem, process spawn, HTTP client, DNS, config store) and the rendering of
+what the shared code returns. If a surface needs a different behaviour, the difference is a parameter of the shared
+code, not a second copy.
+
+- **Adding a slash command:** add an entry to `COMMAND_REGISTRY` (`commands.ts`), `both` or with a `reason` for the
+  surface that does not have it. The CLI's `/help` is derived from it. Two tests fail when a surface and the registry
+  disagree: the dispatch table in `cli.test.ts`, and `COMPOSER_COMMANDS` in `chat-ui/src/composer-commands.test.ts`.
+  A command on both surfaces puts its argument handling in a shared pure function (see `project-command.ts`,
+  `undo-action-command.ts`) and each surface renders the result.
+- **Deciding what a finished turn shows:** `presentTurnResult` and `NO_TRACE` (`turn-presentation.ts`). The CLI prints
+  it and chat-ui renders it; do not read the status branches of `AssistantTurnResult` in a surface.
+- **Building the assistant:** `buildAssistantOptions(config, platform)` (`assistant-options.ts`). A surface supplies
+  its client, storage and tools, and picks a `features` preset. A config-derived option is one edit there; the
+  parity test `assistant-options.test.ts` snapshots which keys each surface passes.
+- **Adding a setting that an environment variable can pin:** one entry in `ENV_KEYS` (`config-keys.ts`), read by both
+  the CLI (`ASSISTANT_*`) and the Vite build (`VITE_ASSISTANT_*`), plus the key in `CONFIG_KEYS` and the type.
+- **When two copies already exist:** do not just keep one. Read both, list every difference, take the best as the base
+  and fold in what the other does better, and record it. See `plans/surface_unification_plan.html`, section 1.
+
 If you touch a counted number quoted in `README.md` / `README_CN.md` / `docs/`,
 run `node scripts/gen-stats.mjs` (CI runs `--check`).
 

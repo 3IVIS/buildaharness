@@ -41,6 +41,7 @@ function createDeferredAssistant() {
         transcript = []
       }),
       undoLastTurn: vi.fn(async () => ({ undone: false })),
+      getSpendState: vi.fn(async () => ({ cumulativeCostUsd: 0, cumulativeCalls: 0, cumulativeInputTokens: 0, cumulativeOutputTokens: 0 })),
       getMemorySummary: vi.fn(async () => ({
         facts: [],
         reminders: [],

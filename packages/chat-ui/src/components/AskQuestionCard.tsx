@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import type { AskAnswer, AskQuestion, AskQuestionOption, AskResponse } from '@buildaharness/aielia'
+import { emptyDraft, orderedOptions, draftToAnswer, type AskAnswer, type AskQuestion, type AskResponse, type QuestionDraft } from '@buildaharness/aielia'
 
 interface Props {
   questions: AskQuestion[]
@@ -7,44 +7,6 @@ interface Props {
   /** Set alongside `resolution: 'answered'` — see ChatEntry's 'clarification' doc comment. */
   answer?: AskResponse
   onSubmit: (response: AskResponse) => void
-}
-
-/**
- * One question's in-progress answer. Kept separate from AskAnswer itself so a user can flip
- * between picking an option and typing free text without losing whichever they touched last —
- * `draftToAnswer` below is what actually collapses this back down to the wire shape.
- */
-interface QuestionDraft {
-  selectedLabels: string[]
-  showEdit: boolean
-  editText: string
-  freeText: string
-}
-
-function emptyDraft(): QuestionDraft {
-  return { selectedLabels: [], showEdit: false, editText: '', freeText: '' }
-}
-
-/** Recommended option(s) first, per the plan's "recommended option rendered first" — stable otherwise. */
-function orderedOptions(question: AskQuestion): AskQuestionOption[] {
-  const options = question.options ?? []
-  return options
-    .map((option, index) => ({ option, index }))
-    .sort((a, b) => Number(b.option.recommended ?? false) - Number(a.option.recommended ?? false) || a.index - b.index)
-    .map(({ option }) => option)
-}
-
-/** Collapses one question's draft into the wire AskAnswer shape, or null while still unanswered (INV-28). */
-function draftToAnswer(questionId: string, draft: QuestionDraft): AskAnswer | null {
-  if (draft.selectedLabels.length > 0) {
-    return draft.showEdit && draft.editText.trim()
-      ? { questionId, kind: 'selected_with_edit', selectedLabels: draft.selectedLabels, editText: draft.editText.trim() }
-      : { questionId, kind: 'selected', selectedLabels: draft.selectedLabels }
-  }
-  if (draft.freeText.trim()) {
-    return { questionId, kind: 'free_text', freeText: draft.freeText.trim() }
-  }
-  return null
 }
 
 /** Short, human-readable line for the resolved (already-submitted) view — the answer summary counterpart of ApprovalCard's "Approved."/"Denied." line. */
@@ -63,7 +25,7 @@ function summarizeAnswer(answer: AskAnswer | undefined): string {
 export function AskQuestionCard({ questions, resolution, answer, onSubmit }: Props): React.JSX.Element {
   const [index, setIndex] = useState(0)
   const [drafts, setDrafts] = useState<Record<string, QuestionDraft>>(() =>
-    Object.fromEntries(questions.map((q) => [q.id, emptyDraft()])),
+    Object.fromEntries(questions.map((q) => [q.id, { ...emptyDraft(), showEdit: false }])),
   )
   const [hoveredLabel, setHoveredLabel] = useState<string | null>(null)
 

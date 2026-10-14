@@ -112,8 +112,12 @@ def _lf_update_trace_output(state: dict) -> None:
         return
     try:
         lf = _lf_get_client()
-        # Langfuse 3.x uses set_current_trace_io; update_current_trace was removed.
-        lf.set_current_trace_io(output=state)
+        # Langfuse 4.x has the deprecated set_current_trace_io; 5.x removed it, so use the current span.
+        set_trace_io = getattr(lf, "set_current_trace_io", None)
+        if set_trace_io is not None:
+            set_trace_io(output=state)
+        else:
+            lf.update_current_span(output=state)
     except Exception:
         pass
 
