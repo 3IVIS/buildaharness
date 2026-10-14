@@ -11,6 +11,8 @@ import {
   createLlmClient as createSharedLlmClient,
   checkProxyHealth,
   buildAssistantOptions,
+  parseProjectCommand,
+  formatSpendCapStatus,
   DESKTOP_FEATURES,
   WEB_FEATURES,
   planUndo,
@@ -451,6 +453,7 @@ export function App(): React.JSX.Element {
   const [sessionUsage, setSessionUsage] = useState<TokenUsage | undefined>(undefined)
   const [memorySummary, setMemorySummary] = useState<MemorySummary | null>(null)
   const [healthChecks, setHealthChecks] = useState<DoctorCheck[] | null>(null)
+  const [spendCapLine, setSpendCapLine] = useState<string | undefined>(undefined)
   // M6 — the Memory panel's data (GUI counterpart of the CLI's /memory family); null = still loading. Reloaded after every action so it never shows a stale queue.
   const [memoryPanelData, setMemoryPanelData] = useState<MemoryPanelData | null>(null)
   const [memoryPanelMessage, setMemoryPanelMessage] = useState<string | null>(null)
@@ -549,11 +552,13 @@ export function App(): React.JSX.Element {
   async function loadDiagnostics(): Promise<void> {
     const assistant = assistantRef.current
     if (!assistant) return
-    const [summary, transcript, checks] = await Promise.all([
+    const [summary, transcript, checks, spendState] = await Promise.all([
       assistant.getMemorySummary(sessionIdRef.current),
       assistant.getTranscript(sessionIdRef.current),
       runHealthChecks(),
+      assistant.getSpendState(sessionIdRef.current),
     ])
+    setSpendCapLine(formatSpendCapStatus(spendState, { sessionCostLimitUsd: config.sessionCostLimitUsd, sessionCallLimit: config.sessionCallLimit }))
     setMemorySummary(summary)
     setTranscriptLength(transcript.length)
     setHealthChecks(checks)
@@ -1005,9 +1010,24 @@ export function App(): React.JSX.Element {
     return true
   }
 
+  /** /project [name | clear]: parsing and wording are the CLI's (project-command.ts); the choice is saved like any Settings change, which rebuilds the assistant. Returns whether `message` was one. */
+  function handleProjectCommand(message: string): boolean {
+    const [command, ...args] = message.trim().split(/\s+/)
+    if (command !== '/project') return false
+    const parsed = parseProjectCommand(args, assistantRef.current?.getActiveProject())
+    setShowDemo(false)
+    setInput('')
+    if (composerRef.current) composerRef.current.style.height = 'auto'
+    setEntries((prev) => [...prev, { id: newId(), kind: 'explain', command: message.trim(), lines: [parsed.message] }])
+    if (parsed.kind === 'set') void handleSaveSettings({ activeProject: parsed.project })
+    else if (parsed.kind === 'clear') void handleSaveSettings({ activeProject: undefined })
+    return true
+  }
+
   function submitMessage(): void {
     const message = input.trim()
     if (showExplanation(message)) return
+    if (handleProjectCommand(message)) return
     if (keyMissing) {
       setNeedsSetup(true)
       return
@@ -1202,6 +1222,7 @@ export function App(): React.JSX.Element {
         lastTurnUsage={lastTurnUsage}
         sessionUsage={sessionUsage}
         healthChecks={healthChecks}
+        spendCapLine={spendCapLine}
       />
     )
   }

@@ -19,6 +19,7 @@ import {
 } from '@buildaharness/runtime'
 import type { AskAnswer, AskQuestion, AskResponse } from '@buildaharness/harness'
 import { orderedOptions, draftToAnswer, emptyDraft, type QuestionDraft } from './ask-draft.js'
+import { parseProjectCommand } from './project-command.js'
 import { createLlmClient } from './llm-client-factory.js'
 import { buildAssistantOptions, CLI_FEATURES } from './assistant-options.js'
 import { withCostEstimate as sharedWithCostEstimate } from './turn-cost.js'
@@ -1771,15 +1772,10 @@ export async function runCli(options: RunCliOptions = {}): Promise<CliInstance> 
    * the assistant is built). /project clear reverts to that workspace-derived default.
    */
   async function handleProject(args: string[]): Promise<void> {
-    if (args.length === 0) {
-      printSafe(`\n${assistant.getActiveProject() || '(none)'}\n`)
-      return
-    }
-    if (args[0] === 'clear') {
-      await handleConfigCommand(['reset', 'activeProject'])
-      return
-    }
-    await handleConfigCommand(['set', 'activeProject', args.join(' ')])
+    const command = parseProjectCommand(args, assistant.getActiveProject())
+    if (command.kind === 'show') printSafe(`\n${command.message}\n`)
+    else if (command.kind === 'clear') await handleConfigCommand(['reset', 'activeProject'])
+    else await handleConfigCommand(['set', 'activeProject', command.project])
   }
 
   // Phase 3 of plans/hierarchical_goal_tree_and_steering_plan.html (R1, mid-task steering).

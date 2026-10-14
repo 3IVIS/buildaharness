@@ -21,8 +21,8 @@ describe('COMMAND_REGISTRY', () => {
     expect(CLI_COMMANDS_HELP.map((c) => c.command)).toEqual(COMMAND_REGISTRY.filter((c) => c.surfaces !== 'gui-only').map((c) => c.usage))
   })
 
-  it('lists the explain commands as both-surface', () => {
-    expect(dispatchKeysFor('gui').sort()).toEqual([...EXPLAIN_COMMANDS].sort())
+  it('lists the explain commands and /project as the commands the apps handle', () => {
+    expect(dispatchKeysFor('gui').sort()).toEqual([...EXPLAIN_COMMANDS, '/project'].sort())
   })
 
   it('keeps the apps-export reason for /memory export', () => {

@@ -29,10 +29,11 @@ export interface AssistantPlatform {
   features: AssistantFeatures
 }
 
-/** What each surface enables today. U4b flips the app presets on purpose; the parity test snapshots them. */
+/** What each surface enables. The parity test snapshots the keys each preset passes. */
 export const CLI_FEATURES: AssistantFeatures = { spendCap: true, ambiguityGuard: true, activeProject: true, consolidateOnNewSession: true }
-export const DESKTOP_FEATURES: AssistantFeatures = { spendCap: false, ambiguityGuard: false, activeProject: false, consolidateOnNewSession: false }
-export const WEB_FEATURES: AssistantFeatures = { spendCap: false, ambiguityGuard: false, activeProject: false, consolidateOnNewSession: false }
+// D1/D2: the apps honour the spend cap, the ambiguity guard and /project, all inert until configured. Consolidation proposals on /new stay CLI-only (the apps have no /memory consolidate control).
+export const DESKTOP_FEATURES: AssistantFeatures = { spendCap: true, ambiguityGuard: true, activeProject: true, consolidateOnNewSession: false }
+export const WEB_FEATURES: AssistantFeatures = { spendCap: true, ambiguityGuard: true, activeProject: true, consolidateOnNewSession: false }
 
 /**
  * The PersonalAssistant.create options derived from AssistantConfig, built once for every surface. Keys a

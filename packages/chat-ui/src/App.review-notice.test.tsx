@@ -18,6 +18,7 @@ function fakeAssistant(notices: { reviewNotice?: string; contradictionNotice?: s
     getPlanState: vi.fn(async () => null),
     clearSession: vi.fn(async () => {}),
     undoLastTurn: vi.fn(async () => ({ undone: false })),
+    getSpendState: vi.fn(async () => ({ cumulativeCostUsd: 0, cumulativeCalls: 0, cumulativeInputTokens: 0, cumulativeOutputTokens: 0 })),
     getMemorySummary: vi.fn(async () => ({ facts: [], reminders: [], pending: [], experience: { strategyWeights: {}, decompositions: [], recoverySequences: [] } })),
     getLastMemoryInjection: vi.fn(() => undefined),
           getMemoryStatus: vi.fn(async () => ({ mode: 'staged', off: false, budgetedRender: false, budgetChars: 4000, storeChars: 0, liveFacts: 0, pending: 0, flaggedPending: 0, retired: 0, auditEnabled: false, auditEntries: 0 })),

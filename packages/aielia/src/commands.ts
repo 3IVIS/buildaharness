@@ -44,7 +44,7 @@ export const COMMAND_REGISTRY: CommandSpec[] = [
   { name: '/memory off', usage: '/memory off | on', description: 'Stop (or resume) all memory writes for this install; existing facts stay readable and removable', surfaces: 'cli-only', reason: `${APP_CONTROL} (Settings)` },
   { name: '/search', usage: '/search <query>', description: 'Search past messages by content — ranked, not just exact-match', surfaces: 'cli-only', reason: `${APP_CONTROL} (search box)` },
   { name: '/model', usage: '/model [name]', description: 'Show or switch the active model', surfaces: 'cli-only', reason: `${APP_CONTROL} (Settings)` },
-  { name: '/project', usage: '/project [name]', description: 'Show or switch which project new project-scoped facts are tagged with (/project clear reverts to the workspace default)', surfaces: 'cli-only', reason: 'planned: U4b' },
+  { name: '/project', usage: '/project [name]', description: 'Show or switch which project new project-scoped facts are tagged with (/project clear reverts to the workspace default)', surfaces: 'both' },
   { name: '/cost', usage: '/cost', description: 'Show token usage for the last turn and this session', surfaces: 'cli-only', reason: `${APP_CONTROL} (cost line under each reply)` },
   { name: '/doctor', usage: '/doctor', description: 'Check proxy/claude-cli/workspace/data-dir health', surfaces: 'cli-only', reason: `${APP_CONTROL} (Settings diagnostics)` },
   { name: '/why', usage: '/why', description: 'Explain the last turn: how confident it was, whether it was checked against what was read, and which layers fired', surfaces: 'both' },

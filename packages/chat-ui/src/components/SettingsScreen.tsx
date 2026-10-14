@@ -59,6 +59,8 @@ interface Props {
   lastTurnUsage?: TokenUsage
   sessionUsage?: TokenUsage
   healthChecks: DoctorCheck[] | null
+  /** The CLI's spend-cap status line (formatSpendCapStatus); undefined when no limit is set. */
+  spendCapLine?: string
 }
 
 function isPinned(overriddenKeys: ReadonlySet<keyof AssistantConfig>, key: keyof AssistantConfig): boolean {
@@ -150,6 +152,7 @@ export function SettingsScreen({
   lastTurnUsage,
   sessionUsage,
   healthChecks,
+  spendCapLine,
 }: Props): React.JSX.Element {
   const [form, setForm] = useState<AssistantConfig>(config)
   const [error, setError] = useState<string | null>(null)
@@ -408,6 +411,53 @@ export function SettingsScreen({
           )}
         </section>
 
+        <section className="settings__section">
+          <h2>Limits</h2>
+          <FieldRow label="Session cost limit (USD)">
+            <input
+              type="number"
+              min={0}
+              step={0.5}
+              aria-label="Session cost limit (USD)"
+              value={form.sessionCostLimitUsd ?? ''}
+              disabled={disabled || pinned('sessionCostLimitUsd')}
+              placeholder="no limit"
+              onChange={(e) => {
+                const n = Number(e.target.value)
+                set('sessionCostLimitUsd', e.target.value && Number.isFinite(n) && n > 0 ? n : undefined)
+              }}
+            />
+          </FieldRow>
+          <FieldRow label="Session call limit">
+            <input
+              type="number"
+              min={1}
+              step={1}
+              aria-label="Session call limit"
+              value={form.sessionCallLimit ?? ''}
+              disabled={disabled || pinned('sessionCallLimit')}
+              placeholder="no limit"
+              onChange={(e) => {
+                const n = Number(e.target.value)
+                set('sessionCallLimit', e.target.value && Number.isInteger(n) && n > 0 ? n : undefined)
+              }}
+            />
+          </FieldRow>
+          <p className="settings__info">With a limit set, Aielia stops taking new messages once this session reaches it. Empty means no limit.</p>
+          <FieldRow label="Ask before guessing (ambiguity guard)">
+            <select
+              aria-label="Ambiguity guard"
+              value={form.ambiguityGuardMode ?? 'default'}
+              disabled={disabled || pinned('ambiguityGuardMode')}
+              onChange={(e) => set('ambiguityGuardMode', e.target.value === 'default' ? undefined : (e.target.value as NonNullable<AssistantConfig['ambiguityGuardMode']>))}
+            >
+              <option value="default">Default</option>
+              <option value="enabled">On</option>
+              <option value="disabled">Off</option>
+            </select>
+          </FieldRow>
+        </section>
+
         {isDesktop && (
           <section className="settings__section">
             <h2>Workspace</h2>
@@ -461,6 +511,7 @@ export function SettingsScreen({
 
           <div className="settings__field-label">Usage</div>
           <UsageTable lastTurn={lastTurnUsage} session={sessionUsage ?? { inputTokens: 0, outputTokens: 0 }} backend={config.llmBackend} />
+          {spendCapLine && <div className="settings__hint">Spend cap: {spendCapLine}</div>}
 
           <div className="settings__field-label">Health</div>
           <HealthList checks={healthChecks} />

@@ -147,6 +147,23 @@ describe('SettingsScreen', () => {
     expect(onSave).toHaveBeenCalledWith({ proxyUrl: 'http://changed:1' })
   })
 
+  it('Limits: setting a cost limit, a call limit and the ambiguity guard saves just those keys; empty means no limit', async () => {
+    const user = userEvent.setup()
+    const { onSave } = renderSettings()
+    await user.type(screen.getByLabelText('Session cost limit (USD)'), '2.5')
+    await user.type(screen.getByLabelText('Session call limit'), '10')
+    await user.selectOptions(screen.getByLabelText('Ambiguity guard'), 'enabled')
+    await user.click(screen.getByRole('button', { name: 'Save' }))
+    expect(onSave).toHaveBeenCalledWith({ sessionCostLimitUsd: 2.5, sessionCallLimit: 10, ambiguityGuardMode: 'enabled' })
+  })
+
+  it('Limits: shows the saved limits, and the spend-cap status line when there is one', () => {
+    renderSettings({ config: { ...DEFAULT_CONFIG, sessionCostLimitUsd: 3, sessionCallLimit: 7 }, spendCapLine: '$0.50 / $3.00 · 2 / 7 turns' })
+    expect(screen.getByLabelText('Session cost limit (USD)')).toHaveValue(3)
+    expect(screen.getByLabelText('Session call limit')).toHaveValue(7)
+    expect(screen.getByText(/Spend cap: \$0.50/)).toBeInTheDocument()
+  })
+
   it('stays usable while a turn is in flight: Back/Cancel work and Save is deferred, with a note', async () => {
     const user = userEvent.setup()
     const { onSave, onCancel } = renderSettings({ busy: true })

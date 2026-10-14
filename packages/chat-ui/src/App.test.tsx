@@ -101,6 +101,7 @@ vi.mock('@buildaharness/aielia', async () => {
             transcript = transcript.slice(0, transcript.length - dropCount)
             return { undone: true }
           }),
+          getSpendState: vi.fn(async () => ({ cumulativeCostUsd: 0, cumulativeCalls: 0, cumulativeInputTokens: 0, cumulativeOutputTokens: 0 })),
           getMemorySummary: vi.fn(async () => ({
             facts: [],
             reminders: [],

@@ -55,6 +55,8 @@ describe('buildAssistantOptions parity', () => {
           "spendCap",
         ],
         "desktop": [
+          "activeProject",
+          "ambiguityGuardMode",
           "dangerouslySkipPermissions",
           "goalGraphSuggestMode",
           "layerPolicyMode",
@@ -64,8 +66,11 @@ describe('buildAssistantOptions parity', () => {
           "model",
           "oneLoopMode",
           "planMode",
+          "spendCap",
         ],
         "web": [
+          "activeProject",
+          "ambiguityGuardMode",
           "dangerouslySkipPermissions",
           "goalGraphSuggestMode",
           "layerPolicyMode",
@@ -75,6 +80,7 @@ describe('buildAssistantOptions parity', () => {
           "model",
           "oneLoopMode",
           "planMode",
+          "spendCap",
         ],
       }
     `)
@@ -89,10 +95,12 @@ describe('buildAssistantOptions parity', () => {
     expect(build(CLI_FEATURES).spendCap).toEqual({ sessionCostLimitUsd: 2, sessionCallLimit: 5 })
   })
 
-  it('activeProject falls back to the workspace root only on a surface that passes it', () => {
+  it('activeProject falls back to the workspace root when the surface has one, and is left out otherwise', () => {
     expect(build(CLI_FEATURES, { ...config, activeProject: undefined }).activeProject).toBe('/ws')
     expect(build(CLI_FEATURES).activeProject).toBe('proj')
-    expect('activeProject' in build(DESKTOP_FEATURES)).toBe(false)
+    expect(build(DESKTOP_FEATURES, { ...config, activeProject: undefined }).activeProject).toBe('/ws')
+    // A surface with no workspace (the plain browser) has no fallback, so the key is left out.
+    expect('activeProject' in buildAssistantOptions({ ...config, activeProject: undefined }, { llmClient, features: WEB_FEATURES })).toBe(false)
   })
 
   it('passes platform pieces through and drops unset ones', () => {
