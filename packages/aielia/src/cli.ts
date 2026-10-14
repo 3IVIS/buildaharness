@@ -7,16 +7,10 @@ import { homedir } from 'node:os'
 import { join, resolve as resolvePath } from 'node:path'
 import { pathToFileURL } from 'node:url'
 import {
-  LLMClient,
-  AnthropicLLMClient,
-  OpenAICompatibleLLMClient,
   ANTHROPIC_DEFAULT_MODEL,
-  OPENAI_BASE_URL,
   OPENAI_DEFAULT_MODEL,
-  OPENROUTER_BASE_URL,
   OPENROUTER_DEFAULT_MODEL,
   defaultModelForBackend,
-  OPENROUTER_EXTRA_HEADERS,
   FileSystemAdapter,
   FileSystemExperienceStore,
   InMemoryReminderStore,
@@ -26,6 +20,7 @@ import {
 } from '@buildaharness/runtime'
 import type { AskAnswer, AskQuestion, AskResponse } from '@buildaharness/harness'
 import { orderedOptions, draftToAnswer, emptyDraft, type QuestionDraft } from './ask-draft.js'
+import { createLlmClient } from './llm-client-factory.js'
 import { withCostEstimate as sharedWithCostEstimate } from './turn-cost.js'
 import { planUndo } from './undo-plan.js'
 import { PersonalAssistant, type AssistantProgress, type AssistantTrace, type AssistantSource, type AssistantTurnResult } from './assistant.js'
@@ -134,29 +129,16 @@ function buildEmailSender(config: AssistantConfig): SendEmail | undefined {
  * browser tab which can't spawn `claude` at all).
  */
 function buildLlmClient(config: AssistantConfig, workspaceRoot: string, remindersFile: string): ILLMClient {
-  switch (config.llmBackend) {
-    case 'claude-cli':
-      return new ClaudeCliLLMClient({
+  return createLlmClient(config, {
+    claudeCli: () =>
+      new ClaudeCliLLMClient({
         fileTools: { workspaceRoot },
         remindersFile,
         shellTools: config.enableShell ? { workspaceRoot } : undefined,
         webTools: config.enableWeb ? { braveApiKey: config.braveApiKey as string | undefined } : undefined,
         actionTools: config.enableEmail ? { workspaceRoot } : undefined,
-      })
-    case 'anthropic':
-      return new AnthropicLLMClient({ apiKey: config.apiKey ?? '' })
-    case 'openai':
-      return new OpenAICompatibleLLMClient({ apiKey: config.apiKey ?? '', baseUrl: OPENAI_BASE_URL, defaultModel: OPENAI_DEFAULT_MODEL })
-    case 'openrouter':
-      return new OpenAICompatibleLLMClient({
-        apiKey: config.apiKey ?? '',
-        baseUrl: OPENROUTER_BASE_URL,
-        defaultModel: OPENROUTER_DEFAULT_MODEL,
-        extraHeaders: OPENROUTER_EXTRA_HEADERS,
-      })
-    case 'proxy':
-      return new LLMClient({ proxyUrl: config.proxyUrl, authToken: config.authToken })
-  }
+      }),
+  })
 }
 
 /**

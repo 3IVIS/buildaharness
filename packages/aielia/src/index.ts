@@ -23,6 +23,7 @@ export type { TurnIntentClassification, TurnIntentContext, RiskLevel } from './t
 export { emptyDraft, orderedOptions, draftToAnswer, type QuestionDraft } from './ask-draft.js'
 export { withCostEstimate } from './turn-cost.js'
 export { planUndo, type UndoPlan } from './undo-plan.js'
+export { createLlmClient, type LlmClientFactoryOptions } from './llm-client-factory.js'
 export { COMMAND_REGISTRY, commandKey, dispatchKeysFor, type CommandSpec, type CommandSurfaces } from './commands.js'
 export { explainWhy, explainLayers, explainSources, explainSteps, explainPlan, explainCommand, verificationHealthLabel, answerClaimLabel, batchBudgetSummaryLine, EXPLAIN_COMMANDS, type TurnExplainInput, type ExplainCommand } from './run-explain.js'
 export { nodeDisplayName, nodeToLayer, buildWhyChain, LAYER_ORDER, LAYER_DISPLAY_NAME, LAYER_SHORT_CODE } from './node-display-names.js'

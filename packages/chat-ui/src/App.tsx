@@ -8,6 +8,7 @@ import {
   classifyError,
   resolveConfig,
   withCostEstimate as sharedWithCostEstimate,
+  createLlmClient as createSharedLlmClient,
   planUndo,
   formatTranscriptMarkdown,
   defaultExportFilename,
@@ -38,14 +39,6 @@ import {
   isGoalGraphSuggestEnabled,
 } from '@buildaharness/aielia'
 import {
-  LLMClient,
-  AnthropicLLMClient,
-  OpenAICompatibleLLMClient,
-  OPENAI_BASE_URL,
-  OPENAI_DEFAULT_MODEL,
-  OPENROUTER_BASE_URL,
-  OPENROUTER_DEFAULT_MODEL,
-  OPENROUTER_EXTRA_HEADERS,
   defaultModelForBackend,
   FileSystemAdapter,
   FileSystemExperienceStore,
@@ -296,26 +289,10 @@ function createLlmClient(config: AssistantConfig, { isDesktop, workspaceRoot, fe
   // production build, so this is byte-identical to the switch below there.
   const testLlmClient = getAssistantTestHooks()?.makeLlmClient
   if (testLlmClient) return testLlmClient(config)
-  switch (config.llmBackend) {
-    case 'claude-cli':
-      if (isDesktop) return new TauriClaudeCliLLMClient({ fileTools: { workspaceRoot }, shellTools: config.enableShell })
-      console.warn('llmBackend "claude-cli" isn\'t available in a plain browser tab (no way to run `claude -p`) — falling back to "proxy".')
-      return new LLMClient({ proxyUrl: config.proxyUrl, authToken: config.authToken, fetchImpl })
-    case 'anthropic':
-      return new AnthropicLLMClient({ apiKey: config.apiKey ?? '', fetchImpl })
-    case 'openai':
-      return new OpenAICompatibleLLMClient({ apiKey: config.apiKey ?? '', baseUrl: OPENAI_BASE_URL, defaultModel: OPENAI_DEFAULT_MODEL, fetchImpl })
-    case 'openrouter':
-      return new OpenAICompatibleLLMClient({
-        apiKey: config.apiKey ?? '',
-        baseUrl: OPENROUTER_BASE_URL,
-        defaultModel: OPENROUTER_DEFAULT_MODEL,
-        extraHeaders: OPENROUTER_EXTRA_HEADERS,
-        fetchImpl,
-      })
-    case 'proxy':
-      return new LLMClient({ proxyUrl: config.proxyUrl, authToken: config.authToken, fetchImpl })
-  }
+  return createSharedLlmClient(config, {
+    fetchImpl,
+    claudeCli: () => (isDesktop ? new TauriClaudeCliLLMClient({ fileTools: { workspaceRoot }, shellTools: config.enableShell }) : undefined),
+  })
 }
 
 /**
