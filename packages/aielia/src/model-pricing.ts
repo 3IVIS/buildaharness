@@ -18,8 +18,6 @@ const PRICING_BY_TIER = {
   haiku: { inputPerMTok: 1, outputPerMTok: 5 },
 } as const satisfies Record<string, ModelPriceUsd>
 
-type ModelTier = keyof typeof PRICING_BY_TIER
-
 /**
  * OpenAI families, ordered most-specific first — matching is by substring, so "gpt-4.1-mini"
  * must be tested before "gpt-4.1". OpenRouter ids ("openai/gpt-4o") match too.
