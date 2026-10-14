@@ -3,7 +3,7 @@ import { spawn } from 'node:child_process'
 import { join } from 'node:path'
 import type { FsBackend } from '@buildaharness/runtime'
 import { memoryStatusChecks, type DoctorCheck } from './cli-session.js'
-import { redactUrlCredentials } from './cli-config.js'
+export { checkProxyHealth } from './proxy-health.js'
 import type { MemoryStatus } from './memory-service.js'
 
 /**
@@ -15,24 +15,6 @@ import type { MemoryStatus } from './memory-service.js'
  */
 
 const DOCTOR_CHECK_TIMEOUT_MS = 3000
-
-/** GET <proxyUrl>/health, expecting {status:'ok'} (see packages/proxy/src/index.ts) — hard-timed so a dead proxy can't hang /doctor. */
-export async function checkProxyHealth(proxyUrl: string): Promise<DoctorCheck> {
-  const label = `proxy reachable (${redactUrlCredentials(proxyUrl)}/health)`
-  const controller = new AbortController()
-  const timeout = setTimeout(() => controller.abort(), DOCTOR_CHECK_TIMEOUT_MS)
-  try {
-    const res = await fetch(`${proxyUrl}/health`, { signal: controller.signal })
-    if (!res.ok) return { label, ok: false, detail: `HTTP ${res.status}` }
-    const body = (await res.json().catch(() => undefined)) as { status?: string } | undefined
-    return body?.status === 'ok' ? { label, ok: true } : { label, ok: false, detail: 'unexpected response body' }
-  } catch (err) {
-    const timedOut = err instanceof Error && err.name === 'AbortError'
-    return { label, ok: false, detail: timedOut ? 'timed out' : err instanceof Error ? err.message : String(err) }
-  } finally {
-    clearTimeout(timeout)
-  }
-}
 
 /** Spawns `<claudePath> --version`, same path resolution ClaudeCliLLMClient uses — hard-timed so a hung/missing binary can't hang /doctor. */
 export function checkClaudeCli(claudePath: string): Promise<DoctorCheck> {

@@ -126,7 +126,7 @@ describe('App', () => {
     localStorage.clear()
     // Already-configured user: skips the first-launch SetupWizard (covered in its own tests below).
     localStorage.setItem('buildaharness.personal-assistant.config', JSON.stringify({ llmBackend: 'proxy' }))
-    // Opening Settings now runs a health check (checkProxyReachable) that hits a real
+    // Opening Settings now runs a health check (checkProxyHealth) that hits a real
     // network URL — stub fetch so tests never depend on (or wait on) an actual network call.
     vi.stubGlobal('fetch', vi.fn().mockRejectedValue(new Error('no network in tests')))
   })

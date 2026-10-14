@@ -1,5 +1,6 @@
 import type { AssistantConfig } from './config.js'
 import { CONFIG_KEYS } from './config.js'
+import { redactUrlCredentials } from './redact-url.js'
 import { resolveOneLoopMode } from './one-loop-flag.js'
 import { resolveAskMode } from './ask-mode-flag.js'
 import { resolveAmbiguityGuardMode } from './ambiguity-guard-flag.js'
@@ -264,21 +265,6 @@ export function parseConfigValue(key: keyof AssistantConfig, raw: string): unkno
   }
 }
 
-/** A URL with any user:password, and every query-string value, masked, so a credential embedded in proxyUrl is never printed. Text that is not a URL is returned unchanged. */
-export function redactUrlCredentials(text: string): string {
-  let url: URL
-  try {
-    url = new URL(text)
-  } catch {
-    return text
-  }
-  if (!url.username && !url.password && !url.search) return text
-  if (url.username) url.username = '***'
-  if (url.password) url.password = '***'
-  for (const key of [...url.searchParams.keys()]) url.searchParams.set(key, '***')
-  return url.toString().split('%2A%2A%2A').join('***')
-}
-
 function formatConfigValue(key: keyof AssistantConfig, config: AssistantConfig): string {
   const value = config[key]
   if (value === undefined || value === '') return '(not set)'
@@ -299,3 +285,5 @@ export function formatConfigListing(config: AssistantConfig, overriddenKeys: Rea
   })
   return lines.join('\n')
 }
+
+export { redactUrlCredentials }

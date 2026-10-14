@@ -4,7 +4,7 @@ import type { FsBackend } from '@buildaharness/runtime'
 const invokeMock = vi.fn()
 vi.mock('@tauri-apps/api/core', () => ({ invoke: (...args: unknown[]) => invokeMock(...args) }))
 
-const { checkProxyReachable, checkClaudeAvailable, checkWorkspaceConfigured, checkDataDirWritable } = await import('./gui-doctor-checks.js')
+const { checkClaudeAvailable, checkWorkspaceConfigured, checkDataDirWritable } = await import('./gui-doctor-checks.js')
 
 function makeFakeBackend(): FsBackend {
   const files = new Map<string, string>()
@@ -20,28 +20,6 @@ function makeFakeBackend(): FsBackend {
 afterEach(() => {
   vi.restoreAllMocks()
   invokeMock.mockReset()
-})
-
-describe('checkProxyReachable', () => {
-  it('reports ok when the endpoint returns {status: "ok"}', async () => {
-    vi.stubGlobal('fetch', vi.fn().mockResolvedValue(new Response(JSON.stringify({ status: 'ok' }), { status: 200 })))
-    const result = await checkProxyReachable('http://localhost:8787')
-    expect(result).toEqual({ label: 'proxy reachable (http://localhost:8787/health)', ok: true })
-  })
-
-  it('reports not-ok on a non-200 response', async () => {
-    vi.stubGlobal('fetch', vi.fn().mockResolvedValue(new Response(null, { status: 500 })))
-    const result = await checkProxyReachable('http://localhost:8787')
-    expect(result.ok).toBe(false)
-    expect(result.detail).toBe('HTTP 500')
-  })
-
-  it('reports the error message when fetch rejects', async () => {
-    vi.stubGlobal('fetch', vi.fn().mockRejectedValue(new Error('ECONNREFUSED')))
-    const result = await checkProxyReachable('http://localhost:8787')
-    expect(result.ok).toBe(false)
-    expect(result.detail).toBe('ECONNREFUSED')
-  })
 })
 
 describe('checkClaudeAvailable', () => {

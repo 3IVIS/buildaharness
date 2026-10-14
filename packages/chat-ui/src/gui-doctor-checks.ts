@@ -12,26 +12,8 @@ import type { DoctorCheck } from '@buildaharness/aielia'
 
 const DOCTOR_CHECK_TIMEOUT_MS = 3000
 
-/** Browser-only: GET <proxyUrl>/health, expecting {status:'ok'} — same contract as the CLI's checkProxyHealth. */
-export async function checkProxyReachable(proxyUrl: string): Promise<DoctorCheck> {
-  const label = `proxy reachable (${proxyUrl}/health)`
-  const controller = new AbortController()
-  const timeout = setTimeout(() => controller.abort(), DOCTOR_CHECK_TIMEOUT_MS)
-  try {
-    const res = await fetch(`${proxyUrl}/health`, { signal: controller.signal })
-    if (!res.ok) return { label, ok: false, detail: `HTTP ${res.status}` }
-    const body = (await res.json().catch(() => undefined)) as { status?: string } | undefined
-    return body?.status === 'ok' ? { label, ok: true } : { label, ok: false, detail: 'unexpected response body' }
-  } catch (err) {
-    const timedOut = err instanceof Error && err.name === 'AbortError'
-    return { label, ok: false, detail: timedOut ? 'timed out' : err instanceof Error ? err.message : String(err) }
-  } finally {
-    clearTimeout(timeout)
-  }
-}
-
 /**
- * Browser-only, `webBackend: 'proxy'` sidecar to checkProxyReachable: a real `POST
+ * Browser-only, `webBackend: 'proxy'` sidecar to the shared checkProxyHealth (@buildaharness/aielia): a real `POST
  * <proxyUrl>/web/search` call (not just `/health`) so Settings can tell "the proxy is up" apart
  * from "the proxy is up but /web/search 401s / the Brave key is missing / DDG scraping broke" —
  * see the internal plan's W5 section.

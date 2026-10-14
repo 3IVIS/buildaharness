@@ -9,6 +9,7 @@ import {
   resolveConfig,
   withCostEstimate as sharedWithCostEstimate,
   createLlmClient as createSharedLlmClient,
+  checkProxyHealth,
   planUndo,
   formatTranscriptMarkdown,
   defaultExportFilename,
@@ -69,7 +70,7 @@ import { envOverridesFromImportMetaEnv, llmBackendFromEnvValue } from './browser
 import { applyBrowserLayerSettings } from './layer-env'
 import { getAssistantTestHooks } from './assistant-test-hooks'
 import { DEMO_USER_MESSAGE, DEMO_APPROVAL_REASON, DEMO_NOTE } from './demo-seed'
-import { checkProxyReachable, checkWebSearchReachable, checkClaudeAvailable, checkWorkspaceConfigured, checkDataDirWritable } from './gui-doctor-checks'
+import { checkWebSearchReachable, checkClaudeAvailable, checkWorkspaceConfigured, checkDataDirWritable } from './gui-doctor-checks'
 import type { ChatEntry } from './types'
 
 /**
@@ -551,7 +552,7 @@ export function App(): React.JSX.Element {
     // M6: the same pure memory checks the CLI's /doctor shows (store vs budget, pending, last consolidation, audit log).
     const memoryChecks = assistantRef.current ? memoryStatusChecks(await assistantRef.current.getMemoryStatus(sessionIdRef.current)) : []
     if (!isTauri()) {
-      const checks = [await checkProxyReachable(config.proxyUrl)]
+      const checks = [await checkProxyHealth(config.proxyUrl)]
       if (config.enableWeb && config.webBackend === 'proxy') checks.push(await checkWebSearchReachable(config.proxyUrl, config.authToken))
       return [...checks, ...memoryChecks]
     }
