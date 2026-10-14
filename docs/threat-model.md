@@ -254,7 +254,7 @@ real when deciding how to deploy.
   limit of its own (the quota middleware covers `/web/*`), tokens from `/auth/token` all
   carry the same subject, and rate-limit state is in memory per process or isolate. Anyone
   holding the proxy secret or a valid token can spend the configured provider keys.
-- **`ASSISTANT_DANGEROUSLY_SKIP_PERMISSIONS=1` disables approval prompts** for staged
+- **`ASSISTANT_DANGEROUSLY_SKIP_PERMISSIONS=1` (or `true`) disables approval prompts** for staged
   actions by design. Do not set it outside a throwaway environment.
 
 ## Verification

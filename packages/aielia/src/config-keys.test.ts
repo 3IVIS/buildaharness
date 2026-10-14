@@ -63,11 +63,27 @@ describe('the CLI and the Vite builder read shared keys the same way', () => {
     }
   })
 
-  it('treats a boolean the same on both surfaces, each with its own literal (decision D6)', () => {
-    expect(envOverridesFrom({ ASSISTANT_ENABLE_WEB: '1' }, 'cli')).toEqual({ enableWeb: true })
-    expect(envOverridesFrom({ ASSISTANT_ENABLE_WEB: 'true' }, 'cli')).toEqual({ enableWeb: false })
-    expect(envOverridesFrom({ VITE_ASSISTANT_ENABLE_WEB: 'true' }, 'vite')).toEqual({ enableWeb: true })
-    expect(envOverridesFrom({ VITE_ASSISTANT_ENABLE_WEB: '1' }, 'vite')).toEqual({ enableWeb: false })
+  it('reads a boolean the same on both surfaces: 1/true on, 0/false off (decision D6)', () => {
+    for (const [cli, vite] of [['ASSISTANT_ENABLE_WEB', 'VITE_ASSISTANT_ENABLE_WEB']]) {
+      for (const on of ['1', 'true']) {
+        expect(envOverridesFrom({ [cli]: on }, 'cli')).toEqual({ enableWeb: true })
+        expect(envOverridesFrom({ [vite]: on }, 'vite')).toEqual({ enableWeb: true })
+      }
+      for (const off of ['0', 'false']) {
+        expect(envOverridesFrom({ [cli]: off }, 'cli')).toEqual({ enableWeb: false })
+        expect(envOverridesFrom({ [vite]: off }, 'vite')).toEqual({ enableWeb: false })
+      }
+    }
+  })
+
+  it('treats any other boolean value as off, with a warning naming the variable, for every boolean key', () => {
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => undefined)
+    for (const name of ['ASSISTANT_ENABLE_WEB', 'ASSISTANT_ENABLE_SHELL', 'ASSISTANT_ENABLE_EMAIL', 'ASSISTANT_DANGEROUSLY_SKIP_PERMISSIONS']) {
+      warn.mockClear()
+      const out = envOverridesFrom({ [name]: 'yes' }, 'cli')
+      expect(Object.values(out)).toEqual([false])
+      expect(String(warn.mock.calls[0]?.[0])).toContain(name)
+    }
   })
 
   it('accepts every documented choice and falls back to a documented choice for a typo, for each enum key', () => {

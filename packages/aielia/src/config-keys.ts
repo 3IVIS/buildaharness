@@ -56,8 +56,17 @@ export function parseShellNetworkAllowlist(raw: string): string[] {
 
 const str = (raw: string): string => raw
 const num = (raw: string): number => Number(raw)
-/** The CLI's boolean env vars are exactly "1"; the build-time ones are exactly "true". Kept per surface: see decision D6 in the surface unification plan. */
-const bool = (raw: string, _envName: string, surface: EnvSurface): boolean => raw === (surface === 'cli' ? '1' : 'true')
+/**
+ * Boolean variables, the same on both surfaces (decision D6): "1" or "true" is on, "0" or "false" is off, and anything
+ * else (yes, True, a typo) is off with a warning. Fail-closed on purpose: a value that is not clearly "on" must never
+ * switch on shell, email or the approval bypass.
+ */
+export function parseEnvBoolean(raw: string, envName: string): boolean {
+  if (raw === '1' || raw === 'true') return true
+  if (raw !== '0' && raw !== 'false') console.warn(`${envName}="${raw}" is not one of 1/true/0/false; treating it as off.`)
+  return false
+}
+const bool = (raw: string, envName: string): boolean => parseEnvBoolean(raw, envName)
 
 export const ENV_KEYS: readonly EnvKeySpec[] = [
   { key: 'llmBackend', cli: 'ASSISTANT_LLM_BACKEND', vite: 'ASSISTANT_LLM_BACKEND', viteDisplayOnly: true, fromEnv: normalizeLlmBackend },
