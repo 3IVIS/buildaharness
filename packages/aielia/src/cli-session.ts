@@ -393,7 +393,7 @@ function formatUsageLine(usage: TokenUsage): string {
   return usage.costUsd !== undefined ? `${tokens}  (~$${usage.costUsd.toFixed(4)})` : tokens
 }
 
-/** Renders /cost's output. The backend-specific footnote matters: claude-cli's cost is real (but may read $0 on a Pro/Max subscription, not API billing); every other backend's cost, when shown, is a static-table estimate (see cli.ts's withCostEstimate), never real billing data — see model-pricing.ts. */
+/** Renders /cost's output. The backend-specific footnote matters: claude-cli's cost is real (but may read $0 on a Pro/Max subscription, not API billing) and openrouter's is as reported by OpenRouter; every other backend's cost, when shown, is a static-table estimate (see cli.ts's withCostEstimate), never real billing data — see model-pricing.ts. */
 export function formatCostSummary(info: CostSummaryInfo): string {
   if (!info.lastTurn && info.session.inputTokens === 0 && info.session.outputTokens === 0 && !info.spendCapLine) {
     return 'No usage yet this session.'
@@ -403,6 +403,8 @@ export function formatCostSummary(info: CostSummaryInfo): string {
   lines.push(`This session: ${formatUsageLine(info.session)}`)
   if (info.backend === 'claude-cli') {
     lines.push('(cost is real usage from your Claude Code session — may read $0 on a Pro/Max subscription rather than API billing)')
+  } else if (info.backend === 'openrouter' && info.session.costUsd !== undefined) {
+    lines.push("(cost is as reported by OpenRouter; any call that didn't report one is estimated from a static pricing table)")
   } else if (info.session.costUsd !== undefined) {
     lines.push('(cost is an approximate estimate from a static pricing table, not real billing data)')
   }

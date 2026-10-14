@@ -518,7 +518,7 @@ export async function runCli(options: RunCliOptions = {}): Promise<CliInstance> 
     { key: 'n', label: 'No' },
   ]
 
-  /** claude-cli is the only backend that returns a real dollar cost (--output-format json's total_cost_usd) — every other backend (proxy, and now anthropic/openai/openrouter, none of which surface billing via TokenUsage.costUsd) gets an approximate estimate instead, see model-pricing.ts. */
+  /** claude-cli (total_cost_usd) and openrouter (usage.cost) report a real dollar cost, which is kept as-is; every other case (proxy, anthropic, openai — token counts only) gets an approximate estimate instead, see model-pricing.ts. */
   function withCostEstimate(usage: TokenUsage): TokenUsage {
     if (config.llmBackend === 'claude-cli' || usage.costUsd !== undefined) return usage
     const estimated = estimateCostUsd(config.model ?? ANTHROPIC_DEFAULT_MODEL, usage)
