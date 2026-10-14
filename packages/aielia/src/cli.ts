@@ -295,6 +295,8 @@ export interface RunCliOptions {
 export interface CliInstance {
   /** Parses and dispatches one line of input exactly as the REPL's 'line' handler does (same dispatchQueue serialization) — the seam cli.test.ts drives command dispatch through without a live TTY. */
   dispatchLine(line: string): Promise<void>
+  /** Keys of the slash-command dispatch table; the parity test compares them with COMMAND_REGISTRY. */
+  commandNames: string[]
   close(): void
   /**
    * Additive, read-only accessor for the pinned-input TUI shell's status line
@@ -2007,6 +2009,7 @@ export async function runCli(options: RunCliOptions = {}): Promise<CliInstance> 
   rl.resume()
 
   return {
+    commandNames: Object.keys(commands),
     dispatchLine: async (line: string) => {
       const message = line.trim()
       if (!message) return
