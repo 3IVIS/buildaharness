@@ -33,7 +33,7 @@ export interface TauriClaudeCliLLMClientOptions {
   /**
    * When set (fileTools must also be set — the MCP server only starts at all when fileTools
    * is), passes `enable_shell_tools: true` to `run_claude_prompt_with_file_tools` so the MCP
-   * server also registers run_shell_command — mirrors ClaudeCliLLMClient's own `shellTools`
+   * server also registers run_shell_command — the platform counterpart of ClaudeCliLLMClient's own `shellTools`
    * option gating the same env var on its MCP subprocess. Absent by default.
    */
   shellTools?: boolean

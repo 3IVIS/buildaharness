@@ -125,12 +125,11 @@ function buildEmailSender(config: AssistantConfig): SendEmail | undefined {
 }
 
 /**
- * Picks the ILLMClient for config.llmBackend — one branch per backend, shared in shape with
- * chat-ui's App.tsx createLlmClient() (both switch over the same 5 values), but this one stays
- * CLI-only: claude-cli here is a real node:child_process subprocess (ClaudeCliLLMClient), not
- * the Tauri-bridged equivalent chat-ui's desktop build uses, and it's the only backend always
- * available on this surface (no "unsupported on this platform" branch needed, unlike a plain
- * browser tab which can't spawn `claude` at all).
+ * Picks the ILLMClient for config.llmBackend. The switch over the five backends is the shared
+ * createLlmClient (llm-client-factory.ts); only claude-cli is supplied here, because on this
+ * surface it is a real node:child_process subprocess (ClaudeCliLLMClient), not the Tauri-bridged
+ * client chat-ui's desktop build supplies, and it is always available (a plain browser tab, which
+ * cannot spawn `claude`, returns undefined and gets the proxy fallback).
  */
 function buildLlmClient(config: AssistantConfig, workspaceRoot: string, remindersFile: string): ILLMClient {
   return createLlmClient(config, {
@@ -1143,7 +1142,7 @@ export async function runCli(options: RunCliOptions = {}): Promise<CliInstance> 
     const questions = result.questions ?? []
     const pendingClarificationId = result.pendingClarificationId
     if (questions.length === 0 || !pendingClarificationId) {
-      // Mirrors shouldRenderAskQuestionCard's guard in chat-ui — shouldn't happen in practice
+      // The same guard presentTurnResult applies for every surface — shouldn't happen in practice
       // (AskClarificationService always sets both together), but fails safe to the plain-text
       // escalation copy rather than entering a loop with nothing to ask.
       lastTrace = undefined
@@ -1384,9 +1383,8 @@ export async function runCli(options: RunCliOptions = {}): Promise<CliInstance> 
         return
       }
 
-      // P2's whole-plan approval gate — the CLI surface for it, mirroring chat-ui's
-      // PlanApprovalCard + its approve/approve-with-edits/approve-trusted/decline handlers, all
-      // resolving through the same PlanApprovalService. Before this branch existed the CLI fell
+      // P2's whole-plan approval gate — the CLI surface for it; chat-ui's PlanApprovalCard offers the same
+      // approve/approve-with-edits/approve-trusted/decline choices, and both resolve through the same PlanApprovalService. Before this branch existed the CLI fell
       // through to the ordinary render below, so a staged plan (whose result carries reply: null)
       // printed as a bare "- null" and could not be approved, edited, or declined at all.
       if (result.status === 'needs_plan_approval') {

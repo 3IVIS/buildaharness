@@ -514,8 +514,8 @@ export function App(): React.JSX.Element {
       document.removeEventListener('mousedown', onPointerDown)
     }
   }, [headerMenuOpen])
-  // R1 (mid-task steering) — one channel per session, mirroring cli.ts's own module-scoped
-  // steeringChannel. A ref, not state: enqueue()/poll() mutate it directly and nothing here needs
+  // R1 (mid-task steering) — one channel per session (the CLI keeps its own in cli.ts: each surface owns its
+  // channel, the logic that drains it is in assistant.turn()). A ref, not state: enqueue()/poll() mutate it directly and nothing here needs
   // a re-render when its contents change (submitMessage already re-renders via setEntries).
   const steeringChannelRef = useRef(new LiveSteeringChannel())
 
@@ -711,7 +711,7 @@ export function App(): React.JSX.Element {
 
   /**
    * GUI equivalent of /undo — peeks the transcript before calling undoLastTurn to know which
-   * UI entries correspond to what just got removed (mirrors cli.ts's handleUndo): a completed
+   * UI entries correspond to what just got removed (planUndo, shared with the CLI's /undo, decides whether anything is there to remove): a completed
    * turn's last 'assistant' entry and the 'user' entry immediately before it, or — if the turn
    * was still awaiting approval — just the last 'approval' entry (no reply was ever appended).
    */
@@ -880,8 +880,8 @@ export function App(): React.JSX.Element {
           toolSteps.push(step)
           setLiveToolSteps((prev) => [...prev, step])
         },
-        // Phase 4 — mirrors cli.ts exactly (per this plan's standing "chat-ui must follow the
-        // same logic/wiring as the CLI" principle): passed unconditionally, since with
+        // Phase 4 — passed unconditionally, as the CLI does (platform plumbing: the channel is this
+        // surface's own, the absorption logic is in assistant.turn()), since with
         // goalGraphModeEnabled false the composer stays disabled while busy (see the JSX below)
         // so nothing ever reaches steeringChannelRef in the first place (INV-43).
         steeringChannel: steeringChannelRef.current,

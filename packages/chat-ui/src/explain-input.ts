@@ -2,9 +2,9 @@ import { approvalLabels, NO_TRACE, type AssistantTurnResult, type GoalGraphState
 import type { ChatEntry } from './types'
 
 /**
- * What /why, /layers, /sources, /steps and /plan explain: the most recent turn on screen. Mirrors the
- * CLI, which remembers the last turn's trace and, when a turn ended before the harness ran (staged,
- * declined, escalated, clarification), a specific reason there is no trace.
+ * What /why, /layers, /sources, /steps and /plan explain: the most recent turn on screen, in the shape the shared
+ * explainers (run-explain.ts) take. When a turn ended before the harness ran (staged, declined, escalated,
+ * clarification), the reason there is no trace comes from NO_TRACE (turn-presentation.ts), the same words the CLI uses.
  */
 export function explainInputFromEntries(
   entries: readonly ChatEntry[],

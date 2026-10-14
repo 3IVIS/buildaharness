@@ -1,4 +1,7 @@
 import { describe, it, expect } from 'vitest'
+import { InMemoryAdapter, type FsBackend } from '@buildaharness/runtime'
+import { PersonalAssistant } from './assistant.js'
+import { createScriptedLLMClient } from './scripted-llm-client.js'
 import type { AssistantTurnResult } from './assistant-types.js'
 import { presentTurnResult, approvalLabels, NO_TRACE, DEFAULT_APPROVAL_REASON, DEFAULT_ESCALATION_REASON, DEFAULT_CLARIFICATION_REASON, MISSING_PLAN_APPROVAL_ID_REASON } from './turn-presentation.js'
 import { FAST_PATH_REASON, explainPlan, NO_PLAN_TEXT, NO_DRAFTED_PLAN_BUT_GOAL_TASKS_TEXT } from './run-explain.js'
@@ -107,5 +110,41 @@ describe('explainPlan: goal-task fallback (drift row 12)', () => {
     expect(explainPlan({ goalGraph: graph([thread(0)]) })).toEqual([NO_PLAN_TEXT])
     expect(explainPlan({ goalGraph: graph([]) })).toEqual([NO_PLAN_TEXT])
     expect(explainPlan({})).toEqual([NO_PLAN_TEXT])
+  })
+})
+
+// Moved from chat-ui's ask-question-render.test.ts when the card guard became presentTurnResult's clarification case.
+// A REAL result: an unmocked PersonalAssistant halting on its step budget with ask mode on. The presentation is chosen
+// from `{ status, questions, pendingClarificationId }` alone, so this proves the assistant's real output is renderable
+// (the cases above use hand-built results).
+describe('presentTurnResult on a genuine assistant result', () => {
+  it('presents a real needs_clarification as a clarification whose question has options a card can show', async () => {
+    const files = new Map([['/ws/note.txt', 'hello']])
+    const backend: FsBackend = {
+      async readTextFile(p) { return files.get(p) },
+      async writeTextFile(p, c) { files.set(p, c) },
+      async removeFile(p) { files.delete(p) },
+      async mkdir() {},
+      async readDir() { return ['note.txt'] },
+    }
+    const readNote = { content: '', toolCalls: [{ id: 't1', name: 'read_file', input: { path: 'note.txt' } }] }
+    const assistant = new PersonalAssistant({
+      llmClient: createScriptedLLMClient({ responses: [readNote, readNote, readNote, readNote, readNote, readNote, 'done'], streamChunks: ['done'] }),
+      fileTools: { backend, workspaceRoot: '/ws' },
+      checkpointStore: new InMemoryAdapter({ scope: 'thread', namespace: 'ui-real-ask' }),
+      oneLoopMode: 'enabled',
+      goalGraphSuggestMode: 'disabled',
+      askMode: 'enabled',
+      maxSteps: 2,
+    })
+    const result = await assistant.turn('Keep re-reading note.txt until you are certain of every word', { sessionId: 'ui' })
+    expect(result.status).toBe('needs_clarification')
+    const shown = presentTurnResult(result)
+    expect(shown.kind).toBe('clarification')
+    if (shown.kind !== 'clarification') return
+    const q = shown.questions[0]
+    expect(q.question.length).toBeGreaterThan(0)
+    expect(q.options!.length).toBeGreaterThanOrEqual(2)
+    expect(q.options!.every((o) => o.label.length > 0)).toBe(true)
   })
 })
