@@ -101,30 +101,54 @@ struct ToolCallOutcome {
   staged_action: Option<String>,
 }
 
-/// Scans `<workspace_root>/.pending-actions/` for a record staged during this call — mirrors
+/// Scans `<workspace_root>/.pending-actions/` for the record staged during this call — mirrors
 /// claude-cli-llm-client.ts's findPendingActionStagedSince, done here in Rust instead of a
 /// second Tauri fs-plugin round-trip since this directory has nothing to do with the
 /// webview's own fs permissions (it's read by this Rust process directly, off the main
 /// thread, the same way the `claude`/MCP-server subprocess tree wrote it).
+///
+/// When the MCP server staged more than one action this call ("run X AND write Y"), every
+/// record lands here in `read_dir`-arbitrary order. Returns the chain head — the record with the
+/// earliest `stagedAt` — because the resolver walks `nextPendingActionId` forward from whichever
+/// record it is handed; returning a later link would orphan the earlier, still-unresolved action.
+/// An entry that cannot be read or parsed (deleted or half-written mid-scan) is skipped, never
+/// ending the scan and losing its siblings.
 fn find_staged_action(workspace_root: &Path, since: SystemTime) -> Option<String> {
   let dir = workspace_root.join(".pending-actions");
   let entries = std::fs::read_dir(dir).ok()?;
+  let mut earliest: Option<(serde_json::Value, String)> = None;
   for entry in entries.flatten() {
     let path = entry.path();
     if path.extension().and_then(|e| e.to_str()) != Some("json") {
       continue;
     }
-    let modified = entry.metadata().ok()?.modified().ok()?;
+    let Some(modified) = entry.metadata().ok().and_then(|m| m.modified().ok()) else { continue };
     // Small buffer against filesystem mtime rounding being coarser than SystemTime's
     // precision — mirrors claude-cli-llm-client.ts's 1s buffer for the same reason.
     if modified + std::time::Duration::from_secs(1) < since {
       continue;
     }
-    if let Ok(contents) = std::fs::read_to_string(&path) {
-      return Some(contents);
+    let Ok(contents) = std::fs::read_to_string(&path) else { continue };
+    let Ok(record) = serde_json::from_str::<serde_json::Value>(&contents) else { continue };
+    let staged_at = record.get("stagedAt").cloned().unwrap_or(serde_json::Value::Null);
+    let is_earlier = match &earliest {
+      None => true,
+      Some((best, _)) => staged_before(&staged_at, best.get("stagedAt").unwrap_or(&serde_json::Value::Null)),
+    };
+    if is_earlier {
+      earliest = Some((record, contents));
     }
   }
-  None
+  earliest.map(|(_, contents)| contents)
+}
+
+/// `a < b` for a record's `stagedAt` (an ISO-8601 string, or a number): the same ordering the TypeScript `<` gives.
+fn staged_before(a: &serde_json::Value, b: &serde_json::Value) -> bool {
+  match (a, b) {
+    (serde_json::Value::String(x), serde_json::Value::String(y)) => x < y,
+    (serde_json::Value::Number(x), serde_json::Value::Number(y)) => x.as_f64().unwrap_or(f64::MAX) < y.as_f64().unwrap_or(f64::MAX),
+    _ => false,
+  }
 }
 
 /// Strips an MCP-qualified tool name (`mcp__<server>__<tool>`, how Claude Code CLI surfaces
@@ -1059,4 +1083,64 @@ pub fn run() {
     })
     .run(tauri::generate_context!())
     .expect("error while running tauri application");
+}
+
+#[cfg(test)]
+mod staged_action_tests {
+  use super::find_staged_action;
+  use std::fs;
+  use std::time::{Duration, SystemTime};
+
+  fn scratch(name: &str) -> std::path::PathBuf {
+    let dir = std::env::temp_dir().join(format!("staged-{name}-{}", std::process::id()));
+    fs::remove_dir_all(&dir).ok();
+    fs::create_dir_all(dir.join(".pending-actions")).unwrap();
+    dir
+  }
+
+  fn long_ago() -> SystemTime {
+    SystemTime::now() - Duration::from_secs(60)
+  }
+
+  fn id_of(record: &str) -> String {
+    serde_json::from_str::<serde_json::Value>(record).unwrap()["id"].as_str().unwrap().to_string()
+  }
+
+  #[test]
+  fn returns_the_chain_head_not_whichever_file_read_dir_lists_first() {
+    let dir = scratch("head");
+    // Written later-staged first and named so that any listing order puts the later record somewhere in the scan.
+    for (name, id, staged_at) in [("a.json", "late", "2026-01-01T00:00:02.000Z"), ("b.json", "head", "2026-01-01T00:00:01.000Z"), ("c.json", "mid", "2026-01-01T00:00:01.500Z")] {
+      fs::write(dir.join(".pending-actions").join(name), format!(r#"{{"id":"{id}","stagedAt":"{staged_at}","kind":"shell","command":"x"}}"#)).unwrap();
+    }
+    assert_eq!(id_of(&find_staged_action(&dir, long_ago()).unwrap()), "head");
+    fs::remove_dir_all(&dir).ok();
+  }
+
+  #[test]
+  fn skips_an_unparseable_record_instead_of_ending_the_scan() {
+    let dir = scratch("bad");
+    fs::write(dir.join(".pending-actions/a.json"), "{ half written").unwrap();
+    fs::write(dir.join(".pending-actions/b.json"), r#"{"id":"ok","stagedAt":"2026-01-01T00:00:01.000Z"}"#).unwrap();
+    assert_eq!(id_of(&find_staged_action(&dir, long_ago()).unwrap()), "ok");
+    fs::remove_dir_all(&dir).ok();
+  }
+
+  #[test]
+  fn ignores_records_older_than_the_call_and_non_json_files() {
+    let dir = scratch("old");
+    fs::write(dir.join(".pending-actions/a.json"), r#"{"id":"old","stagedAt":"2026-01-01T00:00:01.000Z"}"#).unwrap();
+    fs::write(dir.join(".pending-actions/notes.txt"), "x").unwrap();
+    // The call "started" an hour from now, so the file just written predates it.
+    assert!(find_staged_action(&dir, SystemTime::now() + Duration::from_secs(3600)).is_none());
+    fs::remove_dir_all(&dir).ok();
+  }
+
+  #[test]
+  fn none_when_there_is_no_pending_actions_directory() {
+    let dir = std::env::temp_dir().join(format!("staged-none-{}", std::process::id()));
+    fs::create_dir_all(&dir).unwrap();
+    assert!(find_staged_action(&dir, long_ago()).is_none());
+    fs::remove_dir_all(&dir).ok();
+  }
 }
