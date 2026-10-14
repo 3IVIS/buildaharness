@@ -24,7 +24,10 @@ import {
   type TokenUsage,
   type FsBackend,
 } from '@buildaharness/runtime'
-import type { AskAnswer, AskQuestion, AskQuestionOption, AskResponse } from '@buildaharness/harness'
+import type { AskAnswer, AskQuestion, AskResponse } from '@buildaharness/harness'
+import { orderedOptions, draftToAnswer, emptyDraft, type QuestionDraft } from './ask-draft.js'
+import { withCostEstimate as sharedWithCostEstimate } from './turn-cost.js'
+import { planUndo } from './undo-plan.js'
 import { PersonalAssistant, type AssistantProgress, type AssistantTrace, type AssistantSource, type AssistantTurnResult } from './assistant.js'
 import { memoryAuditLogEnabled } from './memory-service.js'
 import { activityLogEnabled, createActivityLogger } from './activity-log.js'
@@ -44,7 +47,6 @@ import { NodeConfigStore } from './node-config-store.js'
 import { applyLayerSettings, formatLayerListing, sanitizeLayerChoices, withLayerChoice, LayerSettingError } from './layer-settings.js'
 import { isConfigKey, findInvalidNumericSettings, envOverridesFromProcessEnv, parseConfigValue, ConfigValueParseError, formatConfigListing, ENV_VAR_FOR_CONFIG_KEY, CONFIG_KEYS } from './cli-config.js'
 import { stripTerminalControls, formatHelp, isQuitCommand, formatStatus, formatTranscriptMarkdown, defaultExportFilename, formatMemorySummary, formatMemoryExport, defaultMemoryExportFilename, formatSearchResults, formatGoalGraphState, formatNextSteps, formatCostSummary, formatDoctorReport, formatUndoLogListing, formatMemoryPendingOutcome, formatMemoryHistory, formatMemoryArchive, formatMemoryStatus } from './cli-session.js'
-import { estimateCostUsd } from './model-pricing.js'
 import { formatSpendCapStatus } from './spend-cap.js'
 import { checkProxyHealth, checkClaudeCli, checkWorkspaceRoot, checkDataDirWritable, checkMemoryHealth } from './doctor-checks.js'
 import { resolveNonInteractiveApprovalMode, type NonInteractiveApprovalMode } from './non-interactive-mode.js'
@@ -522,11 +524,8 @@ export async function runCli(options: RunCliOptions = {}): Promise<CliInstance> 
     { key: 'n', label: 'No' },
   ]
 
-  /** claude-cli (total_cost_usd) and openrouter (usage.cost) report a real dollar cost, which is kept as-is; every other case (proxy, anthropic, openai — token counts only) gets an approximate estimate instead, see model-pricing.ts. */
-  function withCostEstimate(usage: TokenUsage): TokenUsage {
-    if (config.llmBackend === 'claude-cli' || usage.costUsd !== undefined) return usage
-    const estimated = estimateCostUsd(config.model ?? ANTHROPIC_DEFAULT_MODEL, usage)
-    return estimated !== undefined ? { ...usage, costUsd: estimated } : usage
+  function priceUsage(usage: TokenUsage): TokenUsage {
+    return sharedWithCostEstimate(usage, { backend: config.llmBackend, model: config.model })
   }
 
   function printPlan(): void {
@@ -570,7 +569,7 @@ export async function runCli(options: RunCliOptions = {}): Promise<CliInstance> 
     // '##'/'- [ ]' characters, the same gap the underlying report flagged for the legacy
     // (DEFAULT_PLAN_MODE) prose path specifically.
     console.log(stripTerminalControls(`Aielia> ${result.reply ?? '(no reply)'}\n`))
-    if (result.usage) lastTurnUsage = withCostEstimate(result.usage)
+    if (result.usage) lastTurnUsage = priceUsage(result.usage)
   }
 
   /**
@@ -876,12 +875,12 @@ export async function runCli(options: RunCliOptions = {}): Promise<CliInstance> 
    * the reminder went away too.
    */
   async function handleUndo(): Promise<void> {
-    const transcriptBefore = await assistant.getTranscript('cli')
-    if (transcriptBefore.length === 0) {
+    const plan = planUndo(await assistant.getTranscript('cli'))
+    if (plan.nothingToUndo) {
       printSafe('\nNothing to undo.\n')
       return
     }
-    const wasPendingApproval = transcriptBefore[transcriptBefore.length - 1].role !== 'assistant'
+    const { wasPendingApproval } = plan
     const undoneReminders = lastTurnToolSteps.filter((s) => s.tool === 'create_reminder')
 
     const result = await assistant.undoLastTurn('cli')
@@ -1150,40 +1149,8 @@ export async function runCli(options: RunCliOptions = {}): Promise<CliInstance> 
     lastTurnToolSteps.push(step)
   }
 
-  /** One question's in-progress answer — the CLI's text-mode counterpart of AskQuestionCard.tsx's QuestionDraft (chat-ui's Q5 rendering). No `showEdit` flag: a note is only ever entered via the explicit `e<n>` command below, so its presence in `editText` already says whether one exists. */
-  interface ClarificationDraft {
-    selectedLabels: string[]
-    editText: string
-    freeText: string
-  }
-  function emptyClarificationDraft(): ClarificationDraft {
-    return { selectedLabels: [], editText: '', freeText: '' }
-  }
-
-  /** Recommended option(s) first, stable otherwise — mirrors AskQuestionCard.tsx's orderedOptions exactly, so the same question renders its options in the same order on both surfaces. */
-  function orderedAskOptions(question: AskQuestion): AskQuestionOption[] {
-    const options = question.options ?? []
-    return options
-      .map((option, index) => ({ option, index }))
-      .sort((a, b) => Number(b.option.recommended ?? false) - Number(a.option.recommended ?? false) || a.index - b.index)
-      .map(({ option }) => option)
-  }
-
-  /** Collapses one question's draft into the wire AskAnswer shape, or null while still unanswered (INV-28) — mirrors AskQuestionCard.tsx's draftToAnswer. */
-  function clarificationDraftToAnswer(questionId: string, draft: ClarificationDraft): AskAnswer | null {
-    if (draft.selectedLabels.length > 0) {
-      return draft.editText.trim()
-        ? { questionId, kind: 'selected_with_edit', selectedLabels: draft.selectedLabels, editText: draft.editText.trim() }
-        : { questionId, kind: 'selected', selectedLabels: draft.selectedLabels }
-    }
-    if (draft.freeText.trim()) {
-      return { questionId, kind: 'free_text', freeText: draft.freeText.trim() }
-    }
-    return null
-  }
-
-  function printClarificationQuestion(question: AskQuestion, draft: ClarificationDraft, index: number, total: number): void {
-    const options = orderedAskOptions(question)
+  function printClarificationQuestion(question: AskQuestion, draft: QuestionDraft, index: number, total: number): void {
+    const options = orderedOptions(question)
     const allowFreeText = question.allowFreeText !== false
     printSafe('')
     if (question.header) console.log(stripTerminalControls(`[${question.header}]`))
@@ -1244,7 +1211,7 @@ export async function runCli(options: RunCliOptions = {}): Promise<CliInstance> 
     }
 
     printSafe(`\n[needs clarification] ${questions.length} question${questions.length === 1 ? '' : 's'} to answer.`)
-    const drafts = new Map<string, ClarificationDraft>(questions.map((q) => [q.id, emptyClarificationDraft()]))
+    const drafts = new Map<string, QuestionDraft>(questions.map((q) => [q.id, emptyDraft()]))
     let index = 0
 
     while (true) {
@@ -1262,7 +1229,7 @@ export async function runCli(options: RunCliOptions = {}): Promise<CliInstance> 
       }
 
       if (lower === 's' || lower === 'submit') {
-        const answers = questions.map((q) => clarificationDraftToAnswer(q.id, drafts.get(q.id)!))
+        const answers = questions.map((q) => draftToAnswer(q.id, drafts.get(q.id)!))
         const missing = questions.filter((q, i) => answers[i] === null)
         if (missing.length > 0) {
           printSafe(`\nStill need an answer for: ${missing.map((q) => q.question).join('; ')}\n`)
@@ -1295,7 +1262,7 @@ export async function runCli(options: RunCliOptions = {}): Promise<CliInstance> 
       }
       const editMatch = /^e(\d+)$/i.exec(token)
       if (editMatch) {
-        const options = orderedAskOptions(question)
+        const options = orderedOptions(question)
         const option = options[Number(editMatch[1]) - 1]
         if (!option) {
           printSafe(`\nNo option ${editMatch[1]}.\n`)
@@ -1311,7 +1278,7 @@ export async function runCli(options: RunCliOptions = {}): Promise<CliInstance> 
       }
       const toggleMatch = /^t(\d+)$/i.exec(token) ?? /^(\d+)$/.exec(token)
       if (toggleMatch) {
-        const options = orderedAskOptions(question)
+        const options = orderedOptions(question)
         const option = options[Number(toggleMatch[1]) - 1]
         if (!option) {
           printSafe(`\nNo option ${toggleMatch[1]}.\n`)
@@ -1576,7 +1543,7 @@ export async function runCli(options: RunCliOptions = {}): Promise<CliInstance> 
       // harness-skipped turn with no planStatus (trivial fast path, plan sketch) still leaves the
       // last known plan untouched, and a non-skipped turn reporting none still clears it.
       if (!pendingActionId && (!result.harnessSkipped || result.planStatus)) lastPlanStatus = result.planStatus
-      lastTurnUsage = result.usage ? withCostEstimate(result.usage) : undefined
+      lastTurnUsage = result.usage ? priceUsage(result.usage) : undefined
       const riskSuffix = result.riskLevel && result.riskLevel !== 'LOW' ? ` [risk: ${result.riskLevel}]` : ''
       const sourcesHint = result.sources && result.sources.length > 0 ? ` (${result.sources.length} source${result.sources.length > 1 ? 's' : ''} — /sources)` : ''
       const planHint = result.planStatus ? ` (plan: ${result.planStatus.completionPct.toFixed(0)}% — /plan)` : ''

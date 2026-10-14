@@ -8,7 +8,6 @@ import {
   type LayerActivityEvent,
   type ExternalContradictionInput,
 } from '@buildaharness/harness'
-import { ANTHROPIC_DEFAULT_MODEL } from '@buildaharness/runtime'
 import type { MemoryAdapter, ChatMessage, TokenUsage, FsBackend, MemoryResult } from '@buildaharness/runtime'
 import { compactTranscript, compactTranscriptSemantic, messagesAboutToBeCompacted } from './transcript-compaction.js'
 import {
@@ -25,12 +24,10 @@ import {
 import type { ShellToolsContext } from './shell-tools.js'
 import type { ActionToolsContext } from './action-tools.js'
 import { mergeStandingConstraints } from './constraint-check.js'
-import { estimateCostUsd } from './model-pricing.js'
+import { withCostEstimate } from './turn-cost.js'
 import { checkSpendCap, EMPTY_SPEND_STATE, type SpendCapConfig, type SpendState } from './spend-cap.js'
 import { AUDIT_NUDGE_PREFIX } from './reply-audit.js'
 
-/** Same fallback model cli.ts's withCostEstimate uses when config.model is unset — both now import @buildaharness/runtime's ANTHROPIC_DEFAULT_MODEL rather than hand-syncing a literal. Only used to estimate cost for the spend cap when a turn's usage carries no real costUsd. */
-const DEFAULT_MODEL_FOR_COST_ESTIMATE = ANTHROPIC_DEFAULT_MODEL
 
 /**
  * P1 of the internal plan — session/turn-routing switch, distinct from a
@@ -279,7 +276,7 @@ export class AssistantSession {
 
   /**
    * Called once per successfully completed ('ok') turn — counts turns, not raw internal LLM
-   * calls (see SpendCapConfig's doc comment for why). Estimates cost the same way cli.ts's
+   * calls (see SpendCapConfig's doc comment for why). Estimates cost the same way turn-cost.ts's
    * withCostEstimate does for a backend that doesn't report a real costUsd, so the cap enforces
    * against the same number /cost displays, not a second cost model.
    *
@@ -302,7 +299,7 @@ export class AssistantSession {
 
   private async recordSpendNow(sessionId: string, usage: TokenUsage | undefined): Promise<void> {
     const state = await this.getSpendState(sessionId)
-    const costUsd = usage?.costUsd ?? (usage ? estimateCostUsd(this.model() ?? DEFAULT_MODEL_FOR_COST_ESTIMATE, usage) : undefined) ?? 0
+    const costUsd = (usage ? withCostEstimate(usage, { model: this.model() }).costUsd : undefined) ?? 0
     await this.memory.set(`spend:${sessionId}`, {
       cumulativeCostUsd: state.cumulativeCostUsd + costUsd,
       cumulativeCalls: state.cumulativeCalls + 1,

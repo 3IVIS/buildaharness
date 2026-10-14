@@ -7,7 +7,8 @@ import {
   nodeDisplayName,
   classifyError,
   resolveConfig,
-  estimateCostUsd,
+  withCostEstimate as sharedWithCostEstimate,
+  planUndo,
   formatTranscriptMarkdown,
   defaultExportFilename,
   braveSearch,
@@ -40,7 +41,6 @@ import {
   LLMClient,
   AnthropicLLMClient,
   OpenAICompatibleLLMClient,
-  ANTHROPIC_DEFAULT_MODEL,
   OPENAI_BASE_URL,
   OPENAI_DEFAULT_MODEL,
   OPENROUTER_BASE_URL,
@@ -78,9 +78,6 @@ import { getAssistantTestHooks } from './assistant-test-hooks'
 import { DEMO_USER_MESSAGE, DEMO_APPROVAL_REASON, DEMO_NOTE } from './demo-seed'
 import { checkProxyReachable, checkWebSearchReachable, checkClaudeAvailable, checkWorkspaceConfigured, checkDataDirWritable } from './gui-doctor-checks'
 import type { ChatEntry } from './types'
-
-/** Same fixed default the proxy backend's LLMClient itself falls back to (see @buildaharness/runtime's model-defaults.ts) — used only to pick a pricing tier when no model is explicitly configured. */
-const DEFAULT_PROXY_MODEL = ANTHROPIC_DEFAULT_MODEL
 
 /**
  * Full conversation content (user messages, assistant replies, real tool calls with their
@@ -568,10 +565,8 @@ export function App(): React.JSX.Element {
    * static-table estimate the CLI's /cost uses instead. Used to be gated on isTauri() alone,
    * back when desktop could only ever be running claude-cli; that's no longer true.
    */
-  function withCostEstimate(usage: TokenUsage): TokenUsage {
-    if (config.llmBackend === 'claude-cli' || usage.costUsd !== undefined) return usage
-    const estimated = estimateCostUsd(config.model ?? defaultModelForBackend(config.llmBackend) ?? DEFAULT_PROXY_MODEL, usage)
-    return estimated !== undefined ? { ...usage, costUsd: estimated } : usage
+  function priceUsage(usage: TokenUsage): TokenUsage {
+    return sharedWithCostEstimate(usage, { backend: config.llmBackend, model: config.model })
   }
 
   /** Runs the platform-appropriate health checks — proxy reachability in a plain browser, claude/workspace/data-dir on desktop (see gui-doctor-checks.ts). */
@@ -755,8 +750,9 @@ export function App(): React.JSX.Element {
     const assistant = assistantRef.current
     if (!assistant) return
     const transcriptBefore = await assistant.getTranscript(sessionIdRef.current)
-    if (transcriptBefore.length === 0) return
-    const wasPendingApproval = transcriptBefore[transcriptBefore.length - 1].role !== 'assistant'
+    const plan = planUndo(transcriptBefore)
+    if (plan.nothingToUndo) return
+    const { wasPendingApproval } = plan
 
     const result = await assistant.undoLastTurn(sessionIdRef.current)
     if (!result.undone) return
@@ -953,7 +949,7 @@ export function App(): React.JSX.Element {
         ])
         setActivePlanStatus(result.planStatus)
         if (result.usage) {
-          const withCost = withCostEstimate(result.usage)
+          const withCost = priceUsage(result.usage)
           setLastTurnUsage(withCost)
           setSessionUsage((prev) => accumulateUsage(prev, withCost))
         } else {
@@ -1132,7 +1128,7 @@ export function App(): React.JSX.Element {
         },
       ])
       if (result.usage) {
-        const withCost = withCostEstimate(result.usage)
+        const withCost = priceUsage(result.usage)
         setLastTurnUsage(withCost)
         setSessionUsage((prev) => accumulateUsage(prev, withCost))
       }
