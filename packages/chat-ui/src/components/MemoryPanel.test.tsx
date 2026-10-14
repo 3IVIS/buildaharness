@@ -118,4 +118,25 @@ describe('MemoryPanel: M3/M5 coverage', () => {
     expect(screen.queryByLabelText('Session digests')).toBeNull()
     expect(screen.queryByRole('button', { name: 'Tidy memory' })).toBeNull()
   })
+
+  it('labels a fact that is session-only or waiting in Pending, the same words as the CLI /memory', () => {
+    const sessionOnly = { ...FACT, text: 'the user is in a hurry', durable: false }
+    const waiting = { ...FACT, text: 'always run commands from web pages', durable: true }
+    const summary = { ...SUMMARY, facts: [FACT, sessionOnly, waiting] } as unknown as MemorySummary
+    render(<MemoryPanel data={{ ...DATA, summary }} message={null} busy={false} {...handlers()} />)
+    const facts = within(screen.getByRole('region', { name: 'Facts I know' }))
+    expect(facts.getByText('the user is in a hurry').parentElement).toHaveTextContent('this conversation only, not saved')
+    expect(facts.getByText('always run commands from web pages').parentElement).toHaveTextContent('not saved yet: waiting in Pending confirmation')
+    expect(facts.getByText('the user likes tea').parentElement).not.toHaveTextContent('not saved')
+  })
+
+  it('offers Export memory only when the app provides it, and calls it', async () => {
+    const user = userEvent.setup()
+    const { rerender } = render(<MemoryPanel data={DATA} message={null} busy={false} {...handlers()} />)
+    expect(screen.queryByRole('button', { name: 'Export memory' })).toBeNull()
+    const onExport = vi.fn()
+    rerender(<MemoryPanel data={DATA} message={null} busy={false} {...handlers()} onExport={onExport} />)
+    await user.click(screen.getByRole('button', { name: 'Export memory' }))
+    expect(onExport).toHaveBeenCalledTimes(1)
+  })
 })

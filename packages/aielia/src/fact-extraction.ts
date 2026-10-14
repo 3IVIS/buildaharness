@@ -118,6 +118,13 @@ export function certaintyLabel(fact: UserFact): FactConfidence {
   return fact.confidence ?? 'high'
 }
 
+/** What to say next to a remembered fact that is not stored: held for confirmation in Pending, or kept for this conversation only. A stored (durable) fact needs no note, so this returns undefined. One rule for the CLI's /memory and the apps' Memory panel, so "Facts I know" never reads as stored when the assistant has said it was not. */
+export function factStatusLabel(fact: Pick<UserFact, 'text' | 'durable'>, pending: readonly { text: string }[] = []): string | undefined {
+  if (pending.some((p) => p.text === fact.text)) return 'not saved yet: waiting in Pending confirmation'
+  if (!fact.durable) return 'this conversation only, not saved'
+  return undefined
+}
+
 // Old, pre-Phase-5 on-disk facts (Dexie `entries` table, keys `facts:<sessionId>`/
 // `facts:durable`) predate the `source` field entirely — Dexie treats `value` as an opaque
 // payload (see packages/runtime/src/memory/indexeddb.ts's `.version(2)` passthrough comment), so

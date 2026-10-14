@@ -20,6 +20,7 @@ import {
 import type { AskAnswer, AskQuestion, AskResponse } from '@buildaharness/harness'
 import { orderedOptions, draftToAnswer, emptyDraft, type QuestionDraft } from './ask-draft.js'
 import { parseProjectCommand } from './project-command.js'
+import { parseUndoActionCommand } from './undo-action-command.js'
 import { createLlmClient } from './llm-client-factory.js'
 import type { GoalGraphState } from './goal-graph-service.js'
 import { presentTurnResult, approvalLabels, NO_TRACE, DEFAULT_CLARIFICATION_REASON, MISSING_PLAN_APPROVAL_ID_REASON } from './turn-presentation.js'
@@ -864,13 +865,14 @@ export async function runCli(options: RunCliOptions = {}): Promise<CliInstance> 
    * prompt is driven directly rather than via handleTurn's needs_approval branch.
    */
   async function handleUndoAction(args: string[]): Promise<void> {
-    if (args.length === 0) {
+    const command = parseUndoActionCommand(args)
+    if (command.kind === 'list') {
       const entries = await assistant.listUndoLogEntries()
       printSafe(`\n${formatUndoLogListing(entries)}\n`)
       return
     }
 
-    const staged = await assistant.stageUndoAction(args[0])
+    const staged = await assistant.stageUndoAction(command.id)
     if (staged.status === 'error') {
       printSafe(`\n✗ ${staged.message}\n`)
       return

@@ -13,7 +13,7 @@ afterEach(() => {
   else process.env.ASSISTANT_LEXICAL_MODE = PRIOR_LEXICAL_MODE
 })
 
-import { extractFactsFromTurn, migrateFact, tierForFact, factReliability, type UserFact } from './fact-extraction.js'
+import { extractFactsFromTurn, migrateFact, tierForFact, factReliability, factStatusLabel, type UserFact } from './fact-extraction.js'
 
 describe('extractFactsFromTurn', () => {
   it('captures a message stating the user\'s name', () => {
@@ -547,5 +547,23 @@ describe('factReliability — what confidence the harness world model gives a fa
 
   it('keeps an observed fact MEDIUM', () => {
     expect(factReliability(fact({ source: 'observed' }))).toBe('MEDIUM')
+  })
+})
+
+describe('factStatusLabel', () => {
+  const fact = { text: 'likes tea', durable: true }
+  it('says nothing for a durable fact that is not waiting in Pending', () => {
+    expect(factStatusLabel(fact, [])).toBeUndefined()
+    expect(factStatusLabel(fact)).toBeUndefined()
+  })
+  it('says a session-only fact is not saved', () => {
+    expect(factStatusLabel({ ...fact, durable: false }, [])).toBe('this conversation only, not saved')
+  })
+  it('says a fact waiting in Pending is not saved yet, even when it is also session-only', () => {
+    expect(factStatusLabel({ ...fact, durable: false }, [{ text: 'likes tea' }])).toBe('not saved yet: waiting in Pending confirmation')
+    expect(factStatusLabel(fact, [{ text: 'likes tea' }])).toBe('not saved yet: waiting in Pending confirmation')
+  })
+  it('matches pending by text only', () => {
+    expect(factStatusLabel(fact, [{ text: 'something else' }])).toBeUndefined()
   })
 })

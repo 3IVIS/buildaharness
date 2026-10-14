@@ -15,6 +15,10 @@ import {
   presentTurnResult,
   DEFAULT_ESCALATION_REASON,
   parseProjectCommand,
+  parseUndoActionCommand,
+  formatUndoLogListing,
+  formatMemoryExport,
+  defaultMemoryExportFilename,
   formatSpendCapStatus,
   DESKTOP_FEATURES,
   WEB_FEATURES,
@@ -620,6 +624,12 @@ export function App(): React.JSX.Element {
       const removed = await a.forgetDigests(id)
       return `Forgot ${removed} session digest${removed === 1 ? '' : 's'}.`
     }),
+    // The Memory panel's counterpart of /memory export: the same JSON, as a download (D4).
+    onExport: () => void runMemoryAction(async (a) => {
+      const data = await a.exportMemory(sessionIdRef.current)
+      downloadBlob(new Blob([formatMemoryExport(data)], { type: 'application/json' }), defaultMemoryExportFilename())
+      return 'Exported learned memory.'
+    }),
     onConsolidate: () => void runMemoryAction(async (a) => (await a.consolidateMemory(sessionIdRef.current)).message),
     onSetEnabled: (enabled: boolean) => void runMemoryAction(async (a) => {
       await a.setMemoryEnabled(enabled)
@@ -1027,10 +1037,38 @@ export function App(): React.JSX.Element {
     return true
   }
 
+  /** /undo-action [id]: lists revertible edits, or stages a revert that goes through the ordinary approval card (and resumes like any staged action). Parsing and listing text are the CLI's. Returns whether `message` was one. */
+  function handleUndoActionCommand(message: string): boolean {
+    const [command, ...args] = message.trim().split(/\s+/)
+    if (command !== '/undo-action') return false
+    setShowDemo(false)
+    setInput('')
+    if (composerRef.current) composerRef.current.style.height = 'auto'
+    const show = (lines: string[]): void => setEntries((prev) => [...prev, { id: newId(), kind: 'explain', command: message.trim(), lines }])
+    const assistant = assistantRef.current
+    if (!assistant) {
+      show(['Aielia is still starting up — try again in a moment.'])
+      return true
+    }
+    void (async () => {
+      const parsed = parseUndoActionCommand(args)
+      // A plain browser tab has no file tools, so the list is empty and says there is nothing to revert.
+      if (parsed.kind === 'list') return show(formatUndoLogListing(await assistant.listUndoLogEntries()).split('\n'))
+      const staged = await assistant.stageUndoAction(parsed.id)
+      if (staged.status === 'error') return show([`✗ ${staged.message}`])
+      setEntries((prev) => [
+        ...prev,
+        { id: newId(), kind: 'approval', pendingMessage: '', reason: staged.reason, pendingActionId: staged.pendingActionId, pendingActionKind: 'revert' },
+      ])
+    })()
+    return true
+  }
+
   function submitMessage(): void {
     const message = input.trim()
     if (showExplanation(message)) return
     if (handleProjectCommand(message)) return
+    if (handleUndoActionCommand(message)) return
     if (keyMissing) {
       setNeedsSetup(true)
       return

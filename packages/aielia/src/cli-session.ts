@@ -7,7 +7,7 @@ import type { AuditEntry, MemoryStatus, MemoryInjection } from './memory-service
 import type { GoalGraphState, GoalThreadView, GoalThreadVisibility } from './goal-graph-service.js'
 import type { UndoLogEntry } from './action-snapshot.js'
 import { COMMAND_REGISTRY } from './commands.js'
-import { certaintyLabel, type UserFact } from './fact-extraction.js'
+import { certaintyLabel, factStatusLabel, type UserFact } from './fact-extraction.js'
 
 /**
  * Pure formatting/logic backing cli.ts's session-level commands (/help, /status, /export,
@@ -104,8 +104,8 @@ function formatFactLine(f: UserFact, pending: PendingFact[] = []): string {
   chips.push(`established ${f.extractedAt.slice(0, 10)}`)
   if (f.project) chips.push(`project: ${f.project}`)
   // A guess held for this conversation is not saved: say so, so "Facts I know" never reads as a stored fact the assistant denied saving.
-  if (pending.some((p) => p.text === f.text)) chips.push('not saved yet: waiting in Pending confirmation')
-  else if (!f.durable) chips.push('this conversation only, not saved')
+  const status = factStatusLabel(f, pending)
+  if (status) chips.push(status)
   return `${f.text} (${chips.join(', ')})`
 }
 

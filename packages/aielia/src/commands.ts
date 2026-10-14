@@ -29,7 +29,7 @@ export const COMMAND_REGISTRY: CommandSpec[] = [
   { name: '/status', usage: '/status', description: 'Show current model, backend, workspace, and enabled capabilities', surfaces: 'cli-only', reason: `${APP_CONTROL} (Settings)` },
   { name: '/export', usage: '/export [file]', description: "Save this session's transcript to a markdown file", surfaces: 'cli-only', reason: `${APP_CONTROL} (transcript export)` },
   { name: '/undo', usage: '/undo', description: 'Remove the last exchange from conversation history — never reverses a real write_file/run_shell_command effect (see /undo-action)', surfaces: 'cli-only', reason: `${APP_CONTROL} (Undo)` },
-  { name: '/undo-action', usage: '/undo-action [id]', description: 'List revertible filesystem effects from approved actions, or stage a revert of one for approval', surfaces: 'cli-only', reason: 'planned: U8' },
+  { name: '/undo-action', usage: '/undo-action [id]', description: 'List revertible filesystem effects from approved actions, or stage a revert of one for approval', surfaces: 'both' },
   { name: '/memory', usage: '/memory', description: 'Show learned facts, reminders, pending-confirmation guesses, and experience-store content', surfaces: 'cli-only', reason: `${APP_CONTROL} (Memory panel)` },
   { name: '/memory export', usage: '/memory export [file]', description: 'Save the full, unbounded learned-experience contents (plus facts/reminders/pending) to a JSON file', surfaces: 'cli-only', reason: 'apps export from the Memory panel' },
   { name: '/memory confirm', usage: '/memory confirm <n|category>', description: 'Promote a pending-confirmation guess (or a whole category of them) to durable memory', surfaces: 'cli-only', reason: `${APP_CONTROL} (Memory panel)` },
@@ -58,6 +58,14 @@ export const COMMAND_REGISTRY: CommandSpec[] = [
   { name: '/config', usage: '/config ...', description: 'View or change persisted settings', surfaces: 'cli-only', reason: `${APP_CONTROL} (Settings)` },
   { name: '/layers settings', usage: '/layers settings', description: 'List reasoning layers with cost/evidence; /layers on|off|reset <id> to change', surfaces: 'cli-only', reason: `${APP_CONTROL} (Settings)` },
   { name: '/checkpoint', usage: '/checkpoint [clear]', description: 'Inspect, or clear, a stuck in-progress harness checkpoint', surfaces: 'cli-only', reason: 'the apps have no checkpoint inspector yet' },
+]
+
+/**
+ * Capabilities that are CLI-only on purpose and are not slash commands, so they have no registry entry above.
+ * Each is a decision of the owner (D5) and carries the reason.
+ */
+export const CLI_ONLY_FEATURES: { name: string; reason: string }[] = [
+  { name: 'email', reason: 'sending needs credentials a browser or webview cannot hold safely' },
 ]
 
 /** First word of a command name: the key the CLI dispatch table and the composer match on. */

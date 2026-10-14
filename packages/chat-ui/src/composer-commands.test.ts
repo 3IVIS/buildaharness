@@ -7,8 +7,9 @@ describe('composer commands', () => {
     expect([...COMPOSER_COMMANDS].sort()).toEqual(dispatchKeysFor('gui').sort())
   })
 
-  it('each explain command is answered by explainCommand; /project has its own handler', () => {
-    for (const command of COMPOSER_COMMANDS.filter((c) => c !== '/project')) expect(explainCommand(command, {})).toBeDefined()
+  it('each explain command is answered by explainCommand; /project and /undo-action have their own handlers', () => {
+    for (const command of COMPOSER_COMMANDS.filter((c) => c !== '/project' && c !== '/undo-action')) expect(explainCommand(command, {})).toBeDefined()
     expect(explainCommand('/project', {})).toBeUndefined()
+    expect(explainCommand('/undo-action', {})).toBeUndefined()
   })
 })

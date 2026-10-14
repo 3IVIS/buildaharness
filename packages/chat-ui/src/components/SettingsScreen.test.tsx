@@ -164,6 +164,11 @@ describe('SettingsScreen', () => {
     expect(screen.getByText(/Spend cap: \$0.50/)).toBeInTheDocument()
   })
 
+  it('offers no email settings: sending is CLI-only (D5)', () => {
+    renderSettings({ isDesktop: true, config: { ...DEFAULT_CONFIG, enableEmail: true } })
+    expect(screen.queryByText(/email|smtp|resend/i)).toBeNull()
+  })
+
   it('stays usable while a turn is in flight: Back/Cancel work and Save is deferred, with a note', async () => {
     const user = userEvent.setup()
     const { onSave, onCancel } = renderSettings({ busy: true })

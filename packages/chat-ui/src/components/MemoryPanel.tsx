@@ -1,5 +1,5 @@
 import type { MemorySummary, MemoryStatus, AuditEntry, MemoryWriteMode, ConsolidationProposal, SessionDigest } from '@buildaharness/aielia'
-import { formatMemoryStatus } from '@buildaharness/aielia'
+import { formatMemoryStatus, factStatusLabel } from '@buildaharness/aielia'
 
 type Fact = MemorySummary['facts'][number]
 
@@ -32,6 +32,8 @@ interface Props {
   onUndo: (seq: number) => void
   onForgetArchived: (selector: string) => void
   onConsolidate: () => void
+  /** Downloads the full learned memory as JSON (the CLI's `/memory export`). */
+  onExport?: () => void
   /** 1-based, same numbering as the CLI's `/memory consolidate accept|dismiss <n>`. */
   onAcceptProposal?: (selector: string) => void
   onDismissProposal?: (selector: string) => void
@@ -57,7 +59,7 @@ const MODE_OPTIONS: { value: MemoryWriteMode; label: string }[] = [
  * method, the same one the CLI command calls. Before this panel existed, a browser user had no way
  * to confirm a staged write.
  */
-export function MemoryPanel({ data, message, busy, onConfirm, onReject, onForget, onUndo, onForgetArchived, onConsolidate, onAcceptProposal, onDismissProposal, onRestoreArchived, onForgetDigests, onSetEnabled, onSetMode, onClose }: Props): React.JSX.Element {
+export function MemoryPanel({ data, message, busy, onConfirm, onReject, onForget, onUndo, onForgetArchived, onConsolidate, onExport, onAcceptProposal, onDismissProposal, onRestoreArchived, onForgetDigests, onSetEnabled, onSetMode, onClose }: Props): React.JSX.Element {
   if (!data) {
     return (
       <div className="memory-panel">
@@ -129,11 +131,13 @@ export function MemoryPanel({ data, message, busy, onConfirm, onReject, onForget
 
       <section className="memory-panel__section" aria-label="Facts I know">
         <h3>Facts I know ({summary.facts.length})</h3>
+        {onExport && <button type="button" disabled={busy} onClick={onExport}>Export memory</button>}
         {summary.facts.length === 0 ? <p>None yet.</p> : (
           <ol className="memory-panel__list">
             {summary.facts.map((f, i) => (
               <li key={`${f.text}|${f.extractedAt}`}>
                 <span>{f.text}</span>
+                {factStatusLabel(f, summary.pending) && <span className="memory-panel__status"> ({factStatusLabel(f, summary.pending)})</span>}
                 <button type="button" disabled={busy} aria-label={`Forget fact ${i + 1}`} onClick={() => onForget(String(i + 1))}>Forget</button>
                 <button type="button" className="memory-panel__danger" disabled={busy} aria-label={`Erase fact ${i + 1} permanently`} title="Forget and remove from history, so it cannot be undone" onClick={() => onForget(String(i + 1), true)}>Erase</button>
               </li>

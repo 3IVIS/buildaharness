@@ -35,7 +35,7 @@ export function ApprovalCard({ pendingMessage, reason, riskLevel, pendingActionK
       <div className="approval-card__header">
         {resolution === 'approved' ? 'Approved' : resolution === 'denied' ? 'Denied' : 'Needs approval'}{label ? ` — ${label}` : ''}
       </div>
-      <blockquote className="approval-card__pending">{pendingMessage}</blockquote>
+      {pendingMessage && <blockquote className="approval-card__pending">{pendingMessage}</blockquote>}
       <div className="approval-card__reason">{headline}</div>
       {detail !== null && (
         <pre className="approval-card__detail" aria-label="Exact change">
