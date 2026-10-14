@@ -26,6 +26,11 @@ at `appLocalDataDir()` — real files instead of a browser database. See
 Renders each `AssistantTurnResult` status distinctly:
 
 - `ok` — a normal assistant reply bubble.
+  Nothing about how the turn ran is shown unless you ask, the same as in the CLI. Type
+  `/why`, `/layers`, `/sources`, `/steps` or `/plan` in the composer and the answer
+  appears under the conversation as plain text. The wording comes from
+  `packages/aielia/src/run-explain.ts`, the same module the CLI prints from, so the
+  two cannot drift. The commands explain the most recent turn on screen.
 - `needs_approval` — an approve/deny card. Two distinct gates share this one
   status, and the card resumes them differently (T8): the message-level risk
   gate (no `pendingActionId`) just replays the message with

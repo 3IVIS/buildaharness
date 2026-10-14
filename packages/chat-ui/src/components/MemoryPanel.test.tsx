@@ -3,7 +3,6 @@ import { render, screen, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import type { MemoryStatus, AuditEntry, MemorySummary } from '@buildaharness/aielia'
 import { MemoryPanel, type MemoryPanelData } from './MemoryPanel'
-import { ChatMessageBubble } from './ChatMessageBubble'
 
 const STATUS: MemoryStatus = {
   mode: 'staged', off: false, budgetedRender: true, budgetChars: 4000, storeChars: 40, liveFacts: 1, pending: 1, flaggedPending: 1,
@@ -118,22 +117,5 @@ describe('MemoryPanel: M3/M5 coverage', () => {
     expect(screen.queryByLabelText('Proposed tidy-ups')).toBeNull()
     expect(screen.queryByLabelText('Session digests')).toBeNull()
     expect(screen.queryByRole('button', { name: 'Tidy memory' })).toBeNull()
-  })
-})
-
-describe('"Why?" memory line', () => {
-  const trace = { nodeExecutionOrder: [], verificationHealth: { strength: 0.9, feasibility: 0.9 }, layerActivity: [] }
-  it('renders which facts were in the prompt and how many were left out', async () => {
-    const user = userEvent.setup()
-    render(<ChatMessageBubble role="assistant" content="hi" trace={trace} harnessSkipped memoryInjection={{ facts: [{ text: 'the user likes tea', unconfirmed: false }], notShown: 4 }} />)
-    await user.click(screen.getByRole('button', { name: 'Why?' }))
-    expect(screen.getByTestId('why-memory')).toHaveTextContent('4 not shown this turn')
-    expect(screen.getByTestId('why-memory')).toHaveTextContent('the user likes tea')
-  })
-  it('negative control: with no memory snapshot there is no memory line', async () => {
-    const user = userEvent.setup()
-    render(<ChatMessageBubble role="assistant" content="hi" trace={trace} harnessSkipped />)
-    await user.click(screen.getByRole('button', { name: 'Why?' }))
-    expect(screen.queryByTestId('why-memory')).toBeNull()
   })
 })

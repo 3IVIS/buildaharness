@@ -73,7 +73,7 @@ test.describe('flag OFF vs ON parity matrix', () => {
     for (const run of [off, on]) {
       expect(run.reply).toContain('quarterly numbers: 42')
       expect(run.sawApprovalCard).toBe(false) // read-only → gated, never staged for approval
-      await expect(run.page.stepsToggle()).toBeVisible() // the tool call surfaced as a step
+      expect(await run.page.explain('/steps')).toContain('report.txt') // the tool call surfaced as a step, when asked for
       await expect(run.page.haltBanner()).toHaveCount(0) // the ControlState gate ran without erroring
     }
     expect(on.reply).toBe(off.reply)

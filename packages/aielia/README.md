@@ -944,9 +944,10 @@ ends the session.
 | `/model [name]` | Show the active model, or switch it — a thin alias over `/config set model <name>` (see "Configuration" above); rejected the same way if `model` is pinned by `ASSISTANT_MODEL` |
 | `/cost` | Show token usage for the last turn and the running session total |
 | `/doctor` | Check proxy reachability (proxy backend) or the `claude` binary (claude-cli backend), plus workspace root and data dir health — no dedicated check yet for the anthropic/openai/openrouter backends, only the backend-agnostic checks run for those |
-| `/why` | Explain the harness path the last turn took (verification confidence + node sequence) |
+| `/why` | Explain the last turn: confidence, whether the reply was checked against what was read, the layers that fired, and what memory the prompt held. The chat app (web and desktop) answers the same command with the same lines |
 | `/layers` | Show all 11 harness layers: fired or skipped, and why, for the last turn. `/layers settings` lists the reasoning layers with their cost/evidence; `/layers on\|off\|reset <id>` changes a layer's persisted on/off choice (an operator-set `AUDIT_*` env flag wins and shows as pinned) |
 | `/sources` | List files/URLs the last turn actually consulted |
+| `/steps` | List the tool calls the last turn made, in order |
 | `/plan` | Show the active structured plan's task status |
 | `/plan sketch <request>` | One-shot, advisory plan sketch: no plan record, nothing staged, cannot execute |
 | `/goals` | Review every known goal thread this session: status, tasks and visibility (freshly computed, carried over, done, suggested) |

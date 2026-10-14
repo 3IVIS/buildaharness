@@ -116,9 +116,18 @@ export class ChatPage {
     return this.page.locator('.escalation-banner')
   }
 
-  /** The bubble's "Steps (N)" toggle — present only when the turn ran ≥1 tool call. */
-  stepsToggle(): Locator {
-    return this.page.getByRole('button', { name: /^(Steps|Hide steps)/ })
+  /**
+   * Ask for an explanation of the last turn by typing a slash command (`/why`, `/layers`,
+   * `/sources`, `/steps`, `/plan`) and return the text it shows. Nothing about how a turn ran is
+   * on screen until it is asked for, as in the CLI.
+   */
+  async explain(command: string): Promise<string> {
+    const before = await this.page.getByTestId('explain-bubble').count()
+    await this.input.fill(command)
+    await this.page.getByRole('button', { name: 'Send', exact: true }).click()
+    const bubble = this.page.getByTestId('explain-bubble')
+    await expect(bubble).toHaveCount(before + 1)
+    return (await bubble.last().textContent()) ?? ''
   }
 
   /** `'posthoc' | 'flat-oneloop' | 'batch-oneloop'` for the latest turn. */

@@ -121,7 +121,7 @@ export interface WhyChainItem {
  * Collapses a turn's raw layerActivity (one event per layer per main-loop iteration — see
  * harness-runtime.ts's onLayerActivity doc comment) down to just the layers that fired, in the
  * order they fired, merging consecutive re-fires of the same layer (back-to-back loop
- * iterations) into a single link. Shared by the CLI's `/why` and chat-ui's "Why?" panel so both
+ * iterations) into a single link. Used by run-explain.ts, which both the CLI's `/why` and chat-ui's `/why` print, so both
  * surfaces summarize a turn identically instead of drifting apart.
  */
 export function buildWhyChain(layerActivity: LayerActivityEvent[]): WhyChainItem[] {

@@ -30,6 +30,7 @@ import {
   type GoalGraphState,
   type MemoryWriteMode,
   memoryStatusChecks,
+  explainCommand,
   isGoalGraphEnabled,
   isPlanGraphEnabled,
   planToSnapshot,
@@ -53,7 +54,8 @@ import {
 } from '@buildaharness/runtime'
 import { TauriClaudeCliLLMClient } from './tauri-claude-cli-llm-client'
 import { tauriExecuteShellCommand } from './tauri-shell-executor'
-import { ChatMessageBubble } from './components/ChatMessageBubble'
+import { ChatMessageBubble, ExplainBubble } from './components/ChatMessageBubble'
+import { explainInputFromEntries } from './explain-input'
 import { ApprovalCard } from './components/ApprovalCard'
 import { AskQuestionCard } from './components/AskQuestionCard'
 import { PlanVizPanel } from './components/PlanVizPanel'
@@ -1015,12 +1017,24 @@ export function App(): React.JSX.Element {
     }
   }
 
+  /** /why, /layers, /sources, /steps and /plan: answered from the last turn on screen with the CLI's own text (run-explain.ts), never sent to the model. Returns whether `message` was one. */
+  function showExplanation(message: string): boolean {
+    const lines = explainCommand(message, explainInputFromEntries(entries, { memoryInjection: assistantRef.current?.getLastMemoryInjection(), planStatus: activePlanStatus }))
+    if (!lines) return false
+    setShowDemo(false)
+    setInput('')
+    if (composerRef.current) composerRef.current.style.height = 'auto'
+    setEntries((prev) => [...prev, { id: newId(), kind: 'explain', command: message.trim(), lines }])
+    return true
+  }
+
   function submitMessage(): void {
+    const message = input.trim()
+    if (showExplanation(message)) return
     if (keyMissing) {
       setNeedsSetup(true)
       return
     }
-    const message = input.trim()
     if (!message) return
     if (busy) {
       // Composer/Send only stay enabled while busy when goalGraphModeEnabled (see the JSX below)
@@ -1298,6 +1312,8 @@ export function App(): React.JSX.Element {
           switch (entry.kind) {
             case 'user':
               return <ChatMessageBubble key={entry.id} role="user" content={entry.content} />
+            case 'explain':
+              return <ExplainBubble key={entry.id} command={entry.command} lines={entry.lines} />
             case 'assistant':
               return (
                 <Fragment key={entry.id}>
@@ -1305,14 +1321,6 @@ export function App(): React.JSX.Element {
                   role="assistant"
                   content={entry.content}
                   riskLevel={entry.riskLevel}
-                  trace={entry.trace}
-                  harnessSkipped={entry.harnessSkipped}
-                  sources={entry.sources}
-                  toolSteps={entry.toolSteps}
-                  planStatus={entry.planStatus}
-                  onViewPlanGraph={planGraphModeEnabled ? () => setPlanVizOpenPersisted(true) : undefined}
-                  answerClaim={entry.answerClaim}
-                  memoryInjection={entry.memoryInjection}
                   proposerKind={entry.proposerKind}
                 />
                 {entry.contradictionNotice && <p className="turn-notice" role="note">{entry.contradictionNotice}</p>}
@@ -1393,7 +1401,7 @@ export function App(): React.JSX.Element {
               ? progress.planPosition
                 // Phase 3.2: a plan-driven turn shows live position instead of the generic
                 // step counter for the duration of the run — harness-internal node detail is
-                // still available via the "Why?" panel once the turn finishes.
+                // still available via /why once the turn finishes.
                 ? `${progress.planPosition.templateName ?? 'custom plan'} — step ${progress.planPosition.stepIndex} of ${progress.planPosition.stepCount} (${progress.planPosition.completionPct.toFixed(0)}%)${progress.currentNode ? ` — ${nodeDisplayName(progress.currentNode)}…` : ''}`
                 : `Step ${progress.stepsUsed} of ${progress.maxSteps}${progress.currentNode ? ` — ${nodeDisplayName(progress.currentNode)}…` : ''}`
               : 'thinking…'}

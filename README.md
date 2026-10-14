@@ -9,7 +9,7 @@
 [![License](https://img.shields.io/badge/License-Apache%202.0-blue.svg)](https://opensource.org/licenses/Apache-2.0)
 [![Version](https://img.shields.io/badge/version-v0.8.0-brightgreen.svg)](https://github.com/3IVIS/buildaharness/releases)
 [![Status](https://img.shields.io/badge/status-public%20alpha-orange.svg)](https://github.com/3IVIS/buildaharness)
-[![Tests](https://img.shields.io/badge/tests-6%2C191%20passing-brightgreen.svg)](#)
+[![Tests](https://img.shields.io/badge/tests-6%2C204%20passing-brightgreen.svg)](#)
 [![GitHub Stars](https://img.shields.io/github/stars/3IVIS/buildaharness?style=social)](https://github.com/3IVIS/buildaharness/stargazers)
 [![PRs Welcome](https://img.shields.io/badge/PRs-welcome-brightgreen.svg)](CONTRIBUTING.md)
 [![Node.js](https://img.shields.io/badge/Node.js-18+-339933.svg?logo=node.js&logoColor=white)](https://nodejs.org/)
@@ -188,7 +188,7 @@ a reviewer/output gate. Aielia ships the following, all enforced in code rather 
   memory; model-inferred facts promote only at high confidence, medium-confidence
   ones wait for `/memory confirm`, and low-confidence ones stay session-scoped.
 - **AnswerClaim** — replies distinguish "verified against evidence" from "found
-  this but couldn't independently confirm it," surfaced in the chat's "Why?" panel.
+  this but couldn't independently confirm it," shown when you ask with `/why` (CLI, web and desktop).
 - **Crash-safe mid-turn resume** — a turn that dies mid-flight resumes from its
   last checkpoint instead of silently starting over; a checkpoint that keeps
   crashing on replay is discarded automatically after two attempts.
