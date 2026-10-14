@@ -1,10 +1,12 @@
+import { approvalLabels } from '@buildaharness/aielia'
+
 interface Props {
   pendingMessage: string
   reason: string
   riskLevel?: string
   /** A staged write_file/run_shell_command/send_email/batch-research action's kind — see ChatEntry's
-   * 'approval' doc comment. Takes precedence over riskLevel for the header label, mirroring
-   * cli.ts's own kindLabel ternary for the same pause. */
+   * 'approval' doc comment. Takes precedence over riskLevel for the header label, the same
+   * label the CLI prints (approvalLabels in turn-presentation.ts). */
   pendingActionKind?: 'write' | 'shell' | 'email' | 'batch' | 'revert'
   resolution?: 'approved' | 'denied'
   /** Read-only sample (the /try first-load demo): render an explanatory line instead of
@@ -13,8 +15,6 @@ interface Props {
   onApprove: () => void
   onDeny: () => void
 }
-
-const KIND_LABELS: Record<string, string> = { write: 'write', shell: 'shell command', email: 'send email', batch: 'batch research', revert: 'revert' }
 
 /** A staged action's reason is "<headline>\n<detail>": the headline names the action, the detail is the exact content (new-file text or a numbered diff), the command's cwd, or an email's fields. */
 function splitReason(reason: string): { headline: string; detail: string | null } {
@@ -29,7 +29,7 @@ const DIFF_ROW = /^\s*\d+ ([+-])/
 
 export function ApprovalCard({ pendingMessage, reason, riskLevel, pendingActionKind, resolution, illustrative, onApprove, onDeny }: Props): React.JSX.Element {
   const { headline, detail } = splitReason(reason)
-  const label = pendingActionKind ? KIND_LABELS[pendingActionKind] : riskLevel
+  const label = pendingActionKind ? approvalLabels(pendingActionKind).kindLabel : riskLevel
   return (
     <div className="approval-card">
       <div className="approval-card__header">

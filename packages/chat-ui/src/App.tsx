@@ -11,6 +11,9 @@ import {
   createLlmClient as createSharedLlmClient,
   checkProxyHealth,
   buildAssistantOptions,
+  EXPLAIN_COMMANDS,
+  presentTurnResult,
+  DEFAULT_ESCALATION_REASON,
   parseProjectCommand,
   formatSpendCapStatus,
   DESKTOP_FEATURES,
@@ -58,7 +61,6 @@ import { AskQuestionCard } from './components/AskQuestionCard'
 import { PlanVizPanel } from './components/PlanVizPanel'
 import { PlanApprovalCard } from './components/PlanApprovalCard'
 import { EscalationBanner } from './components/EscalationBanner'
-import { shouldRenderAskQuestionCard } from './ask-question-render'
 import { SettingsScreen } from './components/SettingsScreen'
 import { SetupWizard } from './components/SetupWizard'
 import { KeyNotice } from './components/KeyNotice'
@@ -883,14 +885,16 @@ export function App(): React.JSX.Element {
         void refreshPlanGraph()
       }
 
-      if (result.status === 'ok') {
+      // What to show is decided once, in turn-presentation.ts (the CLI prints the same decision); this only renders it.
+      const shown = presentTurnResult(result)
+      if (shown.kind === 'reply') {
         setEntries((prev) => [
           ...prev,
           {
             id: newId(),
             kind: 'assistant',
-            content: result.reply ?? '',
-            riskLevel: result.riskLevel,
+            content: shown.text,
+            riskLevel: shown.riskLevel,
             trace: result.trace,
             harnessSkipped: result.harnessSkipped,
             sources: result.sources,
@@ -900,8 +904,10 @@ export function App(): React.JSX.Element {
             answerClaim: result.answerClaim,
             memoryInjection: assistant.getLastMemoryInjection(),
             proposerKind: result.proposerKind,
-            contradictionNotice: result.contradictionNotice,
-            reviewNotice: result.reviewNotice,
+            contradictionNotice: shown.hints.contradictionNotice,
+            reviewNotice: shown.hints.reviewNotice,
+            auditNotice: shown.hints.auditNotice,
+            pausedNote: shown.hints.pausedNote,
           },
         ])
         setActivePlanStatus(result.planStatus)
@@ -912,55 +918,47 @@ export function App(): React.JSX.Element {
         } else {
           setLastTurnUsage(undefined)
         }
-      } else if (result.status === 'cancelled') {
+      } else if (shown.kind === 'cancelled') {
         setEntries((prev) => [...prev, { id: newId(), kind: 'stopped' }])
-      } else if (result.status === 'needs_approval') {
+      } else if (shown.kind === 'approval') {
         setEntries((prev) => [
           ...prev,
           {
             id: newId(),
             kind: 'approval',
             pendingMessage: message,
-            reason: result.reason ?? 'This action needs approval.',
-            riskLevel: result.riskLevel,
-            pendingActionId: result.pendingActionId,
-            pendingActionKind: result.pendingActionKind,
+            reason: shown.reason,
+            riskLevel: shown.riskLevel,
+            pendingActionId: shown.pendingActionId,
+            pendingActionKind: shown.pendingActionKind,
           },
         ])
-      } else if (result.status === 'needs_plan_approval' && result.planApprovalId && result.planApproval) {
-        const { planApprovalId, planApproval, riskLevel } = result
-        setEntries((prev) => [
-          ...prev,
-          {
-            id: newId(),
-            kind: 'plan_approval',
-            pendingMessage: message,
-            planApprovalId,
-            planApproval,
-            riskLevel,
-          },
-        ])
-      } else if (shouldRenderAskQuestionCard(result)) {
+      } else if (shown.kind === 'plan_approval' && shown.planApproval) {
+        const { planApprovalId, planApproval, riskLevel } = shown
+        setEntries((prev) => [...prev, { id: newId(), kind: 'plan_approval', pendingMessage: message, planApprovalId, planApproval, riskLevel }])
+      } else if (shown.kind === 'clarification') {
         setEntries((prev) => [
           ...prev,
           {
             id: newId(),
             kind: 'clarification',
             pendingMessage: message,
-            pendingClarificationId: result.pendingClarificationId,
-            questions: result.questions,
-            riskLevel: result.riskLevel,
+            pendingClarificationId: shown.pendingClarificationId,
+            questions: shown.questions,
+            riskLevel: shown.riskLevel,
           },
         ])
       } else {
-        setEntries((prev) => [...prev, { id: newId(), kind: 'escalation', reason: result.reason ?? 'Aielia halted and needs more information.', pendingMessage: message }])
+        // An escalation, or a plan approval whose tasks were not handed over (the card needs them to render).
+        const reason = shown.kind === 'escalation' ? shown.reason : (shown.reason ?? DEFAULT_ESCALATION_REASON)
+        setEntries((prev) => [...prev, { id: newId(), kind: 'escalation', reason, pendingMessage: message }])
       }
     } catch (err) {
       // classifyError maps to friendly copy for the UI, which is often too coarse to debug
       // from — the raw error (and on desktop, invoke() rejections carry only a string with
       // no code/name) is otherwise never surfaced anywhere, not even devtools. Log it.
       console.error('[assistant turn failed]', err)
-      const { message: errorMessage, retryable } = classifyError(err)
+      const { message: errorMessage, retryable } = classifyError(err, config.llmBackend)
       setEntries((prev) => [
         ...prev,
         { id: newId(), kind: 'error', content: errorMessage, retryable, retryMessage: message, retryApproved: approved, retryPendingActionId: pendingActionId },
@@ -1001,12 +999,17 @@ export function App(): React.JSX.Element {
 
   /** /why, /layers, /sources, /steps and /plan: answered from the last turn on screen with the CLI's own text (run-explain.ts), never sent to the model. Returns whether `message` was one. */
   function showExplanation(message: string): boolean {
-    const lines = explainCommand(message, explainInputFromEntries(entries, { memoryInjection: assistantRef.current?.getLastMemoryInjection(), planStatus: activePlanStatus }))
-    if (!lines) return false
+    if (!(EXPLAIN_COMMANDS as readonly string[]).includes(message.trim())) return false
     setShowDemo(false)
     setInput('')
     if (composerRef.current) composerRef.current.style.height = 'auto'
-    setEntries((prev) => [...prev, { id: newId(), kind: 'explain', command: message.trim(), lines }])
+    void (async () => {
+      // /plan with no drafted plan says whether the request was worked as tracked goal tasks, which needs the goal graph (the CLI reads the same query).
+      const needsGoals = message.trim() === '/plan' && !activePlanStatus
+      const goalGraph = needsGoals ? await assistantRef.current?.getGoalGraphState(sessionIdRef.current) : undefined
+      const lines = explainCommand(message, explainInputFromEntries(entries, { memoryInjection: assistantRef.current?.getLastMemoryInjection(), planStatus: activePlanStatus, goalGraph }))
+      if (lines) setEntries((prev) => [...prev, { id: newId(), kind: 'explain', command: message.trim(), lines }])
+    })()
     return true
   }
 
@@ -1323,6 +1326,8 @@ export function App(): React.JSX.Element {
                 />
                 {entry.contradictionNotice && <p className="turn-notice" role="note">{entry.contradictionNotice}</p>}
                 {entry.reviewNotice && <p className="turn-notice" role="note">{entry.reviewNotice}</p>}
+                {entry.auditNotice && <p className="turn-notice" role="note">{entry.auditNotice}</p>}
+                {entry.pausedNote && <p className="turn-notice" role="note">{entry.pausedNote}</p>}
                 {/* R7: next-step options only under the newest reply, and only while nothing is in flight — picking one fills the composer as an editable draft, it never sends. */}
                 {entryIndex === entries.length - 1 && !busy && entry.nextSteps && entry.nextSteps.length > 0 && (
                   <NextStepChips

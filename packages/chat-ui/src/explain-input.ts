@@ -1,4 +1,4 @@
-import type { AssistantTurnResult, MemoryInjection, TurnExplainInput } from '@buildaharness/aielia'
+import { approvalLabels, NO_TRACE, type AssistantTurnResult, type GoalGraphState, type MemoryInjection, type TurnExplainInput } from '@buildaharness/aielia'
 import type { ChatEntry } from './types'
 
 /**
@@ -8,10 +8,10 @@ import type { ChatEntry } from './types'
  */
 export function explainInputFromEntries(
   entries: readonly ChatEntry[],
-  extras: { memoryInjection?: MemoryInjection; planStatus?: AssistantTurnResult['planStatus'] } = {},
+  extras: { memoryInjection?: MemoryInjection; planStatus?: AssistantTurnResult['planStatus']; goalGraph?: GoalGraphState } = {},
 ): TurnExplainInput {
   const last = [...entries].reverse().find((e) => e.kind !== 'user' && e.kind !== 'explain')
-  const base: TurnExplainInput = { memoryInjection: extras.memoryInjection, planStatus: extras.planStatus }
+  const base: TurnExplainInput = { memoryInjection: extras.memoryInjection, planStatus: extras.planStatus, goalGraph: extras.goalGraph }
   if (!last) return base
   switch (last.kind) {
     case 'assistant':
@@ -22,23 +22,22 @@ export function explainInputFromEntries(
         sources: last.sources,
         toolSteps: last.toolSteps,
         planStatus: extras.planStatus ?? last.planStatus,
+        goalGraph: extras.goalGraph,
         memoryInjection: last.memoryInjection ?? extras.memoryInjection,
       }
-    case 'approval':
-      return { ...base, noTraceReason: last.resolution
-        ? `No harness trace — the last turn was a staged action that was ${last.resolution === 'approved' ? 'approved' : 'declined'} before the harness ran.`
-        : 'No harness trace — the last turn is waiting for your approval before the harness runs.' }
+    case 'approval': {
+      const resolution = last.resolution ? (last.resolution === 'approved' ? 'approved' : 'declined') : undefined
+      return { ...base, noTraceReason: last.pendingActionId ? NO_TRACE.stagedAction(approvalLabels(last.pendingActionKind).kindLabel, resolution) : NO_TRACE.messageApproval(resolution) }
+    }
     case 'plan_approval':
-      return { ...base, noTraceReason: last.resolution
-        ? `No harness trace — the last turn staged a plan that was ${last.resolution === 'declined' ? 'declined' : 'approved'} before the harness ran.`
-        : 'No harness trace — the last turn staged a plan for approval.' }
+      return { ...base, noTraceReason: NO_TRACE.planApproval(last.resolution ? (last.resolution === 'declined' ? 'declined' : 'approved') : undefined) }
     case 'clarification':
-      return { ...base, noTraceReason: 'No harness trace — the last turn needed clarification before the harness could run.' }
+      return { ...base, noTraceReason: NO_TRACE.clarification() }
     case 'escalation':
-      return { ...base, noTraceReason: `No harness trace — the last turn escalated (${last.reason}) before completing.` }
+      return { ...base, noTraceReason: NO_TRACE.escalated(last.reason) }
     case 'stopped':
-      return { ...base, noTraceReason: 'No harness trace — the last turn was stopped before it finished.' }
+      return { ...base, noTraceReason: NO_TRACE.stopped }
     case 'error':
-      return { ...base, noTraceReason: 'No harness trace — the last turn failed with an error.' }
+      return { ...base, noTraceReason: NO_TRACE.failed }
   }
 }

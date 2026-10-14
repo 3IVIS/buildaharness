@@ -21,6 +21,8 @@ import type { AskAnswer, AskQuestion, AskResponse } from '@buildaharness/harness
 import { orderedOptions, draftToAnswer, emptyDraft, type QuestionDraft } from './ask-draft.js'
 import { parseProjectCommand } from './project-command.js'
 import { createLlmClient } from './llm-client-factory.js'
+import type { GoalGraphState } from './goal-graph-service.js'
+import { presentTurnResult, approvalLabels, NO_TRACE, DEFAULT_CLARIFICATION_REASON, MISSING_PLAN_APPROVAL_ID_REASON } from './turn-presentation.js'
 import { buildAssistantOptions, CLI_FEATURES } from './assistant-options.js'
 import { withCostEstimate as sharedWithCostEstimate } from './turn-cost.js'
 import { planUndo } from './undo-plan.js'
@@ -486,9 +488,10 @@ export async function runCli(options: RunCliOptions = {}): Promise<CliInstance> 
     return sharedWithCostEstimate(usage, { backend: config.llmBackend, model: config.model })
   }
 
-  function printPlan(): void {
+  function printPlan(goalGraph?: GoalGraphState): void {
     if (!lastPlanStatus) {
-      printSafe('\nNo active plan for this session.\n')
+      // No drafted plan: explainPlan says "No active plan", or that the request was worked as tracked goal tasks.
+      printSafe(`\n${explainPlan({ ...lastTurnExplainInput(), goalGraph }).join('\n')}\n`)
       return
     }
     // Phase 6 of the CLI formatting plan ("distinct plan-mode UI") — one combined console.log
@@ -622,7 +625,7 @@ export async function runCli(options: RunCliOptions = {}): Promise<CliInstance> 
     }
     pendingPlanApproval = undefined
     lastTrace = undefined
-    lastNoTraceReason = `No harness trace — the last turn staged a plan that was ${decision === 'decline' ? 'declined' : 'approved'} before the harness ran.`
+    lastNoTraceReason = NO_TRACE.planApproval(decision === 'decline' ? 'declined' : 'approved')
     await handleTurn(message, false, undefined, undefined, undefined, id, decision, edits)
   }
 
@@ -691,16 +694,8 @@ export async function runCli(options: RunCliOptions = {}): Promise<CliInstance> 
       printPlanApproval(pendingPlanApproval.snapshot)
       return
     }
-    // No drafted plan, but the request may still have been worked as tracked goal tasks: say so instead of "No active plan" next to a /goals that shows them.
-    if (!lastPlanStatus) {
-      const goals = await assistant.getGoalGraphState('cli')
-      const withTasks = goals.threads.filter((t) => t.tasks.total > 0)
-      if (withTasks.length > 0) {
-        printSafe(`\nNo drafted plan for this session. The request was worked as tracked goal tasks (/goals):\n${formatGoalGraphState({ ...goals, threads: withTasks })}\n`)
-        return
-      }
-    }
-    printPlan()
+    // No drafted plan, but the request may still have been worked as tracked goal tasks (explainPlan words that).
+    printPlan(lastPlanStatus ? undefined : await assistant.getGoalGraphState('cli'))
   }
 
   /** What the last turn left behind, in the shape the shared explainers (run-explain.ts) take — the same data chat-ui hands them, so /why, /layers, /sources, /steps and /plan read identically on both surfaces. */
@@ -884,7 +879,7 @@ export async function runCli(options: RunCliOptions = {}): Promise<CliInstance> 
     console.log(stripTerminalControls(`\n[needs approval — revert] ${staged.reason}`))
     const confirmed = await askYesNo('Apply this revert? (y/N) ')
     lastTrace = undefined
-    lastNoTraceReason = `No harness trace — the last turn was a staged revert that was ${confirmed ? 'approved' : 'declined'} before the harness ran.`
+    lastNoTraceReason = NO_TRACE.stagedAction('revert', confirmed ? 'approved' : 'declined')
     await handleTurn('', confirmed, staged.pendingActionId)
   }
 
@@ -1150,8 +1145,9 @@ export async function runCli(options: RunCliOptions = {}): Promise<CliInstance> 
       // (AskClarificationService always sets both together), but fails safe to the plain-text
       // escalation copy rather than entering a loop with nothing to ask.
       lastTrace = undefined
-      lastNoTraceReason = `No harness trace — the last turn needed clarification (${result.reason ?? 'no further detail'}) but had no answerable questions.`
-      console.log(stripTerminalControls(`\n[needs clarification] ${result.reason ?? 'This request needs clarification.'}\n`))
+      const unanswerable = presentTurnResult(result)
+      lastNoTraceReason = unanswerable.noTraceReason
+      console.log(stripTerminalControls(`\n[needs clarification] ${unanswerable.kind === 'escalation' ? unanswerable.reason : DEFAULT_CLARIFICATION_REASON}\n`))
       return
     }
 
@@ -1332,22 +1328,7 @@ export async function runCli(options: RunCliOptions = {}): Promise<CliInstance> 
         // its own label and prompt — falling through to the 'write' case here would print
         // "[needs approval — write]" and "Apply this write?" over a message that's actually
         // about how many more searches a batch research turn is projected to need.
-        const kindLabel =
-          result.pendingActionKind === 'shell'
-            ? 'shell command'
-            : result.pendingActionKind === 'email'
-              ? 'send email'
-              : result.pendingActionKind === 'batch'
-                ? 'batch research'
-                : 'write'
-        const promptText =
-          result.pendingActionKind === 'shell'
-            ? 'Run this command?'
-            : result.pendingActionKind === 'email'
-              ? 'Send this email?'
-              : result.pendingActionKind === 'batch'
-                ? 'Continue?'
-                : 'Apply this write?'
+        const { kindLabel, promptText } = approvalLabels(result.pendingActionKind)
         console.log(stripTerminalControls(`\n[needs approval — ${kindLabel}] ${result.reason}`))
         let confirmed: boolean
         if (result.pendingActionKind && rememberedActionKinds.has(result.pendingActionKind)) {
@@ -1359,7 +1340,7 @@ export async function runCli(options: RunCliOptions = {}): Promise<CliInstance> 
           if (decision === 'a' && result.pendingActionKind) rememberedActionKinds.add(result.pendingActionKind)
         }
         lastTrace = undefined
-        lastNoTraceReason = `No harness trace — the last turn was a staged ${kindLabel} that was ${confirmed ? 'approved' : 'declined'} before the harness ran.`
+        lastNoTraceReason = NO_TRACE.stagedAction(kindLabel, confirmed ? 'approved' : 'declined')
         await handleTurn(message, confirmed, result.pendingActionId)
         return
       }
@@ -1385,7 +1366,7 @@ export async function runCli(options: RunCliOptions = {}): Promise<CliInstance> 
           // place and printWhy/printLayers displayed the wrong (already-finished) turn's
           // explanation instead of this decline's reason.
           lastTrace = undefined
-          lastNoTraceReason = 'No harness trace — the last turn was blocked on an approval gate and declined before the harness ran.'
+          lastNoTraceReason = NO_TRACE.messageApproval('declined')
           // Recorded now (not inside turn() itself) because the outcome is only known here —
           // see recordDeclinedRequest's doc comment for why this is safe unlike an eager append
           // inside runTurn. Without it, a later "did that actually happen?" question found no
@@ -1408,7 +1389,7 @@ export async function runCli(options: RunCliOptions = {}): Promise<CliInstance> 
       // printed as a bare "- null" and could not be approved, edited, or declined at all.
       if (result.status === 'needs_plan_approval') {
         if (!result.planApprovalId) {
-          printSafe(`\n[needs plan approval] ${result.reason ?? 'A plan is awaiting approval, but its approval id is missing.'}\n`)
+          printSafe(`\n[needs plan approval] ${result.reason ?? MISSING_PLAN_APPROVAL_ID_REASON}\n`)
           return
         }
         const id = result.planApprovalId
@@ -1419,7 +1400,7 @@ export async function runCli(options: RunCliOptions = {}): Promise<CliInstance> 
         // the job if the user picks "decide later" below.
         pendingPlanApproval = { id, message, snapshot }
         lastTrace = undefined
-        lastNoTraceReason = 'No harness trace — the last turn staged a plan for approval (pending /plan approve|decline|edit).'
+        lastNoTraceReason = NO_TRACE.planApproval(undefined, ' (pending /plan approve|decline|edit)')
         if (!snapshot) {
           printSafe('Decide with /plan approve or /plan decline.\n')
           return
@@ -1442,7 +1423,7 @@ export async function runCli(options: RunCliOptions = {}): Promise<CliInstance> 
         } else {
           decision = 'decline'
         }
-        lastNoTraceReason = `No harness trace — the last turn staged a plan that was ${decision === 'decline' ? 'declined' : 'approved'} before the harness ran.`
+        lastNoTraceReason = NO_TRACE.planApproval(decision === 'decline' ? 'declined' : 'approved')
         // Same originating message, so an approve falls through to the ordinary pipeline with the
         // now-active plan (see PlanApprovalService.resolvePendingPlanApproval's doc comment) exactly
         // the way a freshly template-matched plan already does.
@@ -1452,8 +1433,9 @@ export async function runCli(options: RunCliOptions = {}): Promise<CliInstance> 
 
       if (result.status === 'escalated') {
         lastTrace = undefined
-        lastNoTraceReason = `No harness trace — the last turn escalated (${result.reason}) before completing.`
-        console.log(stripTerminalControls(`\n[escalated] ${result.reason}\n`))
+        const escalation = presentTurnResult(result)
+        lastNoTraceReason = escalation.noTraceReason
+        console.log(stripTerminalControls(`\n[escalated] ${escalation.kind === 'escalation' ? escalation.reason : result.reason}\n`))
         return
       }
 
@@ -1476,9 +1458,7 @@ export async function runCli(options: RunCliOptions = {}): Promise<CliInstance> 
       if (!pendingActionId) {
         lastTrace = result.harnessSkipped ? undefined : result.trace
         lastAnswerClaim = result.answerClaim
-        lastNoTraceReason = result.harnessSkipped
-          ? 'No harness trace — the last turn was a simple, self-contained question answered directly without activating the harness (fast path).'
-          : undefined
+        lastNoTraceReason = result.harnessSkipped ? NO_TRACE.fastPath : undefined
       }
       lastSources = result.sources
       // A trivial fast-path turn never touches plan state at all (assistant.ts's triviality
@@ -1502,26 +1482,27 @@ export async function runCli(options: RunCliOptions = {}): Promise<CliInstance> 
       // last known plan untouched, and a non-skipped turn reporting none still clears it.
       if (!pendingActionId && (!result.harnessSkipped || result.planStatus)) lastPlanStatus = result.planStatus
       lastTurnUsage = result.usage ? priceUsage(result.usage) : undefined
+      const shown = presentTurnResult(result)
+      // status is 'ok' on this path (every other status returned above), so this is always a reply.
+      const hints = shown.kind === 'reply' ? shown.hints : {}
       const riskSuffix = result.riskLevel && result.riskLevel !== 'LOW' ? ` [risk: ${result.riskLevel}]` : ''
-      const sourcesHint = result.sources && result.sources.length > 0 ? ` (${result.sources.length} source${result.sources.length > 1 ? 's' : ''} — /sources)` : ''
-      const planHint = result.planStatus ? ` (plan: ${result.planStatus.completionPct.toFixed(0)}% — /plan)` : ''
-      // Printed as its own line, not folded into riskSuffix/sourcesHint/planHint's inline
-      // "${...}" style — this is a full sentence, not a short bracketed tag. Must be handled the
-      // same way in both branches below (like the other hints), since result.contradictionNotice
-      // is only known once HarnessRuntime.run() finishes, well after writeToken already streamed
-      // `reply` itself to the screen — see assistant.ts's findContradictionNotice doc comment.
-      const contradictionNotice = result.contradictionNotice ? `\n\n${result.contradictionNotice}` : ''
-      // Same treatment for the change reviewer's advisory notice (see AssistantTurnResult.reviewNotice).
-      const reviewNotice = (result.reviewNotice ? `\n\n${result.reviewNotice}` : '') + (result.auditNotice ? `\n\n${result.auditNotice}` : '')
+      const sourcesHint = hints.sourcesCount ? ` (${hints.sourcesCount} source${hints.sourcesCount > 1 ? 's' : ''} — /sources)` : ''
+      const planHint = hints.planCompletionPct !== undefined ? ` (plan: ${hints.planCompletionPct.toFixed(0)}% — /plan)` : ''
+      // Printed as their own lines, not folded into riskSuffix/sourcesHint/planHint's inline "${...}" style: these are
+      // full sentences. They are only known once HarnessRuntime.run() finishes, well after writeToken streamed the reply
+      // (see assistant.ts's findContradictionNotice doc comment), so both branches below print them.
+      const contradictionNotice = hints.contradictionNotice ? `\n\n${hints.contradictionNotice}` : ''
+      // The change reviewer's advisory notice and the reply audit's notice (see AssistantTurnResult.reviewNotice/auditNotice).
+      const reviewNotice = (hints.reviewNotice ? `\n\n${hints.reviewNotice}` : '') + (hints.auditNotice ? `\n\n${hints.auditNotice}` : '')
       // R7: the turn-end next-step options, under the reply. Remembered so a bare 1/2/3 typed as
       // the very next input runs that option (see dispatchOne); any other input clears them.
-      lastNextSteps = result.nextSteps && result.nextSteps.length > 0 ? result.nextSteps : undefined
+      lastNextSteps = hints.nextSteps
       const nextStepsBlock = lastNextSteps ? `\n\n${formatNextSteps(lastNextSteps)}` : ''
       if (streamedAnyTokens) {
         // The reply text is already on screen, printed token-by-token as it streamed in — but
         // onToken only ever saw draftReply, not a Phase 4.1 pausedNote appended afterward (see
         // AssistantTurnResult.pausedNote's doc comment), so that part still needs printing here.
-        const pausedNoteText = result.pausedNote ? `\n\n${result.pausedNote}` : ''
+        const pausedNoteText = hints.pausedNote ? `\n\n${hints.pausedNote}` : ''
         process.stdout.write(stripTerminalControls(`${pausedNoteText}${riskSuffix}${sourcesHint}${planHint}${contradictionNotice}${reviewNotice}${nextStepsBlock}\n\n`))
       } else {
         console.log(stripTerminalControls(`\nAielia>${riskSuffix} ${result.reply}${sourcesHint}${planHint}${contradictionNotice}${reviewNotice}${nextStepsBlock}\n`))
