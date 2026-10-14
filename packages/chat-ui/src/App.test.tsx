@@ -423,6 +423,18 @@ describe('App', () => {
     expect(screen.queryByText('echo: first message')).not.toBeInTheDocument()
   })
 
+  it('"Undo" confirms what it removed', async () => {
+    const user = userEvent.setup()
+    render(<App />)
+    await user.type(screen.getByPlaceholderText('Message Aielia…'), 'first message')
+    await user.click(screen.getByRole('button', { name: 'Send' }))
+    await waitFor(() => expect(screen.getByText('echo: first message')).toBeInTheDocument())
+
+    await user.click(screen.getByRole('button', { name: 'Undo last exchange' }))
+
+    expect(await screen.findByRole('status')).toHaveTextContent('Removed the last exchange')
+  })
+
   it('"Undo" is disabled with no conversation yet', async () => {
     render(<App />)
     expect(await screen.findByRole('button', { name: 'Undo last exchange' })).toBeDisabled()

@@ -133,6 +133,20 @@ function writePlanVizPref(key: string, value: boolean): void {
   }
 }
 
+const SESSION_ID_KEY = 'aielia.sessionId'
+
+function rememberedSessionId(): string {
+  try {
+    const saved = localStorage.getItem(SESSION_ID_KEY)
+    if (saved) return saved
+    const fresh = newId()
+    localStorage.setItem(SESSION_ID_KEY, fresh)
+    return fresh
+  } catch {
+    return newId()
+  }
+}
+
 function newId(): string {
   return typeof crypto !== 'undefined' && crypto.randomUUID ? crypto.randomUUID() : `${Date.now()}-${Math.random()}`
 }
@@ -423,6 +437,8 @@ export function App(): React.JSX.Element {
   // and its card never collides with a real approval card. See demo-seed.ts.
   const [showDemo, setShowDemo] = useState<boolean>(() => !isTauri())
   const [input, setInput] = useState('')
+  // A short confirmation after Undo (the removed exchange just vanishes from the screen, which read as "nothing happened"); clears itself.
+  const [undoNotice, setUndoNotice] = useState<string | null>(null)
   const [appVersion, setAppVersion] = useState<string | undefined>(undefined)
   const [busy, setBusy] = useState(false)
   // Messages sent mid-turn (goal-graph steering). They show below the live reply, and join the transcript only once the turn's reply has been added, so they never appear above the reply they were sent during.
@@ -510,7 +526,8 @@ export function App(): React.JSX.Element {
   const assistantRef = useRef<PersonalAssistant | null>(null)
   const configStoreRef = useRef<ConfigStore | null>(null)
   const [layerPins, setLayerPins] = useState<ReadonlySet<string>>(new Set())
-  const sessionIdRef = useRef(newId())
+  // One conversation per install: the id is remembered so a reload (or reopening the app) shows the chat again instead of starting a new, empty one. "New chat" clears this session's data, it does not need a new id.
+  const sessionIdRef = useRef(rememberedSessionId())
   const bottomRef = useRef<HTMLDivElement>(null)
   const composerRef = useRef<HTMLTextAreaElement>(null)
   const headerMoreRef = useRef<HTMLDivElement>(null)
@@ -743,6 +760,8 @@ export function App(): React.JSX.Element {
 
     const result = await assistant.undoLastTurn(sessionIdRef.current)
     if (!result.undone) return
+    setUndoNotice(wasPendingApproval ? 'Removed the request that was waiting for approval.' : 'Removed the last exchange (your message and the reply).')
+    setTimeout(() => setUndoNotice(null), 5000)
 
     setEntries((prev) => {
       const kinds = prev.map((e) => e.kind)
@@ -782,6 +801,16 @@ export function App(): React.JSX.Element {
       const assistant = await buildAssistant(resolved.config)
       if (!cancelled) {
         assistantRef.current = assistant
+        // Show the stored conversation again after a reload (text only: approval cards and run details are not stored in the transcript).
+        try {
+          const stored = (await assistant.getTranscript(sessionIdRef.current)).filter((m) => m.role === 'user' || m.role === 'assistant')
+          if (!cancelled && stored.length > 0) {
+            setShowDemo(false)
+            setEntries((prev) => (prev.length > 0 ? prev : stored.map((m): ChatEntry => ({ id: newId(), kind: m.role === 'user' ? 'user' : 'assistant', content: m.content }))))
+          }
+        } catch (err) {
+          console.warn('Could not restore the earlier conversation:', err)
+        }
         // Plan graph: pick up a plan persisted by an earlier session so the header button/drawer reflect it.
         if (isPlanGraphEnabled(resolved.config.planGraphMode)) setPlanGraphSource(await assistant.getPlanGraph(sessionIdRef.current))
       }
@@ -1447,6 +1476,7 @@ export function App(): React.JSX.Element {
           )}
         </div>
       )}
+      {undoNotice && <div className="app__notice" role="status">{undoNotice}</div>}
       <form className="app__composer" onSubmit={handleSubmit}>
         <textarea
           ref={composerRef}

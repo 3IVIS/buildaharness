@@ -130,12 +130,15 @@ const CATEGORY_LABELS: Record<FactCategory, string> = {
 }
 
 /** One "Facts I know" line — text plus its metadata chips (topic, certainty, established date, and, for a project-scoped fact, which project) so /memory reads as a real inventory rather than a flat, unlabeled list. Certainty always shows via certaintyLabel() (see its doc comment on why an inherently-certain user_asserted fact still gets a label); category/project are omitted when absent rather than shown as "none". */
-function formatFactLine(f: UserFact): string {
+function formatFactLine(f: UserFact, pending: PendingFact[] = []): string {
   const chips: string[] = []
   if (f.category) chips.push(CATEGORY_LABELS[f.category].toLowerCase())
   chips.push(`${certaintyLabel(f)} certainty`)
   chips.push(`established ${f.extractedAt.slice(0, 10)}`)
   if (f.project) chips.push(`project: ${f.project}`)
+  // A guess held for this conversation is not saved: say so, so "Facts I know" never reads as a stored fact the assistant denied saving.
+  if (pending.some((p) => p.text === f.text)) chips.push('not saved yet: waiting in Pending confirmation')
+  else if (!f.durable) chips.push('this conversation only, not saved')
   return `${f.text} (${chips.join(', ')})`
 }
 
@@ -188,7 +191,7 @@ export function formatMemorySummary(summary: MemorySummary): string {
   sections.push('Facts I know:')
   sections.push(
     summary.facts.length > 0
-      ? [...summary.facts.map((f, i) => `  ${i + 1}. ${formatFactLine(f)}`), '  Use /memory forget <n> to remove one.'].join('\n')
+      ? [...summary.facts.map((f, i) => `  ${i + 1}. ${formatFactLine(f, summary.pending)}`), '  Use /memory forget <n> to remove one.'].join('\n')
       : '  None yet',
   )
 
@@ -317,7 +320,8 @@ const VISIBILITY_LABEL: Record<GoalThreadVisibility, string> = {
 }
 
 function formatGoalThreadLine(thread: GoalThreadView): string {
-  const focus = thread.isActive ? ' [ACTIVE]' : ''
+  // The status tag already says ACTIVE; the focus tag only adds information for a thread that is in focus but not (yet) ACTIVE.
+  const focus = thread.isActive && thread.status !== 'ACTIVE' ? ' [ACTIVE]' : ''
   const sibling = thread.relationToSiblings ? ` (${thread.relationToSiblings} sibling${thread.siblingIds && thread.siblingIds.length > 1 ? 's' : ''})` : ''
   const { total, complete, failed, pending } = thread.tasks
   const taskLine = total > 0 ? `tasks: ${complete}/${total} complete${failed > 0 ? `, ${failed} failed` : ''}${pending > 0 ? `, ${pending} pending` : ''}` : 'no tasks yet'
@@ -331,7 +335,8 @@ function formatGoalThreadLine(thread: GoalThreadView): string {
 
 /** Renders the turn-end next-step options shown under a full turn's reply — numbered so the CLI can accept a bare `1`/`2`/`3` as "run that one" (see cli.ts's dispatchOne). Only the description is shown; the rationale and confidence stay in the structured result for richer front ends. */
 export function formatNextSteps(steps: NextStepSuggestion[]): string {
-  return ['Next steps you could take (type 1, 2 or 3 to run one — or just type your own message):', ...steps.map((s, i) => `  ${i + 1}. ${s.description}`)].join('\n')
+  const pick = steps.length === 1 ? 'type 1 to run it' : `type ${steps.slice(0, -1).map((_, i) => i + 1).join(', ')} or ${steps.length} to run one`
+  return [`Next steps you could take (${pick} — or just type your own message):`, ...steps.map((s, i) => `  ${i + 1}. ${s.description}`)].join('\n')
 }
 
 /**

@@ -24,6 +24,14 @@ function stripMarkdown(text: string): string {
     .trim()
 }
 
+/** Cuts at a word boundary and marks the cut, so a long message never ends mid-word ("anywhere el") with no sign that more follows. */
+function clipAtWord(text: string, max: number): string {
+  if (text.length <= max) return text
+  const cut = text.slice(0, max)
+  const lastSpace = cut.lastIndexOf(' ')
+  return `${(lastSpace > max / 2 ? cut.slice(0, lastSpace) : cut).trimEnd()}…`
+}
+
 function escapeRegExp(term: string): string {
   return term.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
 }
@@ -131,7 +139,7 @@ export function SearchPanel({ search, onCancel }: Props): React.JSX.Element {
                     <span className="search-panel__result-at">{when}</span>
                   </span>{' '}
                   <span className="search-panel__result-snippet" aria-hidden="true">
-                    {highlightMatches(content.slice(0, 160), query)}
+                    {highlightMatches(clipAtWord(content, 160), query)}
                   </span>
                 </button>
                 {expandedIndex === i && (

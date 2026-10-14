@@ -732,6 +732,15 @@ export async function runCli(options: RunCliOptions = {}): Promise<CliInstance> 
       printPlanApproval(pendingPlanApproval.snapshot)
       return
     }
+    // No drafted plan, but the request may still have been worked as tracked goal tasks: say so instead of "No active plan" next to a /goals that shows them.
+    if (!lastPlanStatus) {
+      const goals = await assistant.getGoalGraphState('cli')
+      const withTasks = goals.threads.filter((t) => t.tasks.total > 0)
+      if (withTasks.length > 0) {
+        printSafe(`\nNo drafted plan for this session. The request was worked as tracked goal tasks (/goals):\n${formatGoalGraphState({ ...goals, threads: withTasks })}\n`)
+        return
+      }
+    }
     printPlan()
   }
 

@@ -70,6 +70,33 @@ export class ResponseService {
    * thread, not be silently dropped). A no-op when `memory` wasn't wired in, or the caller never
    * resolved a `threadId` — exactly today's behavior either way (INV-43).
    */
+  /** Public entry for the tool-level approval path (a staged write/command pauses the turn before any result builder runs): records the tasks on the goal thread so Goals shows them. */
+  async syncGoalThread(
+    sessionId: string,
+    threadId: string | undefined,
+    tasks: { id: string; status: string; description?: string; depends_on?: string[]; risk_level?: string }[],
+    onUsage?: (usage: TokenUsage) => void,
+  ): Promise<void> {
+    try {
+      await this.syncGoalThreadEvidence(sessionId, threadId, tasks, onUsage)
+    } catch (err) {
+      console.error('[goal-graph] syncing tasks after an approval pause failed:', err)
+    }
+  }
+
+  /** Marks every counted task of `threadId` COMPLETE (the staged actions it was waiting on were approved and applied); a thread whose tasks all finish moves to DONE. */
+  async completeGoalThread(sessionId: string, threadId: string | undefined, onUsage?: (usage: TokenUsage) => void): Promise<void> {
+    if (!threadId || !this.memory) return
+    try {
+      const record = await loadGoalGraphRecord(this.memory, sessionId, this.session.undoWorkspace())
+      const thread = record?.threads.find((t) => t.id === threadId)
+      if (!thread || thread.tasks.length === 0) return
+      await this.syncGoalThreadEvidence(sessionId, threadId, thread.tasks.map((t) => ({ ...t, status: 'COMPLETE' })), onUsage)
+    } catch (err) {
+      console.error('[goal-graph] completing the thread after an approval failed:', err)
+    }
+  }
+
   private async syncGoalThreadEvidence(
     sessionId: string,
     threadId: string | undefined,

@@ -51,11 +51,18 @@ const base = { userMessage: 'Clear out the old ones.', sessionId: 's', toolLoopW
 describe('AL3a ambiguity guard in TurnInterpreter', () => {
   const ambiguous = '{"ambiguous": true, "question": "What counts as old — before which year?"}'
 
-  it('before (flag off): an ambiguous HIGH-risk request is staged for approval, no scope check made', async () => {
-    const { llm, calls } = stubLlm(ambiguous)
+  it('flag off: a clear HIGH-risk request still goes to the approval gate, after one scope check on the message gate only', async () => {
+    const { llm, calls } = stubLlm('{"ambiguous": false, "question": ""}')
     const out = await interpreter(llm, 'disabled').interpretIntent(base)
     expect(out.kind).toBe('needs_approval')
-    expect(calls.ambiguity).toBe(0)
+    expect(calls.ambiguity).toBe(1)
+  })
+
+  it('flag off: an ambiguous HIGH-risk request gets a question, not a "Proceed?" for an action nobody named', async () => {
+    const { llm, calls } = stubLlm(ambiguous)
+    const out = await interpreter(llm, 'disabled').interpretIntent(base)
+    expect(out.kind).toBe('needs_question')
+    expect(calls.ambiguity).toBe(1)
   })
 
   it('after (flag on): the same request gets a clarifying question and nothing is staged', async () => {

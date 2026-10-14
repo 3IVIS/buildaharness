@@ -114,6 +114,7 @@ class FakeLLMClient implements ILLMClient {
   async callChatStructured(messages: ChatMessage[], _tools?: ToolDefinition[], _options?: ChatOptions): Promise<LLMStructuredResponse> {
     this.calls++
     if (isTurnIntentRequest(messages)) return { content: deriveTurnIntentJSON(messages) }
+    if (String(messages[0]?.content).includes('You decide whether a user')) return { content: '{"ambiguous":false,"question":""}' }
     return { content: this.reply }
   }
 }
@@ -216,6 +217,8 @@ class ScriptedToolLLMClient implements ILLMClient {
       const userContent = messages.find((m) => m.role === 'user')?.content ?? ''
       return { content: deriveTurnIntentJSON(messages, this.classificationOverride?.(userContent)) }
     }
+    // The scope check that runs just before a message-level "Proceed?" is answered here too, so it never uses up a scripted tool-loop response.
+    if (String(messages[0]?.content).includes('You decide whether a user')) return { content: '{"ambiguous":false,"question":""}' }
     this.receivedMessages.push(messages)
     return this.next()
   }
@@ -289,6 +292,7 @@ class ReframeAwareLLMClient implements ILLMClient {
 
   async callChatStructured(messages: ChatMessage[]): Promise<LLMStructuredResponse> {
     if (isTurnIntentRequest(messages)) return { content: deriveTurnIntentJSON(messages) }
+    if (String(messages[0]?.content).includes('You decide whether a user')) return { content: '{"ambiguous":false,"question":""}' }
     this.structuredCalls++
     return { content: this.reframeResponseContent }
   }
@@ -367,7 +371,7 @@ describe('PersonalAssistant', () => {
     expect(result.status).toBe('needs_approval')
     expect(result.riskLevel).toBe('HIGH')
     expect(result.reason).toMatch(/sends a message/)
-    expect(llm.calls).toBe(1)
+    expect(llm.calls).toBe(2) // the classification call + the scope check that runs just before a "Proceed?" is shown
   })
 
   it('dangerouslySkipPermissions bypasses the message-level risk gate entirely — proceeds without needs_approval', async () => {
@@ -393,7 +397,7 @@ describe('PersonalAssistant', () => {
     expect(approved.reply).toBe('Draft sent.')
     // 1 classification call on the first (declined) turn + 1 classification call and 1 reply
     // call on the approved retry, which re-enters runTurn from scratch.
-    expect(llm.calls).toBe(3)
+    expect(llm.calls).toBe(4) // plus the scope check before each gate
   })
 
   it('persists conversation history across turns in the same session', async () => {
@@ -1093,6 +1097,16 @@ describe('PersonalAssistant session management', () => {
     expect(await reminderStore.list()).toEqual(remindersBefore)
   })
 
+  it('an automatic reply-check nudge is never stored as a user message (it showed up in /export and Search)', async () => {
+    const llm = new FakeLLMClient('Noted.')
+    const assistant = new PersonalAssistant({ llmClient: llm })
+    const sessionId = 'nudge-transcript'
+    await assistant.turn('What is 6 times 7?', { sessionId })
+    await assistant.turn('[automatic reply check] Your last reply did not respond to the user\'s message.', { sessionId, auditRetry: true })
+    const users = (await assistant.getTranscript(sessionId)).filter((m) => m.role === 'user').map((m) => m.content)
+    expect(users).toEqual(['What is 6 times 7?'])
+  })
+
   it('clearSession leaves durable facts (name/preference/health-dietary) intact so they survive /new', async () => {
     const llm = new FakeLLMClient('Noted, Ali.')
     const assistant = new PersonalAssistant({ llmClient: llm })
@@ -1485,6 +1499,7 @@ describe('PersonalAssistant session management extras', () => {
       }
       async callChatStructured(messages: ChatMessage[], _tools?: ToolDefinition[], options?: ChatOptions): Promise<LLMStructuredResponse> {
         if (isTurnIntentRequest(messages)) return { content: deriveTurnIntentJSON(messages) }
+        if (String(messages[0]?.content).includes('You decide whether a user')) return { content: '{"ambiguous":false,"question":""}' }
         // Every non-classifyTurnIntent callChatStructured call here is the tool loop's own
         // final-answer round trip (no tool calls scripted) — records the model it was called
         // with and answers immediately, so the turn takes the triviality fast path with no
@@ -1673,6 +1688,27 @@ describe('PersonalAssistant file tools', () => {
     const applied = await assistant.turn('Yes, go ahead.', { approved: true, pendingActionId: staged.pendingActionId })
     expect(applied.reply).toBe('Wrote "summary.md" (1 line, 14 bytes).')
     expect(await backend.readTextFile(`${ROOT}/summary.md`)).toBe('staged content')
+  })
+
+  it('a request paused for a staged write shows its tasks on its goal thread, and the thread is DONE once the write is approved and applied', async () => {
+    const backend = makeFakeBackend()
+    const llm = scriptedResponses([
+      { content: '', toolCalls: [{ id: 'toolu_1', name: 'write_file', input: { path: 'summary.md', content: 'staged content' } }] },
+      { content: 'Should I go ahead and write it?' },
+    ])
+    const assistant = new PersonalAssistant({ llmClient: llm, fileTools: { backend, workspaceRoot: ROOT } })
+    const sessionId = 'goal-after-approval'
+
+    const staged = await assistant.turn('Write a summary to summary.md', { sessionId, steeringChannel: new LiveSteeringChannel() })
+    expect(staged.status).toBe('needs_approval')
+    const paused = await assistant.getGoalGraphState(sessionId)
+    expect(paused.threads[0].tasks.total).toBeGreaterThan(0)
+    expect(paused.threads[0].status).not.toBe('DONE')
+
+    await assistant.turn('Yes', { sessionId, approved: true, pendingActionId: staged.pendingActionId, steeringChannel: new LiveSteeringChannel() })
+    const done = await assistant.getGoalGraphState(sessionId)
+    expect(done.threads[0]).toMatchObject({ status: 'DONE' })
+    expect(done.threads[0].tasks.complete).toBe(done.threads[0].tasks.total)
   })
 
   it('a write_file call editing an existing file shows a diff against its current content in the approval reason, but not a second time in the post-write confirmation (already reviewed at the decision point)', async () => {
@@ -1990,6 +2026,26 @@ describe('PersonalAssistant file tools', () => {
     // The write from the first half of the chain must still be on disk — declining only the
     // second half must never be misread as having undone the first.
     expect(await backend.readTextFile(`${ROOT}/todo.txt`)).toBe('buy milk')
+  })
+
+  it('the last approval of a chained request reports everything the request changed, not only the final receipt', async () => {
+    const backend = makeFakeBackend()
+    const { id: firstId } = await stagePendingAction(backend, ROOT, { kind: 'write', path: 'README.md', content: 'hello' })
+    const { id: secondId } = await stagePendingAction(backend, ROOT, { kind: 'write', path: 'CHECKLIST.md', content: '- one' })
+    const first = await loadPendingAction(backend, ROOT, firstId)
+    await backend.writeTextFile(`${ROOT}/.pending-actions/${firstId}.json`, JSON.stringify({ ...first, nextPendingActionId: secondId }))
+    const second = await loadPendingAction(backend, ROOT, secondId)
+    await backend.writeTextFile(`${ROOT}/.pending-actions/${secondId}.json`, JSON.stringify({ ...second, chainedFrom: true }))
+    const assistant = new PersonalAssistant({ llmClient: scriptedResponses([]), fileTools: { backend, workspaceRoot: ROOT } })
+
+    const afterFirst = await assistant.turn('irrelevant', { approved: true, pendingActionId: firstId })
+    expect(afterFirst.status).toBe('needs_approval')
+    const done = await assistant.turn('irrelevant', { approved: true, pendingActionId: secondId })
+
+    expect(done.status).toBe('ok')
+    expect(done.reply).toContain('What changed')
+    expect(done.reply).toContain('README.md')
+    expect(done.reply).toContain('CHECKLIST.md')
   })
 
   it('a corrupt or out-of-workspace chained record does not turn an already-applied action into an error', async () => {

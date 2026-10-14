@@ -771,6 +771,8 @@ export class PersonalAssistant {
           // The flagged reply is already delivered. If the correction cannot run (it comes back as an escalation, an approval request or an
           // error, or throws), the flagged reply stands with the audit's notice instead of being replaced by that failure (benchmark scenario 10 turn 2).
           let retried: AssistantTurnResult | undefined
+          // The flagged reply was already streamed to the screen; the corrected one follows it, so mark where it starts instead of running the two together.
+          options.onToken?.('\n\n— Correcting my last answer —\n')
           try {
             retried = await this.turn(nudge, { ...options, sessionId, auditRetry: true, approved: undefined, pendingActionId: undefined, pendingClarificationId: undefined, planApprovalId: undefined })
           } catch (err) {
@@ -1300,10 +1302,13 @@ export class PersonalAssistant {
       // Resuming an approved action continues the paused tool loop (more calls, further approvals,
       // a final answer) — a further pause is turned into a result the same way a first one is,
       // except the user message is already in the transcript (resumed: true).
-      return this.actionApproval.resolvePendingAction(
+      const resumed = await this.actionApproval.resolvePendingAction(
         sessionId, transcriptKey, options.pendingActionId, options.approved ?? false, userMessage,
         this.loopResumeOptions(sessionId, transcriptKey, userMessage, { onToken: options.onToken, onToolStep: options.onToolStep }),
       )
+      // The approvals the request was waiting on are all applied: its goal thread is finished, not "no tasks yet".
+      if (options.approved && resumed.status === 'ok') await this.responseService.completeGoalThread(sessionId, goalThreadId, accumulateUsage)
+      return resumed
     }
 
     // Q2 — resolving a staged needs_clarification result is a resume, not a fresh turn: the
@@ -1369,7 +1374,12 @@ export class PersonalAssistant {
     const { facts, factsBlock, knownFactKeys } = await this.memoryService.loadFacts(sessionId)
     const { remindersBlock } = await this.memoryService.loadActiveReminders()
     const recallBlock = await recallPointerBlock(this.agentLoop.digestReader)
-    let systemPrompt = `${SYSTEM_PROMPT}${factsBlock}${recallBlock}${remindersBlock}`
+    // What memory is doing right now, stated outright: without it the model guessed from earlier turns of the conversation and, after
+    // `/memory on`, kept telling the person memory was off (and that nothing would be kept).
+    const memoryStateBlock = (await this.memoryService.isMemoryOff())
+      ? '\n\n[Memory state, set by the user: memory writes are OFF from now on. What the user says from this message on is not saved and will not be remembered after this conversation, so do not say it was or will be. Facts saved earlier (including earlier in this conversation, while memory was on) stay saved and readable: do not withdraw or contradict what you said about those before.]'
+      : '\n\n[Memory state: memory writes are ON. The system saves what the user tells you about themselves, so do not say that nothing is being saved. Anything the user said while memory was off was NOT saved: do not say it was, and do not offer to keep or remember it unless they say it again now.]'
+    let systemPrompt = `${SYSTEM_PROMPT}${factsBlock}${recallBlock}${remindersBlock}${memoryStateBlock}`
 
     const interpretation = await this.turnInterpreter.interpretIntent({
       userMessage,
@@ -1432,6 +1442,13 @@ export class PersonalAssistant {
           ? classification.statedConstraints.filter((_, i) => classification.lastingConstraints!.includes(i + 1))
           : classification.statedConstraints,
       )
+    }
+
+    // Tell the model the rules in force, this message's included: a quick turn is never checked against them afterwards, and the reply that
+    // confirmed "keep every reply to two sentences" was itself three (it was written before the rule was recorded).
+    if (semanticConstraintCheckEnabled()) {
+      const inForce = await this.session.getStandingConstraints(sessionId)
+      if (inForce.length > 0) systemPrompt += `\n\n[Standing instructions from the user for this conversation — follow them in this reply too, including a reply that just acknowledges them:\n${inForce.map((c) => `- ${c}`).join('\n')}]`
     }
 
     // A message that only asks about the active plan is answered from the plan's recorded state; the
@@ -1839,6 +1856,8 @@ export class PersonalAssistant {
       // unexamined, so it propagates out of harnessBridge.run() as a thrown error rather than a
       // `{ status: 'paused' }` outcome; caught here instead.
       if (err instanceof OneLoopPause) {
+        // The turn stops here for a staged write/command: put the request's tasks on its goal thread now, or Goals says "no tasks yet".
+        await this.responseService.syncGoalThread(sessionId, goalThreadId, initialTasks, accumulateUsage)
         // P10: activePlan/err.currentTaskId give buildToolLoopPauseResult what it needs for the
         // INV-36 trust check — this is the only call site with a real answer for "which task was
         // RUNNING", since it's reached only once the harness has actually started driving the

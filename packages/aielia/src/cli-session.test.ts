@@ -251,7 +251,7 @@ describe('formatNextSteps', () => {
     ])
     expect(out).toContain('1. add tests')
     expect(out).toContain('2. deploy it')
-    expect(out).toContain('type 1, 2 or 3 to run one')
+    expect(out).toContain('type 1 or 2 to run one')
     expect(out).toContain('just type your own message')
   })
 })

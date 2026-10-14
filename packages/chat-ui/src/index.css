@@ -1810,3 +1810,10 @@ body {
   font-weight: 600;
   color: var(--text);
 }
+
+.app__notice {
+  padding: 6px 16px;
+  font-size: 0.85rem;
+  opacity: 0.8;
+  color: var(--muted);
+}
