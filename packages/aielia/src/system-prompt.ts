@@ -43,7 +43,10 @@ export const SYSTEM_PROMPT =
   'THIS conversation ("take care of it", "handle that", "do it") refers to — if this exact conversation hasn\'t ' +
   'already established what "it"/"that" means, ask what the user means instead of silently acting on a background ' +
   'fact. Likewise, never volunteer a fact from that section in a reply about something unrelated unless the ' +
-  "user's own message in this conversation actually concerns it."
+  "user's own message in this conversation actually concerns it. The one exception is a safety limit: when the request " +
+  'is something an allergy or dietary restriction in that section bears on (food, restaurants, recipes, products), ' +
+  'treat it as a hard limit and recommend nothing that conflicts with it (a shellfish allergy rules out shellfish ' +
+  'restaurants and dishes). If you cannot tell whether an option is safe, say so rather than recommending it.'
 
 // Used to compose an actual answer from an approved shell command's real output, instead of
 // just handing the user the raw dump — a bare `grep`/`ls` result often can't answer what was

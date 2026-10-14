@@ -1,5 +1,6 @@
 import { actionRecordSuffix, stripActionRecord } from './action-record.js'
 import { deletePlanFiles } from './plan-store.js'
+import { deleteGoalGraphRecord } from './goal-graph-store.js'
 import {
   loadHarnessCheckpoint,
   deleteHarnessCheckpoint,
@@ -26,6 +27,7 @@ import type { ActionToolsContext } from './action-tools.js'
 import { mergeStandingConstraints } from './constraint-check.js'
 import { estimateCostUsd } from './model-pricing.js'
 import { checkSpendCap, EMPTY_SPEND_STATE, type SpendCapConfig, type SpendState } from './spend-cap.js'
+import { AUDIT_NUDGE_PREFIX } from './reply-audit.js'
 
 /** Same fallback model cli.ts's withCostEstimate uses when config.model is unset — both now import @buildaharness/runtime's ANTHROPIC_DEFAULT_MODEL rather than hand-syncing a literal. Only used to estimate cost for the spend cap when a turn's usage carries no real costUsd. */
 const DEFAULT_MODEL_FOR_COST_ESTIMATE = ANTHROPIC_DEFAULT_MODEL
@@ -404,6 +406,9 @@ export class AssistantSession {
     transcriptKey: string,
     input: { role: 'user' | 'assistant'; content: string; actionRecord?: string[] },
   ): Promise<void> {
+    // The automatic reply-check nudge drives a retry turn but is not a user turn: stored, it showed up in /export and Search and the
+    // model later quoted it back as the user's last message. The retry's reply is still stored as the assistant's.
+    if (input.role === 'user' && input.content.startsWith(AUDIT_NUDGE_PREFIX)) return
     // The action record is the system's, built from `actionRecord` (what really ran); a marker inside model-written
     // text is an imitation and is dropped (see action-record.ts).
     const message: { role: 'user' | 'assistant'; content: string } =
@@ -544,6 +549,7 @@ export class AssistantSession {
     await this.memory.delete(`plan:${sessionId}`)
     const planFs = this.undoWorkspace()
     if (planFs) await deletePlanFiles(planFs, sessionId)
+    await deleteGoalGraphRecord(this.memory, sessionId, planFs)
     await this.exitPlanMode(sessionId)
     await deleteHarnessCheckpoint(this.checkpointStore, `turn:${sessionId}`)
     await this.memory.delete(resumeAttemptsKey(sessionId))
@@ -635,7 +641,7 @@ export class AssistantSession {
     const { backend, workspaceRoot } = workspace
 
     const entry = await loadUndoLogEntry(backend, workspaceRoot, id)
-    if (!entry) return { status: 'error', message: `No undo-log entry with id "${id}".` }
+    if (!entry) return { status: 'error', message: `No undo-log entry with id "${id}". Use the full id shown by /undo-action with no argument (a list position does not work).` }
     if (!entry.undoable) return { status: 'error', message: `Entry "${id}" cannot be reverted: ${entry.reason}` }
 
     const plan = buildRevertPlan(entry)

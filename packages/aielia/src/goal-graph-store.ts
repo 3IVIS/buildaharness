@@ -294,6 +294,21 @@ export async function saveGoalGraphRecord(memory: MemoryAdapter, sessionId: stri
 }
 
 /**
+ * Removes `sessionId`'s goal graph from memory and, when configured, its JSON file (the file wins over the memory record on load, so
+ * deleting only the record would bring the old goals straight back). Used when a conversation ends: a fresh conversation must not keep
+ * the old one's goals or the next steps saved on them. Never throws.
+ */
+export async function deleteGoalGraphRecord(memory: MemoryAdapter, sessionId: string, fsPersistence?: GoalGraphFsPersistence): Promise<void> {
+  await memory.delete(goalGraphKey(sessionId))
+  if (!fsPersistence) return
+  try {
+    await fsPersistence.backend.removeFile(goalGraphFilePath(fsPersistence.workspaceRoot, sessionId))
+  } catch (err) {
+    console.error(`goal-graph-store: removing goal graph file for session ${sessionId} failed:`, err)
+  }
+}
+
+/**
  * Loads `sessionId`'s goal graph, migrating a pre-existing `PlanRecord` in place the first time
  * this is called for a session that predates this mechanism (P5-equivalent non-destructive
  * discipline — same as `migrateFact`/`migratePlanRecord`: the old record's data is never silently

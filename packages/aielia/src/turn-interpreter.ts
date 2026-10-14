@@ -183,13 +183,17 @@ export class TurnInterpreter {
     // MEDIUM/HIGH turn that will run write/shell tools) pay for the scope check; UNKNOWN means the
     // classifier itself failed, so the check would likely fail too — leave that on the approval gate.
     // `approved` is an explicit user go-ahead on an already-shown action: never re-question it.
+    // The message-level approval gate is checked even with the guard 'disabled': "Send it to him." got a HIGH "Proceed?" prompt for an
+    // action nobody had named (all three surfaces), and a decline left only "Cancelled." A "Proceed?" must authorise something specific.
+    // The tool-loop case stays behind the flag.
+    const messageGate = turnPolicy.decision === 'REQUIRE_APPROVAL'
     if (
-      this.ambiguityGuardMode === 'enabled' &&
+      (this.ambiguityGuardMode === 'enabled' || messageGate) &&
       !approved &&
       !dangerouslySkipPermissions &&
       classification.riskLevel !== 'UNKNOWN' &&
-      (turnPolicy.decision === 'REQUIRE_APPROVAL' ||
-        (toolLoopWillRun && (classification.riskLevel === 'MEDIUM' || classification.riskLevel === 'HIGH')))
+      (messageGate ||
+        (this.ambiguityGuardMode === 'enabled' && toolLoopWillRun && (classification.riskLevel === 'MEDIUM' || classification.riskLevel === 'HIGH')))
     ) {
       const check = await checkRequestAmbiguity(userMessage, this.llmClient, recentTranscript ?? [], this.model(), onUsage)
       if (check.ambiguous) {

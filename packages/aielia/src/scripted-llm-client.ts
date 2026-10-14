@@ -69,6 +69,7 @@ export const SIDE_CALL_MARKERS: Array<[string, string]> = [
   ['You are a security classifier analyzing untrusted external content', '{"flagged":false}'],
   ['You check whether an assistant\'s reply is faithful to the raw results', '{"verdict":"grounded"}'],
   ['You judge whether an assistant actually accomplished a task', '{"done":true}'],
+  ['You decide whether a user\'s request to an assistant with file and shell tools fully determines the', '{"ambiguous":false,"question":""}'],
   ['You condense the earlier part of a conversation', '{"summary":""}'],
   ['You judge whether an assistant\'s reply violates constraints', '{"violations":[]}'],
   ['You weigh the reliability of the sources an assistant read', '{"assessments":[],"weighed":true}'],

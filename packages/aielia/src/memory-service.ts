@@ -48,6 +48,19 @@ export const ARCHIVED_FACTS_KEY: string = STORE_KEYS.archive
 
 export type AuditOp = 'add' | 'replace' | 'retire' | 'remove' | 'confirm' | 'reject' | 'undo' | 'archive' | 'restore'
 
+/** A forgotten fact's text must not reappear in an export just because the undo log keeps it: drop the images of every entry about a fact that a `forget` removed. */
+function withholdForgotten(log: AuditEntry[]): AuditEntry[] {
+  const forgotten = log.filter((e) => e.op === 'remove' && e.writer === 'forget' && e.before !== undefined).map((e) => e.before as UserFact)
+  if (forgotten.length === 0) return log
+  const isForgotten = (f: UserFact | undefined): boolean => f !== undefined && forgotten.some((g) => sameFact(g, f))
+  return log.map((e) => {
+    const touched = forgotten.some((g) => e.factId === factId(g)) || isForgotten(e.before) || isForgotten(e.after)
+    if (!touched) return e
+    const { before, after, ...rest } = e
+    return { ...rest, factId: `withheld:${e.seq}`, withheld: true, ...(before && !isForgotten(before) ? { before } : {}), ...(after && !isForgotten(after) ? { after } : {}) }
+  })
+}
+
 export interface AuditEntry {
   seq: number
   at: string
@@ -65,6 +78,8 @@ export interface AuditEntry {
   undoes?: number
   /** M6: the user erased this fact from history (`/memory archive forget`); before/after were removed and the entry can no longer be undone. */
   erased?: boolean
+  /** Export only: the images of a forgotten fact are left out of `/memory export`; the stored log still has them so `/memory undo` works. */
+  withheld?: boolean
   /** M5: entries applied together (one consolidation proposal) share a group; undoing one undoes the group. */
   group?: string
   /** M5: position the pre-image held in the durable list, so undo restores order exactly. */
@@ -1491,7 +1506,7 @@ export class MemoryService {
       experience: this.experienceStore.toJSON(),
       digests: await this.digests.exportAll(),
       retired: await this.listArchive(),
-      audit: await this.getAuditLog(Number.MAX_SAFE_INTEGER),
+      audit: withholdForgotten(await this.getAuditLog(Number.MAX_SAFE_INTEGER)),
       governance: { mode: this.writeMode(), off: await this.isMemoryOff() },
     }
   }

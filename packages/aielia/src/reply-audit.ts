@@ -242,6 +242,9 @@ export function replyAuditEnabled(env?: Record<string, string | undefined>): boo
   return !['0', 'false', 'off', 'no', 'disabled'].includes(raw)
 }
 
+/** Every automatic retry message starts with this; it is the system talking to the model, never something the user said. */
+export const AUDIT_NUDGE_PREFIX = '[automatic reply check]'
+
 /**
  * The message for the one automatic retry, or undefined when the reply needs none. A claim or promise of work the system
  * did not record asks for the work to be done now or the claim withdrawn; details that disagree with the command output
@@ -253,7 +256,7 @@ export function auditRetryNudge(audit: ReplyAudit, recorded: string[], userMessa
   // The correction must answer the user's request again, not respond to the check itself: without this a retry argued with the nudge as if
   // it were a rule the user had set, and never re-answered the review that was asked for (benchmark scenario 03 turn 1).
   const asked = userMessage.trim().replace(/\s+/g, ' ').slice(0, 400)
-  return `${nudge} This check is automatic and is not from the user; the user's message you are answering is: "${asked}". Reply to that message.`
+  return `${nudge} This check is automatic and is not from the user; the user's message you are answering is: "${asked}". Reply to that message. Your reply must stand on its own: the user may never have seen your last reply (some screens keep only the final answer), so write the complete answer to their message, and do not refer to a "last reply", an earlier version or this check, or say you are repeating or correcting anything.`
 }
 
 function auditRetryNudgeBody(audit: ReplyAudit, recorded: string[]): string | undefined {

@@ -74,6 +74,7 @@ class FakeLLMClient implements ILLMClient {
   async callChatStructured(messages: ChatMessage[]): Promise<LLMStructuredResponse> {
     this.calls++
     if (isTurnIntentRequest(messages)) return { content: deriveTurnIntentJSON(messages) }
+    if (String(messages[0]?.content).includes('You decide whether a user')) return { content: '{"ambiguous":false,"question":""}' }
     return { content: this.reply }
   }
 }
@@ -97,6 +98,7 @@ class ScriptedToolLLMClient implements ILLMClient {
   }
   async callChatStructured(messages: ChatMessage[], _tools?: ToolDefinition[], _options?: ChatOptions): Promise<LLMStructuredResponse> {
     if (isTurnIntentRequest(messages)) return { content: deriveTurnIntentJSON(messages) }
+    if (String(messages[0]?.content).includes('You decide whether a user')) return { content: '{"ambiguous":false,"question":""}' }
     // Auxiliary structured calls the goal graph makes around a turn (identity matcher, next-step
     // proposer) must not consume a scripted tool call meant for the turn itself.
     const system = String(messages[0]?.content ?? '')
@@ -137,6 +139,7 @@ class DeferredReplyLLMClient implements ILLMClient {
   }
   async callChatStructured(messages: ChatMessage[]): Promise<LLMStructuredResponse> {
     if (isTurnIntentRequest(messages)) return { content: deriveTurnIntentJSON(messages) }
+    if (String(messages[0]?.content).includes('You decide whether a user')) return { content: '{"ambiguous":false,"question":""}' }
     await this.replyGate
     return { content: this.reply }
   }
@@ -532,6 +535,7 @@ describe('turn-end next steps (R7)', () => {
         }
       }
       if (isTurnIntentRequest(messages)) return { content: deriveTurnIntentJSON(messages) }
+      if (String(messages[0]?.content).includes('You decide whether a user')) return { content: '{"ambiguous":false,"question":""}' }
       return { content: 'Here you go.' }
     }
   }
@@ -622,6 +626,7 @@ describe('/status and /cost — spend cap display (T2)', () => {
       }
       async callChatStructured(messages: ChatMessage[]): Promise<LLMStructuredResponse> {
         if (isTurnIntentRequest(messages)) return { content: deriveTurnIntentJSON(messages) }
+        if (String(messages[0]?.content).includes('You decide whether a user')) return { content: '{"ambiguous":false,"question":""}' }
         return { content: 'Noted.' }
       }
     }
@@ -652,6 +657,7 @@ describe('/status and /cost — spend cap display (T2)', () => {
       }
       async callChatStructured(messages: ChatMessage[]): Promise<LLMStructuredResponse> {
         if (isTurnIntentRequest(messages)) return { content: deriveTurnIntentJSON(messages) }
+        if (String(messages[0]?.content).includes('You decide whether a user')) return { content: '{"ambiguous":false,"question":""}' }
         return { content: 'Noted.' }
       }
     }
@@ -695,6 +701,7 @@ describe('getStatusIndicators — persistent model/token/cost chrome (aielia_cli
       }
       async callChatStructured(messages: ChatMessage[]): Promise<LLMStructuredResponse> {
         if (isTurnIntentRequest(messages)) return { content: deriveTurnIntentJSON(messages) }
+        if (String(messages[0]?.content).includes('You decide whether a user')) return { content: '{"ambiguous":false,"question":""}' }
         return { content: 'Noted.' }
       }
     }
@@ -799,7 +806,7 @@ describe('approval-prompt handling', () => {
     await cli.dispatchLine('Please send an email to my boss telling him I quit.')
 
     expect(lines.join('\n')).toContain('Cancelled.')
-    expect(llm.calls).toBe(1) // the one mandatory classification call — declining spends no more
+    expect(llm.calls).toBe(2) // the classification call + the scope check before the gate — declining spends no more
     const transcript = await assistant.getTranscript('cli')
     expect(transcript.some((m) => m.content.includes('email'))).toBe(true)
   })
@@ -814,7 +821,7 @@ describe('approval-prompt handling', () => {
     await cli.dispatchLine('Please send an email to my boss telling him I quit.')
 
     expect(lines.join('\n')).toContain('Cancelled.')
-    expect(llm.calls).toBe(1)
+    expect(llm.calls).toBe(2)
   })
 
   it('a staged write_file action resolves through turn({approved, pendingActionId}) on accept and actually applies', async () => {

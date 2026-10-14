@@ -80,6 +80,8 @@ export class ActionApprovalService {
   readonly recentCommandOutputs: { command: string; output: string }[] = []
   /** Sessions in which a command got the network-containment refusal. */
   private readonly networkDeniedSessions = new Set<string>()
+  /** Per session: where in appliedActions the actions of the request now being approved begin (see resolvePendingActionOnce). */
+  private readonly chainStartBySession = new Map<string, number>()
   /** Pending-action ids currently being resolved (see resolvePendingAction). */
   private readonly inFlightResolutions = new Set<string>()
   networkDenied(sessionId: string): boolean {
@@ -159,6 +161,10 @@ export class ActionApprovalService {
       return { status: 'ok', reply }
     }
 
+    // A request that stages several actions (claude-cli: "write A, write B, tell me what you changed") ends on the last receipt, because the
+    // model that staged them is gone by the time the last one is approved. The head of a chain marks where the request's actions begin.
+    const stagedRecord = await loadPendingAction(backend, workspaceRoot, pendingActionId).catch(() => undefined)
+    if (!stagedRecord?.chainedFrom) this.chainStartBySession.set(sessionId, this.appliedActions.length)
     let shellDurationMs: number | undefined
     let applied: Awaited<ReturnType<typeof applyPendingAction>>
     try {
@@ -352,6 +358,15 @@ export class ActionApprovalService {
       }
     }
 
+    // The last approved action of a chain: say what the whole request changed, from the system's own record of what was applied (never the
+    // model's account), so the person gets the report they asked for instead of only the final receipt.
+    if (stagedRecord?.chainedFrom && !applied.nextPendingActionId && !loopState && (applied.kind === 'write' || applied.kind === 'email')) {
+      const chain = this.appliedActions.slice(this.chainStartBySession.get(sessionId) ?? this.appliedActions.length - 1)
+      if (chain.length > 1) {
+        reply = `${reply}\n\nEverything you approved for this request is done. What changed:\n${chain.map((a) => `- ${a}`).join('\n')}`
+        transcriptContent = reply
+      }
+    }
     await this.session.appendTranscriptMessage(sessionId, transcriptKey, { role: 'assistant', content: transcriptContent, actionRecord: applied.kind === 'shell' || loopState ? actionsSoFar : [] })
     if (applied.nextPendingActionId) {
       const chained = await this.loadChainedApproval(sessionId, backend, workspaceRoot, applied.nextPendingActionId, reply)

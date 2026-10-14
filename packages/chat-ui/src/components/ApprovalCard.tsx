@@ -33,7 +33,7 @@ export function ApprovalCard({ pendingMessage, reason, riskLevel, pendingActionK
   return (
     <div className="approval-card">
       <div className="approval-card__header">
-        Needs approval{label ? ` — ${label}` : ''}
+        {resolution === 'approved' ? 'Approved' : resolution === 'denied' ? 'Denied' : 'Needs approval'}{label ? ` — ${label}` : ''}
       </div>
       <blockquote className="approval-card__pending">{pendingMessage}</blockquote>
       <div className="approval-card__reason">{headline}</div>
@@ -47,7 +47,7 @@ export function ApprovalCard({ pendingMessage, reason, riskLevel, pendingActionK
       )}
       {illustrative ? (
         <div className="approval-card__resolution">
-          This is a sample. Add a model in Settings (⚙) and send your own message — a real
+          This is a sample. Send your own message (if you have not yet, add a model in Settings ⚙ first) — a real
           high-risk request pauses here before Aielia makes any model call.
         </div>
       ) : resolution ? (

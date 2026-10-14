@@ -8,6 +8,7 @@ import {
   createGoalThreadFromPlanRecord,
   loadGoalGraphRecord,
   saveGoalGraphRecord,
+  deleteGoalGraphRecord,
   getActiveThread,
   tasksForGoal,
   readyThreads,
@@ -159,6 +160,18 @@ describe('loadGoalGraphRecord / saveGoalGraphRecord', () => {
 
     const loaded = await loadGoalGraphRecord(memory, 'session-1')
     expect(loaded).toEqual(record)
+  })
+
+  it('deleteGoalGraphRecord removes both the memory record and the fs file, so the old goals do not come back', async () => {
+    const memory = new InMemoryAdapter()
+    const fsPersistence = makeFsPersistence()
+    await saveGoalGraphRecord(memory, 'session-1', makeGoalGraphRecord(), fsPersistence)
+    expect(fsPersistence.backend.files.size).toBeGreaterThan(0)
+
+    await deleteGoalGraphRecord(memory, 'session-1', fsPersistence)
+
+    expect(fsPersistence.backend.files.size).toBe(0)
+    expect(await loadGoalGraphRecord(memory, 'session-1', fsPersistence)).toBeNull()
   })
 
   it('saves and reloads a record via the fs file, preferring it over the Dexie/State-tier copy', async () => {

@@ -383,7 +383,10 @@ const TURN_INTENT_SYSTEM_PROMPT =
   'not a self-reported guess — `high` if the user states it directly and unhedged about themselves ' +
   'in first person ("I\'m allergic to peanuts", "my name is Priya"); `medium` if stated about ' +
   'themselves but hedged, indirect, or inferred from context rather than asserted outright ("I ' +
-  'think I might be lactose intolerant", a fact implied by something else they said); `low` if it ' +
+  'think I might be lactose intolerant", a fact implied by something else they said); the fact text restates only what the ' +
+  'user said, never a broader label they did not use ("I haven\'t eaten meat in ages" is "has not eaten meat for a long ' +
+  'time", NOT "is vegetarian" — that label also excludes fish, which they never said) and a label you drew from behaviour ' +
+  'is `medium` at most; `low` if it ' +
   'is a weak inference, or a statement primarily about a third party that is only tangentially ' +
   'about the user; and `category`, one of identity, health, preference, location, occupation, ' +
   'relationships, project (a fact about a codebase/project the user is working on — its stack, ' +
