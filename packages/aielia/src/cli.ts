@@ -30,7 +30,8 @@ import { memoryAuditLogEnabled } from './memory-service.js'
 import { activityLogEnabled, createActivityLogger } from './activity-log.js'
 import type { AssistantToolStep } from './tool-step.js'
 import type { PlanDecision, PlanApprovalEdits } from './plan-approval-service.js'
-import { nodeDisplayName, nodeToLayer, buildWhyChain, LAYER_ORDER, LAYER_DISPLAY_NAME, LAYER_SHORT_CODE } from './node-display-names.js'
+import { nodeDisplayName, nodeToLayer, LAYER_DISPLAY_NAME } from './node-display-names.js'
+import { explainWhy, explainLayers, explainSources, explainSteps, explainPlan, type TurnExplainInput } from './run-explain.js'
 import { classifyError } from './error-classifier.js'
 import { createNodeFsBackend } from './node-fs-backend.js'
 import { ClaudeCliLLMClient } from './claude-cli-llm-client.js'
@@ -42,7 +43,7 @@ import { resolveConfig, validateConfig, ConfigValidationError, type AssistantCon
 import { NodeConfigStore } from './node-config-store.js'
 import { applyLayerSettings, formatLayerListing, sanitizeLayerChoices, withLayerChoice, LayerSettingError } from './layer-settings.js'
 import { isConfigKey, findInvalidNumericSettings, envOverridesFromProcessEnv, parseConfigValue, ConfigValueParseError, formatConfigListing, ENV_VAR_FOR_CONFIG_KEY, CONFIG_KEYS } from './cli-config.js'
-import { stripTerminalControls, formatHelp, isQuitCommand, formatStatus, formatTranscriptMarkdown, defaultExportFilename, formatMemorySummary, formatMemoryExport, defaultMemoryExportFilename, formatSearchResults, formatGoalGraphState, formatNextSteps, formatCostSummary, formatDoctorReport, formatUndoLogListing, formatMemoryPendingOutcome, formatMemoryHistory, formatMemoryArchive, formatMemoryInjection, formatMemoryStatus } from './cli-session.js'
+import { stripTerminalControls, formatHelp, isQuitCommand, formatStatus, formatTranscriptMarkdown, defaultExportFilename, formatMemorySummary, formatMemoryExport, defaultMemoryExportFilename, formatSearchResults, formatGoalGraphState, formatNextSteps, formatCostSummary, formatDoctorReport, formatUndoLogListing, formatMemoryPendingOutcome, formatMemoryHistory, formatMemoryArchive, formatMemoryStatus } from './cli-session.js'
 import { estimateCostUsd } from './model-pricing.js'
 import { formatSpendCapStatus } from './spend-cap.js'
 import { checkProxyHealth, checkClaudeCli, checkWorkspaceRoot, checkDataDirWritable, checkMemoryHealth } from './doctor-checks.js'
@@ -476,6 +477,7 @@ export async function runCli(options: RunCliOptions = {}): Promise<CliInstance> 
 
   let lastTrace: AssistantTrace | undefined
   let lastSources: AssistantSource[] | undefined
+  let lastAnswerClaim: AssistantTurnResult['answerClaim']
   let lastPlanStatus: AssistantTurnResult['planStatus']
   // A whole-plan approval that was staged but not yet resolved (status 'needs_plan_approval') —
   // kept so the /plan approve|decline|edit commands can resolve it after the turn has already
@@ -525,10 +527,6 @@ export async function runCli(options: RunCliOptions = {}): Promise<CliInstance> 
     return estimated !== undefined ? { ...usage, costUsd: estimated } : usage
   }
 
-  const PLAN_TASK_STATUS_ICON: Record<string, string> = {
-    PENDING: '○', RUNNING: '▶', COMPLETE: '✓', FAILED: '✗', BLOCKED: '✗', HUMAN_REQUIRED: '~',
-  }
-
   function printPlan(): void {
     if (!lastPlanStatus) {
       printSafe('\nNo active plan for this session.\n')
@@ -544,15 +542,7 @@ export async function runCli(options: RunCliOptions = {}): Promise<CliInstance> 
     // TUI-specific stripping never runs, and the marker glyph is unusual enough not to be
     // mistaken for real output outside the TUI, matching how ASSISTANT_REPLY_PREFIX already
     // behaves in non-TUI mode.
-    const lines = [
-      PLAN_LINE_PREFIX,
-      `Plan: ${lastPlanStatus.templateName ?? 'custom plan'} (${lastPlanStatus.completionPct.toFixed(1)}% complete)`,
-      ...lastPlanStatus.tasks.flatMap((task) => [
-        `  ${PLAN_TASK_STATUS_ICON[task.status] ?? '?'} [${task.status}] ${task.id} — ${task.description}`,
-        ...(task.note ? [`      not accepted as done: ${task.note}`] : []),
-      ]),
-      `Success criteria: ${lastPlanStatus.successCriteria}`,
-    ]
+    const lines = [PLAN_LINE_PREFIX, ...explainPlan(lastTurnExplainInput())]
     console.log(stripTerminalControls(`\n${lines.join('\n')}\n`))
   }
 
@@ -745,97 +735,33 @@ export async function runCli(options: RunCliOptions = {}): Promise<CliInstance> 
     printPlan()
   }
 
-  function verificationHealthLabel({ strength, feasibility }: AssistantTrace['verificationHealth']): string {
-    const confidence = Math.min(strength, feasibility)
-    if (confidence >= 0.7) return 'High confidence'
-    if (confidence >= 0.4) return 'Reasonably confident'
-    return 'Worth double-checking'
-  }
-
-  /** One-line summary of AssistantTrace.batchBudget — the same found/not_found/truncated_while_productive
-   * counts a batch turn's synthesized reply is already built from, just as a glance-able tally
-   * rather than prose. Shared by /why's compact view and /layers' fuller per-item breakdown. */
-  function batchBudgetSummaryLine(batchBudget: NonNullable<AssistantTrace['batchBudget']>): string {
-    const found = batchBudget.perItemOutcomes.filter((o) => o.status === 'found').length
-    const notFound = batchBudget.perItemOutcomes.filter((o) => o.status === 'not_found').length
-    const truncated = batchBudget.perItemOutcomes.filter((o) => o.status === 'truncated_while_productive').length
-    return (
-      `Batch: ${batchBudget.itemCount} items — ${found} found, ${notFound} not found, ${truncated} truncated ` +
-      `(${batchBudget.totalCallsUsed} calls used, projected ~${Math.ceil(batchBudget.projectedTotal)})`
-    )
+  /** What the last turn left behind, in the shape the shared explainers (run-explain.ts) take — the same data chat-ui hands them, so /why, /layers, /sources, /steps and /plan read identically on both surfaces. */
+  function lastTurnExplainInput(): TurnExplainInput {
+    return {
+      trace: lastTrace,
+      noTraceReason: lastNoTraceReason,
+      answerClaim: lastAnswerClaim,
+      memoryInjection: assistant.getLastMemoryInjection(),
+      sources: lastSources,
+      toolSteps: lastTurnToolSteps,
+      planStatus: lastPlanStatus,
+    }
   }
 
   function printWhy(): void {
-    // What the reply could have known (M6): printed with or without a harness trace, since a fast-path turn still saw memory.
-    const memoryLine = formatMemoryInjection(assistant.getLastMemoryInjection())
-    if (!lastTrace) {
-      printSafe(`\n${lastNoTraceReason ?? 'No harness trace for the last turn (nothing to explain yet, or it took the fast path).'}\n${memoryLine}\n`)
-      return
-    }
-    printSafe(`\n${verificationHealthLabel(lastTrace.verificationHealth)}`)
-    // Only the layers that actually fired, chained in the order they fired — quiet otherwise
-    // (Design Principle 3 of the harness layer activation plan: the common, unremarkable case
-    // stays quiet, matching the existing "don't badge LOW risk" convention). Use /layers for
-    // the full fired/skipped picture across all 11.
-    const chain = buildWhyChain(lastTrace.layerActivity)
-    if (chain.length > 0) {
-      printSafe('  ' + chain.map((item) => `${LAYER_SHORT_CODE[item.layer]} (${item.reason})`).join(' > '))
-    }
-    // Absent on every non-batch turn (see AssistantTrace.batchBudget's doc comment) — only a
-    // batch-research turn ever has this to show.
-    if (lastTrace.batchBudget) {
-      printSafe('  ' + batchBudgetSummaryLine(lastTrace.batchBudget))
-    }
-    printSafe(memoryLine)
-    printSafe('')
+    printSafe(`\n${explainWhy(lastTurnExplainInput()).join('\n')}\n`)
   }
 
-  /** Full fired/skipped picture across all 11 harness layers for the last turn — pure text rendering of the same layer_activity data /why's "What I checked" summarizes selectively. */
   function printLayers(): void {
-    if (!lastTrace) {
-      printSafe(`\n${lastNoTraceReason ?? 'No harness trace for the last turn (nothing to explain yet, or it took the fast path).'}\n`)
-      return
-    }
-    printSafe('')
-    const byLayer = new Map(lastTrace.layerActivity.map((e) => [e.layer, e]))
-    for (const layer of LAYER_ORDER) {
-      const e = byLayer.get(layer)
-      const mark = e?.fired ? '✓' : '·'
-      const reason = e?.reason ?? 'not evaluated this turn'
-      printSafe(`  [${mark}] ${LAYER_DISPLAY_NAME[layer].padEnd(22)} ${reason}`)
-    }
-    // The full per-item breakdown behind /why's one-line batchBudgetSummaryLine tally — same
-    // "absent on every non-batch turn" gating as that summary.
-    if (lastTrace.batchBudget) {
-      printSafe('')
-      printSafe(`  ${batchBudgetSummaryLine(lastTrace.batchBudget)}`)
-      const STATUS_MARK: Record<'found' | 'not_found' | 'truncated_while_productive', string> = {
-        found: '✓', not_found: '✗', truncated_while_productive: '~',
-      }
-      for (const outcome of lastTrace.batchBudget.perItemOutcomes) {
-        printSafe(`    [${STATUS_MARK[outcome.status]}] ${outcome.item.padEnd(30)} ${outcome.status} (${outcome.callsUsed} calls)`)
-      }
-    }
-    printSafe('')
-  }
-
-  const SOURCE_TOOL_LABEL: Record<AssistantSource['tool'], string> = {
-    read_file: 'Read',
-    list_directory: 'Listed',
-    web_search: 'Searched',
-    fetch_url: 'Fetched',
+    printSafe(`\n${explainLayers(lastTurnExplainInput()).join('\n')}\n`)
   }
 
   function printSources(): void {
-    if (!lastSources || lastSources.length === 0) {
-      printSafe('\nNo sources for the last turn (it used no file/web tool calls).\n')
-      return
-    }
-    printSafe('')
-    for (const source of lastSources) {
-      printSafe(`  - ${SOURCE_TOOL_LABEL[source.tool]} ${source.path}`)
-    }
-    printSafe('')
+    printSafe(`\n${explainSources(lastTurnExplainInput()).join('\n')}\n`)
+  }
+
+  function printSteps(): void {
+    printSafe(`\n${explainSteps(lastTurnExplainInput()).join('\n')}\n`)
   }
 
   function printHelp(): void {
@@ -1595,9 +1521,8 @@ export async function runCli(options: RunCliOptions = {}): Promise<CliInstance> 
         return
       }
 
-      // A trivial turn's trace is present-but-empty (see assistant.ts's triviality branch) so
-      // chat-ui can still render its "Why?"/"Run detail" panels with an explanation and an
-      // all-unfired grid — the CLI has no such grid, so it keeps printing its existing plain
+      // A trivial turn's trace is present-but-empty (see assistant.ts's triviality branch). run-explain.ts
+      // treats a harnessSkipped turn as having no trace, so /why and /layers print the plain
       // "took the fast path" copy instead of an empty/misleading confidence readout.
       //
       // A resolved write_file/run_shell_command/revert pendingAction (assistant.ts's
@@ -1614,6 +1539,7 @@ export async function runCli(options: RunCliOptions = {}): Promise<CliInstance> 
       // resolution, leaving the caller's already-correct state alone.
       if (!pendingActionId) {
         lastTrace = result.harnessSkipped ? undefined : result.trace
+        lastAnswerClaim = result.answerClaim
         lastNoTraceReason = result.harnessSkipped
           ? 'No harness trace — the last turn was a simple, self-contained question answered directly without activating the harness (fast path).'
           : undefined
@@ -1943,6 +1869,7 @@ export async function runCli(options: RunCliOptions = {}): Promise<CliInstance> 
     // Bare /layers is the last-turn fired/skipped view; its subcommands (settings/on/off/reset) edit the on/off choices.
     '/layers': (args) => (args.length === 0 ? printLayers() : handleLayers(args)),
     '/sources': () => printSources(),
+    '/steps': () => printSteps(),
     '/plan': (args) => handlePlan(args),
     '/help': () => printHelp(),
     '/clear': () => handleClear(),

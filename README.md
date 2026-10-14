@@ -188,7 +188,7 @@ a reviewer/output gate. Aielia ships the following, all enforced in code rather 
   memory; model-inferred facts promote only at high confidence, medium-confidence
   ones wait for `/memory confirm`, and low-confidence ones stay session-scoped.
 - **AnswerClaim** — replies distinguish "verified against evidence" from "found
-  this but couldn't independently confirm it," surfaced in the chat's "Why?" panel.
+  this but couldn't independently confirm it," shown when you ask with `/why` (CLI, web and desktop).
 - **Crash-safe mid-turn resume** — a turn that dies mid-flight resumes from its
   last checkpoint instead of silently starting over; a checkpoint that keeps
   crashing on replay is discarded automatically after two attempts.

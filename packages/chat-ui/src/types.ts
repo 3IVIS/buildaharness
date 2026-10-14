@@ -8,15 +8,15 @@ export type ChatEntry =
       content: string
       riskLevel?: RiskLevel
       trace?: AssistantTrace
-      /** Set when this turn skipped the harness entirely (a self-contained trivial question) — see AssistantTurnResult.harnessSkipped. Tells the "Why?" panel to explain the skip instead of showing a confidence readout. */
+      /** Set when this turn skipped the harness entirely (a self-contained trivial question) — see AssistantTurnResult.harnessSkipped. Tells /why to explain the skip instead of showing a confidence readout. */
       harnessSkipped?: boolean
       sources?: AssistantSource[]
       toolSteps?: AssistantToolStep[]
-      /** Durable plan progress as of this turn — see AssistantTurnResult.planStatus. Powers the plan checklist in the "Run detail" panel (Phase 3.3 of the harness layer activation plan). */
+      /** Durable plan progress as of this turn — see AssistantTurnResult.planStatus. Powers /plan. */
       planStatus?: AssistantTurnResult['planStatus']
       /** Epistemic-honesty signal — see AssistantTurnResult.answerClaim's doc comment. Absent on the triviality fast path, same convention as trace/sources. */
       answerClaim?: AnswerClaim
-      /** What this turn's prompt contained from memory (and how many facts were left out) — snapshotted from assistant.getLastMemoryInjection() when the turn completed, shown in the "Why?" panel (M6). */
+      /** What this turn's prompt contained from memory (and how many facts were left out) — snapshotted from assistant.getLastMemoryInjection() when the turn completed, shown by /why (M6). */
       memoryInjection?: MemoryInjection
       /** Which proposer drove this turn — see AssistantTurnResult.proposerKind. A dev/E2E-only test affordance (the internal plan phase B1), rendered as a hidden data-testid element. */
       proposerKind?: AssistantTurnResult['proposerKind']
@@ -44,6 +44,8 @@ export type ChatEntry =
       pendingActionKind?: AssistantTurnResult['pendingActionKind']
     }
   | { id: string; kind: 'stopped' }
+  /** The answer to /why, /layers, /sources, /steps or /plan — shown only when the user asks, like the CLI. */
+  | { id: string; kind: 'explain'; command: string; lines: string[] }
   | {
       id: string
       kind: 'escalation'

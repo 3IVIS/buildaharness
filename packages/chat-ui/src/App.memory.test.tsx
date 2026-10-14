@@ -129,16 +129,18 @@ describe('App: Memory panel (M6)', () => {
     expect(JSON.parse(localStorage.getItem(STORAGE_KEY) ?? '{}')).toMatchObject({ memoryWriteMode: 'auto' })
   })
 
-  it('"Why?" shows which facts the reply could have known (shared formatter with the CLI /why)', async () => {
+  it('/why shows which facts the reply could have known (same lines as the CLI /why), and nothing is shown unasked', async () => {
     localStorage.setItem(STORAGE_KEY, JSON.stringify({ llmBackend: 'proxy' }))
     installSeam({ text: 'the user plays the cello on weekends', confidence: 'high' })
     const user = userEvent.setup()
     render(<App />)
     await send(user, 'please remember the cello')
     await send(user, 'what did I say?')
-    const toggles = await screen.findAllByRole('button', { name: 'Why?' })
-    await user.click(toggles[toggles.length - 1])
-    const memory = await screen.findByTestId('why-memory')
+    expect(screen.queryByTestId('explain-bubble')).toBeNull()
+    expect(screen.queryByRole('button', { name: 'Why?' })).toBeNull()
+    await user.type(await screen.findByPlaceholderText('Message Aielia…'), '/why')
+    await user.click(screen.getByRole('button', { name: 'Send' }))
+    const memory = await screen.findByTestId('explain-bubble')
     expect(memory).toHaveTextContent('Memory in the prompt:')
     expect(memory).toHaveTextContent('the user plays the cello on weekends')
   })

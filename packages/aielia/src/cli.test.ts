@@ -1117,7 +1117,7 @@ describe('clarification-prompt handling (Q6)', () => {
 })
 
 describe('command dispatch table', () => {
-  const NO_ARG_COMMANDS = ['/why', '/layers', '/sources', '/plan', '/help', '/status', '/cost', '/goals']
+  const NO_ARG_COMMANDS = ['/why', '/layers', '/sources', '/steps', '/plan', '/help', '/status', '/cost', '/goals']
 
   it.each(NO_ARG_COMMANDS)('%s routes to its handler without throwing and without invoking the LLM', async (command) => {
     const llm = new FakeLLMClient()
