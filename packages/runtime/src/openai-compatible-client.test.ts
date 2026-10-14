@@ -90,6 +90,22 @@ describe('OpenAICompatibleLLMClient', () => {
       expect(onUsage).toHaveBeenCalledWith({ inputTokens: 10, outputTokens: 3 })
     })
 
+    it('reports the real costUsd from the final stream chunk when usage.cost is present (OpenRouter)', async () => {
+      mockFetchOk([
+        'data: {"choices":[{"delta":{"content":"hi"}}]}',
+        'data: {"choices":[{"delta":{}}],"usage":{"prompt_tokens":10,"completion_tokens":3,"cost":0.0007}}',
+        'data: [DONE]',
+      ])
+      const client = new OpenAICompatibleLLMClient({ apiKey: API_KEY, baseUrl: OPENAI_BASE_URL, defaultModel: 'gpt-4o-mini' })
+      const onUsage = vi.fn()
+
+      for await (const _ of client.callChat([{ role: 'user', content: 'hi' }], { onUsage })) {
+        // drain
+      }
+
+      expect(onUsage).toHaveBeenCalledWith({ inputTokens: 10, outputTokens: 3, costUsd: 0.0007 })
+    })
+
     it('reports cachedInputTokens from the stream when prompt_tokens_details.cached_tokens is present', async () => {
       mockFetchOk([
         'data: {"choices":[{"delta":{"content":"hi"}}]}',
@@ -356,6 +372,19 @@ describe('OpenAICompatibleLLMClient', () => {
       const client = new OpenAICompatibleLLMClient({ apiKey: API_KEY, baseUrl: OPENAI_BASE_URL, defaultModel: 'gpt-4o-mini' })
 
       await expect(client.callChatStructured([{ role: 'user', content: 'hi' }])).rejects.toThrow('rate limit exceeded')
+    })
+
+    it('reports the real costUsd when the response carries usage.cost (OpenRouter)', async () => {
+      mockFetchJson({
+        choices: [{ message: { content: 'ok' } }],
+        usage: { prompt_tokens: 50, completion_tokens: 10, cost: 0.00042 },
+      })
+      const client = new OpenAICompatibleLLMClient({ apiKey: API_KEY, baseUrl: OPENAI_BASE_URL, defaultModel: 'gpt-4o-mini' })
+      const onUsage = vi.fn()
+
+      await client.callChatStructured([{ role: 'user', content: 'hi' }], undefined, { onUsage })
+
+      expect(onUsage).toHaveBeenCalledWith({ inputTokens: 50, outputTokens: 10, costUsd: 0.00042 })
     })
 
     it('reports cachedInputTokens via onUsage when the response includes prompt_tokens_details.cached_tokens', async () => {
