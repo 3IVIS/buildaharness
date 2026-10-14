@@ -10,7 +10,6 @@ import {
   ANTHROPIC_DEFAULT_MODEL,
   OPENAI_DEFAULT_MODEL,
   OPENROUTER_DEFAULT_MODEL,
-  defaultModelForBackend,
   FileSystemAdapter,
   FileSystemExperienceStore,
   InMemoryReminderStore,
@@ -21,6 +20,7 @@ import {
 import type { AskAnswer, AskQuestion, AskResponse } from '@buildaharness/harness'
 import { orderedOptions, draftToAnswer, emptyDraft, type QuestionDraft } from './ask-draft.js'
 import { createLlmClient } from './llm-client-factory.js'
+import { buildAssistantOptions, CLI_FEATURES } from './assistant-options.js'
 import { withCostEstimate as sharedWithCostEstimate } from './turn-cost.js'
 import { planUndo } from './undo-plan.js'
 import { PersonalAssistant, type AssistantProgress, type AssistantTrace, type AssistantSource, type AssistantTurnResult } from './assistant.js'
@@ -52,7 +52,7 @@ import { planToSnapshot } from './plan-viz/plan-snapshot.js'
 import { renderPlan } from './plan-viz/plan-raster.js'
 import type { VizNode } from './plan-viz/types.js'
 import type { TaskStatus } from '@buildaharness/harness'
-import { isGoalGraphSuggestEnabled } from './goal-graph-suggest-flag.js'
+import {  } from './goal-graph-suggest-flag.js'
 import type { NextStepSuggestion } from './next-step-proposer.js'
 import { maybeRunFirstRunSetup } from './first-run.js'
 import { testApiKey, type KeyedBackend, type KeyTestResult } from './provider-setup.js'
@@ -167,57 +167,32 @@ async function buildAssistant(config: AssistantConfig, { backend, dataDir, remin
   // now wires web_search on both backends.
   const llmClient = buildLlmClient(config, workspaceRoot, remindersFile)
 
-  return PersonalAssistant.create({
-    llmClient,
-    // Name the backend's real default when none is set, so spend tracking prices the model that actually runs (not the Anthropic default).
-    model: config.model ?? defaultModelForBackend(config.llmBackend),
-    // config.activeProject (set via /project <name>) overrides the default of "the workspace
-    // I'm running in" — see PersonalAssistantOptions.activeProject's doc comment.
-    activeProject: config.activeProject || workspaceRoot,
-    memoryBudgetChars: config.memoryBudgetChars,
-    memoryWriteMode: config.memoryWriteMode,
-    // M5: consolidation proposals are staged for /memory consolidate; the CLI has the controls, so it may raise them on /new.
-    consolidateOnNewSession: true,
-    memory: new FileSystemAdapter({ backend, baseDir: dataDir, namespace: 'transcripts' }),
-    experienceStore: await FileSystemExperienceStore.create({ backend, baseDir: dataDir, namespace: 'experience' }),
-    checkpointStore: new FileSystemAdapter({ backend, baseDir: dataDir, namespace: 'checkpoints' }),
-    reminderStore: new InMemoryReminderStore(new FileSystemAdapter({ backend, baseDir: dataDir, namespace: 'reminders' })),
-    fileTools: { backend, workspaceRoot },
-    webTools: config.enableWeb ? { search } : undefined,
-    // executeCommand is the real child_process.spawn-based implementation (shell-executor.ts) —
-    // wired in here, not inside assistant.ts, so the browser build never needs node:child_process.
-    shellTools: config.enableShell
-      ? { backend, workspaceRoot, timeoutMs: config.shellTimeoutMs, networkAllowlist: config.shellNetworkAllowlist, executeCommand: runApprovedShellCommand }
-      : undefined,
-    // The Resend/SMTP transport is wired in here, not inside assistant.ts, so the browser build
-    // never needs nodemailer or a mail server — same split as shellTools' executeCommand.
-    actionTools: (() => {
-      const sendEmail = buildEmailSender(config)
-      return sendEmail ? { backend, workspaceRoot, sendEmail } : undefined
-    })(),
-    dangerouslySkipPermissions: config.dangerouslySkipPermissions,
-    // Opt-in durable record of tool calls/results and approvals (see activity-log.ts).
-    onDebugLog: activityLogEnabled(process.env) ? createActivityLogger(join(dataDir, 'activity-log.jsonl')) : undefined,
-    spendCap:
-      config.sessionCostLimitUsd !== undefined || config.sessionCallLimit !== undefined
-        ? { sessionCostLimitUsd: config.sessionCostLimitUsd, sessionCallLimit: config.sessionCallLimit }
+  return PersonalAssistant.create(
+    buildAssistantOptions(config, {
+      llmClient,
+      workspaceRoot,
+      features: CLI_FEATURES,
+      memory: new FileSystemAdapter({ backend, baseDir: dataDir, namespace: 'transcripts' }),
+      experienceStore: await FileSystemExperienceStore.create({ backend, baseDir: dataDir, namespace: 'experience' }),
+      checkpointStore: new FileSystemAdapter({ backend, baseDir: dataDir, namespace: 'checkpoints' }),
+      reminderStore: new InMemoryReminderStore(new FileSystemAdapter({ backend, baseDir: dataDir, namespace: 'reminders' })),
+      fileTools: { backend, workspaceRoot },
+      webTools: config.enableWeb ? { search } : undefined,
+      // executeCommand is the real child_process.spawn-based implementation (shell-executor.ts) —
+      // wired in here, not inside assistant.ts, so the browser build never needs node:child_process.
+      shellTools: config.enableShell
+        ? { backend, workspaceRoot, timeoutMs: config.shellTimeoutMs, networkAllowlist: config.shellNetworkAllowlist, executeCommand: runApprovedShellCommand }
         : undefined,
-    // Resolved through the shared config seam (cli-config.ts's envOverridesFromProcessEnv reads
-    // ASSISTANT_ONE_LOOP into config.oneLoopMode; /config set oneLoopMode persists it) so the CLI,
-    // chat-ui, and the Tauri desktop build all decide this the same way. Undefined here means
-    // PersonalAssistant falls back to DEFAULT_ONE_LOOP_MODE.
-    oneLoopMode: config.oneLoopMode,
-    layerPolicyMode: config.layerPolicyMode,
-    // R7: turn-end next-step options and DONE-thread suggestions. Undefined config means the
-    // package default (enabled); PersonalAssistant itself defaults to disabled, so this is where
-    // the front end opts in.
-    goalGraphSuggestMode: isGoalGraphSuggestEnabled(config.goalGraphSuggestMode) ? 'enabled' : 'disabled',
-    // P11 of the internal plan — resolved through the same shared config
-    // seam as oneLoopMode above (ASSISTANT_PLAN_MODE / `/config set planMode`). Undefined here
-    // means PersonalAssistant falls back to DEFAULT_PLAN_MODE ('legacy').
-    planMode: config.planMode,
-    ambiguityGuardMode: config.ambiguityGuardMode,
-  })
+      // The Resend/SMTP transport is wired in here, not inside assistant.ts, so the browser build
+      // never needs nodemailer or a mail server — same split as shellTools' executeCommand.
+      actionTools: (() => {
+        const sendEmail = buildEmailSender(config)
+        return sendEmail ? { backend, workspaceRoot, sendEmail } : undefined
+      })(),
+      // Opt-in durable record of tool calls/results and approvals (see activity-log.ts).
+      onDebugLog: activityLogEnabled(process.env) ? createActivityLogger(join(dataDir, 'activity-log.jsonl')) : undefined,
+    }),
+  )
 }
 
 /**

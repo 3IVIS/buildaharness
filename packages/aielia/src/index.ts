@@ -23,6 +23,7 @@ export type { TurnIntentClassification, TurnIntentContext, RiskLevel } from './t
 export { emptyDraft, orderedOptions, draftToAnswer, type QuestionDraft } from './ask-draft.js'
 export { withCostEstimate } from './turn-cost.js'
 export { planUndo, type UndoPlan } from './undo-plan.js'
+export { buildAssistantOptions, CLI_FEATURES, DESKTOP_FEATURES, WEB_FEATURES, type AssistantPlatform, type AssistantFeatures } from './assistant-options.js'
 export { checkProxyHealth } from './proxy-health.js'
 export { redactUrlCredentials } from './redact-url.js'
 export { createLlmClient, type LlmClientFactoryOptions } from './llm-client-factory.js'

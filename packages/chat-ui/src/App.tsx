@@ -10,6 +10,9 @@ import {
   withCostEstimate as sharedWithCostEstimate,
   createLlmClient as createSharedLlmClient,
   checkProxyHealth,
+  buildAssistantOptions,
+  DESKTOP_FEATURES,
+  WEB_FEATURES,
   planUndo,
   formatTranscriptMarkdown,
   defaultExportFilename,
@@ -37,10 +40,8 @@ import {
   isGoalGraphEnabled,
   isPlanGraphEnabled,
   planToSnapshot,
-  isGoalGraphSuggestEnabled,
 } from '@buildaharness/aielia'
 import {
-  defaultModelForBackend,
   FileSystemAdapter,
   FileSystemExperienceStore,
   type ILLMClient,
@@ -338,35 +339,22 @@ async function createTauriBackedAssistant(config: AssistantConfig): Promise<Pers
   // The webview's CSP blocks the global fetch to remote hosts, so LLM calls go through the Rust-side HTTP plugin (scoped by the http:default capability).
   const { fetch: tauriFetch } = await import('@tauri-apps/plugin-http')
 
-  return PersonalAssistant.create({
-    llmClient: createLlmClient(config, { isDesktop: true, workspaceRoot, fetchImpl: tauriFetch }),
-    // Name the backend's real default when none is set, so spend tracking prices the model that actually runs.
-    model: config.model ?? defaultModelForBackend(config.llmBackend),
-    // M6 — same AssistantConfig seam as the CLI's buildAssistant (it already passed memoryBudgetChars; the browser build did not).
-    memoryBudgetChars: config.memoryBudgetChars,
-    memoryWriteMode: config.memoryWriteMode,
-    memory: new FileSystemAdapter({ backend, baseDir, namespace: 'transcripts' }),
-    experienceStore: await FileSystemExperienceStore.create({ backend, baseDir, namespace: 'experience' }),
-    checkpointStore: new FileSystemAdapter({ backend, baseDir, namespace: 'checkpoints' }),
-    fileTools: { backend: workspaceBackend, workspaceRoot },
-    webTools: config.enableWeb ? await createWebTools(config, true) : undefined,
-    shellTools: config.enableShell
-      ? { backend: workspaceBackend, workspaceRoot, timeoutMs: config.shellTimeoutMs, executeCommand: tauriExecuteShellCommand }
-      : undefined,
-    dangerouslySkipPermissions: config.dangerouslySkipPermissions,
-    // R5 of the internal plan — resolved through the same AssistantConfig
-    // seam the CLI uses (here from the build-time VITE_ASSISTANT_ONE_LOOP via browser-config.ts, or
-    // a persisted oneLoopMode). Undefined → PersonalAssistant falls back to DEFAULT_ONE_LOOP_MODE.
-    oneLoopMode: config.oneLoopMode,
-    layerPolicyMode: config.layerPolicyMode,
-    // R7: turn-end next-step options + DONE-thread suggestions. Undefined config means the package
-    // default (enabled); PersonalAssistant itself defaults to disabled, so the front end opts in here.
-    goalGraphSuggestMode: isGoalGraphSuggestEnabled(config.goalGraphSuggestMode) ? 'enabled' : 'disabled',
-    // P11 of the internal plan — same seam, from VITE_ASSISTANT_PLAN_MODE
-    // via browser-config.ts, or a persisted planMode. Undefined → falls back to DEFAULT_PLAN_MODE.
-    planMode: config.planMode,
-    onDebugLog: debugLog,
-  })
+  return PersonalAssistant.create(
+    buildAssistantOptions(config, {
+      llmClient: createLlmClient(config, { isDesktop: true, workspaceRoot, fetchImpl: tauriFetch }),
+      workspaceRoot,
+      features: DESKTOP_FEATURES,
+      memory: new FileSystemAdapter({ backend, baseDir, namespace: 'transcripts' }),
+      experienceStore: await FileSystemExperienceStore.create({ backend, baseDir, namespace: 'experience' }),
+      checkpointStore: new FileSystemAdapter({ backend, baseDir, namespace: 'checkpoints' }),
+      fileTools: { backend: workspaceBackend, workspaceRoot },
+      webTools: config.enableWeb ? await createWebTools(config, true) : undefined,
+      shellTools: config.enableShell
+        ? { backend: workspaceBackend, workspaceRoot, timeoutMs: config.shellTimeoutMs, executeCommand: tauriExecuteShellCommand }
+        : undefined,
+      onDebugLog: debugLog,
+    }),
+  )
 }
 
 async function buildAssistant(config: AssistantConfig): Promise<PersonalAssistant> {
@@ -374,30 +362,16 @@ async function buildAssistant(config: AssistantConfig): Promise<PersonalAssistan
   // Test-only (phase B1): an injected in-memory FsBackend so the tool loop actually runs in a
   // plain-browser E2E turn. `getAssistantTestHooks()` is null in any production build.
   const testFsBackend = getAssistantTestHooks()?.makeFsBackend
-  return PersonalAssistant.create({
-    llmClient: createLlmClient(config, { isDesktop: false, workspaceRoot: '' }),
-    // Name the backend's real default when none is set, so spend tracking prices the model that actually runs.
-    model: config.model ?? defaultModelForBackend(config.llmBackend),
-    memoryBudgetChars: config.memoryBudgetChars,
-    memoryWriteMode: config.memoryWriteMode,
-    // No fileTools/shellTools in a plain browser build (no filesystem/process access at all) —
-    // still worth honoring dangerouslySkipPermissions for consistency with the desktop build,
-    // since it also affects the message-level risk gate, independent of file/shell tools.
-    fileTools: testFsBackend ? { backend: testFsBackend(), workspaceRoot: '/workspace' } : undefined,
-    webTools: config.enableWeb ? await createWebTools(config, false) : undefined,
-    dangerouslySkipPermissions: config.dangerouslySkipPermissions,
-    // R5 of the internal plan — same AssistantConfig seam as the desktop
-    // path above and the CLI. Undefined → PersonalAssistant falls back to DEFAULT_ONE_LOOP_MODE.
-    oneLoopMode: config.oneLoopMode,
-    layerPolicyMode: config.layerPolicyMode,
-    // R7: turn-end next-step options + DONE-thread suggestions. Undefined config means the package
-    // default (enabled); PersonalAssistant itself defaults to disabled, so the front end opts in here.
-    goalGraphSuggestMode: isGoalGraphSuggestEnabled(config.goalGraphSuggestMode) ? 'enabled' : 'disabled',
-    // P11 of the internal plan — same seam. Undefined → falls back to
-    // DEFAULT_PLAN_MODE.
-    planMode: config.planMode,
-    onDebugLog: debugLog,
-  })
+  return PersonalAssistant.create(
+    buildAssistantOptions(config, {
+      llmClient: createLlmClient(config, { isDesktop: false, workspaceRoot: '' }),
+      features: WEB_FEATURES,
+      // No fileTools/shellTools in a plain browser build (no filesystem/process access at all); the test hook injects an in-memory backend.
+      fileTools: testFsBackend ? { backend: testFsBackend(), workspaceRoot: '/workspace' } : undefined,
+      webTools: config.enableWeb ? await createWebTools(config, false) : undefined,
+      onDebugLog: debugLog,
+    }),
+  )
 }
 
 function formatElapsed(seconds: number): string {
