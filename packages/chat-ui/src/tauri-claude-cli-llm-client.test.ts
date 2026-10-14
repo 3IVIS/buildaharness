@@ -42,13 +42,17 @@ describe('TauriClaudeCliLLMClient (U7 audit: what it shares with ClaudeCliLLMCli
   })
 })
 
-describe('TauriClaudeCliLLMClient gaps against ClaudeCliLLMClient (U7; each flips to a failure when fixed, then becomes a plain test)', () => {
-  // ClaudeCliLLMClient strips a markdown fence from the content when options.structuredOutput is set (claude has no
-  // schema-constrained mode, so it often fences its JSON). The Tauri client returns the fence, so a caller that
-  // JSON.parses the content fails on desktop with the claude-cli backend.
-  it.fails('strips a ```json fence from structured output', async () => {
+describe('TauriClaudeCliLLMClient structured output (gap G1 of U7, fixed in U10)', () => {
+  // ClaudeCliLLMClient strips a markdown fence from the content when options.structuredOutput is set; so must this one, or a caller that JSON.parses the content fails on desktop.
+  it('strips a ```json fence from structured output', async () => {
     invokeMock.mockResolvedValue(reply('```json\n{"ok":true}\n```'))
     const out = await new TauriClaudeCliLLMClient().callChatStructured(user, undefined, { structuredOutput: true } as never)
     expect(JSON.parse(out.content)).toEqual({ ok: true })
+  })
+
+  it('leaves the content alone when structured output was not asked for', async () => {
+    invokeMock.mockResolvedValue(reply('```json\n{"ok":true}\n```'))
+    const out = await new TauriClaudeCliLLMClient().callChatStructured(user)
+    expect(out.content).toContain('```json')
   })
 })

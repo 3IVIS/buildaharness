@@ -72,7 +72,7 @@ export { WEB_TOOLS, WEB_SEARCH_TOOL, FETCH_URL_TOOL, executeWebTool, assertPubli
 export type { WebToolsContext, WebToolResult, WebSearchResult, DnsResolver } from './web-tools.js'
 export { braveSearch } from './web-search-provider.js'
 export type { BraveSearchOptions } from './web-search-provider.js'
-export { buildClaudePrompt, parseClaudeCliOutput, ALREADY_STAGED_ACTION_TOOL, stagedActionInput } from './claude-cli-prompt.js'
+export { buildClaudePrompt, stripJsonCodeFence, parseClaudeCliOutput, ALREADY_STAGED_ACTION_TOOL, stagedActionInput } from './claude-cli-prompt.js'
 export type { ParsedClaudeCliOutput } from './claude-cli-prompt.js'
 export { stripMcpToolPrefix, summarizeToolStep, summarizeSettledToolStep } from './tool-step.js'
 export type { AssistantToolStep } from './tool-step.js'
