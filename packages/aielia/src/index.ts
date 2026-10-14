@@ -23,6 +23,7 @@ export type { TurnIntentClassification, TurnIntentContext, RiskLevel } from './t
 export { emptyDraft, orderedOptions, draftToAnswer, type QuestionDraft } from './ask-draft.js'
 export { withCostEstimate } from './turn-cost.js'
 export { planUndo, type UndoPlan } from './undo-plan.js'
+export { ENV_KEYS, ENUM_CHOICES, envOverridesFrom, envVarFor, normalizeLlmBackend, parseShellNetworkAllowlist, formatChoices, type EnvKeySpec, type EnvSurface } from './config-keys.js'
 export { presentTurnResult, approvalLabels, NO_TRACE, DEFAULT_APPROVAL_REASON, DEFAULT_ESCALATION_REASON, DEFAULT_CLARIFICATION_REASON, MISSING_PLAN_APPROVAL_ID_REASON, type TurnPresentation, type TurnHints } from './turn-presentation.js'
 export { parseProjectCommand, type ProjectCommand } from './project-command.js'
 export { formatSpendCapStatus } from './spend-cap.js'
