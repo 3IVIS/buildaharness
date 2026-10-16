@@ -43,6 +43,8 @@ export interface WriteServices {
   permissions: { get(): Promise<WritePermissions>; set(p: WritePermissions): Promise<void> }
   /** Dollars spent on model calls in this browser so far (counts toward the cap). */
   spentUsd(): number
+  /** Dollars and calls so far for each kind of call, biggest first. */
+  spendByType(): { id: string; usd: number; calls: number }[]
 }
 
 const SESSION_ID = 'write'
@@ -113,6 +115,7 @@ export async function assembleWriteServices(parts: {
       },
     },
     spentUsd: () => meter.spentUsd(),
+    spendByType: () => Object.entries(meter.byType()).map(([id, v]) => ({ id, ...v })).sort((a, b) => b.usd - a.usd),
   }
 }
 

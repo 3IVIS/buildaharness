@@ -1,10 +1,11 @@
 import { useEffect, useState } from 'react'
-import type { WritePermissions } from '@buildaharness/aielia'
+import { callTypeLabel, type WritePermissions } from '@buildaharness/aielia'
 import { ModelPicker } from './ModelPicker'
 
 interface Props {
   perms: WritePermissions | undefined
   spent: number
+  spentByType: { id: string; usd: number; calls: number }[]
   autoModel: string
   chatModel: string
   suggestions: string[]
@@ -12,7 +13,7 @@ interface Props {
   onSave: (p: WritePermissions) => Promise<void>
 }
 
-export function SettingsPane({ perms, spent, autoModel, chatModel, suggestions, onAutoModel, onSave }: Props): React.JSX.Element {
+export function SettingsPane({ perms, spent, spentByType, autoModel, chatModel, suggestions, onAutoModel, onSave }: Props): React.JSX.Element {
   const [cap, setCap] = useState<string>('')
   useEffect(() => setCap(perms?.spendCapUsd !== undefined ? String(perms.spendCapUsd) : ''), [perms])
   if (!perms) return <p className="write__muted">Loading…</p>
@@ -31,6 +32,16 @@ export function SettingsPane({ perms, spent, autoModel, chatModel, suggestions, 
         <input aria-label="Spending cap" inputMode="decimal" value={cap} onChange={(e) => setCap(e.target.value)} onBlur={() => { const n = Number(cap); void save({ spendCapUsd: cap.trim() !== '' && Number.isFinite(n) && n > 0 ? n : undefined }) }} />
       </label>
       <p className="write__muted">Spent so far in this browser: ${spent.toFixed(2)}</p>
+      {spentByType.length > 0 && (
+        <details className="write__allsrc">
+          <summary>Where it went</summary>
+          <ul className="write__rows" aria-label="Spending by kind of call">
+            {spentByType.map((t) => (
+              <li key={t.id}><div className="write__rowmain">{callTypeLabel(t.id)}<div className="write__reason">${t.usd.toFixed(2)} · {t.calls} call{t.calls === 1 ? '' : 's'}</div></div></li>
+            ))}
+          </ul>
+        </details>
+      )}
     </div>
   )
 }
