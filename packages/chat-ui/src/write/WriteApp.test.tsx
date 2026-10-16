@@ -27,11 +27,11 @@ function llm(replies: Partial<Record<keyof typeof MARK, unknown>>): ILLMClient {
     },
   } as unknown as ILLMClient
 }
-async function servicesOn(store: ReturnType<typeof createMemoryArticleStore>, replies: Parameters<typeof llm>[0]) {
-  return assembleWriteServices({ store, llm: llm(replies), buildAssistant: async () => ({ turn: async () => ({ reply: 'Noted.' }), setModel: () => undefined }) as unknown as PersonalAssistant })
+async function servicesOn(store: ReturnType<typeof createMemoryArticleStore>, replies: Parameters<typeof llm>[0], fetchWeb?: (url: string) => Promise<string>) {
+  return assembleWriteServices({ store, llm: llm(replies), fetchWeb, buildAssistant: async () => ({ turn: async () => ({ reply: 'Noted.' }), setModel: () => undefined }) as unknown as PersonalAssistant })
 }
-async function services(replies: Parameters<typeof llm>[0], seed?: string) {
-  const s = await servicesOn(createMemoryArticleStore(), replies)
+async function services(replies: Parameters<typeof llm>[0], seed?: string, fetchWeb?: (url: string) => Promise<string>) {
+  const s = await servicesOn(createMemoryArticleStore(), replies, fetchWeb)
   if (seed) await s.service.create('Post', seed)
   return s
 }
@@ -467,6 +467,39 @@ describe('comments and sources under the text', () => {
     expect(within(dock).getByText(/suggested 90%/)).toBeInTheDocument()
     await userEvent.click(within(dock).getByRole('button', { name: 'Use this source' }))
     await waitFor(() => expect(within(dock).queryByText(/suggested 90%/)).toBeNull())
+  })
+})
+
+describe('web links', () => {
+  it('reads a pasted link when the browser can, shows when the page changes, and takes the new text only on the writer\'s say', async () => {
+    let page = 'p99 latency is 18 ms.'
+    const s = await services({ sourceLinks: { claims: [] }, resolve: { impacts: [] } }, MD, async () => page)
+    const id = (await s.service.list())[0].id
+    render(<WriteApp services={s} />)
+    await waitForText()
+    putCursor('18 ms')
+    const dock = screen.getByLabelText('Comments and sources for this text')
+    await userEvent.click(within(dock).getByRole('button', { name: 'Source' }))
+    await userEvent.type(within(dock).getByLabelText('Add to this text', { selector: 'input' }), 'https://example.com/bench{Enter}')
+    await waitFor(async () => expect((await s.service.get(id)).meta.sources[0]).toMatchObject({ kind: 'web', passage: 'p99 latency is 18 ms.' }))
+    page = 'p99 latency is now 30 ms.'
+    await userEvent.click(await within(dock).findByRole('button', { name: 'Read the page again' }))
+    await waitFor(async () => expect((await s.service.get(id)).meta.sources[0].fetchedPassage).toBe('p99 latency is now 30 ms.'))
+    expect(await within(dock).findByText(/The page has changed since you read it/)).toBeInTheDocument()
+    await userEvent.click(within(dock).getByRole('button', { name: 'Use the new text of this page' }))
+    await waitFor(async () => expect((await s.service.get(id)).meta.sources[0]).toMatchObject({ passage: 'p99 latency is now 30 ms.', freshness: 'current' }))
+  })
+  it('keeps the link and says to paste the passage when pages cannot be read here', async () => {
+    const s = await services({ sourceLinks: { claims: [] } }, MD)
+    const id = (await s.service.list())[0].id
+    render(<WriteApp services={s} />)
+    await waitForText()
+    putCursor('18 ms')
+    const dock = screen.getByLabelText('Comments and sources for this text')
+    await userEvent.click(within(dock).getByRole('button', { name: 'Source' }))
+    await userEvent.type(within(dock).getByLabelText('Add to this text', { selector: 'input' }), 'https://example.com/bench{Enter}')
+    expect(await screen.findByText(/This browser cannot read web pages/)).toBeInTheDocument()
+    expect((await s.service.get(id)).meta.sources[0]).toMatchObject({ kind: 'web', address: 'https://example.com/bench' })
   })
 })
 

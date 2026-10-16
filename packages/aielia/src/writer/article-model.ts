@@ -75,6 +75,8 @@ export const SourceSchema = z.object({
   trust: z.enum(['normal', 'lower']),
   freshness: z.enum(['unchecked', 'current', 'changed', 'unreachable']),
   note: z.string().optional(),
+  /** New text read from the address that differs from `passage`. Held until the writer accepts it; checks keep using `passage`. */
+  fetchedPassage: z.string().optional(),
 })
 export type Source = z.infer<typeof SourceSchema>
 

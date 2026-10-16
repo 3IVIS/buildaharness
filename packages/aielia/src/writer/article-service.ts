@@ -2,7 +2,7 @@ import type { ILLMClient, TokenUsage } from '@buildaharness/runtime'
 import { extractClaims, type ExtractionResult } from './article-claims.js'
 import { serializeArticle, loadArticleFolder, type ArticleBundle, type ArticleFolder } from './article-folder.js'
 import { createArticleMeta, type ArticleMeta, type Claim, type Idea, type Link, type Source } from './article-model.js'
-import { resolveChange, type ResolveResult } from './article-resolver.js'
+import { assessSourceChange, resolveChange, type ResolveResult, type SourceImpact } from './article-resolver.js'
 import { addCommentOnText, refreshComments } from './article-comments.js'
 import { checkableClaims, unsupportedClaims, type IssueCategory } from './article-issues.js'
 import { applyProfile, renderStyleGuide, setBrief, deleteProfile, loadProfiles, saveProfile } from './article-style.js'
@@ -14,7 +14,7 @@ import { addSnapshot, compareVersions, isLargeChange, summarizeChange, type Chan
 import { checkIntegrity, computeReadiness, confirmLink, createSnapshot, removeLink, restoreSnapshot, setSectionReview, type Problem, type Readiness, type Snapshot } from './article-rules.js'
 import { suggestEdits, type EditSuggestResult } from './article-edit-suggest.js'
 import { reconcileSections } from './article-sections.js'
-import { acceptNewPassage, createSource } from './article-sources.js'
+import { acceptNewPassage, applyRecheck, createSource } from './article-sources.js'
 import { acceptSuggestion, refreshSuggestions, rejectSuggestion } from './article-suggestions.js'
 import { checkClaimSupport, needsAutoCheck, type SupportCheck } from './article-support.js'
 import { loadPermissions } from './write-permissions.js'
@@ -71,6 +71,8 @@ export interface ArticleServiceOptions {
   modelFor?: (role: 'writer' | 'checker') => string | undefined
   /** The name stored with a check result ("which model ran it"); defaults to the checker model. */
   modelName?: string
+  /** Reads a web page as plain text. Absent where the browser cannot reach pages (no proxy and no desktop shell); links are then stored without a passage and the writer pastes it. */
+  fetchWeb?: (url: string) => Promise<string>
   onUsage?: (usage: TokenUsage) => void
   now?: () => string
   newId?: () => string
@@ -84,6 +86,19 @@ export interface UpdateOutcome {
   resolution?: ResolveResult
   autoChecks: { claimId: string; status: SupportCheck['status'] }[]
 }
+
+/** True for an http or https address; anything else (file:, javascript:, a bare word) is never fetched. */
+function isHttpAddress(address: string): boolean {
+  try {
+    const { protocol } = new URL(address)
+    return protocol === 'http:' || protocol === 'https:'
+  } catch {
+    return false
+  }
+}
+
+/** The most of a page kept as a source passage. */
+const MAX_SOURCE_CHARS = 30000
 
 function sectionText(markdown: string, s: { span: { start: number; end: number } }): string {
   return markdown.slice(s.span.start, s.span.end)
@@ -232,6 +247,54 @@ export class ArticleService {
     const source = createSource({ id: `src${n}`, ...input, now: this.now() })
     await this.store.save(id, { ...b, meta: { ...b.meta, sources: [...b.meta.sources, source] } })
     return source.id
+  }
+
+  /**
+   * Reads a web source's address. First read: the page text becomes the stored passage. Later reads: same text keeps it current;
+   * different text is held as `fetchedPassage` (the stored passage and every check stay as they were), the source is marked
+   * changed and a model judges which citing claims it touches. The writer accepts the new text with acceptSourceChange.
+   */
+  async readSource(id: string, sourceId: string, modelOverride?: string): Promise<{ status: 'read' | 'unchanged' | 'changed' | 'unreachable' | 'unavailable' | 'not_a_link'; impacts: SourceImpact[]; reason?: string }> {
+    const b = await this.get(id)
+    const src = b.meta.sources.find((x) => x.id === sourceId)
+    if (!src) return { status: 'not_a_link', impacts: [], reason: `No source ${sourceId}.` }
+    if (src.kind !== 'web' || !src.address || !isHttpAddress(src.address)) return { status: 'not_a_link', impacts: [], reason: 'Only a web link can be read.' }
+    if (!this.opts.fetchWeb) return { status: 'unavailable', impacts: [], reason: 'This browser cannot read web pages. Paste the passage instead.' }
+    const save = (s: Source, meta = b.meta): Promise<void> => this.store.save(id, { ...b, meta: { ...meta, sources: meta.sources.map((x) => (x.id === sourceId ? s : x)) } })
+    let text: string
+    try {
+      text = (await this.opts.fetchWeb(src.address)).slice(0, MAX_SOURCE_CHARS).trim()
+    } catch (e) {
+      await save(applyRecheck(src, { unreachable: true }, this.now()))
+      return { status: 'unreachable', impacts: [], reason: e instanceof Error ? e.message : String(e) }
+    }
+    if (!text) {
+      await save(applyRecheck(src, { unreachable: true }, this.now()))
+      return { status: 'unreachable', impacts: [], reason: 'The page had no text.' }
+    }
+    if (src.passage === undefined) {
+      await save(acceptNewPassage(src, text, this.now()))
+      return { status: 'read', impacts: [] }
+    }
+    const rechecked = applyRecheck(src, { passage: text }, this.now())
+    if (rechecked.freshness !== 'changed') {
+      await save({ ...rechecked, fetchedPassage: undefined })
+      return { status: 'unchanged', impacts: [] }
+    }
+    const model = modelOverride ?? this.checker()
+    const assessed = await assessSourceChange({ meta: b.meta, sourceId, before: src.passage, after: text, now: this.now() }, this.opts.llm, model, this.opts.onUsage)
+    await save({ ...rechecked, fetchedPassage: text }, assessed.meta)
+    return { status: 'changed', impacts: assessed.impacts }
+  }
+
+  /** The writer takes the new text a re-read found: it becomes the stored passage, so checks made on the old text stop counting until run again. */
+  async acceptSourceChange(id: string, sourceId: string): Promise<{ ok: boolean; reason?: string }> {
+    const b = await this.get(id)
+    const src = b.meta.sources.find((x) => x.id === sourceId)
+    if (!src?.fetchedPassage) return { ok: false, reason: 'There is no new text waiting.' }
+    const next = { ...acceptNewPassage(src, src.fetchedPassage, this.now()), fetchedPassage: undefined }
+    await this.store.save(id, { ...b, meta: { ...b.meta, sources: b.meta.sources.map((x) => (x.id === sourceId ? next : x)) } })
+    return { ok: true }
   }
 
   /** The writer ties a claim to a source: a hand-drawn supported_by link, which the assistant can never remove. */
@@ -579,7 +642,7 @@ export class ArticleService {
     let next = { ...src }
     if (patch.address !== undefined) next.address = patch.address.trim() || undefined
     if (patch.note !== undefined) next.note = patch.note.trim() || undefined
-    if (patch.passage !== undefined && patch.passage !== src.passage) next = acceptNewPassage(next, patch.passage, this.now())
+    if (patch.passage !== undefined && patch.passage !== src.passage) next = { ...acceptNewPassage(next, patch.passage, this.now()), fetchedPassage: undefined }
     await this.store.save(id, { ...b, meta: { ...b.meta, sources: b.meta.sources.map((x) => (x.id === sourceId ? next : x)) } })
     return { ok: true }
   }

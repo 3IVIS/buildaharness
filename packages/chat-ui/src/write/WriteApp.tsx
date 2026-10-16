@@ -266,6 +266,11 @@ export function WriteApp({ services }: { services: WriteServices }): React.JSX.E
   async function addSourceAndPlace(src: { kind: 'web' | 'upload' | 'say_so'; address?: string; passage?: string; note?: string }, attach: boolean): Promise<void> {
     if (!activeId) return
     const sid = await service.addSource(activeId, src)
+    if (src.kind === 'web') {
+      const read = await service.readSource(activeId, sid)
+      if (read.status === 'read') setNotice('I read the page and stored its text.')
+      else if (read.reason) setNotice(`Link stored. ${read.reason}${read.status === 'unreachable' ? ' Paste the passage instead.' : ''}`)
+    }
     if (attach && selection) {
       const r = await service.attachSourceToText(activeId, selection, sid)
       if (!r.ok) setNotice(r.reason)
@@ -465,6 +470,11 @@ export function WriteApp({ services }: { services: WriteServices }): React.JSX.E
               onDeleteComment={(cid) => change('Saving', async (id) => { await service.deleteComment(id, cid) })}
               onDetach={(claimId, sourceId) => change('Saving', async (id) => { await service.detachSource(id, claimId, sourceId) })}
               onConfirm={(claimId, sourceId) => change('Saving', async (id) => { const link = meta.links.find((l) => l.kind === 'supported_by' && l.from.id === claimId && l.to.id === sourceId); if (link) await service.confirmDependency(id, link.id) })}
+              onRead={(sourceId) => change('Reading the page', async (id) => {
+                const r = await service.readSource(id, sourceId, services.models.auto())
+                setNotice(r.status === 'read' ? 'I read the page and stored its text.' : r.status === 'unchanged' ? 'The page has not changed.' : r.status === 'changed' ? `The page has changed. ${r.impacts.filter((i) => i.impact !== 'none').length} claim${r.impacts.filter((i) => i.impact !== 'none').length === 1 ? '' : 's'} may be affected. Accept the new text to use it.` : r.reason ?? 'The page could not be read.')
+              })}
+              onAcceptNew={(sourceId) => change('Saving', async (id) => { const r = await service.acceptSourceChange(id, sourceId); if (!r.ok && r.reason) setNotice(r.reason) })}
               onCheck={(claimId) => change(`Checking with ${chatModel}`, async (id) => { const r = await service.checkClaim(id, claimId, chatModel); setNotice(r.status === 'checked' ? `Checked with ${chatModel}: ${r.verdict.replace('_', ' ')}. ${r.reason}` : r.status === 'no_sources' ? 'There is no stored passage to check against.' : r.reason) })}
             />
           </section>

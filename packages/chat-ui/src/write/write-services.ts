@@ -7,6 +7,7 @@ import {
   createLlmClient,
   createMemoryAdapterArticleStore,
   createSpendMeter,
+  executeWebTool,
   defaultWriteModels,
   loadPermissions,
   savePermissions,
@@ -18,6 +19,8 @@ import {
   type WriterChatPort,
 } from '@buildaharness/aielia'
 import { IndexedDBAdapter, type ILLMClient } from '@buildaharness/runtime'
+import { rememberUserUrls } from '../user-urls'
+import { createProxyWebTools } from '../web-context'
 
 /** The models the page uses. `chat` is for the chat, edit suggestions and checks started from the chat; `auto` is for checks that run by themselves. */
 export interface WriteModels {
@@ -53,6 +56,8 @@ export async function assembleWriteServices(parts: {
   backend?: string
   configuredModel?: string
   buildAssistant: (port: WriterChatPort, llm: ILLMClient, model: string) => Promise<PersonalAssistant>
+  /** Reads a web page as text. Absent when this browser cannot reach pages. */
+  fetchWeb?: (url: string) => Promise<string>
 }): Promise<WriteServices> {
   const { store } = parts
   const backend = parts.backend ?? 'anthropic'
@@ -69,7 +74,7 @@ export async function assembleWriteServices(parts: {
   // Every model call, the article steps and the chat alike, goes through the cap.
   const llm = withSpendCap(parts.llm, meter, () => cap)
   const port = createArticleChatPort(store)
-  const service = new ArticleService({ store, llm, modelFor: (role) => (role === 'writer' ? chatModel : autoModel) })
+  const service = new ArticleService({ store, llm, fetchWeb: parts.fetchWeb, modelFor: (role) => (role === 'writer' ? chatModel : autoModel) })
   const assistant = await parts.buildAssistant(port, llm, chatModel)
 
   return {
@@ -111,12 +116,24 @@ export async function assembleWriteServices(parts: {
   }
 }
 
+function proxyFetch(config: AssistantConfig): (url: string) => Promise<string> {
+  const ctx = createProxyWebTools(config)
+  return async (url) => {
+    rememberUserUrls(url)
+    return (await executeWebTool({ search: ctx.search, fetchImpl: ctx.fetchImpl, dns: ctx.dns }, 'fetch_url', { url })).text
+  }
+}
+
 /** The real thing: IndexedDB storage, the visitor's own key, a plain browser (no file or shell tools). */
 export function createWriteServices(config: AssistantConfig): Promise<WriteServices> {
   const memory = new IndexedDBAdapter({ namespace: 'aielia-write' })
   const store = createMemoryAdapterArticleStore(memory)
   const llm = createLlmClient(config, { claudeCli: () => undefined })
+  // A plain browser tab cannot fetch arbitrary pages (CORS, and no DNS to check the address). Pages are read through the proxy
+  // when the visitor set one up; otherwise the writer pastes the passage.
+  const fetchWeb = config.webBackend === 'proxy' ? proxyFetch(config) : undefined
   return assembleWriteServices({
+    fetchWeb,
     store,
     llm,
     backend: config.llmBackend,
