@@ -2,7 +2,7 @@ import { describe, it, expect } from 'vitest'
 import { createArticleMeta, type ArticleMeta, type Claim } from './article-model.js'
 import { createSnapshot } from './article-rules.js'
 import { createSource } from './article-sources.js'
-import { addSnapshot, compareVersions, diffLines, isLargeChange, MAX_CHECKPOINTS } from './article-history.js'
+import { addSnapshot, compareVersions, diffLines, isLargeChange, MAX_CHECKPOINTS, summarizeChange } from './article-history.js'
 
 const NOW = '2026-10-16T10:00:00.000Z'
 const claim = (over: Partial<Claim>): Claim => ({ id: 'k1', sectionId: 's1', quote: 'It is fast.', position: 0, kind: 'factual', author: 'model', authorAt: NOW, confirmed: false, sourceStatus: 'none', ...over })
@@ -59,5 +59,26 @@ describe('isLargeChange', () => {
     expect(isLargeChange(base, base.replace('line 3', 'line three'))).toBe(false)
     expect(isLargeChange(base, Array.from({ length: 20 }, (_, i) => `other ${i}`).join('\n'))).toBe(true)
     expect(isLargeChange('a\nb', 'a\nc')).toBe(false)
+  })
+})
+
+describe('summarizeChange', () => {
+  const side = (markdown: string, sections: { heading: string; start: number; end: number }[]) => ({
+    markdown,
+    meta: meta({ sections: sections.map((s, i) => ({ id: `s${i}`, heading: s.heading, level: 2, order: i, span: { start: s.start, end: s.end }, review: { state: 'clean' as const } })) }),
+  })
+  const A = '## One\nalpha\n## Two\nbeta\n'
+  const aSections = [{ heading: 'One', start: 0, end: 12 }, { heading: 'Two', start: 12, end: A.length }]
+  it('names the sections that changed and counts the lines', () => {
+    const B = '## One\nalpha\n## Two\nbeta changed\nmore\n'
+    const bSections = [{ heading: 'One', start: 0, end: 12 }, { heading: 'Two', start: 12, end: B.length }]
+    const r = summarizeChange(side(A, aSections), side(B, bSections))
+    expect(r).toMatchObject({ first: false, added: 2, removed: 1, sections: ['Two'], claims: 0, sources: 0 })
+  })
+  it('counts added and removed sections, and says first when nothing came before', () => {
+    const C = '## One\nalpha\n## Three\ngamma\n'
+    const cSections = [{ heading: 'One', start: 0, end: 12 }, { heading: 'Three', start: 12, end: C.length }]
+    expect(summarizeChange(side(A, aSections), side(C, cSections)).sections.sort()).toEqual(['Three', 'Two'])
+    expect(summarizeChange(undefined, side(A, aSections))).toMatchObject({ first: true, added: 5, removed: 0 })
   })
 })

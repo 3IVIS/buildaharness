@@ -184,11 +184,17 @@ describe('version history', () => {
     await s.publish(id, 'v1')
     const h = await s.history(id)
     expect(h.map((x) => [x.kind, x.label])).toEqual([['published', 'v1'], ['checkpoint', 'First draft']])
+    expect(h[0].change).toMatchObject({ first: false, added: 1, removed: 1, sections: ['Latency'] })
+    expect(h[1].change.first).toBe(true)
     const diff = await s.compareWithCurrent(id, h[0].index)
     expect(diff.changedLines).toBe(0)
     const older = await s.compareWithCurrent(id, h[1].index)
     expect(older.text.some((l) => l.type === 'add' && l.text.includes('41 ms'))).toBe(true)
     await expect(s.compareWithCurrent(id, 9)).rejects.toThrow('No version')
+    await s.updateText(id, MD.replace('18 ms', '41 ms') + '\nA new last line.\n', { analyze: false })
+    expect(await s.changeSinceLastVersion(id)).toMatchObject({ added: 2 })
+    const fresh = build()
+    expect(await fresh.s.changeSinceLastVersion(await fresh.s.create('Empty', '# E\n'))).toBeUndefined()
   })
   it('keeps a checkpoint before a suggestion is accepted and before a large rewrite', async () => {
     const { s } = build()
@@ -220,3 +226,27 @@ describe('version history', () => {
     expect(h.some((x) => x.label === 'Original')).toBe(true)
   })
 })
+
+
+describe('dependencies through the service', () => {
+  it('finds proposals, lets only the writer confirm or remove, and refuses a circle', async () => {
+    const store = createMemoryArticleStore()
+    const reply = { links: [{ from: 's3', to: 's2', kind: 'repeats', reason: 'repeats the bound', confidence: 0.8 }] }
+    const s = new ArticleService({ store, llm: routedLinks(reply), now: () => NOW, newId: () => 'a1' })
+    const id = await s.create('Post', MD)
+    const found = await s.findDependencies(id)
+    expect(found.added).toHaveLength(1)
+    const linkId = found.added[0].id
+    expect((await s.get(id)).meta.links[0]).toMatchObject({ origin: 'proposed' })
+    expect(await s.confirmDependency(id, linkId)).toEqual({ ok: true })
+    expect((await s.get(id)).meta.links[0].origin).toBe('confirmed')
+    expect(await s.addDependency(id, 's2', 's3', 'rests_on')).toEqual({ ok: true })
+    expect(await s.addDependency(id, 's3', 's2', 'rests_on')).toMatchObject({ ok: false })
+    expect(await s.removeDependency(id, linkId)).toEqual({ ok: true })
+    expect((await s.get(id)).meta.links).toHaveLength(1)
+  })
+})
+
+function routedLinks(reply: unknown): ILLMClient {
+  return { callChatStructured: async () => ({ content: JSON.stringify(reply) }) } as unknown as ILLMClient
+}

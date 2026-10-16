@@ -3,8 +3,9 @@ import { extractClaims, type ExtractionResult } from './article-claims.js'
 import { serializeArticle, loadArticleFolder, type ArticleBundle, type ArticleFolder } from './article-folder.js'
 import { createArticleMeta, type ArticleMeta, type Claim, type Link, type Source } from './article-model.js'
 import { resolveChange, type ResolveResult } from './article-resolver.js'
-import { addSnapshot, compareVersions, isLargeChange, type VersionComparison } from './article-history.js'
-import { checkIntegrity, computeReadiness, createSnapshot, restoreSnapshot, setSectionReview, type Problem, type Readiness, type Snapshot } from './article-rules.js'
+import { addDrawnLink, proposeDependencies, type DependencyKind, type DependencyProposal } from './article-dependencies.js'
+import { addSnapshot, compareVersions, isLargeChange, summarizeChange, type ChangeSummary, type VersionComparison } from './article-history.js'
+import { checkIntegrity, computeReadiness, confirmLink, createSnapshot, removeLink, restoreSnapshot, setSectionReview, type Problem, type Readiness, type Snapshot } from './article-rules.js'
 import { suggestEdits, type EditSuggestResult } from './article-edit-suggest.js'
 import { reconcileSections } from './article-sections.js'
 import { createSource } from './article-sources.js'
@@ -275,10 +276,26 @@ export class ArticleService {
     await this.store.save(id, { ...b, snapshots: addSnapshot(b.snapshots, createSnapshot('checkpoint', b.markdown, b.meta, this.now(), label?.trim() || 'Saved by you')) })
   }
 
-  /** Every version, newest first: published snapshots and checkpoints, with the counts recorded at the time. */
-  async history(id: string): Promise<{ index: number; kind: Snapshot['kind']; label?: string; at: string; readiness: Snapshot['readiness'] }[]> {
+  /** Every version, newest first, each with what changed since the version before it (the oldest has nothing to compare with). */
+  async history(id: string): Promise<{ index: number; kind: Snapshot['kind']; label?: string; at: string; readiness: Snapshot['readiness']; change: ChangeSummary }[]> {
     const b = await this.get(id)
-    return b.snapshots.map((s, index) => ({ index, kind: s.kind, label: s.label, at: s.at, readiness: s.readiness })).reverse()
+    return b.snapshots
+      .map((s, index) => ({
+        index,
+        kind: s.kind,
+        label: s.label,
+        at: s.at,
+        readiness: s.readiness,
+        change: summarizeChange(index === 0 ? undefined : { markdown: b.snapshots[index - 1].markdown, meta: b.snapshots[index - 1].meta }, { markdown: s.markdown, meta: s.meta }),
+      }))
+      .reverse()
+  }
+
+  /** What the working article has changed since the latest saved version; undefined when nothing was saved yet. */
+  async changeSinceLastVersion(id: string): Promise<ChangeSummary | undefined> {
+    const b = await this.get(id)
+    const last = b.snapshots[b.snapshots.length - 1]
+    return last ? summarizeChange({ markdown: last.markdown, meta: last.meta }, { markdown: b.markdown, meta: b.meta }) : undefined
   }
 
   /** What changed between a stored version and the article now (text, claim status, sources, readiness). */
@@ -309,6 +326,41 @@ export class ArticleService {
     const next: ArticleBundle = { markdown: restored.markdown, meta, snapshots }
     await this.store.save(id, next)
     return next
+  }
+
+  /** The assistant reads the whole article and proposes dependencies between sections. Proposals wait for the writer to confirm them. */
+  async findDependencies(id: string): Promise<DependencyProposal> {
+    const b = await this.get(id)
+    const { llm, model, onUsage } = this.opts
+    const r = await proposeDependencies({ meta: b.meta, markdown: b.markdown, now: this.now() }, llm, model, onUsage)
+    if (r.status === 'proposed' && r.added.length > 0) await this.store.save(id, { ...b, meta: r.meta })
+    return r
+  }
+
+  /** The writer draws a link by hand. */
+  async addDependency(id: string, from: string, to: string, kind: DependencyKind): Promise<{ ok: true } | { ok: false; reason: string }> {
+    const b = await this.get(id)
+    const r = addDrawnLink(b.meta, from, to, kind, this.now())
+    if (!r.ok) return r
+    await this.store.save(id, { ...b, meta: r.meta })
+    return { ok: true }
+  }
+
+  /** Only the writer confirms a proposed link, or removes any link. */
+  async confirmDependency(id: string, linkId: string): Promise<{ ok: boolean; reason?: string }> {
+    const b = await this.get(id)
+    const r = confirmLink(b.meta, linkId, 'writer')
+    if (!r.ok) return r
+    await this.store.save(id, { ...b, meta: r.meta })
+    return { ok: true }
+  }
+
+  async removeDependency(id: string, linkId: string): Promise<{ ok: boolean; reason?: string }> {
+    const b = await this.get(id)
+    const r = removeLink(b.meta, linkId, 'writer')
+    if (!r.ok) return r
+    await this.store.save(id, { ...b, meta: r.meta })
+    return { ok: true }
   }
 
   readiness(bundle: ArticleBundle): { readiness: Readiness; problems: Problem[] } {

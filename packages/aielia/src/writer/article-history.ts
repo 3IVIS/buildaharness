@@ -61,6 +61,42 @@ export function compareVersions(from: VersionSide, to: VersionSide): VersionComp
   return { text, changedLines: text.filter((l) => l.type !== 'same').length, claims, sources, readiness: { from: computeReadiness(from.meta), to: computeReadiness(to.meta) } }
 }
 
+export interface ChangeSummary {
+  /** No earlier version to compare with. */
+  first: boolean
+  added: number
+  removed: number
+  /** Headings of the sections whose text changed, were added or were removed. */
+  sections: string[]
+  /** Claims whose shown status changed, appeared or disappeared. */
+  claims: number
+  /** Sources added, removed or changed. */
+  sources: number
+}
+
+function sectionTexts(side: VersionSide): Map<string, string> {
+  return new Map(side.meta.sections.map((sec) => [sec.heading, side.markdown.slice(sec.span.start, sec.span.end)]))
+}
+
+/** What changed from one version to the next, in a form short enough for one line of a list. `from` is undefined for the first version. */
+export function summarizeChange(from: VersionSide | undefined, to: VersionSide): ChangeSummary {
+  if (!from) return { first: true, added: to.markdown === '' ? 0 : to.markdown.split('\n').length, removed: 0, sections: [], claims: 0, sources: 0 }
+  const cmp = compareVersions(from, to)
+  const a = sectionTexts(from)
+  const b = sectionTexts(to)
+  const names: string[] = []
+  for (const [heading, text] of b) if (a.get(heading) !== text) names.push(heading || 'Opening')
+  for (const heading of a.keys()) if (!b.has(heading)) names.push(heading || 'Opening')
+  return {
+    first: false,
+    added: cmp.text.filter((l) => l.type === 'add').length,
+    removed: cmp.text.filter((l) => l.type === 'del').length,
+    sections: [...new Set(names)],
+    claims: cmp.claims.length,
+    sources: cmp.sources.length,
+  }
+}
+
 export const MAX_CHECKPOINTS = 20
 
 /** Adds a snapshot, keeping every published one and at most MAX_CHECKPOINTS of the newest checkpoints. */

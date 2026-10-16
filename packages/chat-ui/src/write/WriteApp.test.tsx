@@ -51,7 +51,7 @@ describe('WriteApp layout', () => {
       await screen.findByLabelText('Article text')
       const main = container.querySelector('.write__main') as HTMLElement
       const rail = screen.getByRole('navigation', { name: 'Panels' })
-      expect(within(rail).getAllByRole('button').map((b) => b.getAttribute('aria-label'))).toEqual(['Text', 'Outline', 'Issues', 'Sources', 'History', 'Chat', 'Settings'])
+      expect(within(rail).getAllByRole('button').map((b) => b.getAttribute('aria-label'))).toEqual(['Text', 'Outline', 'Issues', 'Sources', 'Links', 'History', 'Chat', 'Settings'])
       expect(main.dataset.open).toBe('true') // starts with the outline open
       await userEvent.click(within(rail).getByRole('button', { name: 'Outline' }))
       expect(main.dataset.open).toBe('false')
@@ -86,9 +86,46 @@ describe('WriteApp layout', () => {
     const s = await services({}, MD)
     render(<WriteApp services={s} />)
     await screen.findByLabelText('Article text')
-    expect(screen.getByRole('option', { name: 'Post' })).toBeInTheDocument()
+    expect(within(screen.getByLabelText('Article')).getByRole('option', { name: 'Post' })).toBeInTheDocument()
     fireEvent.change(screen.getByLabelText('Article text'), { target: { value: MD.replace('# Post', '# Renamed in the text') } })
-    expect(await screen.findByRole('option', { name: 'Renamed in the text' }, { timeout: 3000 })).toBeInTheDocument()
+    expect(await within(screen.getByLabelText('Article')).findByRole('option', { name: 'Renamed in the text' }, { timeout: 3000 })).toBeInTheDocument()
+  })
+})
+
+describe('WriteApp history and outline details', () => {
+  it('each version says what changed since the one before it, and the icons are explained at the top', async () => {
+    const s = await services({}, MD)
+    const id = (await s.service.list())[0].id
+    await s.service.saveVersion(id, 'First draft')
+    await s.service.updateText(id, MD.replace('18 ms', '41 ms') + '\n## Memory\n\nIt uses 40 MB.\n', { analyze: false })
+    await s.service.saveVersion(id, 'Added memory')
+    render(<WriteApp services={s} />)
+    await screen.findByLabelText('Article text')
+    await userEvent.click(screen.getByRole('button', { name: 'History' }))
+    const legend = screen.getByLabelText('What the icons do')
+    expect(within(legend).getByText(/View the text/)).toBeInTheDocument()
+    expect(within(legend).getByText(/Compare with now/)).toBeInTheDocument()
+    expect(within(legend).getByText(/Restore/)).toBeInTheDocument()
+    const region = screen.getByRole('region', { name: 'History' })
+    expect(await within(region).findByText('First version')).toBeInTheDocument()
+    expect(within(region).getByText(/Latency, Memory/)).toBeInTheDocument()
+    expect(within(region).getAllByRole('button', { name: 'Restore' })).toHaveLength(3) // includes the automatic checkpoint before the large change
+    expect(within(region).getByText('Before a large change')).toBeInTheDocument()
+    expect(within(region).getByText(/No text changes since the last version/)).toBeInTheDocument()
+  })
+
+  it('indents only real sub-headings, and shows the title on top without an indent', async () => {
+    const md = '# Post\n\n## One\n\ntext\n\n### One point one\n\ntext\n\n## Two\n\ntext\n'
+    const s = await services({}, md)
+    render(<WriteApp services={s} />)
+    await screen.findByLabelText('Article text')
+    const outline = screen.getByRole('region', { name: 'Outline' })
+    const li = (name: string) => within(outline).getByRole('button', { name }).closest('li') as HTMLElement
+    expect(li('Post').style.marginLeft).toBe('0px')
+    expect(li('One').style.marginLeft).toBe('0px')
+    expect(li('Two').style.marginLeft).toBe('0px')
+    expect(li('One point one').style.marginLeft).toBe('16px')
+    expect(li('One point one').className).toContain('is-nested')
   })
 })
 

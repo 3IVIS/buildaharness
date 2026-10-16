@@ -186,3 +186,7 @@ export { WritePermissionsSchema, DEFAULT_WRITE_PERMISSIONS, loadPermissions, sav
 export type { WritePermissions, SpendMeter, SettingsStore } from './writer/write-permissions.js'
 export { diffLines, compareVersions, addSnapshot, isLargeChange, MAX_CHECKPOINTS } from './writer/article-history.js'
 export type { DiffLine, VersionComparison, VersionSide } from './writer/article-history.js'
+export { summarizeChange } from './writer/article-history.js'
+export type { ChangeSummary } from './writer/article-history.js'
+export { proposeDependencies, addDrawnLink, dependenciesOf, wouldCycle, DEPENDENCY_KINDS, DEPENDENCY_LABEL } from './writer/article-dependencies.js'
+export type { DependencyKind, DependencyProposal, SectionDependencies, AddLinkResult } from './writer/article-dependencies.js'

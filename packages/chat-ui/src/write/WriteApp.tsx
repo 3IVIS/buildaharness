@@ -1,10 +1,10 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
-import { computeReadiness, effectiveSourceStatus, sourcesForClaim, type ArticleBundle, type Claim, type Source, type VersionComparison, type WritePermissions } from '@buildaharness/aielia'
+import { DEPENDENCY_KINDS, DEPENDENCY_LABEL, computeReadiness, dependenciesOf, effectiveSourceStatus, sourcesForClaim, type DependencyKind, type ArticleBundle, type Claim, type Source, type ChangeSummary, type VersionComparison, type WritePermissions } from '@buildaharness/aielia'
 import type { WriteServices } from './write-services'
 import './write.css'
 
-type Tab = 'text' | 'outline' | 'issues' | 'sources' | 'history' | 'chat' | 'settings'
-type VersionRow = { index: number; kind: 'published' | 'checkpoint'; label?: string; at: string; readiness: { openComments: number; unsourcedFactualClaims: number } }
+type Tab = 'text' | 'outline' | 'issues' | 'sources' | 'links' | 'history' | 'chat' | 'settings'
+type VersionRow = { index: number; kind: 'published' | 'checkpoint'; label?: string; at: string; change: ChangeSummary }
 interface ChatLine { id: number; from: 'you' | 'aielia'; text: string }
 
 const TABS: { id: Tab; label: string }[] = [
@@ -12,6 +12,7 @@ const TABS: { id: Tab; label: string }[] = [
   { id: 'outline', label: 'Outline' },
   { id: 'issues', label: 'Issues' },
   { id: 'sources', label: 'Sources' },
+  { id: 'links', label: 'Links' },
   { id: 'history', label: 'History' },
   { id: 'chat', label: 'Chat' },
   { id: 'settings', label: 'Settings' },
@@ -22,9 +23,39 @@ const ICONS: Record<Tab, string> = {
   outline: 'M8 6h12M8 12h12M8 18h12M4 6h.01M4 12h.01M4 18h.01',
   issues: 'M12 3 2.5 20h19L12 3zM12 10v4M12 17h.01',
   sources: 'M6 3h9l4 4v14H6zM15 3v4h4M9 12h6M9 16h6',
+  links: 'M10 14a4 4 0 0 0 5.7 0l3-3a4 4 0 0 0-5.7-5.7l-1 1M14 10a4 4 0 0 0-5.7 0l-3 3a4 4 0 0 0 5.7 5.7l1-1',
   history: 'M3 12a9 9 0 1 0 3-6.7M3 4v5h5M12 7v5l3 2',
   chat: 'M4 5h16v11H9l-5 4z',
   settings: 'M12 9a3 3 0 1 0 0 6 3 3 0 0 0 0-6zM12 3v3M12 18v3M3 12h3M18 12h3M5.6 5.6l2.1 2.1M16.3 16.3l2.1 2.1M18.4 5.6l-2.1 2.1M7.7 16.3l-2.1 2.1',
+}
+
+const ICON_PATHS = {
+  view: 'M2 12s4-7 10-7 10 7 10 7-4 7-10 7S2 12 2 12zM12 9a3 3 0 1 0 0 6 3 3 0 0 0 0-6z',
+  compare: 'M7 7h11l-3-3M17 17H6l3 3',
+  restore: 'M9 14 4 9l5-5M4 9h10a6 6 0 0 1 0 12h-3',
+  published: 'M5 21V4M5 4h12l-2 4 2 4H5',
+  saved: 'M6 3h12v18l-6-4-6 4z',
+  save: 'M5 3h11l3 3v15H5zM8 3v6h7M8 21v-6h8',
+}
+
+function Icon({ d, size = 18 }: { d: string; size?: number }): React.JSX.Element {
+  return (
+    <svg viewBox="0 0 24 24" width={size} height={size} aria-hidden="true" focusable="false">
+      <path d={d} fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" />
+    </svg>
+  )
+}
+
+/** One line saying what a version changed: lines, then the sections, claims and sources it touched. */
+function describeChange(c: ChangeSummary | undefined): string {
+  if (!c) return 'Nothing saved yet'
+  if (c.first) return 'First version'
+  const parts: string[] = []
+  parts.push(c.added === 0 && c.removed === 0 ? 'No text changes' : `+${c.added} −${c.removed} lines`)
+  if (c.sections.length > 0) parts.push(c.sections.length <= 3 ? c.sections.join(', ') : `${c.sections.slice(0, 3).join(', ')} and ${c.sections.length - 3} more`)
+  if (c.claims > 0) parts.push(`${c.claims} claim${c.claims === 1 ? '' : 's'}`)
+  if (c.sources > 0) parts.push(`${c.sources} source${c.sources === 1 ? '' : 's'}`)
+  return parts.join(' · ')
 }
 
 /** The desktop layout starts at 960 px (see write.css). jsdom has no matchMedia, which reads as a phone. */
@@ -53,6 +84,10 @@ export function WriteApp({ services }: { services: WriteServices }): React.JSX.E
   // Desktop: the side panel opens when a rail button is clicked and closes when it is clicked again.
   const [railOpen, setRailOpen] = useState<boolean>(() => isWide())
   const [versions, setVersions] = useState<VersionRow[]>([])
+  const [working, setWorking] = useState<ChangeSummary | undefined>(undefined)
+  const [linkFrom, setLinkFrom] = useState('')
+  const [linkTo, setLinkTo] = useState('')
+  const [linkKind, setLinkKind] = useState<DependencyKind>('rests_on')
   const [viewing, setViewing] = useState<{ mode: 'view' | 'compare'; markdown: string; diff?: VersionComparison } | null>(null)
   const [notice, setNotice] = useState<string | null>(null)
   const [busy, setBusy] = useState<string | null>(null)
@@ -148,10 +183,11 @@ export function WriteApp({ services }: { services: WriteServices }): React.JSX.E
   const isOn = (id: Tab): boolean => tab === id && (railOpen || id === 'text' || id === 'chat')
 
   useEffect(() => {
-    if (!activeId) { setVersions([]); return }
+    if (!activeId) { setVersions([]); setWorking(undefined); return }
     void service.history(activeId).then((v) => setVersions(v as VersionRow[]), () => undefined)
+    void service.changeSinceLastVersion(activeId).then(setWorking, () => undefined)
     setViewing(null)
-  }, [service, activeId, bundle?.snapshots.length])
+  }, [service, activeId, bundle?.snapshots.length, bundle?.markdown])
 
   async function saveVersion(): Promise<void> {
     if (!activeId) return
@@ -188,6 +224,32 @@ export function WriteApp({ services }: { services: WriteServices }): React.JSX.E
       await reload(activeId)
       setNotice('Restored. The article as it was before is in History.')
     })
+  }
+
+  async function findLinks(): Promise<void> {
+    if (!activeId) return
+    await run('Looking for links between sections', async () => {
+      await flushDraft()
+      const r = await service.findDependencies(activeId)
+      await reload(activeId)
+      setNotice(r.status === 'failed' ? 'The search for links could not run. Nothing was changed.' : r.added.length === 0 ? 'No new links found.' : `Found ${r.added.length} possible link${r.added.length === 1 ? '' : 's'}. Confirm the ones that are right.`)
+    })
+  }
+
+  async function addLink(): Promise<void> {
+    if (!activeId) return
+    await run('Adding the link', async () => {
+      const r = await service.addDependency(activeId, linkFrom, linkTo, linkKind)
+      if (!r.ok) setNotice(r.reason)
+      else { setLinkFrom(''); setLinkTo('') }
+      await reload(activeId)
+    })
+  }
+
+  async function removeLinkById(linkId: string, origin: string): Promise<void> {
+    if (!activeId) return
+    if (origin !== 'proposed' && !window.confirm('Remove this link? You confirmed or drew it yourself.')) return
+    await run('Removing the link', async () => { await service.removeDependency(activeId, linkId); await reload(activeId) })
   }
 
   async function check(): Promise<void> {
@@ -264,6 +326,7 @@ export function WriteApp({ services }: { services: WriteServices }): React.JSX.E
   }
 
   const meta = bundle?.meta
+  const sectionName = (sid: string): string => meta?.sections.find((x) => x.id === sid)?.heading || '(opening)'
   const readiness = meta ? computeReadiness(meta) : undefined
 
   return (
@@ -304,21 +367,34 @@ export function WriteApp({ services }: { services: WriteServices }): React.JSX.E
             <>
               <section className={`write__pane write__panel-pane ${tab === 'outline' ? 'is-shown' : ''}`} aria-label="Outline">
                 <h2 className="write__panehead">Outline</h2>
-                <p className="write__muted">The headings of your text. Click one to go there.</p>
+                <p className="write__muted">The headings of your text. A sub-heading (###) is indented under the section it belongs to. Click one to go there.</p>
                 <ul className="write__list write__outline">
-                  {meta.sections.map((s) => (
-                    <li key={s.id} style={{ marginLeft: `${Math.max(0, s.level - 1) * 12}px` }}>
-                      <button type="button" className="write__link" onClick={() => jumpTo(s.span.start)}>{s.heading || '(opening)'}</button>
-                      {s.review.state !== 'clean' && (
-                        <span className={`write__badge write__badge--${s.review.state}`}>
-                          {s.review.state === 'needs_review' ? 'needs review' : s.review.state.replace('_', ' ')}
+                {meta.sections.map((sec) => {
+                  const isTitle = sec.level === 1
+                  const base = Math.min(...meta.sections.filter((x) => x.level > 1).map((x) => x.level), 2)
+                  const depth = isTitle ? 0 : Math.max(0, sec.level - base)
+                  return (
+                    <li key={sec.id} className={`${isTitle ? 'write__outline-title' : ''} ${depth > 0 ? 'is-nested' : ''}`} style={{ marginLeft: `${depth * 16}px` }}>
+                      <button type="button" className="write__link" onClick={() => jumpTo(sec.span.start)}>{sec.heading || '(opening)'}</button>
+                      {sec.review.state !== 'clean' && (
+                        <span className={`write__badge write__badge--${sec.review.state}`}>
+                          {sec.review.state === 'needs_review' ? 'needs review' : sec.review.state.replace('_', ' ')}
                         </span>
                       )}
-                      {s.review.reason && <p className="write__reason">{s.review.reason}</p>}
-                      {s.review.state === 'needs_review' && <button type="button" onClick={() => void run('Saving', async () => { await service.setReview(activeId, s.id, 'clean'); await reload(activeId) })}>Mark clean</button>}
+                      {(() => {
+                        const d = dependenciesOf(meta, sec.id)
+                        const parts = [
+                          ...d.uses.map((l) => `${DEPENDENCY_LABEL[l.kind as DependencyKind]} ${sectionName(l.to.id)}${l.origin === 'proposed' ? ' (suggested)' : ''}`),
+                          ...(d.usedBy.length > 0 ? [`used by ${d.usedBy.map((l) => sectionName(l.from.id)).join(', ')}`] : []),
+                        ]
+                        return parts.length > 0 ? <p className="write__reason write__deps">{parts.join(' · ')}</p> : null
+                      })()}
+                      {sec.review.reason && <p className="write__reason">{sec.review.reason}</p>}
+                      {sec.review.state === 'needs_review' && <button type="button" onClick={() => void run('Saving', async () => { await service.setReview(activeId, sec.id, 'clean'); await reload(activeId) })}>Mark clean</button>}
                     </li>
-                  ))}
-                </ul>
+                  )
+                })}
+              </ul>
               </section>
               <section className={`write__pane write__panel-pane ${tab === 'issues' ? 'is-shown' : ''}`} aria-label="Issues">
                 <h2>Suggested changes</h2>
@@ -385,21 +461,72 @@ export function WriteApp({ services }: { services: WriteServices }): React.JSX.E
                   {meta.sources.length === 0 && <li className="write__muted">No sources yet. Add a passage, a file or your own say-so.</li>}
                 </ul>
               </section>
-              <section className={`write__pane write__panel-pane ${tab === 'history' ? 'is-shown' : ''}`} aria-label="History">
-                <h2 className="write__panehead">History</h2>
-                <p className="write__muted">Versions of this article. Published versions are frozen. The others are saved before a large change or a suggestion you accept, and when you press Save version.</p>
-                <button type="button" onClick={() => void saveVersion()} disabled={busy !== null}>Save version</button>
+              <section className={`write__pane write__panel-pane ${tab === 'links' ? 'is-shown' : ''}`} aria-label="Links">
+                <h2 className="write__panehead">Links between sections</h2>
+                <p className="write__muted">Record where one section depends on another. When you change the second, the first is flagged for review.</p>
+                <ul className="write__legend" aria-label="Kinds of link">
+                  <li><strong>rests on</strong> builds on it, like an argument on its evidence</li>
+                  <li><strong>repeats</strong> restates it, like an opening or a conclusion repeating a finding</li>
+                </ul>
+                <button type="button" onClick={() => void findLinks()} disabled={busy !== null || meta.sections.length < 2}>Find links</button>
                 <ul className="write__list">
-                  {versions.map((v) => (
-                    <li key={v.index}>
-                      <strong>{v.label ?? (v.kind === 'published' ? 'Published' : 'Saved')}</strong> <span className="write__badge">{v.kind === 'published' ? 'published' : 'saved'}</span>
-                      <p className="write__reason">{new Date(v.at).toLocaleString()} · then: {v.readiness.openComments} open comment{v.readiness.openComments === 1 ? '' : 's'}, {v.readiness.unsourcedFactualClaims} unsourced</p>
-                      <button type="button" onClick={() => void openVersion(v.index, 'view')}>View</button>
-                      <button type="button" onClick={() => void openVersion(v.index, 'compare')}>Compare with now</button>
-                      <button type="button" onClick={() => void restoreVersion(v.index)}>Restore</button>
+                  {meta.links.filter((l) => (DEPENDENCY_KINDS as readonly string[]).includes(l.kind) && l.from.type === 'section' && l.to.type === 'section').map((l) => (
+                    <li key={l.id}>
+                      <p><strong>{sectionName(l.from.id)}</strong> {DEPENDENCY_LABEL[l.kind as DependencyKind]} <strong>{sectionName(l.to.id)}</strong></p>
+                      <span className="write__badge">{l.origin === 'proposed' ? `suggested${l.confidence !== undefined ? ` ${Math.round(l.confidence * 100)}%` : ''}` : l.origin === 'confirmed' ? 'confirmed' : 'drawn by you'}</span>
+                      {l.reason && <p className="write__reason">{l.reason}</p>}
+                      {l.origin === 'proposed' && <button type="button" onClick={() => void run('Saving', async () => { await service.confirmDependency(activeId, l.id); await reload(activeId) })}>Confirm</button>}
+                      <button type="button" onClick={() => void removeLinkById(l.id, l.origin)}>{l.origin === 'proposed' ? 'Dismiss' : 'Remove'}</button>
                     </li>
                   ))}
-                  {versions.length === 0 && <li className="write__muted">No saved versions yet.</li>}
+                  {!meta.links.some((l) => (DEPENDENCY_KINDS as readonly string[]).includes(l.kind)) && <li className="write__muted">No links yet. Press Find links, or add one below.</li>}
+                </ul>
+                <form className="write__form" onSubmit={(e) => { e.preventDefault(); void addLink() }}>
+                  <h3>Add a link yourself</h3>
+                  <select aria-label="Section that depends" value={linkFrom} onChange={(e) => setLinkFrom(e.target.value)}>
+                    <option value="">This section…</option>
+                    {meta.sections.map((x) => <option key={x.id} value={x.id}>{x.heading || '(opening)'}</option>)}
+                  </select>
+                  <select aria-label="Kind of link" value={linkKind} onChange={(e) => setLinkKind(e.target.value as DependencyKind)}>
+                    {DEPENDENCY_KINDS.map((k) => <option key={k} value={k}>{DEPENDENCY_LABEL[k]}</option>)}
+                  </select>
+                  <select aria-label="Section it depends on" value={linkTo} onChange={(e) => setLinkTo(e.target.value)}>
+                    <option value="">…this section</option>
+                    {meta.sections.filter((x) => x.id !== linkFrom).map((x) => <option key={x.id} value={x.id}>{x.heading || '(opening)'}</option>)}
+                  </select>
+                  <button type="submit" disabled={!linkFrom || !linkTo || linkFrom === linkTo}>Add link</button>
+                </form>
+              </section>
+              <section className={`write__pane write__panel-pane ${tab === 'history' ? 'is-shown' : ''}`} aria-label="History">
+                <h2 className="write__panehead">History</h2>
+                <ul className="write__legend" aria-label="What the icons do">
+                  <li><Icon d={ICON_PATHS.view} /> View the text</li>
+                  <li><Icon d={ICON_PATHS.compare} /> Compare with now</li>
+                  <li><Icon d={ICON_PATHS.restore} /> Restore</li>
+                </ul>
+                <div className="write__working">
+                  <div>
+                    <strong>Now</strong>
+                    <div className="write__hchange">{working ? (working.added === 0 && working.removed === 0 ? 'No text changes since the last version' : `${describeChange(working)} since the last version`) : 'Nothing saved yet'}</div>
+                  </div>
+                  <button type="button" onClick={() => void saveVersion()} disabled={busy !== null}><Icon d={ICON_PATHS.save} /> Save version</button>
+                </div>
+                <ul className="write__history">
+                  {versions.map((v) => (
+                    <li key={v.index}>
+                      <span className="write__hkind" title={v.kind === 'published' ? 'Published (frozen)' : 'Saved'}><Icon d={v.kind === 'published' ? ICON_PATHS.published : ICON_PATHS.saved} /></span>
+                      <div className="write__hmain">
+                        <div className="write__hline"><strong>{v.label ?? (v.kind === 'published' ? 'Published' : 'Saved')}</strong><time dateTime={v.at}>{new Date(v.at).toLocaleString(undefined, { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' })}</time></div>
+                        <div className="write__hchange">{describeChange(v.change)}</div>
+                      </div>
+                      <div className="write__hactions">
+                        <button type="button" className="write__iconbtn" aria-label="View" title="View the text" onClick={() => void openVersion(v.index, 'view')}><Icon d={ICON_PATHS.view} /></button>
+                        <button type="button" className="write__iconbtn" aria-label="Compare with now" title="Compare with now" onClick={() => void openVersion(v.index, 'compare')}><Icon d={ICON_PATHS.compare} /></button>
+                        <button type="button" className="write__iconbtn" aria-label="Restore" title="Restore" onClick={() => void restoreVersion(v.index)}><Icon d={ICON_PATHS.restore} /></button>
+                      </div>
+                    </li>
+                  ))}
+                  {versions.length === 0 && <li className="write__muted">No saved versions yet. Published versions are frozen; the others are saved before a large change or a suggestion you accept, and when you press Save version.</li>}
                 </ul>
                 {viewing && (
                   <div className="write__version" aria-label="Version detail">
