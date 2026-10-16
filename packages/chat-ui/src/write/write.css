@@ -34,7 +34,7 @@
 .write__pane { display: none; }
 .write__pane.is-shown { display: block; }
 .write__panel { display: contents; }
-.write__pane--text textarea { width: 100%; min-height: 60dvh; resize: vertical; font-family: ui-monospace, Menlo, monospace; line-height: 1.6; }
+.write__pane--text > textarea { width: 100%; min-height: 48dvh; resize: vertical; font-family: ui-monospace, Menlo, monospace; line-height: 1.6; }
 .write__panehead { font-size: 1rem; margin: 0 0 4px; }
 .write__list { list-style: none; margin: 0 0 16px; padding: 0; display: grid; gap: 10px; }
 .write__list li { border: 1px solid var(--border); border-radius: 8px; padding: 10px 12px; background: var(--surface); }
@@ -65,7 +65,9 @@
 .write__hactions { display: inline-flex; gap: 4px; }
 .write .write__iconbtn { display: inline-flex; align-items: center; justify-content: center; min-width: 34px; min-height: 34px; padding: 4px; margin: 0; }
 @media (max-width: 959px) { .write .write__iconbtn { min-width: 44px; min-height: 44px; } }
-.write__form { display: grid; gap: 8px; margin-bottom: 16px; }
+.write__form { display: grid; grid-template-columns: minmax(0, 1fr); gap: 8px; margin-bottom: 16px; }
+.write__form > *, .write__adjust > * { min-width: 0; max-width: 100%; box-sizing: border-box; }
+.write__form textarea, .write__form input, .write__form select, .write__form button { width: 100%; box-sizing: border-box; }
 .write__version { border: 1px solid var(--border); border-radius: 8px; padding: 10px 12px; margin: 12px 0; background: var(--surface); }
 .write__pre { white-space: pre-wrap; overflow-wrap: anywhere; margin: 8px 0; padding: 8px; max-height: 320px; overflow: auto; font: 0.85rem/1.5 ui-monospace, Menlo, monospace; background: var(--tint-1); border-radius: 6px; }
 .write__diff--add { color: var(--green); }
@@ -83,11 +85,18 @@
 .write__dock.is-over { border-color: var(--accent); background: var(--accent-a08); }
 .write__dockhead { display: flex; align-items: baseline; gap: 10px; padding: 8px 12px; border-bottom: 1px solid var(--border); }
 .write__dockfor { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--muted); font-size: 0.9rem; }
-.write__dockbody { padding: 8px 12px 12px; max-height: 280px; overflow: auto; }
+.write__dockbody { display: flex; flex-direction: column; max-height: 300px; min-height: 0; padding: 8px 12px 10px; }
+.write__dockscroll { flex: 1 1 auto; min-height: 120px; overflow: auto; }
+.write__dockfoot { flex: none; }
 .write__dsrc { padding: 6px 0 2px 10px; border-left: 2px solid var(--border); margin: 6px 0; }
-.write__dockform { display: grid; gap: 6px; }
-.write__filepick { display: inline-block; margin-top: 6px; color: var(--muted); font-size: 0.9rem; }
+.write__dockform { display: flex; flex-wrap: wrap; gap: 6px; align-items: flex-start; }
+.write__dockform textarea { flex: 1 1 180px; min-width: 0; min-height: 40px; resize: vertical; }
+.write__dockform select { flex: none; }
+.write__hint { margin: 6px 0 0; font-size: 0.8rem; }
+.write__filepick { position: relative; display: inline-flex; align-items: center; min-height: 40px; padding: 0 4px; color: var(--accent); font-size: 0.9rem; cursor: pointer; text-decoration: underline; }
+.write__filepick input { position: absolute; inset: 0; opacity: 0; cursor: pointer; width: 100%; }
 .write__dropzone { margin-top: 8px; padding: 8px; border: 1px dashed var(--border); border-radius: 8px; }
+.write__dropzone .write__dockform select { max-width: 9rem; }
 .write__allsrc { margin-top: 10px; font-size: 0.9rem; }
 .write__ideatext { display: flex; gap: 8px; align-items: flex-start; }
 .write__ideas li.is-done { opacity: 0.7; }
@@ -121,9 +130,9 @@
   .write__main[data-open='false'] .write__panel { display: none; }
   .write__pane--text { display: flex; grid-column: 3; min-height: 0; padding: 14px; }
   .write__pane--text { flex-direction: column; }
-  .write__pane--text textarea { flex: 1; min-height: 120px; resize: none; }
-  .write__dock { flex: none; max-height: 45%; display: flex; flex-direction: column; }
-  .write__dockbody { min-height: 0; max-height: none; }
+  .write__pane--text > textarea { flex: 1; min-height: 120px; resize: none; }
+  .write__dock { flex: none; max-height: 52%; display: flex; flex-direction: column; }
+  .write__dockbody { max-height: none; flex: 1 1 auto; }
   .write__empty { grid-column: 3; padding: 14px; }
   .write__pane--chat { display: flex; flex-direction: column; grid-column: 4; min-height: 0; padding: 14px; border-left: 1px solid var(--border); }
     .write__pane--chat .write__chat { flex: 1; overflow: auto; min-height: 0; }

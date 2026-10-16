@@ -71,6 +71,7 @@ export function SourceDock({ meta, markdown, selection, busy, model, onAdd, onDr
       </header>
       {!collapsed && (
         <div className="write__dockbody">
+          <div className="write__dockscroll">
           {unit && claims.length === 0 && <p className="write__muted">No claim is recorded for this text yet. Add a source below and it becomes one.</p>}
           <ul className="write__list">
             {claims.map((c) => {
@@ -98,18 +99,20 @@ export function SourceDock({ meta, markdown, selection, busy, model, onAdd, onDr
               )
             })}
           </ul>
+          </div>
+          <div className="write__dockfoot">
           <div className="write__dropzone">
-            <p className="write__muted">{attachHere ? 'Drop a file here, or add a source for this text:' : 'Drop a file here, or add a source. It is stored, and Aielia proposes where it belongs.'}</p>
             <div className="write__dockform">
               <select aria-label="Kind of source" value={kind} onChange={(e) => setKind(e.target.value as typeof kind)}>
                 <option value="passage">A passage</option>
                 <option value="link">A link</option>
                 <option value="say_so">My own word</option>
               </select>
-              <textarea aria-label="Source text" rows={2} value={text} onChange={(e) => setText(e.target.value)} placeholder={kind === 'link' ? 'https://…' : kind === 'say_so' ? 'What you know, in a sentence' : 'Paste the passage'} />
+              <textarea aria-label="Source text" rows={1} value={text} onChange={(e) => setText(e.target.value)} placeholder={kind === 'link' ? 'https://…' : kind === 'say_so' ? 'What you know, in a sentence' : 'Paste the passage'} />
               <button type="button" onClick={submit} disabled={busy || !text.trim()}>Add source</button>
+              <label className="write__filepick">Choose a file<input type="file" multiple onChange={(e) => { const files = Array.from(e.target.files ?? []); if (files.length > 0) onDropFiles(files, attachHere); e.target.value = '' }} /></label>
             </div>
-            <label className="write__filepick">Or choose a file<input type="file" multiple onChange={(e) => { const files = Array.from(e.target.files ?? []); if (files.length > 0) onDropFiles(files, attachHere); e.target.value = '' }} /></label>
+            <p className="write__muted write__hint">{attachHere ? 'Adds to the text above. You can also drop a file anywhere in this box.' : 'Stored, then Aielia proposes where it belongs. You can also drop a file anywhere in this box.'}</p>
           </div>
           {meta.sources.length > 0 && (
             <details className="write__allsrc">
@@ -119,6 +122,7 @@ export function SourceDock({ meta, markdown, selection, busy, model, onAdd, onDr
               </ul>
             </details>
           )}
+          </div>
         </div>
       )}
     </section>
