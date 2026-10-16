@@ -3,7 +3,7 @@ import { render, screen, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { SettingsPane } from './SettingsPane'
 
-const base = { perms: { captureChat: true, autoCheck: false }, spent: 0.42, autoModel: 'small', chatModel: 'big', suggestions: [], onAutoModel: () => undefined, onSave: async () => undefined }
+const base = { perms: { captureChat: true, autoCheck: false, recheckBeforePublish: true }, spent: 0.42, autoModel: 'small', chatModel: 'big', suggestions: [], onAutoModel: () => undefined, onSave: async () => undefined }
 
 describe('SettingsPane spending', () => {
   it('shows the total, and where it went by kind of call once there is something to show', async () => {

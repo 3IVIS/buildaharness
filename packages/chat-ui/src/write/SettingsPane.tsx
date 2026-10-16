@@ -23,6 +23,7 @@ export function SettingsPane({ perms, spent, spentByType, autoModel, chatModel, 
       <h2 className="write__panehead">Settings</h2>
       <p className="write__muted">Aielia only ever changes your text as suggestions you accept. These are the other things it may do on its own.</p>
       <label><input type="checkbox" checked={perms.captureChat} onChange={(e) => void save({ captureChat: e.target.checked })} /> Remember reviewer comments, decisions and corrections I mention in chat</label>
+      <label><input type="checkbox" checked={perms.recheckBeforePublish} onChange={(e) => void save({ recheckBeforePublish: e.target.checked })} /> Read my web sources again before I publish, and tell me which changed</label>
       <label><input type="checkbox" checked={perms.autoCheck} onChange={(e) => void save({ autoCheck: e.target.checked })} /> Check claims and effects by itself when I stop typing (uses your key)</label>
       <label>Model for the automatic checks
         <ModelPicker label="Model for the automatic checks" value={autoModel} suggestions={suggestions} onChange={onAutoModel} />

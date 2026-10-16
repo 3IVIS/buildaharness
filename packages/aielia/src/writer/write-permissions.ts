@@ -14,12 +14,14 @@ export const WritePermissionsSchema = z.object({
   captureChat: z.boolean(),
   /** Run the claim check and the effects check on its own after the writer stops typing. Off by default: it spends the writer's money without being asked. */
   autoCheck: z.boolean(),
+  /** Read the web sources again just before publishing, and say which changed or could not be reached. On by default: it costs a model call only for a page that changed. Publishing is never blocked by it. */
+  recheckBeforePublish: z.boolean().default(true),
   /** Stop all model calls once this much has been spent in this browser, in US dollars. Unset means no cap. */
   spendCapUsd: z.number().positive().optional(),
 })
 export type WritePermissions = z.infer<typeof WritePermissionsSchema>
 
-export const DEFAULT_WRITE_PERMISSIONS: WritePermissions = { captureChat: true, autoCheck: false }
+export const DEFAULT_WRITE_PERMISSIONS: WritePermissions = { captureChat: true, autoCheck: false, recheckBeforePublish: true }
 
 const KEY = 'writer:permissions'
 

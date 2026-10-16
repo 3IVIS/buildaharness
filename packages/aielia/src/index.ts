@@ -177,6 +177,7 @@ export { processWriterMessage, createMemoryWriterChatPort } from './writer/write
 export type { WriterChatPort } from './writer/writer-chat-turn.js'
 export { proposeSuggestion, refreshSuggestions, acceptSuggestion, rejectSuggestion } from './writer/article-suggestions.js'
 export type { SuggestionResult } from './writer/article-suggestions.js'
+export type { SourceRecheckReport } from './writer/article-service.js'
 export { ArticleService, createArticleChatPort, createMemoryArticleStore } from './writer/article-service.js'
 export type { ArticleStore, ArticleServiceOptions, UpdateOutcome } from './writer/article-service.js'
 export { createMemoryAdapterArticleStore } from './writer/article-memory-store.js'

@@ -106,6 +106,16 @@ function sectionText(markdown: string, s: { span: { start: number; end: number }
 
 const clip = (t: string, n = 400): string => (t.length > n ? `${t.slice(0, n)}…` : t)
 
+export interface SourceRecheckReport {
+  read: number
+  unchanged: number
+  /** Addresses whose page text differs from what was stored. */
+  changed: string[]
+  unreachable: string[]
+  /** Web sources not read: no page reader here, or past the limit. */
+  skipped: number
+}
+
 export interface ResolveReport {
   category: IssueCategory
   /** How many items the action dealt with. */
@@ -285,6 +295,23 @@ export class ArticleService {
     const assessed = await assessSourceChange({ meta: b.meta, sourceId, before: src.passage, after: text, now: this.now() }, this.opts.llm, model, this.opts.onUsage)
     await save({ ...rechecked, fetchedPassage: text }, assessed.meta)
     return { status: 'changed', impacts: assessed.impacts }
+  }
+
+  /** Reads every web source again (at most 30, one after another). Used before publishing; nothing is blocked, the report says what to look at. */
+  async recheckSources(id: string, modelOverride?: string): Promise<SourceRecheckReport> {
+    const b = await this.get(id)
+    const report: SourceRecheckReport = { read: 0, unchanged: 0, changed: [], unreachable: [], skipped: 0 }
+    const web = b.meta.sources.filter((s) => s.kind === 'web' && s.address && isHttpAddress(s.address))
+    if (!this.opts.fetchWeb) return { ...report, skipped: web.length }
+    for (const s of web.slice(0, 30)) {
+      const r = await this.readSource(id, s.id, modelOverride)
+      if (r.status === 'read') report.read++
+      else if (r.status === 'unchanged') report.unchanged++
+      else if (r.status === 'changed') report.changed.push(s.address as string)
+      else if (r.status === 'unreachable') report.unreachable.push(s.address as string)
+    }
+    report.skipped = Math.max(0, web.length - 30)
+    return report
   }
 
   /** The writer takes the new text a re-read found: it becomes the stored passage, so checks made on the old text stop counting until run again. */

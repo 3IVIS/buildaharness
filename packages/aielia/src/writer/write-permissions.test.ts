@@ -20,9 +20,14 @@ describe('permissions', () => {
     expect(await loadPermissions(store)).toEqual(DEFAULT_WRITE_PERMISSIONS)
     await store.setSetting('writer:permissions', { captureChat: 'yes' })
     expect(await loadPermissions(store)).toEqual(DEFAULT_WRITE_PERMISSIONS)
-    await savePermissions(store, { captureChat: false, autoCheck: true, spendCapUsd: 2 })
-    expect(await loadPermissions(store)).toEqual({ captureChat: false, autoCheck: true, spendCapUsd: 2 })
-    await expect(savePermissions(store, { captureChat: true, autoCheck: false, spendCapUsd: -1 })).rejects.toThrow()
+    await savePermissions(store, { captureChat: false, autoCheck: true, recheckBeforePublish: false, spendCapUsd: 2 })
+    expect(await loadPermissions(store)).toEqual({ captureChat: false, autoCheck: true, recheckBeforePublish: false, spendCapUsd: 2 })
+    await expect(savePermissions(store, { captureChat: true, autoCheck: false, recheckBeforePublish: true, spendCapUsd: -1 })).rejects.toThrow()
+  })
+  it('settings saved before the recheck option existed keep their values and get its default (on)', async () => {
+    const store = createMemoryArticleStore()
+    await store.setSetting('writer:permissions', { captureChat: false, autoCheck: true, spendCapUsd: 3 })
+    expect(await loadPermissions(store)).toEqual({ captureChat: false, autoCheck: true, recheckBeforePublish: true, spendCapUsd: 3 })
   })
 })
 

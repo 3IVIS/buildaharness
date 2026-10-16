@@ -121,6 +121,25 @@ describe('header and article menu', () => {
     expect((await svc.get(id)).snapshots).toHaveLength(1)
   })
 
+  it('rereads web sources before publishing and says which changed, unless the setting is off; publishing goes ahead either way', async () => {
+    let page = 'p99 is 18 ms.'
+    const store = createMemoryArticleStore()
+    const s = await servicesOn(store, { resolve: { impacts: [] } }, async () => page)
+    const id = await s.service.create('Post', MD)
+    const src = await s.service.addSource(id, { kind: 'web', address: 'https://example.com/bench' })
+    await s.service.readSource(id, src)
+    page = 'p99 is now 30 ms.'
+    vi.spyOn(window, 'prompt').mockReturnValue('v1')
+    render(<WriteApp services={s} />)
+    await waitForText()
+    await userEvent.click(screen.getByRole('button', { name: 'Publish' }))
+    expect(await screen.findByText(/1 web source has changed since you read it/)).toBeInTheDocument()
+    expect((await s.service.get(id)).snapshots).toHaveLength(1)
+    await userEvent.click(rail('Settings'))
+    await userEvent.click(screen.getByLabelText(/Read my web sources again before I publish/))
+    await waitFor(async () => expect((await s.permissions.get()).recheckBeforePublish).toBe(false))
+  })
+
   it('shows an error from the service instead of failing silently', async () => {
     const s = await services({}, MD)
     render(<WriteApp services={{ ...s, service: Object.assign(s.service, { updateText: async () => { throw new Error('storage is full') } }) }} />)
