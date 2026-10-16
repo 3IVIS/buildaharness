@@ -460,7 +460,18 @@ describe('comments and sources under the text', () => {
     const dock = screen.getByLabelText('Comments and sources for this text')
     fireEvent.drop(dock, { dataTransfer: { files: [new File(['p99: 18 ms measured on 8 cores'], 'bench.txt', { type: 'text/plain' }), new File(['%PDF'], 'paper.pdf', { type: 'application/pdf' })] } })
     expect(await within(dock).findByText('bench.txt')).toBeInTheDocument()
-    expect(await screen.findByText(/paper\.pdf: only text files can be read/)).toBeInTheDocument()
+    expect(await screen.findByText(/paper\.pdf: only text and code files can be read/)).toBeInTheDocument()
+  })
+
+  it('stores a dropped code file as a code source', async () => {
+    const s = await services({ sourceLinks: { claims: [] } }, MD)
+    const id = (await s.service.list())[0].id
+    render(<WriteApp services={s} />)
+    await waitForText()
+    putCursor('18 ms')
+    fireEvent.drop(screen.getByLabelText('Comments and sources for this text'), { dataTransfer: { files: [new File(['export const limit = 20'], 'limits.ts', { type: '' })] } })
+    expect(await screen.findByText(/limits\.ts: added as code/)).toBeInTheDocument()
+    expect((await s.service.get(id)).meta.sources[0]).toMatchObject({ kind: 'code', address: 'limits.ts', passage: 'export const limit = 20' })
   })
 
   it('a file dropped into the chat is stored and Aielia proposes where it belongs, to confirm under the text with one icon', async () => {

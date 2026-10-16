@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
-import { claimMarks, collectIssues, computeReadiness, effectiveSourceStatus, issueCount, type ArticleBundle, type ChangeSummary, type DependencyKind, type IssueCategory, type StyleProfile, type WritePermissions } from '@buildaharness/aielia'
+import { claimMarks, collectIssues, sourceKindForFile, computeReadiness, effectiveSourceStatus, issueCount, type ArticleBundle, type ChangeSummary, type DependencyKind, type IssueCategory, type StyleProfile, type WritePermissions } from '@buildaharness/aielia'
 import type { ChatAction } from './AdjustBar'
 import { ArticleSwitcher, type ArticleItem } from './ArticleSwitcher'
 import { ChatPane, type ChatLine } from './ChatPane'
@@ -57,7 +57,6 @@ const STATUS_LABEL: Record<string, string> = {
   not_checked: 'not checked',
 }
 
-const isTextFile = (f: File): boolean => f.type.startsWith('text/') || ['.txt', '.md', '.csv', '.tsv', '.json', '.log'].some((ext) => f.name.toLowerCase().endsWith(ext))
 
 let lineId = 0
 
@@ -265,7 +264,7 @@ export function WriteApp({ services }: { services: WriteServices }): React.JSX.E
   }
 
   // ---- comments and sources under the text
-  async function addSourceAndPlace(src: { kind: 'web' | 'upload' | 'say_so'; address?: string; passage?: string; note?: string }, attach: boolean): Promise<void> {
+  async function addSourceAndPlace(src: { kind: 'web' | 'upload' | 'code' | 'say_so'; address?: string; passage?: string; note?: string }, attach: boolean): Promise<void> {
     if (!activeId) return
     const sid = await service.addSource(activeId, src)
     if (src.kind === 'web') {
@@ -297,9 +296,10 @@ export function WriteApp({ services }: { services: WriteServices }): React.JSX.E
     change('Adding the files', async () => {
       const lines: string[] = []
       for (const f of files) {
-        if (!isTextFile(f)) { lines.push(`${f.name}: only text files can be read for now.`); continue }
-        await addSourceAndPlace({ kind: 'upload', address: f.name, passage: await f.text() }, attach)
-        lines.push(`${f.name}: added.`)
+        const kind = sourceKindForFile(f)
+        if (!kind) { lines.push(`${f.name}: only text and code files can be read for now.`); continue }
+        await addSourceAndPlace({ kind, address: f.name, passage: await f.text() }, attach)
+        lines.push(`${f.name}: added${kind === 'code' ? ' as code' : ''}.`)
       }
       if (say) setChat((c) => [...c, { id: ++lineId, from: 'aielia', text: `${lines.join('\n')}\nI stored ${files.length === 1 ? 'it' : 'them'} and looked for the claims they bear on. Click in the text to see and confirm them under it.`, model: chatModel }])
       else setNotice(lines.join(' '))

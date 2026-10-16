@@ -41,3 +41,17 @@ export function applyRecheck(source: Source, result: { passage: string } | { unr
 export function acceptNewPassage(source: Source, passage: string, now: string): Source {
   return { ...source, passage, readAt: now, fingerprint: fingerprintPassage(passage), freshness: 'current' }
 }
+
+const TEXT_EXTENSIONS = ['.txt', '.md', '.markdown', '.csv', '.tsv', '.json', '.log']
+const CODE_EXTENSIONS = ['.ts', '.tsx', '.js', '.jsx', '.mjs', '.cjs', '.py', '.rb', '.go', '.rs', '.java', '.kt', '.swift', '.c', '.h', '.cc', '.cpp', '.hpp', '.cs', '.php', '.sh', '.bash', '.sql', '.yaml', '.yml', '.toml', '.ini', '.xml', '.html', '.css', '.scss', '.lua', '.r', '.scala']
+
+/**
+ * What kind of source a dropped file is, from its name and type: code (program text, so claims about what it does are checked against the
+ * code itself), an uploaded text document, or undefined when it cannot be read as text. The caller reads the file's text.
+ */
+export function sourceKindForFile(file: { name: string; type?: string }): 'code' | 'upload' | undefined {
+  const name = file.name.toLowerCase()
+  if (CODE_EXTENSIONS.some((e) => name.endsWith(e))) return 'code'
+  if (TEXT_EXTENSIONS.some((e) => name.endsWith(e)) || (file.type ?? '').startsWith('text/')) return 'upload'
+  return undefined
+}
