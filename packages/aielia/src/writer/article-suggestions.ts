@@ -28,12 +28,12 @@ function find(markdown: string, quote: string, hint: number): number {
 export function proposeSuggestion(
   meta: ArticleMeta,
   markdown: string,
-  input: { quote: string; replacement: string; reason: string; by: 'assistant' | 'writer'; now: string; model?: string },
+  input: { quote: string; replacement: string; reason: string; by: 'assistant' | 'writer'; now: string; model?: string; ideaIds?: string[] },
 ): SuggestionResult {
   if (!input.quote) return { ok: false, reason: 'A suggestion needs the text it replaces.' }
   const start = markdown.indexOf(input.quote)
   if (start === -1) return { ok: false, reason: 'The text to replace is not in the article.' }
-  const s: Suggestion = { id: nextId(meta), span: { start, end: start + input.quote.length, quote: input.quote }, replacement: input.replacement, reason: input.reason, proposedBy: input.by, ...(input.model ? { model: input.model } : {}), state: 'pending', createdAt: input.now }
+  const s: Suggestion = { id: nextId(meta), span: { start, end: start + input.quote.length, quote: input.quote }, replacement: input.replacement, reason: input.reason, proposedBy: input.by, ...(input.model ? { model: input.model } : {}), ...(input.ideaIds && input.ideaIds.length > 0 ? { ideaIds: input.ideaIds } : {}), state: 'pending', createdAt: input.now }
   return { ok: true, markdown, meta: { ...meta, suggestions: [...meta.suggestions, s] } }
 }
 
@@ -67,7 +67,9 @@ export function acceptSuggestion(meta: ArticleMeta, markdown: string, id: string
     if (overlaps) return { ...x, state: 'stale' as const }
     return x.span.start >= at + s.span.quote.length ? { ...x, span: { ...x.span, start: x.span.start + delta, end: x.span.end + delta } } : x
   })
-  return { ok: true, markdown: next, meta: { ...meta, suggestions } }
+  const sectionId = [...meta.sections].filter((sec) => at >= sec.span.start && at < sec.span.end).sort((a, b) => b.span.start - a.span.start)[0]?.id
+  const ideas = (meta.ideas ?? []).map((i) => (s.ideaIds?.includes(i.id) ? { ...i, state: 'used' as const, usedIn: sectionId ?? i.usedIn } : i))
+  return { ok: true, markdown: next, meta: { ...meta, suggestions, ideas } }
 }
 
 export function rejectSuggestion(meta: ArticleMeta, id: string): SuggestionResult & { ok: boolean } {

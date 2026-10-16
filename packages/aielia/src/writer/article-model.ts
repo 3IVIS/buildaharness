@@ -100,10 +100,27 @@ export const SuggestionSchema = z.object({
   proposedBy: z.enum(['assistant', 'writer']),
   /** The model that proposed it, when the assistant did. */
   model: z.string().optional(),
+  /** Ideas that this suggestion writes into the text; they are marked used when it is accepted. */
+  ideaIds: z.array(z.string()).optional(),
   state: z.enum(['pending', 'accepted', 'rejected', 'edited_accepted', 'stale']),
   createdAt: z.string(),
 })
 export type Suggestion = z.infer<typeof SuggestionSchema>
+
+export const IdeaSchema = z.object({
+  id: z.string(),
+  text: z.string(),
+  /** Who added it. When the assistant did, `model` says which model. */
+  origin: z.enum(['writer', 'assistant']),
+  model: z.string().optional(),
+  /** The section it is meant for, if the writer or the assistant said so. */
+  sectionId: z.string().optional(),
+  /** open: not in the text yet. used: written into the article. dropped: set aside. */
+  state: z.enum(['open', 'used', 'dropped']),
+  usedIn: z.string().optional(),
+  createdAt: z.string(),
+})
+export type Idea = z.infer<typeof IdeaSchema>
 
 export const ArticleMetaSchema = z.object({
   formatVersion: z.number().int(),
@@ -120,11 +137,13 @@ export const ArticleMetaSchema = z.object({
   /** Corrections the writer gave in chat (author's say-so). */
   corrections: z.array(WriterCorrectionSchema),
   suggestions: z.array(SuggestionSchema),
+  /** Ideas: material the writer or the assistant collected, to be written into the article. */
+  ideas: z.array(IdeaSchema).default([]),
 })
 export type ArticleMeta = z.infer<typeof ArticleMetaSchema>
 
 export function createArticleMeta(id: string, title: string): ArticleMeta {
-  return { formatVersion: ARTICLE_META_VERSION, id, title, status: 'drafting', sections: [], claims: [], sources: [], links: [], comments: [], corrections: [], suggestions: [] }
+  return { formatVersion: ARTICLE_META_VERSION, id, title, status: 'drafting', sections: [], claims: [], sources: [], links: [], comments: [], corrections: [], suggestions: [], ideas: [] }
 }
 
 export type LoadResult = { ok: true; meta: ArticleMeta } | { ok: false; reason: string }

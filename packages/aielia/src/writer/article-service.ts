@@ -1,8 +1,9 @@
 import type { ILLMClient, TokenUsage } from '@buildaharness/runtime'
 import { extractClaims, type ExtractionResult } from './article-claims.js'
 import { serializeArticle, loadArticleFolder, type ArticleBundle, type ArticleFolder } from './article-folder.js'
-import { createArticleMeta, type ArticleMeta, type Claim, type Link, type Source } from './article-model.js'
+import { createArticleMeta, type ArticleMeta, type Claim, type Idea, type Link, type Source } from './article-model.js'
 import { resolveChange, type ResolveResult } from './article-resolver.js'
+import { addIdea, editIdea, removeIdea, setIdeaState, suggestIdeas, type IdeaSuggestion } from './article-ideas.js'
 import { attachSourceToText, proposeSourceLinks, type SourceLinkProposal, type TextRange } from './article-source-links.js'
 import { addDrawnLink, proposeDependencies, type DependencyKind, type DependencyProposal } from './article-dependencies.js'
 import { addSnapshot, compareVersions, isLargeChange, summarizeChange, type ChangeSummary, type VersionComparison } from './article-history.js'
@@ -252,11 +253,11 @@ export class ArticleService {
   }
 
   /** The assistant turns the writer\'s instruction into suggestions; nothing is applied until the writer accepts. */
-  async suggest(id: string, instruction: string, modelOverride?: string): Promise<EditSuggestResult> {
+  async suggest(id: string, instruction: string, modelOverride?: string, ideaIds?: string[]): Promise<EditSuggestResult> {
     const b = await this.get(id)
     const { llm, onUsage } = this.opts
     const model = modelOverride ?? this.writer()
-    const r = await suggestEdits({ meta: b.meta, markdown: b.markdown, instruction, now: this.now(), modelName: model }, llm, model, onUsage)
+    const r = await suggestEdits({ meta: b.meta, markdown: b.markdown, instruction, now: this.now(), modelName: model, ideaIds }, llm, model, onUsage)
     if (r.status === 'suggested' && r.added.length > 0) await this.store.save(id, { ...b, meta: r.meta })
     return r
   }
@@ -420,6 +421,54 @@ export class ArticleService {
     return { ok: true }
   }
 
+  // ---- ideas
+
+  async addIdea(id: string, input: { text: string; origin?: Idea['origin']; model?: string; sectionId?: string }): Promise<{ ok: true; idea: Idea } | { ok: false; reason: string }> {
+    const b = await this.get(id)
+    const r = addIdea(b.meta, { ...input, origin: input.origin ?? 'writer' }, this.now())
+    if (!r.ok) return r
+    await this.store.save(id, { ...b, meta: r.meta })
+    return { ok: true, idea: r.idea }
+  }
+
+  async updateIdea(id: string, ideaId: string, patch: { text?: string; sectionId?: string | null; state?: Idea['state'] }): Promise<{ ok: boolean; reason?: string }> {
+    const b = await this.get(id)
+    let meta = b.meta
+    if (patch.text !== undefined || patch.sectionId !== undefined) {
+      const r = editIdea(meta, ideaId, { text: patch.text, sectionId: patch.sectionId })
+      if (!r.ok) return r
+      meta = r.meta
+    }
+    if (patch.state) {
+      const r = setIdeaState(meta, ideaId, patch.state)
+      if (!r.ok) return r
+      meta = r.meta
+    }
+    await this.store.save(id, { ...b, meta })
+    return { ok: true }
+  }
+
+  async deleteIdea(id: string, ideaId: string): Promise<void> {
+    const b = await this.get(id)
+    await this.store.save(id, { ...b, meta: removeIdea(b.meta, ideaId) })
+  }
+
+  /** The assistant proposes new ideas from the article, the sources and what the writer asked for. They are added as open ideas, marked with the model. */
+  async suggestIdeas(id: string, request?: string, modelOverride?: string): Promise<IdeaSuggestion> {
+    const b = await this.get(id)
+    const { llm, onUsage } = this.opts
+    const model = modelOverride ?? this.writer()
+    const r = await suggestIdeas({ meta: b.meta, markdown: b.markdown, request, now: this.now(), modelName: model }, llm, model, onUsage)
+    if (r.status === 'suggested' && r.added.length > 0) await this.store.save(id, { ...b, meta: r.meta })
+    return r
+  }
+
+  /** Writes the chosen ideas into the article as suggestions the writer accepts; each idea is marked used when its suggestion is accepted. */
+  async writeIdeasIn(id: string, ideaIds: string[], instruction?: string, modelOverride?: string): Promise<EditSuggestResult> {
+    const text = instruction?.trim() || 'Write the selected ideas into the article, each where it belongs.'
+    return this.suggest(id, text, modelOverride, ideaIds)
+  }
+
   readiness(bundle: ArticleBundle): { readiness: Readiness; problems: Problem[] } {
     return { readiness: computeReadiness(bundle.meta), problems: checkIntegrity(bundle.meta) }
   }
@@ -460,6 +509,10 @@ const PENDING_KEY = 'writer:pending-ops'
 export function createArticleChatPort(store: ArticleStore): WriterChatPort {
   return {
     articles: () => store.list(),
+    async ideasText(articleId) {
+      const open = ((await store.load(articleId))?.meta.ideas ?? []).filter((i) => i.state === 'open')
+      return open.map((i) => i.text)
+    },
     async captureEnabled() {
       return (await loadPermissions(store)).captureChat
     },
