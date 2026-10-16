@@ -3,6 +3,8 @@ import { extractClaims, type ExtractionResult } from './article-claims.js'
 import { serializeArticle, loadArticleFolder, type ArticleBundle, type ArticleFolder } from './article-folder.js'
 import { createArticleMeta, type ArticleMeta, type Claim, type Idea, type Link, type Source } from './article-model.js'
 import { resolveChange, type ResolveResult } from './article-resolver.js'
+import { addCommentOnText, refreshComments } from './article-comments.js'
+import { checkableClaims, unsupportedClaims, type IssueCategory } from './article-issues.js'
 import { addIdea, editIdea, removeIdea, setIdeaState, suggestIdeas, type IdeaSuggestion } from './article-ideas.js'
 import { attachSourceToText, proposeSourceLinks, type SourceLinkProposal, type TextRange } from './article-source-links.js'
 import { addDrawnLink, proposeDependencies, type DependencyKind, type DependencyProposal } from './article-dependencies.js'
@@ -10,7 +12,7 @@ import { addSnapshot, compareVersions, isLargeChange, summarizeChange, type Chan
 import { checkIntegrity, computeReadiness, confirmLink, createSnapshot, removeLink, restoreSnapshot, setSectionReview, type Problem, type Readiness, type Snapshot } from './article-rules.js'
 import { suggestEdits, type EditSuggestResult } from './article-edit-suggest.js'
 import { reconcileSections } from './article-sections.js'
-import { createSource } from './article-sources.js'
+import { acceptNewPassage, createSource } from './article-sources.js'
 import { acceptSuggestion, refreshSuggestions, rejectSuggestion } from './article-suggestions.js'
 import { checkClaimSupport, needsAutoCheck, type SupportCheck } from './article-support.js'
 import { loadPermissions } from './write-permissions.js'
@@ -87,6 +89,14 @@ function sectionText(markdown: string, s: { span: { start: number; end: number }
 
 const clip = (t: string, n = 400): string => (t.length > n ? `${t.slice(0, n)}…` : t)
 
+export interface ResolveReport {
+  category: IssueCategory
+  /** How many items the action dealt with. */
+  done: number
+  /** One plain sentence saying what happened. */
+  note: string
+}
+
 export class ArticleService {
   private readonly store: ArticleStore
   private readonly now: () => string
@@ -157,7 +167,7 @@ export class ArticleService {
 
     // The article's title is its first top-level heading, so the writer edits it in the text and nowhere else.
     const heading = rec.sections.find((x) => x.level === 1 && x.heading.trim() !== '')?.heading.trim()
-    let meta = refreshSuggestions({ ...before.meta, sections: rec.sections, title: heading ?? before.meta.title }, markdown)
+    let meta = refreshComments(refreshSuggestions({ ...before.meta, sections: rec.sections, title: heading ?? before.meta.title }, markdown), markdown)
     // A rewrite is a natural point to be able to go back to: keep the text as it was.
     const snapshots = isLargeChange(before.markdown, markdown) ? addSnapshot(before.snapshots, createSnapshot('checkpoint', before.markdown, before.meta, this.now(), 'Before a large change')) : before.snapshots
     let bundle: ArticleBundle = { ...before, markdown, meta, snapshots }
@@ -253,11 +263,11 @@ export class ArticleService {
   }
 
   /** The assistant turns the writer\'s instruction into suggestions; nothing is applied until the writer accepts. */
-  async suggest(id: string, instruction: string, modelOverride?: string, ideaIds?: string[]): Promise<EditSuggestResult> {
+  async suggest(id: string, instruction: string, modelOverride?: string, refs: { ideaIds?: string[]; commentIds?: string[]; sectionIds?: string[] } = {}): Promise<EditSuggestResult> {
     const b = await this.get(id)
     const { llm, onUsage } = this.opts
     const model = modelOverride ?? this.writer()
-    const r = await suggestEdits({ meta: b.meta, markdown: b.markdown, instruction, now: this.now(), modelName: model, ideaIds }, llm, model, onUsage)
+    const r = await suggestEdits({ meta: b.meta, markdown: b.markdown, instruction, now: this.now(), modelName: model, ...refs }, llm, model, onUsage)
     if (r.status === 'suggested' && r.added.length > 0) await this.store.save(id, { ...b, meta: r.meta })
     return r
   }
@@ -466,7 +476,185 @@ export class ArticleService {
   /** Writes the chosen ideas into the article as suggestions the writer accepts; each idea is marked used when its suggestion is accepted. */
   async writeIdeasIn(id: string, ideaIds: string[], instruction?: string, modelOverride?: string): Promise<EditSuggestResult> {
     const text = instruction?.trim() || 'Write the selected ideas into the article, each where it belongs.'
-    return this.suggest(id, text, modelOverride, ideaIds)
+    return this.suggest(id, text, modelOverride, { ideaIds })
+  }
+
+  // ---- editing in place
+
+  /** Renames a section by changing its heading line in the text, which is where the heading lives. The section keeps its identity. */
+  async renameSection(id: string, sectionId: string, heading: string): Promise<{ ok: true } | { ok: false; reason: string }> {
+    const b = await this.get(id)
+    const sec = b.meta.sections.find((x) => x.id === sectionId)
+    if (!sec) return { ok: false, reason: `No section ${sectionId}.` }
+    if (sec.level < 1) return { ok: false, reason: 'The opening has no heading to rename.' }
+    const clean = heading.split(/\s+/).filter(Boolean).join(' ')
+    if (!clean) return { ok: false, reason: 'A heading cannot be empty.' }
+    const lineEnd = b.markdown.indexOf('\n', sec.span.start)
+    const end = lineEnd === -1 ? b.markdown.length : lineEnd
+    const md = `${b.markdown.slice(0, sec.span.start)}${'#'.repeat(sec.level)} ${clean}${b.markdown.slice(end)}`
+    await this.updateText(id, md, { analyze: false })
+    return { ok: true }
+  }
+
+  /** The one-line purpose the outline shows under a section. An empty text removes it. */
+  async setSectionPurpose(id: string, sectionId: string, purpose: string): Promise<void> {
+    const b = await this.get(id)
+    if (!b.meta.sections.some((x) => x.id === sectionId)) throw new Error(`No section ${sectionId}.`)
+    const text = purpose.trim()
+    await this.store.save(id, { ...b, meta: { ...b.meta, sections: b.meta.sections.map((x) => (x.id === sectionId ? { ...x, purpose: text || undefined } : x)) } })
+  }
+
+  async addComment(id: string, range: TextRange, text: string): Promise<{ ok: true } | { ok: false; reason: string }> {
+    const b = await this.get(id)
+    const r = addCommentOnText(b.meta, b.markdown, range, text, this.now())
+    if (!r.ok) return r
+    await this.store.save(id, { ...b, meta: r.meta })
+    return { ok: true }
+  }
+
+  async editComment(id: string, commentId: string, patch: { text?: string; decision?: string }): Promise<{ ok: boolean; reason?: string }> {
+    const b = await this.get(id)
+    const c = b.meta.comments.find((x) => x.id === commentId)
+    if (!c) return { ok: false, reason: `No comment ${commentId}.` }
+    const text = patch.text !== undefined ? patch.text.trim() : c.text
+    if (!text) return { ok: false, reason: 'A comment needs some text.' }
+    const decision = patch.decision !== undefined ? patch.decision.trim() || undefined : c.decision
+    await this.store.save(id, { ...b, meta: { ...b.meta, comments: b.meta.comments.map((x) => (x.id === commentId ? { ...x, text, decision } : x)) } })
+    return { ok: true }
+  }
+
+  async deleteComment(id: string, commentId: string): Promise<void> {
+    const b = await this.get(id)
+    const comments = b.meta.comments.filter((x) => x.id !== commentId).map((x) => ({ ...x, conflictsWith: x.conflictsWith.filter((o) => o !== commentId) }))
+    await this.store.save(id, { ...b, meta: { ...b.meta, comments } })
+  }
+
+  async editCorrection(id: string, correctionId: string, patch: { note?: string; supersedes?: string }): Promise<{ ok: boolean; reason?: string }> {
+    const b = await this.get(id)
+    const c = b.meta.corrections.find((x) => x.id === correctionId)
+    if (!c) return { ok: false, reason: `No correction ${correctionId}.` }
+    const note = patch.note !== undefined ? patch.note.trim() : c.note
+    if (!note) return { ok: false, reason: 'A correction needs some text.' }
+    const supersedes = patch.supersedes !== undefined ? patch.supersedes.trim() || undefined : c.supersedes
+    await this.store.save(id, { ...b, meta: { ...b.meta, corrections: b.meta.corrections.map((x) => (x.id === correctionId ? { ...x, note, supersedes } : x)) } })
+    return { ok: true }
+  }
+
+  /** Editing a source's passage replaces it as the writer's own new text, so checks made against the old passage stop counting until they are run again. */
+  async editSource(id: string, sourceId: string, patch: { address?: string; note?: string; passage?: string }): Promise<{ ok: boolean; reason?: string }> {
+    const b = await this.get(id)
+    const src = b.meta.sources.find((x) => x.id === sourceId)
+    if (!src) return { ok: false, reason: `No source ${sourceId}.` }
+    let next = { ...src }
+    if (patch.address !== undefined) next.address = patch.address.trim() || undefined
+    if (patch.note !== undefined) next.note = patch.note.trim() || undefined
+    if (patch.passage !== undefined && patch.passage !== src.passage) next = acceptNewPassage(next, patch.passage, this.now())
+    await this.store.save(id, { ...b, meta: { ...b.meta, sources: b.meta.sources.map((x) => (x.id === sourceId ? next : x)) } })
+    return { ok: true }
+  }
+
+  /** Renames a saved version. A published version is frozen, label included. */
+  async renameVersion(id: string, index: number, label: string): Promise<{ ok: boolean; reason?: string }> {
+    const b = await this.get(id)
+    const snap = b.snapshots[index]
+    if (!snap) return { ok: false, reason: `No version ${index}.` }
+    if (snap.kind === 'published') return { ok: false, reason: 'A published version is frozen.' }
+    const snapshots = b.snapshots.map((x, i) => (i === index ? { ...x, label: label.trim() || undefined } : x))
+    await this.store.save(id, { ...b, snapshots })
+    return { ok: true }
+  }
+
+  // ---- resolving issues in batches
+
+  /** Accepts every pending suggestion in one go: one checkpoint first, then from the end of the text to the start so earlier ones keep their place. */
+  async acceptAllSuggestions(id: string): Promise<{ accepted: number; skipped: number }> {
+    const b = await this.get(id)
+    const pending = b.meta.suggestions.filter((x) => x.state === 'pending').sort((x, y) => y.span.start - x.span.start)
+    if (pending.length === 0) return { accepted: 0, skipped: 0 }
+    const snapshots = addSnapshot(b.snapshots, createSnapshot('checkpoint', b.markdown, b.meta, this.now(), 'Before accepting suggested changes'))
+    let meta = b.meta
+    let md = b.markdown
+    let accepted = 0
+    let skipped = 0
+    for (const sg of pending) {
+      const r = acceptSuggestion(meta, md, sg.id)
+      if (r.ok) { meta = r.meta; md = r.markdown; accepted++ } else skipped++
+    }
+    await this.store.save(id, { ...b, markdown: md, meta, snapshots })
+    await this.updateText(id, md, { analyze: false })
+    return { accepted, skipped }
+  }
+
+  /**
+   * The one action for each category of issues (see article-issues.ts). Where the answer is a change to the text it is a set of suggestions,
+   * never an edit: suggested changes are accepted (all at once) from the "suggestions" category.
+   */
+  async resolveCategory(id: string, category: IssueCategory, options: { model?: string } = {}): Promise<ResolveReport> {
+    const b = await this.get(id)
+    const meta = b.meta
+    const model = options.model
+    const fix = async (instruction: string, refs: { commentIds?: string[]; sectionIds?: string[] }, none: string): Promise<ResolveReport> => {
+      const r = await this.suggest(id, instruction, model, refs)
+      if (r.status === 'failed') return { category, done: 0, note: 'The suggestions could not be made. Nothing was changed.' }
+      return { category, done: r.added.length, note: r.added.length === 0 ? none : `${r.added.length} suggested change${r.added.length === 1 ? '' : 's'} added${model ? ` (${model})` : ''}. Accept them under Suggested changes.` }
+    }
+    switch (category) {
+      case 'suggestions': {
+        const r = await this.acceptAllSuggestions(id)
+        return { category, done: r.accepted, note: `${r.accepted} accepted${r.skipped > 0 ? `, ${r.skipped} no longer fit` : ''}. The text as it was is saved in History.` }
+      }
+      case 'stale': {
+        const n = meta.suggestions.filter((x) => x.state === 'stale').length
+        await this.store.save(id, { ...b, meta: { ...meta, suggestions: meta.suggestions.map((x) => (x.state === 'stale' ? { ...x, state: 'rejected' as const } : x)) } })
+        return { category, done: n, note: `${n} dismissed.` }
+      }
+      case 'links': {
+        const n = meta.links.filter((l) => l.origin === 'proposed').length
+        await this.store.save(id, { ...b, meta: { ...meta, links: meta.links.map((l) => (l.origin === 'proposed' ? { ...l, origin: 'confirmed' as const } : l)) } })
+        return { category, done: n, note: `${n} confirmed.` }
+      }
+      case 'checkable': {
+        const todo = checkableClaims(meta).slice(0, 25)
+        let next = meta
+        let checked = 0
+        const { llm, onUsage } = this.opts
+        const used = model ?? this.checker()
+        for (const c of todo) {
+          const r = await checkClaimSupport({ meta: next, markdown: b.markdown, claimId: c.id, modelName: this.opts.modelName ?? used ?? 'model', now: this.now() }, llm, used, onUsage)
+          if (r.status === 'checked') { next = r.meta; checked++ }
+        }
+        if (next !== meta) await this.store.save(id, { ...b, meta: next })
+        return { category, done: checked, note: `${checked} of ${todo.length} checked${used ? ` (${used})` : ''}.` }
+      }
+      case 'comments': {
+        const open = meta.comments.filter((c) => c.state === 'open' && c.conflictsWith.length === 0)
+        if (open.length === 0) return { category, done: 0, note: 'No comments to act on.' }
+        const lines = open.map((c) => `- ${c.label ?? c.id}${c.span ? ` (on: "${c.span.quote}")` : ''}: ${c.text}${c.decision ? ` The writer decided: ${c.decision}.` : ''}`)
+        return fix(`Address these open reviewer comments with the smallest edits that do what each asks:\n${lines.join('\n')}`, { commentIds: open.map((c) => c.id) }, 'None of these comments can be addressed by editing the text.')
+      }
+      case 'unsupported': {
+        const claims = unsupportedClaims(meta)
+        if (claims.length === 0) return { category, done: 0, note: 'Nothing to fix.' }
+        const lines = claims.map((c) => `- "${c.quote}"`)
+        return fix(`These claims have no source, or the source does not back them. For each, suggest an edit that removes it or qualifies it so the text claims only what can be backed. Do not invent a source, a figure or a fact:\n${lines.join('\n')}`, {}, 'I found no safe way to change these without a source.')
+      }
+      case 'sections': {
+        const secs = meta.sections.filter((x) => x.review.state === 'needs_review')
+        if (secs.length === 0) return { category, done: 0, note: 'Nothing to review.' }
+        const lines = secs.map((x) => `- ${x.heading || '(opening)'}: ${x.review.reason ?? 'something it depends on changed'}`)
+        return fix(`These sections were flagged because something they depend on changed. Suggest the edits that bring each in line, and change nothing that does not need to change:\n${lines.join('\n')}`, { sectionIds: secs.map((x) => x.id) }, 'These sections look fine as they are.')
+      }
+    }
+  }
+
+  /** Every category in a sensible order, one action each. It prepares suggestions but does not apply them; `accept` also applies them at the end. */
+  async resolveAll(id: string, options: { model?: string; categories?: IssueCategory[]; accept?: boolean } = {}): Promise<ResolveReport[]> {
+    const order: IssueCategory[] = ['links', 'checkable', 'comments', 'unsupported', 'sections', 'stale']
+    const wanted = options.categories ?? order
+    const reports: ResolveReport[] = []
+    for (const category of order) if (wanted.includes(category)) reports.push(await this.resolveCategory(id, category, { model: options.model }))
+    if (options.accept) reports.push(await this.resolveCategory(id, 'suggestions', { model: options.model }))
+    return reports
   }
 
   readiness(bundle: ArticleBundle): { readiness: Readiness; problems: Problem[] } {

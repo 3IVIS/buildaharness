@@ -102,6 +102,10 @@ export const SuggestionSchema = z.object({
   model: z.string().optional(),
   /** Ideas that this suggestion writes into the text; they are marked used when it is accepted. */
   ideaIds: z.array(z.string()).optional(),
+  /** Reviewer comments this suggestion was written to address; they are marked addressed when it is accepted. */
+  commentIds: z.array(z.string()).optional(),
+  /** Sections this suggestion brings in line; their review mark is cleared when it is accepted. */
+  sectionIds: z.array(z.string()).optional(),
   state: z.enum(['pending', 'accepted', 'rejected', 'edited_accepted', 'stale']),
   createdAt: z.string(),
 })

@@ -25,6 +25,10 @@ export const WriterCommentSchema = z.object({
   origin: z.enum(['reviewer', 'writer', 'assistant']),
   /** Where the comment applies, when it is tied to one section or claim (article model, "about" link). */
   anchor: z.object({ type: z.enum(['section', 'claim']), id: z.string() }).optional(),
+  /** The stretch of text the writer highlighted when commenting. Found again by the quote after the text changes. */
+  span: z.object({ start: z.number().int(), end: z.number().int(), quote: z.string() }).optional(),
+  /** The text the comment was on no longer exists as it was. The comment is kept. */
+  outdated: z.boolean().optional(),
   /** The suggestion that addressed it, if any. */
   suggestionId: z.string().optional(),
   capturedAt: z.string(),

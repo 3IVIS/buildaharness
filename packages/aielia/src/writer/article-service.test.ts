@@ -3,10 +3,12 @@ import type { ILLMClient } from '@buildaharness/runtime'
 import { ArticleService, createArticleChatPort, createMemoryArticleStore } from './article-service.js'
 import { processWriterMessage } from './writer-chat-turn.js'
 import { proposeSuggestion } from './article-suggestions.js'
+import type { ArticleMeta } from './article-model.js'
+import { effectiveSourceStatus } from './article-rules.js'
 
 const NOW = '2026-10-16T10:00:00.000Z'
 const MD = '# Post\n\nIntro: p99 under 20 ms.\n\n## Latency\n\nThe p99 was 18 ms.\n\n## Conclusion\n\nSo p99 stays under 20 ms.\n'
-const MARK = { claims: 'You read parts of an article and list the claims', resolve: 'You help a writer keep an article consistent', support: 'You check whether a claim from an article', capture: 'A writer is working with an assistant' }
+const MARK = { claims: 'You read parts of an article and list the claims', resolve: 'You help a writer keep an article consistent', support: 'You check whether a claim from an article', capture: 'A writer is working with an assistant', edits: 'You propose edits to an article' }
 
 type Router = Partial<Record<keyof typeof MARK, unknown | ((user: string) => unknown)>>
 function routed(r: Router, calls: string[] = []): ILLMClient {
@@ -332,5 +334,169 @@ describe('sources for the text under the cursor, through the service', () => {
     await s.suggest(id, 'x', 'chosen-writer')
     await s.analyze(id)
     expect(used).toEqual(['chosen-for-this-check', 'chosen-too', 'chosen-writer', 'default-model'])
+  })
+})
+
+
+describe('editing in place', () => {
+  it('renames a section by changing its heading in the text, keeping its identity, and refuses the opening and an empty heading', async () => {
+    const { svc: s } = svc()
+    const id = await s.create('Post', 'Opening line.\n\n# Post\n\n## Latency\n\nThe p99 was 18 ms.\n')
+    const latency = (await s.get(id)).meta.sections.find((x) => x.heading === 'Latency')!
+    expect(await s.renameSection(id, latency.id, '  Response   time ')).toEqual({ ok: true })
+    const b = await s.get(id)
+    expect(b.markdown).toContain('## Response time\n')
+    expect(b.meta.sections.find((x) => x.id === latency.id)?.heading).toBe('Response time')
+    const opening = b.meta.sections.find((x) => x.level === 0)!
+    expect(await s.renameSection(id, opening.id, 'x')).toMatchObject({ ok: false })
+    expect(await s.renameSection(id, latency.id, '   ')).toMatchObject({ ok: false })
+    expect(await s.renameSection(id, 'nope', 'x')).toMatchObject({ ok: false })
+  })
+  it('sets and clears the outline purpose of a section', async () => {
+    const { svc: s } = svc()
+    const id = await s.create('Post', MD)
+    const sec = (await s.get(id)).meta.sections[1]
+    await s.setSectionPurpose(id, sec.id, '  Show the latency  ')
+    expect((await s.get(id)).meta.sections[1].purpose).toBe('Show the latency')
+    await s.setSectionPurpose(id, sec.id, '')
+    expect((await s.get(id)).meta.sections[1].purpose).toBeUndefined()
+  })
+  it('comments on highlighted text, edits and deletes them, and the comment follows the text', async () => {
+    const { svc: s } = svc()
+    const id = await s.create('Post', MD)
+    const at = MD.indexOf('18 ms')
+    expect(await s.addComment(id, { start: at, end: at }, 'Is this the median?')).toEqual({ ok: true })
+    expect(await s.addComment(id, { start: at, end: at }, '  ')).toMatchObject({ ok: false })
+    await s.updateText(id, 'New intro.\n\n' + MD, { analyze: false })
+    const c = (await s.get(id)).meta.comments[0]
+    expect(c.span?.quote).toBe('The p99 was 18 ms.')
+    expect(c.outdated).toBeUndefined()
+    expect(await s.editComment(id, c.id, { text: 'Is this p99 or the median?', decision: 'Say p99' })).toEqual({ ok: true })
+    expect((await s.get(id)).meta.comments[0]).toMatchObject({ text: 'Is this p99 or the median?', decision: 'Say p99' })
+    expect(await s.editComment(id, c.id, { text: ' ' })).toMatchObject({ ok: false })
+    await s.deleteComment(id, c.id)
+    expect((await s.get(id)).meta.comments).toEqual([])
+  })
+  it('edits a correction, and a source passage edit makes checks made against the old passage stop counting', async () => {
+    const { store, svc: s } = svc({ support: { verdict: 'supported', reason: 'ok' }, claims: { claims: [] } })
+    const id = await s.create('Post', MD)
+    const src = await s.addSource(id, { kind: 'upload', address: 'a.txt', passage: 'p99: 18 ms' })
+    const at = MD.indexOf('18 ms')
+    await s.attachSourceToText(id, { start: at, end: at }, src)
+    const claimId = (await s.get(id)).meta.claims[0].id
+    await s.checkClaim(id, claimId)
+    const before = await s.get(id)
+    expect(before.meta.claims[0].sourceStatus).toBe('supported')
+    expect(await s.editSource(id, src, { passage: 'p99: 41 ms', address: 'b.txt' })).toEqual({ ok: true })
+    const after = await s.get(id)
+    expect(after.meta.sources[0]).toMatchObject({ passage: 'p99: 41 ms', address: 'b.txt' })
+    expect(effectiveSourceStatus(after.meta.claims[0], after.meta.sources)).toBe('stale')
+    await store.save(id, { ...after, meta: { ...after.meta, corrections: [{ id: 'wx1', articleId: id, kind: 'say_so', trust: 'lower', note: 'old', capturedAt: NOW }] } })
+    expect(await s.editCorrection(id, 'wx1', { note: 'p99 is 41 ms', supersedes: '18 ms' })).toEqual({ ok: true })
+    expect((await s.get(id)).meta.corrections[0]).toMatchObject({ note: 'p99 is 41 ms', supersedes: '18 ms' })
+    expect(await s.editCorrection(id, 'wx1', { note: ' ' })).toMatchObject({ ok: false })
+  })
+  it('renames a saved version but not a published one', async () => {
+    const { s } = (() => { const x = svc(); return { s: x.svc } })()
+    const id = await s.create('Post', MD)
+    await s.saveVersion(id, 'Draft')
+    await s.publish(id, 'v1')
+    const h = await s.history(id)
+    expect(await s.renameVersion(id, h[1].index, 'First draft')).toEqual({ ok: true })
+    expect((await s.history(id))[1].label).toBe('First draft')
+    expect(await s.renameVersion(id, h[0].index, 'x')).toMatchObject({ ok: false })
+  })
+})
+
+describe('resolving issues in batches', () => {
+  const sg = (id: string, quote: string, replacement: string, extra: object = {}) => ({ id, span: { start: MD.indexOf(quote), end: MD.indexOf(quote) + quote.length, quote }, replacement, reason: 'r', proposedBy: 'assistant' as const, state: 'pending' as const, createdAt: NOW, ...extra })
+  const setup = async (replies: Router = {}, edit?: (m: ArticleMeta) => ArticleMeta) => {
+    const calls: string[] = []
+    const store = createMemoryArticleStore()
+    const s = new ArticleService({ store, llm: routed(replies, calls), now: () => NOW, newId: () => 'a1', modelFor: () => 'default-model' })
+    const id = await s.create('Post', MD)
+    if (edit) { const b = await s.get(id); await store.save(id, { ...b, meta: edit(b.meta) }) }
+    return { s, id, calls, store }
+  }
+
+  it('suggestions: accepts them all in one go, from the end of the text, with one checkpoint, and says what no longer fit', async () => {
+    const { s, id } = await setup({}, (m) => ({ ...m, suggestions: [sg('sg1', '18 ms', '41 ms'), sg('sg2', 'So p99 stays under 20 ms.', 'So p99 stays under 41 ms.'), sg('sg3', 'gone text', 'x', { span: { start: 3, end: 12, quote: 'gone text' } })] }))
+    const r = await s.resolveCategory(id, 'suggestions')
+    expect(r).toMatchObject({ category: 'suggestions', done: 2 })
+    expect(r.note).toContain('1 no longer fit')
+    const b = await s.get(id)
+    expect(b.markdown).toContain('41 ms')
+    expect(b.markdown).toContain('So p99 stays under 41 ms.')
+    expect(b.snapshots.filter((x) => x.label === 'Before accepting suggested changes')).toHaveLength(1)
+  })
+  it('stale and links: dismisses stale suggestions and confirms every proposed link', async () => {
+    const { s, id } = await setup({}, (m) => ({
+      ...m,
+      suggestions: [{ ...sg('sg1', '18 ms', '41 ms'), state: 'stale' as const }],
+      links: [{ id: 'lk1', from: { type: 'section', id: 's3' }, to: { type: 'section', id: 's2' }, kind: 'repeats', origin: 'proposed', at: NOW }, { id: 'lk2', from: { type: 'section', id: 's3' }, to: { type: 'section', id: 's2' }, kind: 'rests_on', origin: 'drawn', at: NOW }],
+    }))
+    expect((await s.resolveCategory(id, 'stale')).done).toBe(1)
+    expect((await s.get(id)).meta.suggestions[0].state).toBe('rejected')
+    expect((await s.resolveCategory(id, 'links')).done).toBe(1)
+    expect((await s.get(id)).meta.links.map((l) => l.origin)).toEqual(['confirmed', 'drawn'])
+  })
+  it('checkable: checks every claim that has a passage, with the model given', async () => {
+    const used: (string | undefined)[] = []
+    const store = createMemoryArticleStore()
+    const llm = { callChatStructured: async (_m: unknown, _t: unknown, o?: { model?: string }) => { used.push(o?.model); return { content: JSON.stringify({ verdict: 'supported', reason: 'ok' }) } } } as unknown as ILLMClient
+    const s = new ArticleService({ store, llm, now: () => NOW, newId: () => 'a1' })
+    const id = await s.create('Post', MD)
+    const src = await s.addSource(id, { kind: 'upload', passage: 'p99: 18 ms' })
+    const at = MD.indexOf('18 ms')
+    await s.attachSourceToText(id, { start: at, end: at }, src)
+    const r = await s.resolveCategory(id, 'checkable', { model: 'chosen' })
+    expect(r).toMatchObject({ done: 1 })
+    expect(used).toEqual(['chosen'])
+    expect((await s.get(id)).meta.claims[0].sourceStatus).toBe('supported')
+  })
+  it('comments: asks for edits that address the open ones, leaves comments in conflict alone, and accepting closes the comments', async () => {
+    const reply = { suggestions: [{ quote: '18 ms', replacement: '18 ms (p99)', reason: 'C1', commentIds: ['wc1', 'wc2', 'ghost'] }] }
+    const { s, id, calls } = await setup({ edits: reply }, (m) => ({
+      ...m,
+      comments: [
+        { id: 'wc1', articleId: 'a1', label: 'C1', text: 'Say which percentile', state: 'open', conflictsWith: [], origin: 'reviewer', capturedAt: NOW },
+        { id: 'wc2', articleId: 'a1', label: 'C4', text: 'Open with cost', state: 'open', conflictsWith: ['wc3'], origin: 'reviewer', capturedAt: NOW },
+        { id: 'wc3', articleId: 'a1', label: 'C5', text: 'Cost last', state: 'open', conflictsWith: ['wc2'], origin: 'reviewer', capturedAt: NOW },
+      ],
+    }))
+    const r = await s.resolveCategory(id, 'comments', { model: 'm1' })
+    expect(r.done).toBe(1)
+    expect(calls).toEqual(['edits'])
+    const sug = (await s.get(id)).meta.suggestions[0]
+    expect(sug.commentIds).toEqual(['wc1']) // only the comments it was given: not the conflicting one, not an unknown id
+    await s.resolveCategory(id, 'suggestions')
+    const after = await s.get(id)
+    expect(after.meta.comments.find((c) => c.id === 'wc1')).toMatchObject({ state: 'addressed', suggestionId: sug.id })
+    expect(after.meta.comments.find((c) => c.id === 'wc2')?.state).toBe('open')
+  })
+  it('sections: suggests edits for flagged sections, and accepting clears the flag as the writer\'s act', async () => {
+    const reply = { suggestions: [{ quote: 'The p99 was 18 ms.', replacement: 'The p99 was 41 ms.', reason: 'figure changed', sectionIds: ['s2'] }] }
+    const { s, id } = await setup({ edits: reply }, (m) => ({ ...m, sections: m.sections.map((x) => (x.id === 's2' ? { ...x, review: { state: 'needs_review' as const, reason: 'figure changed', setBy: 'resolver' as const } } : x)) }))
+    expect((await s.resolveCategory(id, 'sections')).done).toBe(1)
+    expect((await s.get(id)).meta.sections.find((x) => x.id === 's2')!.review.state).toBe('needs_review')
+    await s.resolveCategory(id, 'suggestions')
+    expect((await s.get(id)).meta.sections.find((x) => x.id === 's2')!.review).toMatchObject({ state: 'clean', setBy: 'writer' })
+  })
+  it('a failed model step changes nothing and says so', async () => {
+    const { s, id } = await setup({}, (m) => ({ ...m, sections: m.sections.map((x) => (x.id === 's2' ? { ...x, review: { state: 'needs_review' as const, reason: 'r' } } : x)) }))
+    const r = await s.resolveCategory(id, 'sections')
+    expect(r).toMatchObject({ done: 0 })
+    expect(r.note).toContain('Nothing was changed')
+  })
+  it('resolve all: runs each category once in a sensible order, prepares suggestions without applying them, and applies them only when asked', async () => {
+    const reply = { suggestions: [{ quote: 'So p99 stays under 20 ms.', replacement: 'So p99 stays under 41 ms.', reason: 'r', sectionIds: ['s3'] }] }
+    const { s, id, calls } = await setup({ edits: reply }, (m) => ({ ...m, sections: m.sections.map((x) => (x.id === 's3' ? { ...x, review: { state: 'needs_review' as const, reason: 'r' } } : x)) }))
+    const first = await s.resolveAll(id, { model: 'm1' })
+    expect(first.map((r) => r.category)).toEqual(['links', 'checkable', 'comments', 'unsupported', 'sections', 'stale'])
+    expect((await s.get(id)).markdown).not.toContain('So p99 stays under 41 ms.')
+    expect(calls.filter((c) => c === 'edits').length).toBeGreaterThanOrEqual(1)
+    const second = await s.resolveAll(id, { model: 'm1', categories: ['stale'], accept: true })
+    expect(second.map((r) => r.category)).toEqual(['stale', 'suggestions'])
+    expect((await s.get(id)).markdown).toContain('So p99 stays under 41 ms.')
   })
 })

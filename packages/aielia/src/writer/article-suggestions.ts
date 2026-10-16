@@ -28,12 +28,12 @@ function find(markdown: string, quote: string, hint: number): number {
 export function proposeSuggestion(
   meta: ArticleMeta,
   markdown: string,
-  input: { quote: string; replacement: string; reason: string; by: 'assistant' | 'writer'; now: string; model?: string; ideaIds?: string[] },
+  input: { quote: string; replacement: string; reason: string; by: 'assistant' | 'writer'; now: string; model?: string; ideaIds?: string[]; commentIds?: string[]; sectionIds?: string[] },
 ): SuggestionResult {
   if (!input.quote) return { ok: false, reason: 'A suggestion needs the text it replaces.' }
   const start = markdown.indexOf(input.quote)
   if (start === -1) return { ok: false, reason: 'The text to replace is not in the article.' }
-  const s: Suggestion = { id: nextId(meta), span: { start, end: start + input.quote.length, quote: input.quote }, replacement: input.replacement, reason: input.reason, proposedBy: input.by, ...(input.model ? { model: input.model } : {}), ...(input.ideaIds && input.ideaIds.length > 0 ? { ideaIds: input.ideaIds } : {}), state: 'pending', createdAt: input.now }
+  const s: Suggestion = { id: nextId(meta), span: { start, end: start + input.quote.length, quote: input.quote }, replacement: input.replacement, reason: input.reason, proposedBy: input.by, ...(input.model ? { model: input.model } : {}), ...(input.ideaIds && input.ideaIds.length > 0 ? { ideaIds: input.ideaIds } : {}), ...(input.commentIds && input.commentIds.length > 0 ? { commentIds: input.commentIds } : {}), ...(input.sectionIds && input.sectionIds.length > 0 ? { sectionIds: input.sectionIds } : {}), state: 'pending', createdAt: input.now }
   return { ok: true, markdown, meta: { ...meta, suggestions: [...meta.suggestions, s] } }
 }
 
@@ -69,7 +69,10 @@ export function acceptSuggestion(meta: ArticleMeta, markdown: string, id: string
   })
   const sectionId = [...meta.sections].filter((sec) => at >= sec.span.start && at < sec.span.end).sort((a, b) => b.span.start - a.span.start)[0]?.id
   const ideas = (meta.ideas ?? []).map((i) => (s.ideaIds?.includes(i.id) ? { ...i, state: 'used' as const, usedIn: sectionId ?? i.usedIn } : i))
-  return { ok: true, markdown: next, meta: { ...meta, suggestions, ideas } }
+  // What the suggestion was written to fix is closed by the writer accepting it: comments are addressed, sections are no longer flagged.
+  const comments = meta.comments.map((c) => (s.commentIds?.includes(c.id) && c.state === 'open' ? { ...c, state: 'addressed' as const, suggestionId: s.id } : c))
+  const sections = meta.sections.map((sec) => (s.sectionIds?.includes(sec.id) && sec.review.state === 'needs_review' ? { ...sec, review: { state: 'clean' as const, setBy: 'writer' as const } } : sec))
+  return { ok: true, markdown: next, meta: { ...meta, suggestions, ideas, comments, sections } }
 }
 
 export function rejectSuggestion(meta: ArticleMeta, id: string): SuggestionResult & { ok: boolean } {

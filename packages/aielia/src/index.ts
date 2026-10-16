@@ -198,3 +198,6 @@ export { addIdea, editIdea, setIdeaState, removeIdea, suggestIdeas } from './wri
 export type { IdeaSuggestion } from './writer/article-ideas.js'
 export { WRITE_PARAMETERS, PARAMETER_GROUPS, findParameter, adjustmentInstruction } from './writer/write-parameters.js'
 export type { WriteParameter, ParameterGroup, ParameterKind } from './writer/write-parameters.js'
+export { addCommentOnText, commentsInRange, refreshComments } from './writer/article-comments.js'
+export { collectIssues, issueCount, checkableClaims, unsupportedClaims, ISSUE_CATEGORIES } from './writer/article-issues.js'
+export type { IssueBatch, IssueItem, IssueCategory } from './writer/article-issues.js'
