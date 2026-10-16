@@ -175,3 +175,5 @@ export { resolveChange, assessSourceChange, linkedSectionIds } from './writer/ar
 export type { Change, ResolveResult, SourceImpact, SourceChangeResult } from './writer/article-resolver.js'
 export { processWriterMessage, createMemoryWriterChatPort } from './writer/writer-chat-turn.js'
 export type { WriterChatPort } from './writer/writer-chat-turn.js'
+export { proposeSuggestion, refreshSuggestions, acceptSuggestion, rejectSuggestion } from './writer/article-suggestions.js'
+export type { SuggestionResult } from './writer/article-suggestions.js'
