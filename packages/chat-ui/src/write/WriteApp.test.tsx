@@ -6,7 +6,7 @@ import type { ILLMClient } from '@buildaharness/runtime'
 import { WriteApp } from './WriteApp'
 import { assembleWriteServices } from './write-services'
 
-const MARK = { claims: 'You read parts of an article and list the claims', resolve: 'You help a writer keep an article consistent', edits: 'You propose edits to an article', capture: 'A writer is working with an assistant' }
+const MARK = { claims: 'You read parts of an article and list the claims', resolve: 'You help a writer keep an article consistent', edits: 'You propose edits to an article', capture: 'A writer is working with an assistant', ideas: 'You help a writer collect ideas', sourceLinks: 'A writer added a source to an article' }
 function llm(replies: Partial<Record<keyof typeof MARK, unknown>>): ILLMClient {
   return {
     callChatStructured: async (messages: { role: string; content: string }[]) => {
@@ -51,7 +51,7 @@ describe('WriteApp layout', () => {
       await screen.findByLabelText('Article text')
       const main = container.querySelector('.write__main') as HTMLElement
       const rail = screen.getByRole('navigation', { name: 'Panels' })
-      expect(within(rail).getAllByRole('button').map((b) => b.getAttribute('aria-label'))).toEqual(['Text', 'Outline', 'Issues', 'Sources', 'Links', 'History', 'Chat', 'Settings'])
+      expect(within(rail).getAllByRole('button').map((b) => b.getAttribute('aria-label'))).toEqual(['Text', 'Outline', 'Ideas', 'Issues', 'Links', 'History', 'Chat', 'Settings'])
       expect(main.dataset.open).toBe('true') // starts with the outline open
       await userEvent.click(within(rail).getByRole('button', { name: 'Outline' }))
       expect(main.dataset.open).toBe('false')
@@ -82,13 +82,32 @@ describe('WriteApp layout', () => {
     expect(await screen.findByText('Before restoring an earlier version')).toBeInTheDocument()
   })
 
-  it('shows the article under the title taken from its heading, and keeps the actions together', async () => {
+  it('shows a short name in the header, cut off when long, separate from the title in the text, and lets the writer rename it', async () => {
     const s = await services({}, MD)
     render(<WriteApp services={s} />)
     await screen.findByLabelText('Article text')
-    expect(within(screen.getByLabelText('Article')).getByRole('option', { name: 'Post' })).toBeInTheDocument()
-    fireEvent.change(screen.getByLabelText('Article text'), { target: { value: MD.replace('# Post', '# Renamed in the text') } })
-    expect(await within(screen.getByLabelText('Article')).findByRole('option', { name: 'Renamed in the text' }, { timeout: 3000 })).toBeInTheDocument()
+    const head = screen.getByRole('button', { name: 'Article' })
+    expect(head).toHaveTextContent('Post')
+    expect(head).toHaveAttribute('title', 'Post') // the full name, for when the shown one is cut off
+    fireEvent.change(screen.getByLabelText('Article text'), { target: { value: MD.replace('# Post', '# A much longer heading that is the title of the text') } })
+    await new Promise((r) => setTimeout(r, 1000))
+    expect(screen.getByRole('button', { name: 'Article' })).toHaveTextContent('Post') // the name does not follow the heading
+    vi.spyOn(window, 'prompt').mockReturnValue('Q3 write-up')
+    await userEvent.click(screen.getByRole('button', { name: 'Article' }))
+    await userEvent.click(screen.getByRole('button', { name: /Rename this article/ }))
+    await waitFor(() => expect(screen.getByRole('button', { name: 'Article' })).toHaveTextContent('Q3 write-up'))
+  })
+
+  it('opens a list of articles from the name, to switch between them', async () => {
+    const s = await services({}, MD)
+    await s.service.create('Second article', '# Second\n\ntext\n')
+    render(<WriteApp services={s} />)
+    await screen.findByLabelText('Article text')
+    await userEvent.click(screen.getByRole('button', { name: 'Article' }))
+    const list = screen.getByRole('listbox', { name: 'Articles' })
+    expect(within(list).getAllByRole('option')).toHaveLength(2) // the two articles; the rename entry is an action, not an article
+    await userEvent.click(within(list).getByRole('button', { name: 'Second article' }))
+    await waitFor(() => expect((screen.getByLabelText('Article text') as HTMLTextAreaElement).value).toContain('# Second'))
   })
 })
 
@@ -174,7 +193,9 @@ describe('WriteApp', () => {
     const s = await services({ claims: { claims: [{ quote: 'The p99 was 18 ms.', kind: 'factual', matchesId: null, sure: true }] }, resolve: { affected: [] } }, MD)
     render(<WriteApp services={s} />)
     await screen.findByLabelText('Article text')
-    await userEvent.click(screen.getByRole('button', { name: 'Check article' }))
+    expect(screen.queryByRole('button', { name: 'Check article' })).toBeNull() // no longer in the header
+    await userEvent.click(screen.getByRole('button', { name: 'Chat' }))
+    await userEvent.click(screen.getByRole('button', { name: /Check article with/ }))
     await userEvent.click(screen.getByRole('button', { name: 'Issues' }))
     expect(await screen.findByText('The p99 was 18 ms.')).toBeInTheDocument()
     expect(screen.getByText('no source')).toBeInTheDocument()
@@ -229,7 +250,153 @@ describe('WriteApp', () => {
     const s = await services({}, MD)
     render(<WriteApp services={{ ...s, service: Object.assign(s.service, { updateText: async () => { throw new Error('storage is full') } }) }} />)
     await screen.findByLabelText('Article text')
-    fireEvent.click(screen.getByRole('button', { name: 'Check article' }))
+    fireEvent.click(screen.getByRole('button', { name: /Check article with/ }))
     expect(await screen.findByText('storage is full')).toBeInTheDocument()
+  })
+})
+
+
+describe('WriteApp chat: adjust, model, check', () => {
+  it('sends an adjustment as an ordinary chat message and the edits come back as suggestions, labelled with the model', async () => {
+    const s = await services({ capture: { articleId: null, ops: [] }, edits: { suggestions: [{ quote: 'It is quick.', replacement: 'It is, well, quick.', reason: 'more conversational' }] } }, MD + '\nIt is quick.\n')
+    render(<WriteApp services={s} />)
+    await screen.findByLabelText('Article text')
+    await userEvent.click(screen.getByRole('button', { name: 'Chat' }))
+    await userEvent.selectOptions(screen.getByLabelText('Adjust', { selector: 'select' }), 'tone-of-voice')
+    const how = screen.getByLabelText('How')
+    expect(document.querySelector(`datalist[id="${how.getAttribute('list')}"]`)?.querySelectorAll('option').length).toBeGreaterThan(5)
+    await userEvent.type(how, 'Conversational')
+    await userEvent.click(screen.getByRole('button', { name: 'Send adjustment' }))
+    expect(await screen.findByText(/tone of voice is: Conversational/)).toBeInTheDocument() // shown as the writer's own message
+    expect(await screen.findByText(/added 1 suggested change/)).toBeInTheDocument()
+    expect(screen.getAllByTitle('The model that wrote this').length).toBeGreaterThan(0)
+  })
+
+  it('lets the writer adjust something that is not listed', async () => {
+    const s = await services({ capture: { articleId: null, ops: [] }, edits: { suggestions: [] } }, MD)
+    render(<WriteApp services={s} />)
+    await screen.findByLabelText('Article text')
+    await userEvent.click(screen.getByRole('button', { name: 'Chat' }))
+    await userEvent.selectOptions(screen.getByLabelText('Adjust', { selector: 'select' }), 'other')
+    await userEvent.type(screen.getByLabelText('What to adjust'), 'pacing')
+    await userEvent.type(screen.getByLabelText('How'), 'slower in the middle')
+    await userEvent.click(screen.getByRole('button', { name: 'Send adjustment' }))
+    expect(await screen.findByText(/pacing is: slower in the middle/)).toBeInTheDocument()
+  })
+
+  it('the model picked next to the chat title is the one used and shown for the answer and for the check', async () => {
+    const s = await services({ capture: { articleId: null, ops: [] }, claims: { claims: [{ quote: 'The p99 was 18 ms.', kind: 'factual', matchesId: null, sure: true }] }, resolve: { affected: [] } }, MD)
+    render(<WriteApp services={s} />)
+    await screen.findByLabelText('Article text')
+    await userEvent.click(screen.getByRole('button', { name: 'Chat' }))
+    const picker = screen.getByLabelText('Model for the chat')
+    await userEvent.clear(picker)
+    await userEvent.type(picker, 'my-own-model')
+    fireEvent.blur(picker)
+    await waitFor(() => expect(s.models.chat()).toBe('my-own-model'))
+    await userEvent.type(screen.getByLabelText('Message'), 'hello')
+    await userEvent.click(screen.getByRole('button', { name: 'Send' }))
+    expect(await screen.findByText('Noted.')).toBeInTheDocument()
+    expect(screen.getAllByTitle('The model that wrote this')[0]).toHaveTextContent('my-own-model')
+    await userEvent.click(screen.getByRole('button', { name: 'Check article with my-own-model' }))
+    expect(await screen.findByText(/I found 1 factual claim/)).toBeInTheDocument()
+    expect(screen.getAllByTitle('The model that wrote this').at(-1)).toHaveTextContent('my-own-model')
+  })
+
+  it('warns in Settings when the automatic checks use the same model as the chat', async () => {
+    const s = await services({}, MD)
+    await s.models.setAuto(s.models.chat())
+    render(<WriteApp services={s} />)
+    await screen.findByLabelText('Article text')
+    await userEvent.click(screen.getByRole('button', { name: 'Settings' }))
+    expect(await screen.findByText(/same model as the chat/)).toBeInTheDocument()
+  })
+})
+
+describe('WriteApp sources under the text', () => {
+  const putCursor = (needle: string): void => {
+    const box = screen.getByLabelText('Article text') as HTMLTextAreaElement
+    const at = box.value.indexOf(needle)
+    box.setSelectionRange(at, at)
+    fireEvent.select(box)
+  }
+
+  it('shows the sources for the sentence under the cursor, adds one there, and detaches it', async () => {
+    const s = await services({}, MD)
+    render(<WriteApp services={s} />)
+    await screen.findByLabelText('Article text')
+    expect(screen.queryByRole('button', { name: 'Sources' })).toBeNull() // no Sources tab any more
+    expect(screen.getByText(/Click in the text to see its sources/)).toBeInTheDocument()
+    putCursor('18 ms')
+    const dock = screen.getByLabelText('Sources for this text')
+    expect(within(dock).getByText(/The p99 was 18 ms\./)).toBeInTheDocument()
+    await userEvent.type(within(dock).getByLabelText('Source text'), 'p99 latency: 18 ms')
+    await userEvent.click(within(dock).getByRole('button', { name: 'Add source' }))
+    expect(await within(dock).findByText(/p99 latency: 18 ms/)).toBeInTheDocument()
+    expect(within(dock).getByText('attached, not checked')).toBeInTheDocument()
+    await userEvent.click(within(dock).getByRole('button', { name: 'Detach' }))
+    await waitFor(() => expect(within(dock).getByText('No source attached.')).toBeInTheDocument())
+  })
+
+  it('attaches a dropped text file to the text under the cursor, and says so for a file it cannot read', async () => {
+    const s = await services({}, MD)
+    render(<WriteApp services={s} />)
+    await screen.findByLabelText('Article text')
+    putCursor('18 ms')
+    const dock = screen.getByLabelText('Sources for this text')
+    const good = new File(['p99: 18 ms measured on 8 cores'], 'bench.txt', { type: 'text/plain' })
+    const bad = new File(['%PDF'], 'paper.pdf', { type: 'application/pdf' })
+    fireEvent.drop(dock, { dataTransfer: { files: [good, bad] } })
+    expect((await within(dock).findAllByText('bench.txt')).length).toBeGreaterThan(0) // on the claim, and in the list of all sources
+    expect(await screen.findByText(/paper\.pdf: only text files can be read/)).toBeInTheDocument()
+  })
+
+  it('a file dropped into the chat is stored and the assistant proposes where it belongs, to confirm under the text', async () => {
+    const s = await services({ sourceLinks: { claims: [{ claimId: 'k1', relation: 'supports', reason: 'same figure', confidence: 0.9 }] } }, MD)
+    const id = (await s.service.list())[0].id
+    const at = MD.indexOf('18 ms')
+    const first = await s.service.addSource(id, { kind: 'upload', passage: 'first' })
+    await s.service.attachSourceToText(id, { start: at, end: at }, first) // makes claim k1
+    await s.service.detachSource(id, 'k1', first)
+    render(<WriteApp services={s} />)
+    await screen.findByLabelText('Article text')
+    await userEvent.click(screen.getByRole('button', { name: 'Chat' }))
+    fireEvent.drop(screen.getByRole('region', { name: 'Chat' }), { dataTransfer: { files: [new File(['p99 is 18 ms'], 'notes.txt', { type: 'text/plain' })] } })
+    expect(await screen.findByText(/notes\.txt: added/)).toBeInTheDocument()
+    putCursor('18 ms')
+    const dock = screen.getByLabelText('Sources for this text')
+    expect((await within(dock).findAllByText('notes.txt')).length).toBeGreaterThan(0)
+    expect(within(dock).getByText(/suggested 90%/)).toBeInTheDocument()
+    await userEvent.click(within(dock).getByRole('button', { name: 'Confirm' }))
+    await waitFor(() => expect(within(dock).queryByText(/suggested 90%/)).toBeNull())
+  })
+})
+
+describe('WriteApp ideas', () => {
+  it('collects ideas, lets the assistant suggest more (marked with the model), writes chosen ones in as suggestions, and marks them used when accepted', async () => {
+    const s = await services({
+      capture: { articleId: null, ops: [] },
+      ideas: { ideas: [{ text: 'Say what 18 ms means for users', sectionId: null }] },
+      edits: { suggestions: [{ quote: 'The p99 was 18 ms.', replacement: 'The p99 was 18 ms, which users cannot notice.', reason: 'idea', ideaIds: ['id1'] }] },
+    }, MD)
+    render(<WriteApp services={s} />)
+    await screen.findByLabelText('Article text')
+    await userEvent.click(screen.getByRole('button', { name: 'Ideas' }))
+    const panel = screen.getByRole('region', { name: 'Ideas' })
+    await userEvent.type(within(panel).getByLabelText('New idea'), 'Mention the re-run')
+    await userEvent.click(within(panel).getByRole('button', { name: 'Add idea' }))
+    expect(await within(panel).findByText('Mention the re-run')).toBeInTheDocument()
+    await userEvent.click(within(panel).getByRole('button', { name: /Suggest ideas with/ }))
+    expect(await within(panel).findByText('Say what 18 ms means for users')).toBeInTheDocument()
+    expect(within(panel).getByText(/Aielia · /)).toBeInTheDocument()
+    await userEvent.click(within(panel).getByLabelText('Choose: Mention the re-run'))
+    await userEvent.click(within(panel).getByRole('button', { name: /^Write 1 into the article with/ }))
+    expect(await screen.findByText(/added 1 suggested change from your ideas/)).toBeInTheDocument()
+    await userEvent.click(screen.getByRole('button', { name: 'Issues' }))
+    await userEvent.click(await screen.findByRole('button', { name: 'Accept' }))
+    await waitFor(async () => {
+      const b = await s.service.get((await s.service.list())[0].id)
+      expect(b.meta.ideas.find((i) => i.text === 'Mention the re-run')?.state).toBe('used')
+    })
   })
 })

@@ -1,17 +1,22 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
-import { DEPENDENCY_KINDS, DEPENDENCY_LABEL, computeReadiness, dependenciesOf, effectiveSourceStatus, sourcesForClaim, type DependencyKind, type ArticleBundle, type Claim, type Source, type ChangeSummary, type VersionComparison, type WritePermissions } from '@buildaharness/aielia'
+import { DEPENDENCY_KINDS, DEPENDENCY_LABEL, computeReadiness, dependenciesOf, effectiveSourceStatus, type DependencyKind, type ArticleBundle, type ChangeSummary, type VersionComparison, type WritePermissions } from '@buildaharness/aielia'
+import { AdjustBar } from './AdjustBar'
+import { ArticleSwitcher, type ArticleItem } from './ArticleSwitcher'
+import { IdeasPanel } from './IdeasPanel'
+import { ModelPicker } from './ModelPicker'
+import { SourceDock, type NewSource } from './SourceDock'
 import type { WriteServices } from './write-services'
 import './write.css'
 
-type Tab = 'text' | 'outline' | 'issues' | 'sources' | 'links' | 'history' | 'chat' | 'settings'
+type Tab = 'text' | 'outline' | 'ideas' | 'issues' | 'links' | 'history' | 'chat' | 'settings'
 type VersionRow = { index: number; kind: 'published' | 'checkpoint'; label?: string; at: string; change: ChangeSummary }
-interface ChatLine { id: number; from: 'you' | 'aielia'; text: string }
+interface ChatLine { id: number; from: 'you' | 'aielia'; text: string; model?: string }
 
 const TABS: { id: Tab; label: string }[] = [
   { id: 'text', label: 'Text' },
   { id: 'outline', label: 'Outline' },
+  { id: 'ideas', label: 'Ideas' },
   { id: 'issues', label: 'Issues' },
-  { id: 'sources', label: 'Sources' },
   { id: 'links', label: 'Links' },
   { id: 'history', label: 'History' },
   { id: 'chat', label: 'Chat' },
@@ -22,7 +27,7 @@ const ICONS: Record<Tab, string> = {
   text: 'M5 5h14M5 9h14M5 13h14M5 17h9',
   outline: 'M8 6h12M8 12h12M8 18h12M4 6h.01M4 12h.01M4 18h.01',
   issues: 'M12 3 2.5 20h19L12 3zM12 10v4M12 17h.01',
-  sources: 'M6 3h9l4 4v14H6zM15 3v4h4M9 12h6M9 16h6',
+  ideas: 'M9 18h6M10 21h4M12 3a6 6 0 0 0-3.5 10.9c.6.5 1 1.2 1 2.1h5c0-.9.4-1.6 1-2.1A6 6 0 0 0 12 3z',
   links: 'M10 14a4 4 0 0 0 5.7 0l3-3a4 4 0 0 0-5.7-5.7l-1 1M14 10a4 4 0 0 0-5.7 0l-3 3a4 4 0 0 0 5.7 5.7l1-1',
   history: 'M3 12a9 9 0 1 0 3-6.7M3 4v5h5M12 7v5l3 2',
   chat: 'M4 5h16v11H9l-5 4z',
@@ -76,7 +81,7 @@ let lineId = 0
 
 export function WriteApp({ services }: { services: WriteServices }): React.JSX.Element {
   const { service, port } = services
-  const [articles, setArticles] = useState<{ id: string; title: string }[]>([])
+  const [articles, setArticles] = useState<ArticleItem[]>([])
   const [activeId, setActiveId] = useState<string | undefined>()
   const [bundle, setBundle] = useState<ArticleBundle | undefined>()
   const [draft, setDraft] = useState('')
@@ -94,6 +99,10 @@ export function WriteApp({ services }: { services: WriteServices }): React.JSX.E
   const [chat, setChat] = useState<ChatLine[]>([])
   const [chatInput, setChatInput] = useState('')
   const [askForEdits, setAskForEdits] = useState(false)
+  // Where the cursor or selection is in the text: the sources dock shows the sources for that text.
+  const [selection, setSelection] = useState<{ start: number; end: number } | null>(null)
+  const [, setModelTick] = useState(0)
+  const chatModel = services.models.chat()
   const [perms, setPerms] = useState<WritePermissions | undefined>()
   const permsRef = useRef<WritePermissions | undefined>(undefined)
   const saveTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
@@ -142,12 +151,23 @@ export function WriteApp({ services }: { services: WriteServices }): React.JSX.E
   }
 
   async function createArticle(): Promise<void> {
-    const title = window.prompt('Title of the new article?')?.trim()
+    const title = window.prompt('Name of the new article?')?.trim()
     if (!title) return
     await run('Creating', async () => {
       const id = await service.create(title, `# ${title}\n\n`)
       await refreshList()
       await select(id)
+    })
+  }
+
+  async function renameArticle(): Promise<void> {
+    if (!activeId) return
+    const current = articles.find((a) => a.id === activeId)
+    const name = window.prompt('New name for this article?', current?.name ?? current?.title ?? '')?.trim()
+    if (!name) return
+    await run('Renaming', async () => {
+      await service.rename(activeId, name)
+      await refreshList()
     })
   }
 
@@ -252,14 +272,93 @@ export function WriteApp({ services }: { services: WriteServices }): React.JSX.E
     await run('Removing the link', async () => { await service.removeDependency(activeId, linkId); await reload(activeId) })
   }
 
-  async function check(): Promise<void> {
+  /** A check started from the chat, with the model chosen there. The result is said in the chat, with the model's name. */
+  async function checkFromChat(): Promise<void> {
     if (!activeId) return
-    await run('Checking the article', async () => {
+    const used = services.models.chat()
+    setChat((c) => [...c, { id: ++lineId, from: 'you', text: 'Check the article' }])
+    await run(`Checking with ${used}`, async () => {
       if (saveTimer.current) clearTimeout(saveTimer.current)
-      const o = await service.updateText(activeId, draft)
-      const full = o.changedSectionIds.length === 0 ? await service.analyze(activeId) : o
-      setBundle((await service.get(activeId)) ?? full.bundle)
-      if (full.extraction?.status === 'not_extracted') setNotice('The claim check could not run. Nothing was marked as checked.')
+      const o = await service.updateText(activeId, draft, { model: used })
+      const full = o.changedSectionIds.length === 0 ? await service.analyze(activeId, used) : o
+      const b = await service.get(activeId)
+      setBundle(b)
+      let text: string
+      if (!full.extraction || full.extraction.status === 'not_extracted') {
+        text = 'The check could not run, so nothing was marked as checked.'
+      } else {
+        const factual = b.meta.claims.filter((c) => c.kind === 'factual')
+        const statuses = factual.map((c) => effectiveSourceStatus(c, b.meta.sources))
+        const supported = statuses.filter((x) => x === 'supported').length
+        const unsourced = statuses.filter((x) => x === 'none' || x === 'attached').length
+        const look = statuses.length - supported - unsourced
+        const flagged = full.resolution?.flagged.length ?? 0
+        text = `I found ${factual.length} factual claim${factual.length === 1 ? '' : 's'}: ${supported} supported, ${unsourced} without a checked source, ${look} to look at.${flagged > 0 ? ` ${flagged} other section${flagged === 1 ? '' : 's'} may need a look because of what changed.` : ''} Details are in Issues.`
+      }
+      setChat((c) => [...c, { id: ++lineId, from: 'aielia', text, model: used }])
+    })
+  }
+
+  const isTextFile = (f: File): boolean => f.type.startsWith('text/') || ['.txt', '.md', '.csv', '.tsv', '.json', '.log'].some((ext) => f.name.toLowerCase().endsWith(ext))
+
+  /** Stores a source and either attaches it to the text under the cursor or asks the assistant where it belongs. */
+  async function addSourceAndPlace(src: NewSource, attachHere: boolean): Promise<string | undefined> {
+    if (!activeId) return undefined
+    await flushDraft()
+    const sid = await service.addSource(activeId, src)
+    if (attachHere && selection) {
+      const r = await service.attachSourceToText(activeId, selection, sid)
+      if (!r.ok) setNotice(r.reason)
+    } else {
+      const r = await service.proposeLinksForSource(activeId, sid, services.models.chat())
+      setNotice(r.status === 'failed' ? 'Source stored. Finding where it belongs could not run.' : r.added.length === 0 ? 'Source stored. I did not find a claim it bears on.' : `Source stored. It may back ${r.added.length} claim${r.added.length === 1 ? '' : 's'}: click in the text to confirm.`)
+    }
+    return sid
+  }
+
+  async function dropFiles(files: File[], attachHere: boolean, say = false): Promise<void> {
+    if (!activeId) return
+    await run('Adding the files', async () => {
+      const lines: string[] = []
+      for (const f of files) {
+        if (!isTextFile(f)) { lines.push(`${f.name}: only text files can be read for now.`); continue }
+        await addSourceAndPlace({ kind: 'upload', address: f.name, passage: await f.text() }, attachHere)
+        lines.push(`${f.name}: added.`)
+      }
+      await reload(activeId)
+      if (say) setChat((c) => [...c, { id: ++lineId, from: 'aielia', text: `${lines.join('\n')}\nI stored ${files.length === 1 ? 'it' : 'them'} and looked for the claims they bear on. Click in the text to see and confirm them under it.`, model: services.models.chat() }])
+      else setNotice(lines.join(' '))
+    })
+  }
+
+  async function addIdeaText(text: string, sectionId: string | undefined): Promise<void> {
+    if (!activeId) return
+    await run('Adding the idea', async () => {
+      const r = await service.addIdea(activeId, { text, sectionId })
+      if (!r.ok) setNotice(r.reason)
+      await reload(activeId)
+    })
+  }
+
+  async function suggestIdeasNow(request: string): Promise<void> {
+    if (!activeId) return
+    const used = services.models.chat()
+    await run(`Finding ideas with ${used}`, async () => {
+      await flushDraft()
+      const r = await service.suggestIdeas(activeId, request, used)
+      await reload(activeId)
+      setNotice(r.status === 'failed' ? 'The search for ideas could not run.' : r.added.length === 0 ? 'I had nothing new to add.' : `Added ${r.added.length} idea${r.added.length === 1 ? '' : 's'} (${used}).`)
+    })
+  }
+
+  async function writeIdeasNow(ids: string[], how: string): Promise<void> {
+    if (!activeId) return
+    const used = services.models.chat()
+    await run(`Writing the ideas in with ${used}`, async () => {
+      await flushDraft()
+      const r = await service.writeIdeasIn(activeId, ids, how, used)
+      await reload(activeId)
+      setNotice(r.status === 'failed' ? 'I could not turn the ideas into edits.' : r.added.length === 0 ? 'I found no place in the text for those ideas.' : `I added ${r.added.length} suggested change${r.added.length === 1 ? '' : 's'} from your ideas (${used}). Accept them in Issues.`)
     })
   }
 
@@ -303,24 +402,26 @@ export function WriteApp({ services }: { services: WriteServices }): React.JSX.E
     })
   }
 
-  async function sendChat(): Promise<void> {
-    const text = chatInput.trim()
+  /** One chat message, the same path whether typed or composed by the Adjust control. `edits` overrides the "ask for edits" box for this message. */
+  async function sendChat(override?: string, edits?: boolean): Promise<void> {
+    const text = (override ?? chatInput).trim()
     if (!text) return
-    setChatInput('')
+    const wantEdits = edits ?? askForEdits
+    if (override === undefined) setChatInput('')
     setChat((c) => [...c, { id: ++lineId, from: 'you', text }])
-    await run(askForEdits ? 'Asking for edits' : 'Thinking', async () => {
+    await run(wantEdits ? 'Asking for edits' : 'Thinking', async () => {
       if (activeId) await service.updateText(activeId, draft, { analyze: false })
-      if (askForEdits && activeId) {
+      if (wantEdits && activeId) {
         // Record what the writer said (comments, corrections) the same way a chat turn does, then turn the request into suggestions.
-        const reply = await services.chat(text, activeId)
-        const r = await service.suggest(activeId, text)
+        const { reply, model: said } = await services.chat(text, activeId)
+        const r = await service.suggest(activeId, text, said)
         setBundle(await service.get(activeId))
         const summary = r.status === 'failed' ? 'I could not turn that into edits.' : r.added.length === 0 ? 'I found nothing to change in the text for that.' : `I added ${r.added.length} suggested change${r.added.length === 1 ? '' : 's'}. Open Issues to accept or reject them.`
-        setChat((c) => [...c, { id: ++lineId, from: 'aielia', text: `${reply}\n\n${summary}` }])
+        setChat((c) => [...c, { id: ++lineId, from: 'aielia', text: `${reply}\n\n${summary}`, model: said }])
       } else {
-        const reply = await services.chat(text, activeId)
+        const { reply, model: said } = await services.chat(text, activeId)
         if (activeId) setBundle(await service.get(activeId))
-        setChat((c) => [...c, { id: ++lineId, from: 'aielia', text: reply }])
+        setChat((c) => [...c, { id: ++lineId, from: 'aielia', text: reply, model: said }])
       }
     })
   }
@@ -333,13 +434,9 @@ export function WriteApp({ services }: { services: WriteServices }): React.JSX.E
     <div className="write">
       <header className="write__bar">
         <h1 className="write__title">Aielia Write</h1>
-        <select className="write__switch" aria-label="Article" value={activeId ?? ''} onChange={(e) => void select(e.target.value)} disabled={articles.length === 0}>
-          {articles.length === 0 && <option value="">No articles yet</option>}
-          {articles.map((a) => <option key={a.id} value={a.id}>{a.title}</option>)}
-        </select>
+        <ArticleSwitcher articles={articles} activeId={activeId} onSelect={(id) => void select(id)} onRename={() => void renameArticle()} />
         <div className="write__actions">
           <button type="button" onClick={() => void createArticle()}>New</button>
-          <button type="button" onClick={() => void check()} disabled={!activeId || busy !== null}>Check article</button>
           <button type="button" onClick={() => void publish()} disabled={!activeId || busy !== null}>Publish</button>
           <button type="button" onClick={() => void exportArticle()} disabled={!activeId}>Export</button>
           <label className="write__import">Import<input type="file" accept="application/json,.json" onChange={(e) => { const f = e.target.files?.[0]; if (f) void importArticle(f); e.target.value = '' }} /></label>
@@ -447,19 +544,8 @@ export function WriteApp({ services }: { services: WriteServices }): React.JSX.E
                   </>
                 )}
               </section>
-              <section className={`write__pane write__panel-pane ${tab === 'sources' ? 'is-shown' : ''}`} aria-label="Sources">
-                <SourceForm onAdd={(input) => run('Adding the source', async () => { await service.addSource(activeId, input); await reload(activeId) })} />
-                <ul className="write__list">
-                  {meta.sources.map((s) => (
-                    <li key={s.id}>
-                      <strong>{s.kind === 'say_so' ? 'Your say-so' : s.address ?? s.kind}</strong> <span className="write__badge">{s.freshness}</span>
-                      {s.trust === 'lower' && <span className="write__badge">lower trust</span>}
-                      <p className="write__reason">{s.note ?? (s.passage ? `${s.passage.slice(0, 160)}${s.passage.length > 160 ? '…' : ''}` : '')}</p>
-                      <AttachControl claims={meta.claims.filter((c) => c.kind === 'factual')} sourceId={s.id} attached={(c) => sourcesForClaim(meta, c.id).some((x: Source) => x.id === s.id)} onAttach={(claimId) => run('Attaching', async () => { await service.attachSource(activeId, claimId, s.id); await reload(activeId) })} />
-                    </li>
-                  ))}
-                  {meta.sources.length === 0 && <li className="write__muted">No sources yet. Add a passage, a file or your own say-so.</li>}
-                </ul>
+              <section className={`write__pane write__panel-pane ${tab === 'ideas' ? 'is-shown' : ''}`} aria-label="Ideas">
+                <IdeasPanel meta={meta} busy={busy !== null} model={chatModel} onAdd={(t, sec) => void addIdeaText(t, sec)} onSuggest={(r) => void suggestIdeasNow(r)} onWrite={(ids, how) => void writeIdeasNow(ids, how)} onState={(id, st) => void run('Saving', async () => { await service.updateIdea(activeId, id, { state: st }); await reload(activeId) })} onRemove={(id) => void run('Saving', async () => { await service.deleteIdea(activeId, id); await reload(activeId) })} />
               </section>
               <section className={`write__pane write__panel-pane ${tab === 'links' ? 'is-shown' : ''}`} aria-label="Links">
                 <h2 className="write__panehead">Links between sections</h2>
@@ -555,25 +641,57 @@ export function WriteApp({ services }: { services: WriteServices }): React.JSX.E
             <p className="write__muted">Create or import an article to use the panels.</p>
           )}
           <section className={`write__pane write__panel-pane ${tab === 'settings' ? 'is-shown' : ''}`} aria-label="Settings">
-            <SettingsPane perms={perms} spent={services.spentUsd()} onSave={(p) => run('Saving', async () => { await services.permissions.set(p); permsRef.current = p; setPerms(p) })} />
+            <SettingsPane perms={perms} spent={services.spentUsd()} autoModel={services.models.auto()} chatModel={chatModel} suggestions={services.models.suggestions} onAutoModel={(m) => void services.models.setAuto(m).then(() => setModelTick((t) => t + 1))} onSave={(p) => run('Saving', async () => { await services.permissions.set(p); permsRef.current = p; setPerms(p) })} />
           </section>
         </aside>
         {!activeId || !bundle || !meta ? (
           <p className="write__empty">Create an article, or import one, to begin.</p>
         ) : (
           <section className={`write__pane write__pane--text ${tab === 'text' ? 'is-shown' : ''}`} aria-label="Text">
-            <textarea ref={textRef} aria-label="Article text" value={draft} onChange={(e) => onType(e.target.value)} spellCheck />
+            <textarea ref={textRef} aria-label="Article text" value={draft} onChange={(e) => onType(e.target.value)} onSelect={(e) => setSelection({ start: e.currentTarget.selectionStart, end: e.currentTarget.selectionEnd })} onClick={(e) => setSelection({ start: e.currentTarget.selectionStart, end: e.currentTarget.selectionEnd })} spellCheck />
+            <SourceDock
+              meta={meta}
+              markdown={draft}
+              selection={selection}
+              busy={busy !== null}
+              model={chatModel}
+              onAdd={(src, here) => void run('Adding the source', async () => { await addSourceAndPlace(src, here); await reload(activeId) })}
+              onDropFiles={(files, here) => void dropFiles(files, here)}
+              onDetach={(claimId, sourceId) => void run('Saving', async () => { await service.detachSource(activeId, claimId, sourceId); await reload(activeId) })}
+              onConfirm={(claimId, sourceId) => void run('Saving', async () => { const link = meta.links.find((l) => l.kind === 'supported_by' && l.from.id === claimId && l.to.id === sourceId); if (link) await service.confirmDependency(activeId, link.id); await reload(activeId) })}
+              onCheck={(claimId) => void run(`Checking with ${chatModel}`, async () => { const r = await service.checkClaim(activeId, claimId, chatModel); await reload(activeId); setNotice(r.status === 'checked' ? `Checked with ${chatModel}: ${r.verdict.replace('_', ' ')}. ${r.reason}` : r.status === 'no_sources' ? 'There is no stored passage to check against.' : r.reason) })}
+            />
           </section>
         )}
-        <section className={`write__pane write__pane--chat ${tab === 'chat' ? 'is-shown' : ''}`} aria-label="Chat">
+        <section className={`write__pane write__pane--chat ${tab === 'chat' ? 'is-shown' : ''}`} aria-label="Chat"
+          onDragOver={(e) => e.preventDefault()}
+          onDrop={(e) => { e.preventDefault(); const files = Array.from(e.dataTransfer.files); if (files.length > 0) void dropFiles(files, false, true) }}>
+          <header className="write__chathead">
+            <h2 className="write__panehead">Chat</h2>
+            <ModelPicker label="Model for the chat" value={chatModel} suggestions={services.models.suggestions} onChange={(m) => void services.models.setChat(m).then(() => setModelTick((t) => t + 1))} />
+          </header>
           <ul className="write__chat" aria-live="polite">
-            {chat.map((l) => <li key={l.id} className={`write__line write__line--${l.from}`}>{l.text}</li>)}
-            {chat.length === 0 && <li className="write__muted">Talk to Aielia about the article, or paste reviewer comments here.</li>}
+            {chat.map((l) => (
+              <li key={l.id} className={`write__line write__line--${l.from}`}>
+                <div>{l.text}</div>
+                {l.from === 'aielia' && l.model && (
+                  <div className="write__linemeta">
+                    <span className="write__linemodel" title="The model that wrote this">{l.model}</span>
+                    {activeId && <button type="button" className="write__link" onClick={() => void run('Saving', async () => { const r = await service.addIdea(activeId, { text: l.text, origin: 'assistant', model: l.model }); if (!r.ok) setNotice(r.reason); await reload(activeId) })}>Save to ideas</button>}
+                  </div>
+                )}
+              </li>
+            ))}
+            {chat.length === 0 && <li className="write__muted">Talk to Aielia about the article, paste reviewer comments, or drop a file here to use it as a source.</li>}
           </ul>
+          <AdjustBar disabled={busy !== null || !activeId} onSend={(m) => { setAskForEdits(true); void sendChat(m, true) }} />
           <label className="write__toggle"><input type="checkbox" checked={askForEdits} onChange={(e) => setAskForEdits(e.target.checked)} /> Ask for edits (they arrive as suggestions)</label>
           <div className="write__compose">
             <textarea aria-label="Message" value={chatInput} onChange={(e) => setChatInput(e.target.value)} rows={3} />
-            <button type="button" onClick={() => void sendChat()} disabled={busy !== null || !chatInput.trim()}>Send</button>
+            <div className="write__composebar">
+              <button type="button" onClick={() => void checkFromChat()} disabled={!activeId || busy !== null} title={`Find the claims and check them against their sources, with ${chatModel}`}>Check article with {chatModel}</button>
+              <button type="button" onClick={() => void sendChat()} disabled={busy !== null || !chatInput.trim()}>Send</button>
+            </div>
           </div>
         </section>
       </main>
@@ -581,41 +699,7 @@ export function WriteApp({ services }: { services: WriteServices }): React.JSX.E
   )
 }
 
-function SourceForm({ onAdd }: { onAdd: (input: { kind: Source['kind']; address?: string; passage?: string; note?: string }) => Promise<void> }): React.JSX.Element {
-  const [kind, setKind] = useState<'upload' | 'web' | 'say_so'>('upload')
-  const [address, setAddress] = useState('')
-  const [text, setText] = useState('')
-  async function readFile(file: File): Promise<void> {
-    setText(await file.text())
-    setAddress(file.name)
-  }
-  return (
-    <form className="write__form" onSubmit={(e) => { e.preventDefault(); void onAdd(kind === 'say_so' ? { kind, note: text } : { kind, address: address || undefined, passage: text }).then(() => { setText(''); setAddress('') }) }}>
-      <select aria-label="Kind of source" value={kind} onChange={(e) => setKind(e.target.value as typeof kind)}>
-        <option value="upload">A file or pasted text</option>
-        <option value="web">A web page (paste the passage)</option>
-        <option value="say_so">My own word</option>
-      </select>
-      {kind !== 'say_so' && <input aria-label="Name or address" placeholder="File name or address" value={address} onChange={(e) => setAddress(e.target.value)} />}
-      <textarea aria-label="Source text" placeholder={kind === 'say_so' ? 'What you know, in a sentence' : 'The passage'} value={text} onChange={(e) => setText(e.target.value)} rows={4} />
-      {kind === 'upload' && <input type="file" aria-label="Choose a text file" onChange={(e) => { const f = e.target.files?.[0]; if (f) void readFile(f) }} />}
-      <button type="submit" disabled={!text.trim()}>Add source</button>
-    </form>
-  )
-}
-
-function AttachControl({ claims, sourceId, attached, onAttach }: { claims: Claim[]; sourceId: string; attached: (c: Claim) => boolean; onAttach: (claimId: string) => Promise<void> }): React.JSX.Element {
-  const free = claims.filter((c) => !attached(c))
-  if (claims.length === 0) return <span className="write__muted">Find the claims first.</span>
-  return (
-    <select aria-label={`Attach source ${sourceId} to a claim`} value="" onChange={(e) => { if (e.target.value) void onAttach(e.target.value) }}>
-      <option value="">Attach to a claim…</option>
-      {free.map((c) => <option key={c.id} value={c.id}>{c.quote.slice(0, 70)}</option>)}
-    </select>
-  )
-}
-
-function SettingsPane({ perms, spent, onSave }: { perms: WritePermissions | undefined; spent: number; onSave: (p: WritePermissions) => Promise<void> }): React.JSX.Element {
+function SettingsPane({ perms, spent, autoModel, chatModel, suggestions, onAutoModel, onSave }: { perms: WritePermissions | undefined; spent: number; autoModel: string; chatModel: string; suggestions: string[]; onAutoModel: (model: string) => void; onSave: (p: WritePermissions) => Promise<void> }): React.JSX.Element {
   const [cap, setCap] = useState<string>('')
   useEffect(() => setCap(perms?.spendCapUsd !== undefined ? String(perms.spendCapUsd) : ''), [perms])
   if (!perms) return <p className="write__muted">Loading…</p>
@@ -625,6 +709,10 @@ function SettingsPane({ perms, spent, onSave }: { perms: WritePermissions | unde
       <p>Aielia only ever changes your text as suggestions you accept. These are the other things it may do on its own.</p>
       <label><input type="checkbox" checked={perms.captureChat} onChange={(e) => void save({ captureChat: e.target.checked })} /> Remember reviewer comments, decisions and corrections I mention in chat</label>
       <label><input type="checkbox" checked={perms.autoCheck} onChange={(e) => void save({ autoCheck: e.target.checked })} /> Check claims and effects by itself when I stop typing (uses your key)</label>
+      <label>Model for the automatic checks
+        <ModelPicker label="Model for the automatic checks" value={autoModel} suggestions={suggestions} onChange={onAutoModel} />
+      </label>
+      {autoModel === chatModel && <p className="write__warn">The automatic checks use the same model as the chat. A different, smaller model gives you a second opinion and costs less.</p>}
       <label>Stop using my key after this much, in US dollars (blank for no limit)
         <input aria-label="Spending cap" inputMode="decimal" value={cap} onChange={(e) => setCap(e.target.value)} onBlur={() => { const n = Number(cap); void save({ spendCapUsd: cap.trim() !== '' && Number.isFinite(n) && n > 0 ? n : undefined }) }} />
       </label>

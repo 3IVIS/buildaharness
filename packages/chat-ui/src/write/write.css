@@ -5,7 +5,17 @@
 /* Header: the name and the article switcher on the left, the actions on the right. */
 .write__bar { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; padding: 10px 16px; border-bottom: 1px solid var(--border); background: var(--surface); }
 .write__title { font-size: 1.1rem; margin: 0 8px 0 0; }
-.write__switch { flex: 1 1 100%; min-width: 0; max-width: 100%; }
+/* The article switcher: a short name, cut off with an ellipsis when it is long. */
+.write__switcher { position: relative; flex: 1 1 100%; min-width: 0; max-width: 100%; }
+.write .write__switch { display: flex; align-items: center; justify-content: space-between; gap: 8px; width: 100%; max-width: 100%; text-align: left; }
+.write__switchname { display: block; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.write__menu { position: absolute; z-index: 20; top: calc(100% + 4px); left: 0; margin: 0; padding: 4px; list-style: none; min-width: 100%; max-width: min(420px, 90vw); background: var(--surface); border: 1px solid var(--border); border-radius: 8px; box-shadow: 0 8px 24px var(--shadow); }
+.write__menu li { margin: 0; }
+.write .write__menu button { display: block; width: 100%; text-align: left; background: none; border: none; border-radius: 6px; min-height: 36px; }
+.write .write__menu button:hover, .write .write__menu button.is-on { background: var(--tint-2); }
+.write__menu-sep { border-top: 1px solid var(--border); margin-top: 4px; padding-top: 4px; }
+.write__model input { width: 100%; min-width: 0; font-size: 0.85rem; padding: 4px 8px; }
+.write__model { display: inline-block; min-width: 0; flex: 1 1 140px; }
 .write__actions { display: flex; flex-wrap: wrap; gap: 8px; }
 .write button, .write select, .write input, .write textarea, .write__import { font: inherit; color: var(--text); background: var(--tint-2); border: 1px solid var(--border); border-radius: 6px; padding: 6px 10px; }
 .write button { cursor: pointer; min-height: 40px; }
@@ -60,6 +70,27 @@
 .write__pre { white-space: pre-wrap; overflow-wrap: anywhere; margin: 8px 0; padding: 8px; max-height: 320px; overflow: auto; font: 0.85rem/1.5 ui-monospace, Menlo, monospace; background: var(--tint-1); border-radius: 6px; }
 .write__diff--add { color: var(--green); }
 .write__diff--del { color: var(--red); }
+.write__chathead { display: flex; align-items: center; gap: 10px; margin-bottom: 8px; }
+.write__chathead h2 { margin: 0; flex: none; }
+.write__linemeta { display: flex; flex-wrap: wrap; gap: 4px 10px; align-items: center; margin-top: 6px; }
+.write__linemodel { font: 0.75rem ui-monospace, Menlo, monospace; color: var(--muted); border: 1px solid var(--border); border-radius: 999px; padding: 0 8px; }
+.write__adjust { display: grid; gap: 6px; margin-bottom: 8px; padding: 8px; border: 1px solid var(--border); border-radius: 8px; background: var(--tint-1); }
+.write__adjust select, .write__adjust input { width: 100%; min-width: 0; }
+.write__composebar { display: flex; flex-wrap: wrap; gap: 8px; justify-content: space-between; }
+.write__composebar button { overflow-wrap: anywhere; }
+/* Sources for the text under the cursor, at the bottom of the text. */
+.write__dock { margin-top: 10px; border: 1px solid var(--border); border-radius: 8px; background: var(--surface); min-width: 0; }
+.write__dock.is-over { border-color: var(--accent); background: var(--accent-a08); }
+.write__dockhead { display: flex; align-items: baseline; gap: 10px; padding: 8px 12px; border-bottom: 1px solid var(--border); }
+.write__dockfor { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--muted); font-size: 0.9rem; }
+.write__dockbody { padding: 8px 12px 12px; max-height: 280px; overflow: auto; }
+.write__dsrc { padding: 6px 0 2px 10px; border-left: 2px solid var(--border); margin: 6px 0; }
+.write__dockform { display: grid; gap: 6px; }
+.write__filepick { display: inline-block; margin-top: 6px; color: var(--muted); font-size: 0.9rem; }
+.write__dropzone { margin-top: 8px; padding: 8px; border: 1px dashed var(--border); border-radius: 8px; }
+.write__allsrc { margin-top: 10px; font-size: 0.9rem; }
+.write__ideatext { display: flex; gap: 8px; align-items: flex-start; }
+.write__ideas li.is-done { opacity: 0.7; }
 .write__chat { list-style: none; margin: 0 0 12px; padding: 0; display: grid; gap: 8px; align-content: start; }
 .write__line { padding: 8px 12px; border-radius: 8px; white-space: pre-wrap; }
 .write__line--you { background: var(--accent-a18); justify-self: end; }
@@ -80,7 +111,7 @@
    (click it again to close it). The text takes the room that is left, and the chat is always there on the right. */
 @media (min-width: 960px) {
   .write { height: 100dvh; min-height: 0; }
-  .write__switch { flex: 0 1 360px; }
+  .write__switcher { flex: 0 1 280px; }
   .write__actions { margin-left: auto; }
   .write__main { min-height: 0; padding: 0; display: grid; grid-template-columns: 76px var(--panel-w, 340px) minmax(0, 1fr) minmax(320px, 400px); grid-template-rows: minmax(0, 1fr); overflow: hidden; }
   .write__main[data-open='false'] { --panel-w: 0px; }
@@ -89,9 +120,11 @@
   .write__panel { display: block; grid-column: 2; min-width: 0; overflow: auto; padding: 14px; border-right: 1px solid var(--border); }
   .write__main[data-open='false'] .write__panel { display: none; }
   .write__pane--text { display: flex; grid-column: 3; min-height: 0; padding: 14px; }
-  .write__pane--text textarea { flex: 1; min-height: 0; resize: none; }
+  .write__pane--text { flex-direction: column; }
+  .write__pane--text textarea { flex: 1; min-height: 120px; resize: none; }
+  .write__dock { flex: none; max-height: 45%; display: flex; flex-direction: column; }
+  .write__dockbody { min-height: 0; max-height: none; }
   .write__empty { grid-column: 3; padding: 14px; }
   .write__pane--chat { display: flex; flex-direction: column; grid-column: 4; min-height: 0; padding: 14px; border-left: 1px solid var(--border); }
-  .write__pane--chat::before { content: 'Chat'; font-weight: 700; margin-bottom: 8px; }
-  .write__pane--chat .write__chat { flex: 1; overflow: auto; min-height: 0; }
+    .write__pane--chat .write__chat { flex: 1; overflow: auto; min-height: 0; }
 }
