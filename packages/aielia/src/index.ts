@@ -157,3 +157,13 @@ export { WriterChatStateSchema, WriterCommentSchema, WriterCorrectionSchema, WRI
 export type { WriterChatState, WriterComment, WriterCorrection, ArticleRef, CaptureOp, ApplyResult } from './writer/writer-chat-state.js'
 export { captureChatState } from './writer/writer-chat-capture.js'
 export type { CaptureResult, CaptureStatus } from './writer/writer-chat-capture.js'
+// Aielia Write: the article model, its rules, folder format and stored sources
+export { ArticleMetaSchema, SectionSchema, ClaimSchema, SourceSchema, LinkSchema, SuggestionSchema, ARTICLE_META_VERSION, createArticleMeta, parseArticleMeta } from './writer/article-model.js'
+export type { ArticleMeta, Section, Claim, Source, Link, Suggestion, SourceStatus, ReviewState, LoadResult } from './writer/article-model.js'
+export { parseSections, reconcileSections } from './writer/article-sections.js'
+export type { ReconcileResult, ParsedHeading } from './writer/article-sections.js'
+export { effectiveSourceStatus, editClaimText, setSectionReview, removeLink, confirmLink, checkIntegrity, computeReadiness, createSnapshot, restoreSnapshot } from './writer/article-rules.js'
+export type { Actor, Problem, Readiness, Snapshot } from './writer/article-rules.js'
+export { serializeArticle, loadArticleFolder } from './writer/article-folder.js'
+export type { ArticleFolder, ArticleBundle, FolderLoad } from './writer/article-folder.js'
+export { fingerprintPassage, createSource, applyRecheck, acceptNewPassage } from './writer/article-sources.js'
