@@ -138,6 +138,7 @@ export function WriteApp({ services }: { services: WriteServices }): React.JSX.E
   }
 
   /** Runs a change to the article that starts from the saved text, then shows the result. */
+  const [candidates, setCandidates] = useState<Record<string, { title: string; url: string; snippet: string }[]>>({})
   const [profiles, setProfiles] = useState<StyleProfile[]>([])
   useEffect(() => { void service.profiles().then(setProfiles).catch(() => undefined) }, [service])
 
@@ -485,6 +486,19 @@ export function WriteApp({ services }: { services: WriteServices }): React.JSX.E
                 const r = await service.readSource(id, sourceId, services.models.auto())
                 setNotice(r.status === 'read' ? 'I read the page and stored its text.' : r.status === 'unchanged' ? 'The page has not changed.' : r.status === 'changed' ? `The page has changed. ${r.impacts.filter((i) => i.impact !== 'none').length} claim${r.impacts.filter((i) => i.impact !== 'none').length === 1 ? '' : 's'} may be affected. Accept the new text to use it.` : r.reason ?? 'The page could not be read.')
               })}
+              canSearch={services.canSearch}
+              candidates={candidates}
+              onFindSources={(claimId) => change('Searching the web', async (id) => {
+                const r = await service.findSourceCandidates(id, claimId)
+                if (r.status === 'found') setCandidates((c) => ({ ...c, [claimId]: r.results }))
+                else setNotice(r.reason ?? 'The search could not run.')
+              })}
+              onUseCandidate={(claimId, url) => change('Reading the page', async (id) => {
+                const r = await service.useSourceCandidate(id, claimId, url)
+                setCandidates((c) => { const { [claimId]: _gone, ...rest } = c; void _gone; return rest })
+                setNotice(!r.ok ? r.reason ?? 'That page could not be used.' : r.read === 'read' || r.read === 'unchanged' ? 'Source added and read. Check the claim against it when you like.' : 'Source added, but the page could not be read here. Paste the passage to check against it.')
+              })}
+              onDismissCandidates={(claimId) => setCandidates((c) => { const { [claimId]: _gone, ...rest } = c; void _gone; return rest })}
               onAcceptNew={(sourceId) => change('Saving', async (id) => { const r = await service.acceptSourceChange(id, sourceId); if (!r.ok && r.reason) setNotice(r.reason) })}
               onCheck={(claimId) => change(`Checking with ${chatModel}`, async (id) => { const r = await service.checkClaim(id, claimId, chatModel); setNotice(r.status === 'checked' ? `Checked with ${chatModel}: ${r.verdict.replace('_', ' ')}. ${r.reason}` : r.status === 'no_sources' ? 'There is no stored passage to check against.' : r.reason) })}
             />

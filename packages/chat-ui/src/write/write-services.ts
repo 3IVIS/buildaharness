@@ -43,6 +43,8 @@ export interface WriteServices {
   permissions: { get(): Promise<WritePermissions>; set(p: WritePermissions): Promise<void> }
   /** Dollars spent on model calls in this browser so far (counts toward the cap). */
   spentUsd(): number
+  /** Whether this page can search the web for sources (a proxy and a search key are set up). */
+  canSearch: boolean
   /** Dollars and calls so far for each kind of call, biggest first. */
   spendByType(): { id: string; usd: number; calls: number }[]
 }
@@ -60,6 +62,8 @@ export async function assembleWriteServices(parts: {
   buildAssistant: (port: WriterChatPort, llm: ILLMClient, model: string) => Promise<PersonalAssistant>
   /** Reads a web page as text. Absent when this browser cannot reach pages. */
   fetchWeb?: (url: string) => Promise<string>
+  /** Searches the web for pages that might back a claim. Absent when no search is set up. */
+  searchWeb?: (query: string) => Promise<{ title: string; url: string; snippet: string }[]>
 }): Promise<WriteServices> {
   const { store } = parts
   const backend = parts.backend ?? 'anthropic'
@@ -76,7 +80,7 @@ export async function assembleWriteServices(parts: {
   // Every model call, the article steps and the chat alike, goes through the cap.
   const llm = withSpendCap(parts.llm, meter, () => cap)
   const port = createArticleChatPort(store)
-  const service = new ArticleService({ store, llm, fetchWeb: parts.fetchWeb, modelFor: (role) => (role === 'writer' ? chatModel : autoModel) })
+  const service = new ArticleService({ store, llm, fetchWeb: parts.fetchWeb, searchWeb: parts.searchWeb, modelFor: (role) => (role === 'writer' ? chatModel : autoModel) })
   const assistant = await parts.buildAssistant(port, llm, chatModel)
 
   return {
@@ -114,16 +118,21 @@ export async function assembleWriteServices(parts: {
         cap = p.spendCapUsd
       },
     },
+    canSearch: parts.searchWeb !== undefined,
     spentUsd: () => meter.spentUsd(),
     spendByType: () => Object.entries(meter.byType()).map(([id, v]) => ({ id, ...v })).sort((a, b) => b.usd - a.usd),
   }
 }
 
-function proxyFetch(config: AssistantConfig): (url: string) => Promise<string> {
+/** Page reading and search through the proxy, sharing one set of search results so a found page can be read. Search needs the visitor's search key too. */
+function proxyWeb(config: AssistantConfig): { fetchWeb: (url: string) => Promise<string>; searchWeb?: (query: string) => Promise<{ title: string; url: string; snippet: string }[]> } {
   const ctx = createProxyWebTools(config)
-  return async (url) => {
-    rememberUserUrls(url)
-    return (await executeWebTool({ search: ctx.search, fetchImpl: ctx.fetchImpl, dns: ctx.dns }, 'fetch_url', { url })).text
+  return {
+    fetchWeb: async (url) => {
+      rememberUserUrls(url)
+      return (await executeWebTool({ search: ctx.search, fetchImpl: ctx.fetchImpl, dns: ctx.dns }, 'fetch_url', { url })).text
+    },
+    searchWeb: config.braveApiKey ? ctx.search : undefined,
   }
 }
 
@@ -134,9 +143,10 @@ export function createWriteServices(config: AssistantConfig): Promise<WriteServi
   const llm = createLlmClient(config, { claudeCli: () => undefined })
   // A plain browser tab cannot fetch arbitrary pages (CORS, and no DNS to check the address). Pages are read through the proxy
   // when the visitor set one up; otherwise the writer pastes the passage.
-  const fetchWeb = config.webBackend === 'proxy' ? proxyFetch(config) : undefined
+  const web = config.webBackend === 'proxy' ? proxyWeb(config) : undefined
   return assembleWriteServices({
-    fetchWeb,
+    fetchWeb: web?.fetchWeb,
+    searchWeb: web?.searchWeb,
     store,
     llm,
     backend: config.llmBackend,

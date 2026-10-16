@@ -73,6 +73,8 @@ export interface ArticleServiceOptions {
   modelName?: string
   /** Reads a web page as plain text. Absent where the browser cannot reach pages (no proxy and no desktop shell); links are then stored without a passage and the writer pastes it. */
   fetchWeb?: (url: string) => Promise<string>
+  /** Searches the web for pages that might back a claim. Absent where no search is set up. */
+  searchWeb?: (query: string) => Promise<{ title: string; url: string; snippet: string }[]>
   onUsage?: (usage: TokenUsage) => void
   now?: () => string
   newId?: () => string
@@ -105,6 +107,12 @@ function sectionText(markdown: string, s: { span: { start: number; end: number }
 }
 
 const clip = (t: string, n = 400): string => (t.length > n ? `${t.slice(0, n)}…` : t)
+
+export interface SourceCandidate {
+  title: string
+  url: string
+  snippet: string
+}
 
 export interface SourceRecheckReport {
   read: number
@@ -295,6 +303,37 @@ export class ArticleService {
     const assessed = await assessSourceChange({ meta: b.meta, sourceId, before: src.passage, after: text, now: this.now() }, this.opts.llm, model, this.opts.onUsage)
     await save({ ...rechecked, fetchedPassage: text }, assessed.meta)
     return { status: 'changed', impacts: assessed.impacts }
+  }
+
+  /**
+   * Looks for pages that might back a claim: a web search on the claim's own words (no model call). Pages already stored as sources are left out.
+   * Nothing is stored until the writer picks one with useSourceCandidate.
+   */
+  async findSourceCandidates(id: string, claimId: string): Promise<{ status: 'found' | 'unavailable' | 'failed'; results: SourceCandidate[]; reason?: string }> {
+    const b = await this.get(id)
+    const claim = b.meta.claims.find((c) => c.id === claimId)
+    if (!claim) return { status: 'failed', results: [], reason: `No claim ${claimId}.` }
+    if (!this.opts.searchWeb) return { status: 'unavailable', results: [], reason: 'Web search is not set up here.' }
+    const query = claim.quote.replace(/[#*_`>[\]]/g, ' ').replace(/\s+/g, ' ').trim().slice(0, 200)
+    try {
+      const have = new Set(b.meta.sources.map((s) => s.address).filter(Boolean))
+      const results = (await this.opts.searchWeb(query)).filter((r) => isHttpAddress(r.url) && !have.has(r.url)).slice(0, 5)
+      return { status: 'found', results: results.map((r) => ({ title: r.title.slice(0, 200), url: r.url, snippet: r.snippet.slice(0, 300) })) }
+    } catch (e) {
+      return { status: 'failed', results: [], reason: e instanceof Error ? e.message : String(e) }
+    }
+  }
+
+  /** The writer picks a found page: it is stored as a web source, read, and tied to the claim by a link the writer drew. A model checks it only when asked. */
+  async useSourceCandidate(id: string, claimId: string, url: string): Promise<{ ok: boolean; reason?: string; read: 'read' | 'unreachable' | 'unavailable' | 'not_a_link' | 'unchanged' | 'changed' }> {
+    if (!isHttpAddress(url)) return { ok: false, reason: 'Only a web address can be used.', read: 'not_a_link' }
+    const b = await this.get(id)
+    if (!b.meta.claims.some((c) => c.id === claimId)) return { ok: false, reason: `No claim ${claimId}.`, read: 'not_a_link' }
+    const existing = b.meta.sources.find((s) => s.address === url)
+    const sourceId = existing?.id ?? (await this.addSource(id, { kind: 'web', address: url }))
+    const read = await this.readSource(id, sourceId)
+    await this.attachSource(id, claimId, sourceId)
+    return { ok: true, read: read.status }
   }
 
   /** Reads every web source again (at most 30, one after another). Used before publishing; nothing is blocked, the report says what to look at. */

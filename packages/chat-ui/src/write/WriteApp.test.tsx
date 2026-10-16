@@ -27,11 +27,11 @@ function llm(replies: Partial<Record<keyof typeof MARK, unknown>>): ILLMClient {
     },
   } as unknown as ILLMClient
 }
-async function servicesOn(store: ReturnType<typeof createMemoryArticleStore>, replies: Parameters<typeof llm>[0], fetchWeb?: (url: string) => Promise<string>) {
-  return assembleWriteServices({ store, llm: llm(replies), fetchWeb, buildAssistant: async () => ({ turn: async () => ({ reply: 'Noted.' }), setModel: () => undefined }) as unknown as PersonalAssistant })
+async function servicesOn(store: ReturnType<typeof createMemoryArticleStore>, replies: Parameters<typeof llm>[0], fetchWeb?: (url: string) => Promise<string>, searchWeb?: (q: string) => Promise<{ title: string; url: string; snippet: string }[]>) {
+  return assembleWriteServices({ store, llm: llm(replies), fetchWeb, searchWeb, buildAssistant: async () => ({ turn: async () => ({ reply: 'Noted.' }), setModel: () => undefined }) as unknown as PersonalAssistant })
 }
-async function services(replies: Parameters<typeof llm>[0], seed?: string, fetchWeb?: (url: string) => Promise<string>) {
-  const s = await servicesOn(createMemoryArticleStore(), replies, fetchWeb)
+async function services(replies: Parameters<typeof llm>[0], seed?: string, fetchWeb?: (url: string) => Promise<string>, searchWeb?: (q: string) => Promise<{ title: string; url: string; snippet: string }[]>) {
+  const s = await servicesOn(createMemoryArticleStore(), replies, fetchWeb, searchWeb)
   if (seed) await s.service.create('Post', seed)
   return s
 }
@@ -527,6 +527,33 @@ describe('revise the text under the cursor', () => {
     expect(await screen.findByText(/added 1 suggested change to that text/)).toBeInTheDocument()
     expect((await s.service.get(id)).meta.suggestions[0]).toMatchObject({ state: 'pending', replacement: 'The p99 was 18 ms on 8 cores.' })
     expect((await s.service.get(id)).markdown).toBe(MD)
+  })
+})
+
+describe('finding sources', () => {
+  it('searches for pages that may back a claim, shows them, and a picked page becomes a source tied to the claim', async () => {
+    const s = await services({ claims: { claims: [{ quote: 'The p99 was 18 ms.', kind: 'factual', matchesId: null, sure: true }] }, resolve: { affected: [] } }, MD, async () => 'p99 was 18 ms in the benchmark.', async () => [{ title: 'Benchmark report', url: 'https://example.com/report', snippet: 'p99 latency 18 ms' }])
+    const id = (await s.service.list())[0].id
+    await s.service.analyze(id)
+    render(<WriteApp services={s} />)
+    await waitForText()
+    putCursor('18 ms')
+    const dock = screen.getByLabelText('Comments and sources for this text')
+    await userEvent.click(await within(dock).findByRole('button', { name: 'Find sources for this claim' }))
+    const found = await within(dock).findByRole('group', { name: 'Pages that may back this claim' })
+    expect(within(found).getByText('Benchmark report')).toBeInTheDocument()
+    await userEvent.click(within(found).getByRole('button', { name: /Use Benchmark report as a source/ }))
+    await waitFor(async () => expect((await s.service.get(id)).meta.sources[0]).toMatchObject({ address: 'https://example.com/report', passage: 'p99 was 18 ms in the benchmark.' }))
+    expect(screen.queryByRole('group', { name: 'Pages that may back this claim' })).toBeNull()
+  })
+  it('offers no search button when no search is set up', async () => {
+    const s = await services({ claims: { claims: [{ quote: 'The p99 was 18 ms.', kind: 'factual', matchesId: null, sure: true }] }, resolve: { affected: [] } }, MD)
+    await s.service.analyze((await s.service.list())[0].id)
+    render(<WriteApp services={s} />)
+    await waitForText()
+    putCursor('18 ms')
+    await within(screen.getByLabelText('Comments and sources for this text')).findByRole('button', { name: /Check this claim/ })
+    expect(screen.queryByRole('button', { name: 'Find sources for this claim' })).toBeNull()
   })
 })
 

@@ -236,3 +236,4 @@
 
 .write__subhead { font-size: 0.95rem; margin: 14px 0 6px; }
 .write__field { display: grid; gap: 4px; margin-bottom: 8px; }
+.write__found { margin: 6px 0 4px; padding-left: 8px; border-left: 2px solid var(--border); display: grid; gap: 4px; }

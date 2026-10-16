@@ -33,6 +33,13 @@ interface Props {
   onRead(sourceId: string): void
   onAcceptNew(sourceId: string): void
   onCheck(claimId: string): void
+  /** Whether the page can search the web for a source. */
+  canSearch: boolean
+  /** Pages found for a claim, waiting for the writer to pick one. */
+  candidates: Record<string, { title: string; url: string; snippet: string }[]>
+  onFindSources(claimId: string): void
+  onUseCandidate(claimId: string, url: string): void
+  onDismissCandidates(claimId: string): void
 }
 
 const clip = (t: string, n: number): string => (t.length > n ? `${t.slice(0, n)}…` : t)
@@ -50,7 +57,7 @@ const PLACEHOLDER: Record<NoteKind, string> = {
  * paragraph or a section: its comments and sources show here. One line adds to it: type a comment, paste a link or passage, or state your own
  * word; drop a file anywhere in this box, or use the paperclip.
  */
-export function TextNotes({ meta, markdown, selection, busy, model, onAdd, onFiles, onEditComment, onResolveComment, onDeleteComment, onDetach, onConfirm, onRead, onAcceptNew, onCheck }: Props): React.JSX.Element {
+export function TextNotes({ meta, markdown, selection, busy, model, onAdd, onFiles, onEditComment, onResolveComment, onDeleteComment, onDetach, onConfirm, onRead, onAcceptNew, onCheck, canSearch, candidates, onFindSources, onUseCandidate, onDismissCandidates }: Props): React.JSX.Element {
   const [collapsed, setCollapsed] = useState(false)
   const [kind, setKind] = useState<NoteKind>('comment')
   const [text, setText] = useState('')
@@ -103,6 +110,19 @@ export function TextNotes({ meta, markdown, selection, busy, model, onAdd, onFil
                     <div className="write__rowmain">
                       <span>{clip(c.quote, 120)}</span> <span className={`write__badge write__badge--${status}`}>{STATUS_LABEL[status] ?? status}</span>
                       {srcs.length === 0 && <div className="write__reason">No source yet.</div>}
+                      {candidates[c.id] && (
+                        <div className="write__found" role="group" aria-label="Pages that may back this claim">
+                          {candidates[c.id].length === 0 && <div className="write__reason">The search found nothing new.</div>}
+                          {candidates[c.id].map((r) => (
+                            <div key={r.url} className="write__dsrc">
+                              <span className="write__dsrcname">{r.title || r.url}</span>
+                              <span className="write__rowacts"><IconButton label={`Use ${r.title || r.url} as a source`} icon="check" onClick={() => onUseCandidate(c.id, r.url)} disabled={busy} /></span>
+                              <div className="write__reason">{r.url}{r.snippet ? ` · ${clip(r.snippet, 140)}` : ''}</div>
+                            </div>
+                          ))}
+                          <button type="button" className="write__link" onClick={() => onDismissCandidates(c.id)}>Dismiss these</button>
+                        </div>
+                      )}
                       {srcs.map((s) => {
                         const link = meta.links.find((l) => l.kind === 'supported_by' && l.from.id === c.id && l.to.id === s.id)
                         const proposed = link?.origin === 'proposed'
@@ -121,7 +141,7 @@ export function TextNotes({ meta, markdown, selection, busy, model, onAdd, onFil
                         )
                       })}
                     </div>
-                    <span className="write__rowacts"><IconButton label={`Check this claim with ${model}`} icon="check2" onClick={() => onCheck(c.id)} disabled={busy || srcs.length === 0} /></span>
+                    <span className="write__rowacts">{canSearch && <IconButton label="Find sources for this claim" icon="view" onClick={() => onFindSources(c.id)} disabled={busy} />}<IconButton label={`Check this claim with ${model}`} icon="check2" onClick={() => onCheck(c.id)} disabled={busy || srcs.length === 0} /></span>
                   </li>
                 )
               })}

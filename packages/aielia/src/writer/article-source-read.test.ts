@@ -89,3 +89,41 @@ describe('reading a web source', () => {
     expect(await bare.recheckSources(id)).toMatchObject({ skipped: 1, changed: [], unreachable: [] })
   })
 })
+
+describe('finding sources for a claim', () => {
+  const claimed = async (search?: (q: string) => Promise<{ title: string; url: string; snippet: string }[]>) => {
+    const store = createMemoryArticleStore()
+    const svc = new ArticleService({ store, llm: llm([]), now: () => NOW, searchWeb: search, fetchWeb: async () => 'p99 was 18 ms in the benchmark.' })
+    const id = await svc.create('Post', MD)
+    const b = await svc.get(id)
+    const claim = { id: 'c1', sectionId: b.meta.sections[1].id, quote: 'The p99 was **18 ms**.', position: 0, kind: 'factual', author: 'writer', authorAt: NOW, confirmed: true, sourceStatus: 'none' }
+    await store.save(id, { ...b, meta: { ...b.meta, claims: [claim as never] } })
+    return { svc, id }
+  }
+  it('searches on the claim\'s words, leaves out pages already used, and stores nothing until one is picked', async () => {
+    const queries: string[] = []
+    const { svc, id } = await claimed(async (q) => { queries.push(q); return [{ title: 'Benchmark', url: 'https://x.test/bench', snippet: 's' }, { title: 'Used', url: 'https://x.test/used', snippet: 's' }, { title: 'Bad', url: 'javascript:alert(1)', snippet: 's' }] })
+    await svc.addSource(id, { kind: 'web', address: 'https://x.test/used' })
+    const r = await svc.findSourceCandidates(id, 'c1')
+    expect(queries).toEqual(['The p99 was 18 ms .'])
+    expect(r).toMatchObject({ status: 'found', results: [{ url: 'https://x.test/bench' }] })
+    expect((await svc.get(id)).meta.sources).toHaveLength(1)
+  })
+  it('says why when it cannot search, and survives a failing search', async () => {
+    const { svc, id } = await claimed(async () => { throw new Error('quota') })
+    expect(await svc.findSourceCandidates(id, 'c1')).toMatchObject({ status: 'failed', reason: 'quota' })
+    expect(await svc.findSourceCandidates(id, 'nope')).toMatchObject({ status: 'failed' })
+    const none = await claimed()
+    expect(await none.svc.findSourceCandidates(none.id, 'c1')).toMatchObject({ status: 'unavailable' })
+  })
+  it('using a found page stores it, reads it and ties it to the claim', async () => {
+    const { svc, id } = await claimed(async () => [])
+    expect(await svc.useSourceCandidate(id, 'c1', 'https://x.test/bench')).toEqual({ ok: true, read: 'read' })
+    const m = (await svc.get(id)).meta
+    expect(m.sources[0]).toMatchObject({ kind: 'web', address: 'https://x.test/bench', passage: 'p99 was 18 ms in the benchmark.' })
+    expect(m.links.some((l) => l.kind === 'supported_by' && l.from.id === 'c1' && l.to.id === m.sources[0].id && l.origin === 'drawn')).toBe(true)
+    expect(await svc.useSourceCandidate(id, 'c1', 'https://x.test/bench')).toMatchObject({ ok: true })
+    expect((await svc.get(id)).meta.sources).toHaveLength(1)
+    expect(await svc.useSourceCandidate(id, 'c1', 'ftp://x')).toMatchObject({ ok: false })
+  })
+})
