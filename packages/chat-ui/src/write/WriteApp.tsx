@@ -43,7 +43,8 @@ const RAIL_ICONS: Record<Tab, string> = {
 }
 
 /** The desktop layout starts at 960 px (see write.css). jsdom has no matchMedia, which reads as a phone. */
-const isWide = (): boolean => typeof window !== 'undefined' && window.matchMedia?.('(min-width: 960px)').matches === true
+/** The side rail layout (tablet and desktop) starts at 640 px; below that the rail is a bottom bar and the chat is a sheet. See write.css. */
+const isWide = (): boolean => typeof window !== 'undefined' && window.matchMedia?.('(min-width: 640px)').matches === true
 
 const STATUS_LABEL: Record<string, string> = {
   none: 'no source',
@@ -398,7 +399,7 @@ export function WriteApp({ services }: { services: WriteServices }): React.JSX.E
         </p>
       )}
 
-      <main className="write__main" data-open={railOpen ? 'true' : 'false'}>
+      <main className="write__main" data-open={railOpen ? 'true' : 'false'} data-tab={tab}>
         <nav className="write__rail" aria-label="Panels">
           {TABS.map((t) => (
             <button key={t.id} type="button" data-tab={t.id} className={isOn(t.id) ? 'is-on' : ''} aria-pressed={isOn(t.id)} aria-label={t.label} onClick={() => pickTab(t.id)}>
@@ -456,7 +457,7 @@ export function WriteApp({ services }: { services: WriteServices }): React.JSX.E
           </section>
         </aside>
         {ready && meta ? (
-          <section className={`write__pane write__pane--text ${tab === 'text' ? 'is-shown' : ''}`} aria-label="Text">
+          <section className={`write__pane write__pane--text ${tab === 'text' || tab === 'chat' ? 'is-shown' : ''}`} aria-label="Text">
             <MarkedText textRef={textRef} value={draft} marks={claimMarks(meta, draft)} onChange={onType} onSelection={setSelection} />
             <TextNotes
               meta={meta}
@@ -483,6 +484,7 @@ export function WriteApp({ services }: { services: WriteServices }): React.JSX.E
           <p className="write__empty">Create an article, or import one, to begin.</p>
         )}
         <ChatPane
+          onClose={() => setTab('text')}
           lines={chat}
           model={chatModel}
           suggestions={services.models.suggestions}

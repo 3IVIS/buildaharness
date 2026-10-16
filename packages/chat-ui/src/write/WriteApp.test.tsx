@@ -53,7 +53,7 @@ const putCursor = (needle: string): void => {
 }
 const wide = <T,>(fn: () => Promise<T>): Promise<T> => {
   const original = window.matchMedia
-  window.matchMedia = ((q: string) => ({ matches: q.includes('min-width: 960px'), media: q, addEventListener: () => undefined, removeEventListener: () => undefined })) as unknown as typeof window.matchMedia
+  window.matchMedia = ((q: string) => ({ matches: q.includes('min-width: 640px'), media: q, addEventListener: () => undefined, removeEventListener: () => undefined })) as unknown as typeof window.matchMedia
   return fn().finally(() => { window.matchMedia = original })
 }
 
@@ -545,6 +545,23 @@ describe('ideas', () => {
     await userEvent.click(rail('Issues'))
     await userEvent.click(await within(panel('Issues')).findByRole('button', { name: 'Accept' }))
     await waitFor(async () => expect((await s.service.get(id)).meta.ideas.find((i) => i.id === 'id2')?.state).toBe('used'))
+  })
+})
+
+describe('phone layout', () => {
+  it('opens the chat as a sheet with the text still shown behind it, and closes it again', async () => {
+    const s = await services({}, MD)
+    const { container } = render(<WriteApp services={s} />)
+    await waitForText()
+    const text = screen.getByRole('region', { name: 'Text' })
+    expect(rail('Chat')).toHaveAttribute('aria-pressed', 'false')
+    await userEvent.click(rail('Chat'))
+    expect(container.querySelector('.write__main')).toHaveAttribute('data-tab', 'chat')
+    expect(panel('Chat')).toHaveClass('is-shown')
+    expect(text).toHaveClass('is-shown')
+    await userEvent.click(screen.getByRole('button', { name: 'Close the chat' }))
+    expect(panel('Chat')).not.toHaveClass('is-shown')
+    expect(text).toHaveClass('is-shown')
   })
 })
 

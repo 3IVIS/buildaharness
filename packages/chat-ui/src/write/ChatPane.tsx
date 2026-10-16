@@ -1,6 +1,6 @@
 import { AdjustBar, type ChatAction } from './AdjustBar'
 import { ModelPicker } from './ModelPicker'
-import { ICON_PATHS, Icon } from './icons'
+import { ICON_PATHS, Icon, IconButton } from './icons'
 
 export interface ChatLine {
   id: number
@@ -26,6 +26,8 @@ interface Props {
   onAction: (action: ChatAction) => void
   onSaveIdea: (line: ChatLine) => void
   onDropFiles: (files: File[]) => void
+  /** Closes the chat sheet on a phone. */
+  onClose: () => void
 }
 
 /** The chat: always visible on a wide screen. The model is picked next to the title; every answer says which model wrote it. */
@@ -40,6 +42,7 @@ export function ChatPane(p: Props): React.JSX.Element {
       <header className="write__chathead">
         <h2 className="write__panehead">Chat</h2>
         <ModelPicker label="Model for the chat" value={p.model} suggestions={p.suggestions} onChange={p.onModel} />
+        <IconButton label="Close the chat" icon="close" className="write__chatclose" onClick={p.onClose} />
       </header>
       <ul className="write__chat" aria-live="polite">
         {p.lines.map((l) => (

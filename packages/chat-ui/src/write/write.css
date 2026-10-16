@@ -126,34 +126,50 @@
 .write__compose textarea { width: 100%; }
 .write__empty { color: var(--muted); }
 
-/* Phones: one panel at a time, picked from a bottom bar; nothing scrolls sideways. */
-@media (max-width: 959px) {
+/* Phones: one panel at a time, picked from a bottom bar; nothing scrolls sideways. The chat opens as a sheet over the lower part of the
+   screen with the text still visible above it. */
+@media (max-width: 639px) {
   .write__rail { position: fixed; left: 0; right: 0; bottom: 0; z-index: 5; display: grid; grid-auto-flow: column; grid-auto-columns: 1fr; gap: 1px; padding: 6px 2px calc(6px + env(safe-area-inset-bottom)); background: var(--surface); border-top: 1px solid var(--border); }
   .write__rail button { font-size: 0.6rem; padding: 4px 0; }
   .write__main { padding-bottom: 92px; }
+  .write__main[data-tab='chat'] { padding-bottom: calc(60dvh + 24px); }
+  .write__pane--chat.is-shown { position: fixed; left: 0; right: 0; bottom: calc(64px + env(safe-area-inset-bottom)); height: 60dvh; z-index: 4; display: flex; flex-direction: column; box-sizing: border-box; padding: 10px 14px; background: var(--surface); border-top: 1px solid var(--border); border-radius: 14px 14px 0 0; box-shadow: 0 -8px 24px rgba(0, 0, 0, 0.18); }
+  .write__pane--chat .write__chat { flex: 1; overflow: auto; min-height: 0; }
 }
+.write .write__iconbtn.write__chatclose { display: none; }
+@media (max-width: 639px) { .write .write__iconbtn.write__chatclose { display: inline-flex; margin-left: auto; } }
 
-/* Desktop: the header and status bar stay put. A rail of buttons sits at the side; the panel for the chosen button opens next to it
-   (click it again to close it). The text takes the room that is left, and the chat is always there on the right. */
-@media (min-width: 960px) {
+/* Tablet and desktop: the header and status bar stay put. A rail of buttons sits at the side; the panel for the chosen button opens next
+   to it (click it again to close it). The text takes the room that is left, and the chat is always there on the right. */
+@media (min-width: 640px) {
   .write { height: 100dvh; min-height: 0; }
   .write__switcher { flex: 0 1 280px; }
   .write__actions { margin-left: auto; }
-  .write__main { min-height: 0; padding: 0; display: grid; grid-template-columns: 76px var(--panel-w, 340px) minmax(0, 1fr) minmax(320px, 400px); grid-template-rows: minmax(0, 1fr); overflow: hidden; }
-  .write__main[data-open='false'] { --panel-w: 0px; }
-  .write__rail { grid-column: 1; display: flex; flex-direction: column; gap: 4px; padding: 10px 6px; border-right: 1px solid var(--border); background: var(--surface); }
+  .write__main { position: relative; min-height: 0; padding: 0; display: grid; grid-template-columns: 76px minmax(0, 1fr) minmax(260px, 320px); grid-template-rows: minmax(0, 1fr); overflow: hidden; }
+  .write__rail { grid-column: 1; display: flex; flex-direction: column; gap: 4px; padding: 10px 6px; border-right: 1px solid var(--border); background: var(--surface); overflow-y: auto; }
   .write__rail button[data-tab='text'], .write__rail button[data-tab='chat'] { display: none; }
-  .write__panel { display: block; grid-column: 2; min-width: 0; overflow: auto; padding: 14px; border-right: 1px solid var(--border); }
+  /* On a tablet the panel floats over the text column instead of taking room from it. */
+  .write__panel { display: block; position: absolute; top: 0; bottom: 0; left: 76px; z-index: 3; width: min(340px, 60vw); min-width: 0; overflow: auto; padding: 14px; box-sizing: border-box; background: var(--bg, var(--surface)); border-right: 1px solid var(--border); box-shadow: 6px 0 18px rgba(0, 0, 0, 0.12); }
   .write__main[data-open='false'] .write__panel { display: none; }
-  .write__pane--text { display: flex; grid-column: 3; min-height: 0; padding: 14px; }
+  .write__pane--text { display: flex; grid-column: 2; min-height: 0; padding: 14px; }
   .write__pane--text { flex-direction: column; }
   .write__editor textarea { flex: 1; min-height: 120px; resize: none; }
   .write__backdrop { min-height: 120px; }
   .write__dock { flex: none; max-height: 52%; display: flex; flex-direction: column; }
   .write__dockbody { max-height: none; flex: 1 1 auto; }
-  .write__empty { grid-column: 3; padding: 14px; }
-  .write__pane--chat { display: flex; flex-direction: column; grid-column: 4; min-height: 0; padding: 14px; border-left: 1px solid var(--border); }
+  .write__empty { grid-column: 2; padding: 14px; }
+  .write__pane--chat { display: flex; flex-direction: column; grid-column: 3; min-height: 0; padding: 14px; border-left: 1px solid var(--border); }
     .write__pane--chat .write__chat { flex: 1; overflow: auto; min-height: 0; }
+}
+
+/* Desktop: the open panel takes its own column beside the text. */
+@media (min-width: 960px) {
+  .write__main { grid-template-columns: 76px var(--panel-w, 340px) minmax(0, 1fr) minmax(320px, 400px); }
+  .write__main[data-open='false'] { --panel-w: 0px; }
+  .write__panel { position: static; grid-column: 2; width: auto; box-shadow: none; }
+  .write__pane--text { grid-column: 3; }
+  .write__empty { grid-column: 3; }
+  .write__pane--chat { grid-column: 4; }
 }
 
 

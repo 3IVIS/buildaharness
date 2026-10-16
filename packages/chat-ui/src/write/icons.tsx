@@ -23,9 +23,9 @@ export function Icon({ d, size = 18 }: { d: string; size?: number }): React.JSX.
 }
 
 /** A small icon-only button. The label is what a screen reader says and what the tooltip shows. */
-export function IconButton({ label, icon, onClick, disabled }: { label: string; icon: keyof typeof ICON_PATHS; onClick: () => void; disabled?: boolean }): React.JSX.Element {
+export function IconButton({ label, icon, onClick, disabled, className }: { label: string; icon: keyof typeof ICON_PATHS; onClick: () => void; disabled?: boolean; className?: string }): React.JSX.Element {
   return (
-    <button type="button" className="write__iconbtn" aria-label={label} title={label} onClick={onClick} disabled={disabled}>
+    <button type="button" className={`write__iconbtn${className ? ` ${className}` : ''}`} aria-label={label} title={label} onClick={onClick} disabled={disabled}>
       <Icon d={ICON_PATHS[icon]} />
     </button>
   )
