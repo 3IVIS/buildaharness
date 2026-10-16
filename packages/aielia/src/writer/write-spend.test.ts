@@ -83,3 +83,11 @@ describe('pricing by the model that made the call', () => {
     expect(small).toBeLessThan(big)
   })
 })
+
+describe('a model the price table does not know', () => {
+  it('is priced as the default model rather than for free', async () => {
+    const meter = await createSpendMeter(createMemoryArticleStore(), { model: 'claude-opus-5-5' })
+    await meter.record({ inputTokens: 1_000_000, outputTokens: 0 } as never, 'claims', 'some-new-model')
+    expect(meter.spentUsd()).toBeGreaterThan(0)
+  })
+})

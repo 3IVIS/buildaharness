@@ -72,7 +72,8 @@ export async function createSpendMeter(store: SettingsStore, pricing: { backend?
     spentUsd: () => total,
     byType: () => ({ ...types }),
     async record(usage, callType, model) {
-      const cost = withCostEstimate(usage, { ...pricing, model: model ?? pricing.model }).costUsd ?? 0
+      // A model missing from the price table is priced as the default model, so an unknown model cannot spend past the cap for free.
+      const cost = (withCostEstimate(usage, { ...pricing, model: model ?? pricing.model }).costUsd ?? withCostEstimate(usage, pricing).costUsd) ?? 0
       total += cost
       if (callType) types[callType] = { usd: (types[callType]?.usd ?? 0) + cost, calls: (types[callType]?.calls ?? 0) + 1 }
       await store.setSetting(SPEND_KEY, total)
