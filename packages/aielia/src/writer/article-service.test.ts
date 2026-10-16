@@ -70,7 +70,7 @@ describe('ArticleService', () => {
     const { svc: s } = svc(
       {
         claims: { claims: [{ quote: 'The p99 was 41 ms.', kind: 'factual', matchesId: null, sure: true }] },
-        resolve: (u: string) => ({ affected: [{ sectionId: 's1', reason: 'still says under 20 ms' }, { sectionId: 's3', reason: 'repeats under 20 ms' }] }),
+        resolve: () => ({ affected: [{ sectionId: 's1', reason: 'still says under 20 ms' }, { sectionId: 's3', reason: 'repeats under 20 ms' }] }),
       },
       calls,
     )
