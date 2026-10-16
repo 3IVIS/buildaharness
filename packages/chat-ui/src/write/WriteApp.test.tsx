@@ -1,0 +1,108 @@
+import { describe, it, expect, vi, afterEach } from 'vitest'
+import { render, screen, waitFor, fireEvent, within } from '@testing-library/react'
+import userEvent from '@testing-library/user-event'
+import { ArticleService, createMemoryArticleStore, createArticleChatPort, type PersonalAssistant } from '@buildaharness/aielia'
+import type { ILLMClient } from '@buildaharness/runtime'
+import { WriteApp } from './WriteApp'
+import { assembleWriteServices } from './write-services'
+
+const MARK = { claims: 'You read parts of an article and list the claims', resolve: 'You help a writer keep an article consistent', edits: 'You propose edits to an article', capture: 'A writer is working with an assistant' }
+function llm(replies: Partial<Record<keyof typeof MARK, unknown>>): ILLMClient {
+  return {
+    callChatStructured: async (messages: { role: string; content: string }[]) => {
+      const sys = messages.find((m) => m.role === 'system')!.content
+      const key = (Object.keys(MARK) as (keyof typeof MARK)[]).find((k) => sys.includes(MARK[k]))
+      const out = key ? replies[key] : undefined
+      if (out === undefined) throw new Error(`no scripted reply for ${key}`)
+      return { content: JSON.stringify(out) }
+    },
+  } as unknown as ILLMClient
+}
+async function services(replies: Parameters<typeof llm>[0], seed?: string) {
+  const store = createMemoryArticleStore()
+  const client = llm(replies)
+  const s = await assembleWriteServices({ store, llm: client, buildAssistant: async () => ({ turn: async () => ({ reply: 'Noted.' }) }) as unknown as PersonalAssistant })
+  if (seed) await s.service.create('Post', seed)
+  return s
+}
+afterEach(() => {
+  vi.restoreAllMocks()
+})
+
+const MD = '# Post\n\n## Latency\n\nThe p99 was 18 ms.\n'
+
+describe('WriteApp', () => {
+  it('starts empty, creates an article, and shows its sections in the outline', async () => {
+    vi.spyOn(window, 'prompt').mockReturnValue('My post')
+    render(<WriteApp services={await services({})} />)
+    expect(screen.getByText(/Create an article, or import one/)).toBeInTheDocument()
+    await userEvent.click(screen.getByRole('button', { name: 'New' }))
+    const box = (await screen.findByLabelText('Article text')) as HTMLTextAreaElement
+    expect(box.value).toContain('# My post')
+    await userEvent.click(screen.getByRole('button', { name: 'Outline' }))
+    expect(within(screen.getByLabelText('Outline')).getByText('My post')).toBeInTheDocument()
+  })
+
+  it('finds the claims on request and shows them as having no source', async () => {
+    const s = await services({ claims: { claims: [{ quote: 'The p99 was 18 ms.', kind: 'factual', matchesId: null, sure: true }] }, resolve: { affected: [] } }, MD)
+    render(<WriteApp services={s} />)
+    await screen.findByLabelText('Article text')
+    await userEvent.click(screen.getByRole('button', { name: 'Check article' }))
+    await userEvent.click(screen.getByRole('button', { name: 'Issues' }))
+    expect(await screen.findByText('The p99 was 18 ms.')).toBeInTheDocument()
+    expect(screen.getByText('no source')).toBeInTheDocument()
+  })
+
+  it('a chat request for edits becomes suggestions, and accepting one changes the text', async () => {
+    const s = await services({ capture: { articleId: null, ops: [] }, edits: { suggestions: [{ quote: '18 ms', replacement: '41 ms', reason: 'the re-run' }] } }, MD)
+    render(<WriteApp services={s} />)
+    await screen.findByLabelText('Article text')
+    await userEvent.click(screen.getByRole('button', { name: 'Chat' }))
+    await userEvent.click(screen.getByLabelText(/Ask for edits/))
+    await userEvent.type(screen.getByLabelText('Message'), 'use 41 ms')
+    await userEvent.click(screen.getByRole('button', { name: 'Send' }))
+    expect(await screen.findByText(/added 1 suggested change/)).toBeInTheDocument()
+    await userEvent.click(screen.getByRole('button', { name: 'Issues' }))
+    expect(screen.getByText('41 ms')).toBeInTheDocument()
+    expect((screen.getByLabelText('Article text') as HTMLTextAreaElement).value).toContain('18 ms') // nothing changed yet
+    await userEvent.click(screen.getByRole('button', { name: 'Accept' }))
+    await waitFor(() => expect((screen.getByLabelText('Article text') as HTMLTextAreaElement).value).toContain('41 ms'))
+  })
+
+  it('shows reviewer comments the chat captured, including a conflict the writer has not resolved', async () => {
+    const store = createMemoryArticleStore()
+    const svc = new ArticleService({ store, llm: llm({}), newId: () => 'a1' })
+    const id = await svc.create('Post', MD)
+    const b = await svc.get(id)
+    const mk = (n: number, label: string, other: string) => ({ id: `wc${n}`, articleId: id, label, reviewer: 'Dana', text: `${label} text`, state: 'open' as const, conflictsWith: [`wc${other}`], origin: 'reviewer' as const, capturedAt: 'now' })
+    await store.save(id, { ...b, meta: { ...b.meta, comments: [mk(1, 'C4', '2'), mk(2, 'C5', '1')] } })
+    const port = createArticleChatPort(store)
+    render(<WriteApp services={{ service: svc, store, port, chat: async () => 'ok' }} />)
+    await screen.findByLabelText('Article text')
+    await userEvent.click(screen.getByRole('button', { name: 'Issues' }))
+    expect(screen.getAllByText(/You have not chosen/)).toHaveLength(2)
+    expect(screen.getByText(/2 open comments/)).toBeInTheDocument()
+  })
+
+  it('publishes even with open items, and says what was still open', async () => {
+    const store = createMemoryArticleStore()
+    const svc = new ArticleService({ store, llm: llm({}), newId: () => 'a1' })
+    const id = await svc.create('Post', MD)
+    const b = await svc.get(id)
+    await store.save(id, { ...b, meta: { ...b.meta, comments: [{ id: 'wc1', articleId: id, text: 't', state: 'open', conflictsWith: [], origin: 'reviewer', capturedAt: 'now' }] } })
+    vi.spyOn(window, 'prompt').mockReturnValue('v1')
+    render(<WriteApp services={{ service: svc, store, port: createArticleChatPort(store), chat: async () => 'ok' }} />)
+    await screen.findByLabelText('Article text')
+    await userEvent.click(screen.getByRole('button', { name: 'Publish' }))
+    expect(await screen.findByText(/1 item was still open/)).toBeInTheDocument()
+    expect((await svc.get(id)).snapshots).toHaveLength(1)
+  })
+
+  it('shows an error from the service instead of failing silently', async () => {
+    const s = await services({}, MD)
+    render(<WriteApp services={{ ...s, service: Object.assign(s.service, { updateText: async () => { throw new Error('storage is full') } }) }} />)
+    await screen.findByLabelText('Article text')
+    fireEvent.click(screen.getByRole('button', { name: 'Check article' }))
+    expect(await screen.findByText('storage is full')).toBeInTheDocument()
+  })
+})

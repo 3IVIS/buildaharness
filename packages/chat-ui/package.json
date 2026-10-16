@@ -11,7 +11,9 @@
     "typecheck": "tsc --noEmit",
     "build:e2e": "VITE_E2E=1 vite build --outDir dist-e2e",
     "preview:e2e": "vite preview --outDir dist-e2e --port 4173 --strictPort",
-    "test:e2e": "playwright test"
+    "test:e2e": "playwright test",
+    "dev:write": "vite --config vite.write.config.ts",
+    "build:write": "tsc --noEmit && vite build --config vite.write.config.ts"
   },
   "dependencies": {
     "@buildaharness/aielia": "^0.3.6",

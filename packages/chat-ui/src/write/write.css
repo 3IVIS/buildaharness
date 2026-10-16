@@ -1,0 +1,44 @@
+@import '../index.css';
+
+.write { display: flex; flex-direction: column; min-height: 100dvh; background: var(--bg); color: var(--text); font: 16px/1.5 system-ui, sans-serif; }
+.write__bar { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; padding: 10px 16px; border-bottom: 1px solid var(--border); background: var(--surface); }
+.write__title { font-size: 1.1rem; margin: 0 8px 0 0; }
+.write button, .write select, .write input, .write textarea, .write__import { font: inherit; color: var(--text); background: var(--tint-2); border: 1px solid var(--border); border-radius: 6px; padding: 6px 10px; }
+.write button { cursor: pointer; min-height: 40px; }
+.write button:disabled { opacity: 0.5; cursor: default; }
+.write__import { position: relative; cursor: pointer; min-height: 40px; display: inline-flex; align-items: center; }
+.write__import input { position: absolute; inset: 0; opacity: 0; cursor: pointer; }
+.write__notice { margin: 0; padding: 8px 16px; background: var(--accent-a10); border-bottom: 1px solid var(--accent-a35); }
+.write__tabs { display: flex; gap: 4px; padding: 8px 16px 0; overflow-x: auto; }
+.write__tabs button { border-bottom-left-radius: 0; border-bottom-right-radius: 0; }
+.write__tabs .is-on { background: var(--accent-solid); color: var(--on-accent); border-color: var(--accent-solid); }
+.write__main { flex: 1; padding: 12px 16px 24px; display: block; }
+.write__pane { display: none; }
+.write__pane.is-shown { display: block; }
+.write__pane--text textarea { width: 100%; min-height: 60dvh; resize: vertical; font-family: ui-monospace, Menlo, monospace; line-height: 1.6; }
+.write__list { list-style: none; margin: 0 0 16px; padding: 0; display: grid; gap: 10px; }
+.write__list li { border: 1px solid var(--border); border-radius: 8px; padding: 10px 12px; background: var(--surface); }
+.write__list button { margin: 6px 6px 0 0; }
+.write__reason, .write__muted { color: var(--muted); margin: 4px 0 0; font-size: 0.9rem; }
+.write__warn { color: var(--amber); margin: 4px 0 0; }
+.write__counts { color: var(--muted); }
+.write__badge { display: inline-block; margin-left: 8px; padding: 1px 8px; border-radius: 999px; font-size: 0.8rem; background: var(--tint-2); border: 1px solid var(--border); }
+.write__badge--needs_review, .write__badge--stale, .write__badge--contradicted, .write__badge--not_supported { background: var(--red-a18); border-color: var(--red); }
+.write__badge--supported { background: var(--accent-a18); border-color: var(--green); }
+.write__form { display: grid; gap: 8px; margin-bottom: 16px; }
+.write__chat { list-style: none; margin: 0 0 12px; padding: 0; display: grid; gap: 8px; }
+.write__line { padding: 8px 12px; border-radius: 8px; white-space: pre-wrap; }
+.write__line--you { background: var(--accent-a18); justify-self: end; }
+.write__line--aielia { background: var(--surface); border: 1px solid var(--border); }
+.write__toggle { display: block; margin-bottom: 8px; color: var(--muted); }
+.write__compose { display: grid; gap: 8px; }
+.write__compose textarea { width: 100%; }
+.write__empty { color: var(--muted); }
+
+/* Wide screens: the text and the side panel are shown together. Phones: one panel at a time, picked by the tabs. */
+@media (min-width: 960px) {
+  .write__tabs button[data-tab='text'] { display: none; }
+  .write__main { display: grid; grid-template-columns: minmax(0, 3fr) minmax(320px, 2fr); gap: 16px; align-items: start; }
+  .write__pane--text { display: block; grid-column: 1; grid-row: 1 / span 6; position: sticky; top: 8px; }
+  .write__pane:not(.write__pane--text) { grid-column: 2; }
+}
