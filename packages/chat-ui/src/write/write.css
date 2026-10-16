@@ -1,36 +1,51 @@
 @import '../index.css';
 
-.write { display: flex; flex-direction: column; min-height: 100dvh; background: var(--bg); color: var(--text); font: 16px/1.5 system-ui, sans-serif; }
+.write { display: flex; flex-direction: column; min-height: 100dvh; background: var(--bg); color: var(--text); font: 16px/1.5 system-ui, sans-serif; overflow-x: hidden; }
+
+/* Header: the name and the article switcher on the left, the actions on the right. */
 .write__bar { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; padding: 10px 16px; border-bottom: 1px solid var(--border); background: var(--surface); }
 .write__title { font-size: 1.1rem; margin: 0 8px 0 0; }
+.write__switch { flex: 1 1 100%; min-width: 0; max-width: 100%; }
+.write__actions { display: flex; flex-wrap: wrap; gap: 8px; }
 .write button, .write select, .write input, .write textarea, .write__import { font: inherit; color: var(--text); background: var(--tint-2); border: 1px solid var(--border); border-radius: 6px; padding: 6px 10px; }
 .write button { cursor: pointer; min-height: 40px; }
 .write button:disabled { opacity: 0.5; cursor: default; }
 .write__import { position: relative; cursor: pointer; min-height: 40px; display: inline-flex; align-items: center; }
 .write__import input { position: absolute; inset: 0; opacity: 0; cursor: pointer; }
 .write__notice { margin: 0; padding: 8px 16px; background: var(--accent-a10); border-bottom: 1px solid var(--accent-a35); }
-.write__tabs { display: flex; gap: 4px; padding: 8px 16px 0; overflow-x: auto; }
-.write__tabs button { border-bottom-left-radius: 0; border-bottom-right-radius: 0; }
-.write__tabs .is-on { background: var(--accent-solid); color: var(--on-accent); border-color: var(--accent-solid); }
+.write__status { margin: 0; padding: 6px 16px; color: var(--muted); font-size: 0.9rem; border-bottom: 1px solid var(--border); background: var(--tint-1); }
+
+/* The rail: one button per panel. */
+.write__rail button { display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 2px; padding: 4px 2px; min-height: 52px; font-size: 0.72rem; line-height: 1.1; background: none; border: 1px solid transparent; border-radius: 8px; }
+.write__rail button.is-on { background: var(--accent-solid); color: var(--on-accent); border-color: var(--accent-solid); }
+.write .write__rail button:hover:not(.is-on) { background: var(--tint-2); }
+
 .write__main { flex: 1; padding: 12px 16px 24px; display: block; }
 .write__pane { display: none; }
 .write__pane.is-shown { display: block; }
+.write__panel { display: contents; }
 .write__pane--text textarea { width: 100%; min-height: 60dvh; resize: vertical; font-family: ui-monospace, Menlo, monospace; line-height: 1.6; }
+.write__panehead { font-size: 1rem; margin: 0 0 4px; }
 .write__list { list-style: none; margin: 0 0 16px; padding: 0; display: grid; gap: 10px; }
 .write__list li { border: 1px solid var(--border); border-radius: 8px; padding: 10px 12px; background: var(--surface); }
 .write__list button { margin: 6px 6px 0 0; }
 .write__list select, .write__list li { max-width: 100%; min-width: 0; }
 .write__list select { width: 100%; }
-.write__pane { min-width: 0; }
-.write__reason, .write__list li p { overflow-wrap: anywhere; }
 .write__reason, .write__muted { color: var(--muted); margin: 4px 0 0; font-size: 0.9rem; }
+.write__reason, .write__list li p { overflow-wrap: anywhere; }
 .write__warn { color: var(--amber); margin: 4px 0 0; }
-.write__status { margin: 0; padding: 6px 16px; color: var(--muted); font-size: 0.9rem; border-bottom: 1px solid var(--border); background: var(--tint-1); }
 .write__badge { display: inline-block; margin-left: 8px; padding: 1px 8px; border-radius: 999px; font-size: 0.8rem; background: var(--tint-2); border: 1px solid var(--border); }
 .write__badge--needs_review, .write__badge--stale, .write__badge--contradicted, .write__badge--not_supported { background: var(--red-a18); border-color: var(--red); }
 .write__badge--supported { background: var(--accent-a18); border-color: var(--green); }
+.write .write__link { background: none; border: none; padding: 2px 0; min-height: 0; margin: 0; text-align: left; font-weight: 600; text-decoration: underline; text-decoration-color: var(--border); }
+.write .write__link:hover { text-decoration-color: var(--accent); }
+.write .write__outline li { background: transparent; border: none; border-left: 2px solid var(--border); border-radius: 0; padding: 4px 8px; }
 .write__form { display: grid; gap: 8px; margin-bottom: 16px; }
-.write__chat { list-style: none; margin: 0 0 12px; padding: 0; display: grid; gap: 8px; }
+.write__version { border: 1px solid var(--border); border-radius: 8px; padding: 10px 12px; margin: 12px 0; background: var(--surface); }
+.write__pre { white-space: pre-wrap; overflow-wrap: anywhere; margin: 8px 0; padding: 8px; max-height: 320px; overflow: auto; font: 0.85rem/1.5 ui-monospace, Menlo, monospace; background: var(--tint-1); border-radius: 6px; }
+.write__diff--add { color: var(--green); }
+.write__diff--del { color: var(--red); }
+.write__chat { list-style: none; margin: 0 0 12px; padding: 0; display: grid; gap: 8px; align-content: start; }
 .write__line { padding: 8px 12px; border-radius: 8px; white-space: pre-wrap; }
 .write__line--you { background: var(--accent-a18); justify-self: end; }
 .write__line--aielia { background: var(--surface); border: 1px solid var(--border); }
@@ -39,22 +54,29 @@
 .write__compose textarea { width: 100%; }
 .write__empty { color: var(--muted); }
 
-/* Phones: one panel at a time, picked from a bottom tab bar; nothing scrolls sideways. */
-.write { overflow-x: hidden; }
-.write__bar select { flex: 1 1 100%; min-width: 0; max-width: 100%; }
+/* Phones: one panel at a time, picked from a bottom bar; nothing scrolls sideways. */
 @media (max-width: 959px) {
-  .write__tabs { position: fixed; left: 0; right: 0; bottom: 0; z-index: 5; display: grid; grid-template-columns: repeat(6, 1fr); gap: 2px; padding: 6px 6px calc(6px + env(safe-area-inset-bottom)); background: var(--surface); border-top: 1px solid var(--border); overflow: visible; }
-  .write__tabs button { min-height: 44px; padding: 4px 2px; font-size: 0.74rem; border-radius: 6px; }
-  .write__main { padding-bottom: 84px; }
+  .write__rail { position: fixed; left: 0; right: 0; bottom: 0; z-index: 5; display: grid; grid-template-columns: repeat(7, 1fr); gap: 2px; padding: 6px 4px calc(6px + env(safe-area-inset-bottom)); background: var(--surface); border-top: 1px solid var(--border); }
+  .write__rail button { font-size: 0.64rem; padding: 4px 0; }
+  .write__main { padding-bottom: 92px; }
 }
 
-/* Wide screens: outline on the left, the text in the middle, a panel on the right that switches between issues, sources, chat and settings. */
+/* Desktop: the header and status bar stay put. A rail of buttons sits at the side; the panel for the chosen button opens next to it
+   (click it again to close it). The text takes the room that is left, and the chat is always there on the right. */
 @media (min-width: 960px) {
-  .write__tabs button[data-tab='text'], .write__tabs button[data-tab='outline'] { display: none; }
-  .write__bar select { flex: 0 1 360px; }
-  .write__main { display: grid; grid-template-columns: 220px minmax(0, 3fr) minmax(340px, 2fr); gap: 16px; align-items: start; }
-  .write__pane--outline { display: block; grid-column: 1; grid-row: 1 / span 6; position: sticky; top: 8px; }
-  .write__pane--text { display: block; grid-column: 2; grid-row: 1 / span 6; position: sticky; top: 8px; }
-  .write__pane:not(.write__pane--text):not(.write__pane--outline) { grid-column: 3; }
-  .write__pane--text textarea { min-height: 75dvh; }
+  .write { height: 100dvh; min-height: 0; }
+  .write__switch { flex: 0 1 360px; }
+  .write__actions { margin-left: auto; }
+  .write__main { min-height: 0; padding: 0; display: grid; grid-template-columns: 76px var(--panel-w, 340px) minmax(0, 1fr) minmax(320px, 400px); grid-template-rows: minmax(0, 1fr); overflow: hidden; }
+  .write__main[data-open='false'] { --panel-w: 0px; }
+  .write__rail { grid-column: 1; display: flex; flex-direction: column; gap: 4px; padding: 10px 6px; border-right: 1px solid var(--border); background: var(--surface); }
+  .write__rail button[data-tab='text'], .write__rail button[data-tab='chat'] { display: none; }
+  .write__panel { display: block; grid-column: 2; min-width: 0; overflow: auto; padding: 14px; border-right: 1px solid var(--border); }
+  .write__main[data-open='false'] .write__panel { display: none; }
+  .write__pane--text { display: flex; grid-column: 3; min-height: 0; padding: 14px; }
+  .write__pane--text textarea { flex: 1; min-height: 0; resize: none; }
+  .write__empty { grid-column: 3; padding: 14px; }
+  .write__pane--chat { display: flex; flex-direction: column; grid-column: 4; min-height: 0; padding: 14px; border-left: 1px solid var(--border); }
+  .write__pane--chat::before { content: 'Chat'; font-weight: 700; margin-bottom: 8px; }
+  .write__pane--chat .write__chat { flex: 1; overflow: auto; min-height: 0; }
 }

@@ -37,6 +37,16 @@ describe('ArticleService', () => {
     expect((await s.get(id)).meta.sections.map((x) => x.heading)).toEqual(['Post', 'Latency', 'Conclusion'])
   })
 
+  it('takes the article\'s title from its first top-level heading, so editing the heading renames the article', async () => {
+    const { svc: s } = svc()
+    const id = await s.create('Working title', MD)
+    await s.updateText(id, MD.replace('# Post', '# A better title'), { analyze: false })
+    expect((await s.get(id)).meta.title).toBe('A better title')
+    expect(await s.list()).toEqual([{ id, title: 'A better title' }])
+    await s.updateText(id, 'No heading at all.\n', { analyze: false })
+    expect((await s.get(id)).meta.title).toBe('A better title') // nothing to take it from: keeps the last one
+  })
+
   it('updates the structure without any model call when analysis is off, and marks suggestions stale', async () => {
     const calls: string[] = []
     const { store, svc: s } = svc({}, calls)
@@ -157,5 +167,56 @@ describe('chat-held state stored inside the articles', () => {
     const block = await processWriterMessage({ message: 'show', port, now: NOW }, routed({ capture: { articleId: null, ops: [] } }))
     expect(block).toContain('G1')
     expect(block).not.toContain('C1')
+  })
+})
+
+describe('version history', () => {
+  const build = () => {
+    const store = createMemoryArticleStore()
+    let t = 0
+    return { store, s: new ArticleService({ store, llm: routed({}), now: () => `2026-10-16T10:00:0${t++}.000Z`, newId: () => 'a1' }) }
+  }
+  it('lists saved versions newest first and compares one with the article now', async () => {
+    const { s } = build()
+    const id = await s.create('Post', MD)
+    await s.saveVersion(id, 'First draft')
+    await s.updateText(id, MD.replace('18 ms', '41 ms'), { analyze: false })
+    await s.publish(id, 'v1')
+    const h = await s.history(id)
+    expect(h.map((x) => [x.kind, x.label])).toEqual([['published', 'v1'], ['checkpoint', 'First draft']])
+    const diff = await s.compareWithCurrent(id, h[0].index)
+    expect(diff.changedLines).toBe(0)
+    const older = await s.compareWithCurrent(id, h[1].index)
+    expect(older.text.some((l) => l.type === 'add' && l.text.includes('41 ms'))).toBe(true)
+    await expect(s.compareWithCurrent(id, 9)).rejects.toThrow('No version')
+  })
+  it('keeps a checkpoint before a suggestion is accepted and before a large rewrite', async () => {
+    const { s } = build()
+    const id = await s.create('Post', MD)
+    const b = await s.get(id)
+    const p = proposeSuggestion(b.meta, b.markdown, { quote: '18 ms', replacement: '41 ms', reason: 'r', by: 'assistant', now: NOW })
+    if (!p.ok) throw new Error('setup')
+    await s['store'].save(id, { ...b, meta: p.meta })
+    await s.acceptSuggestionAndUpdate(id, 'sg1', undefined, { analyze: false })
+    expect((await s.history(id))[0]).toMatchObject({ kind: 'checkpoint', label: 'Before accepting a suggested change' })
+    const rewrite = Array.from({ length: 12 }, (_, i) => `# Heading ${i}\n\nNew text ${i}.`).join('\n\n')
+    await s.updateText(id, rewrite, { analyze: false })
+    expect((await s.history(id))[0].label).toBe('Before a large change')
+  })
+  it('restores an old version as the working article after saving the present one, and keeps comments', async () => {
+    const { store, s } = build()
+    const id = await s.create('Post', MD)
+    await s.saveVersion(id, 'Original')
+    await s.updateText(id, MD.replace('18 ms', '41 ms'), { analyze: false })
+    const b = await s.get(id)
+    await store.save(id, { ...b, meta: { ...b.meta, comments: [{ id: 'wc1', articleId: id, text: 'keep me', state: 'open', conflictsWith: [], origin: 'reviewer', capturedAt: NOW }] } })
+    const restored = await s.restore(id, 0)
+    expect(restored.markdown).toBe(MD)
+    expect(restored.meta.comments).toHaveLength(1)
+    expect(restored.meta.status).toBe('drafting')
+    const h = await s.history(id)
+    expect(h[0].label).toBe('Before restoring an earlier version')
+    expect((await s.getVersion(id, h[0].index)).markdown).toContain('41 ms')
+    expect(h.some((x) => x.label === 'Original')).toBe(true)
   })
 })

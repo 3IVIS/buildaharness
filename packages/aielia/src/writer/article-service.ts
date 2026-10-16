@@ -3,7 +3,8 @@ import { extractClaims, type ExtractionResult } from './article-claims.js'
 import { serializeArticle, loadArticleFolder, type ArticleBundle, type ArticleFolder } from './article-folder.js'
 import { createArticleMeta, type ArticleMeta, type Claim, type Link, type Source } from './article-model.js'
 import { resolveChange, type ResolveResult } from './article-resolver.js'
-import { checkIntegrity, computeReadiness, createSnapshot, setSectionReview, type Problem, type Readiness } from './article-rules.js'
+import { addSnapshot, compareVersions, isLargeChange, type VersionComparison } from './article-history.js'
+import { checkIntegrity, computeReadiness, createSnapshot, restoreSnapshot, setSectionReview, type Problem, type Readiness, type Snapshot } from './article-rules.js'
 import { suggestEdits, type EditSuggestResult } from './article-edit-suggest.js'
 import { reconcileSections } from './article-sections.js'
 import { createSource } from './article-sources.js'
@@ -132,8 +133,12 @@ export class ArticleService {
       return !old || sectionText(before.markdown, old) !== sectionText(markdown, s)
     }).map((s) => s.id)
 
-    let meta = refreshSuggestions({ ...before.meta, sections: rec.sections }, markdown)
-    let bundle: ArticleBundle = { ...before, markdown, meta }
+    // The article's title is its first top-level heading, so the writer edits it in the text and nowhere else.
+    const heading = rec.sections.find((x) => x.level === 1 && x.heading.trim() !== '')?.heading.trim()
+    let meta = refreshSuggestions({ ...before.meta, sections: rec.sections, title: heading ?? before.meta.title }, markdown)
+    // A rewrite is a natural point to be able to go back to: keep the text as it was.
+    const snapshots = isLargeChange(before.markdown, markdown) ? addSnapshot(before.snapshots, createSnapshot('checkpoint', before.markdown, before.meta, this.now(), 'Before a large change')) : before.snapshots
+    let bundle: ArticleBundle = { ...before, markdown, meta, snapshots }
     await this.store.save(id, bundle)
     const outcome: UpdateOutcome = { bundle, changedSectionIds, removedSections: rec.removed.map((s) => s.heading), autoChecks: [] }
     if (options.analyze === false || changedSectionIds.length === 0) return outcome
@@ -152,7 +157,7 @@ export class ArticleService {
     outcome.resolution = resolution
     if (resolution.status === 'resolved') meta = resolution.meta
 
-    bundle = { ...before, markdown, meta }
+    bundle = { ...before, markdown, meta, snapshots }
     await this.store.save(id, bundle)
     outcome.bundle = bundle
     return outcome
@@ -236,7 +241,8 @@ export class ArticleService {
     const b = await this.get(id)
     const r = acceptSuggestion(b.meta, b.markdown, suggestionId, edited)
     if (!r.ok) return r
-    await this.store.save(id, { ...b, meta: r.meta })
+    const snapshots = addSnapshot(b.snapshots, createSnapshot('checkpoint', b.markdown, b.meta, this.now(), 'Before accepting a suggested change'))
+    await this.store.save(id, { ...b, meta: r.meta, snapshots })
     return { ok: true, outcome: await this.updateText(id, r.markdown, options) }
   }
 
@@ -261,6 +267,48 @@ export class ArticleService {
     const b = await this.get(id)
     if (!b.meta.comments.some((c) => c.id === commentId)) throw new Error(`No comment ${commentId}.`)
     await this.store.save(id, { ...b, meta: { ...b.meta, comments: b.meta.comments.map((c) => (c.id === commentId ? { ...c, state } : c)) } })
+  }
+
+  /** Saves the article as it is now as a named version the writer can come back to. */
+  async saveVersion(id: string, label?: string): Promise<void> {
+    const b = await this.get(id)
+    await this.store.save(id, { ...b, snapshots: addSnapshot(b.snapshots, createSnapshot('checkpoint', b.markdown, b.meta, this.now(), label?.trim() || 'Saved by you')) })
+  }
+
+  /** Every version, newest first: published snapshots and checkpoints, with the counts recorded at the time. */
+  async history(id: string): Promise<{ index: number; kind: Snapshot['kind']; label?: string; at: string; readiness: Snapshot['readiness'] }[]> {
+    const b = await this.get(id)
+    return b.snapshots.map((s, index) => ({ index, kind: s.kind, label: s.label, at: s.at, readiness: s.readiness })).reverse()
+  }
+
+  /** What changed between a stored version and the article now (text, claim status, sources, readiness). */
+  async compareWithCurrent(id: string, index: number): Promise<VersionComparison> {
+    const b = await this.get(id)
+    const snap = b.snapshots[index]
+    if (!snap) throw new Error(`No version ${index}.`)
+    return compareVersions({ markdown: snap.markdown, meta: snap.meta }, { markdown: b.markdown, meta: b.meta })
+  }
+
+  async getVersion(id: string, index: number): Promise<Snapshot> {
+    const snap = (await this.get(id)).snapshots[index]
+    if (!snap) throw new Error(`No version ${index}.`)
+    return snap
+  }
+
+  /**
+   * Restoring makes a new working version from an old one and rewrites no history. The present article is saved as a checkpoint first,
+   * so nothing is lost. Reviewer comments and the writer's corrections are the record of the conversation, not of the text, so they stay as they are.
+   */
+  async restore(id: string, index: number): Promise<ArticleBundle> {
+    const b = await this.get(id)
+    const snap = b.snapshots[index]
+    if (!snap) throw new Error(`No version ${index}.`)
+    const snapshots = addSnapshot(b.snapshots, createSnapshot('checkpoint', b.markdown, b.meta, this.now(), 'Before restoring an earlier version'))
+    const restored = restoreSnapshot(snap)
+    const meta: ArticleMeta = { ...restored.meta, status: 'drafting', comments: b.meta.comments, corrections: b.meta.corrections }
+    const next: ArticleBundle = { markdown: restored.markdown, meta, snapshots }
+    await this.store.save(id, next)
+    return next
   }
 
   readiness(bundle: ArticleBundle): { readiness: Readiness; problems: Problem[] } {

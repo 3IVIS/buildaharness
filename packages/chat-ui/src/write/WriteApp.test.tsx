@@ -32,6 +32,66 @@ afterEach(() => {
 
 const MD = '# Post\n\n## Latency\n\nThe p99 was 18 ms.\n'
 
+describe('WriteApp layout', () => {
+  it('has a labelled outline whose entries jump to that place in the text', async () => {
+    const s = await services({}, MD)
+    render(<WriteApp services={s} />)
+    const box = (await screen.findByLabelText('Article text')) as HTMLTextAreaElement
+    expect(within(screen.getByRole('region', { name: 'Outline' })).getByRole('heading', { name: 'Outline' })).toBeInTheDocument()
+    await userEvent.click(within(screen.getByRole('region', { name: 'Outline' })).getByRole('button', { name: 'Latency' }))
+    expect(box.selectionStart).toBe(MD.indexOf('## Latency'))
+  })
+
+  it('has a rail of buttons; on desktop the panel opens from the rail and closes when the same button is clicked again', async () => {
+    const original = window.matchMedia
+    window.matchMedia = ((q: string) => ({ matches: q.includes('min-width: 960px'), media: q, addEventListener: () => undefined, removeEventListener: () => undefined })) as unknown as typeof window.matchMedia
+    try {
+      const s = await services({}, MD)
+      const { container } = render(<WriteApp services={s} />)
+      await screen.findByLabelText('Article text')
+      const main = container.querySelector('.write__main') as HTMLElement
+      const rail = screen.getByRole('navigation', { name: 'Panels' })
+      expect(within(rail).getAllByRole('button').map((b) => b.getAttribute('aria-label'))).toEqual(['Text', 'Outline', 'Issues', 'Sources', 'History', 'Chat', 'Settings'])
+      expect(main.dataset.open).toBe('true') // starts with the outline open
+      await userEvent.click(within(rail).getByRole('button', { name: 'Outline' }))
+      expect(main.dataset.open).toBe('false')
+      await userEvent.click(within(rail).getByRole('button', { name: 'History' }))
+      expect(main.dataset.open).toBe('true')
+      expect(screen.getByRole('region', { name: 'History' }).className).toContain('is-shown')
+      expect(screen.getByRole('region', { name: 'Outline' }).className).not.toContain('is-shown')
+    } finally {
+      window.matchMedia = original
+    }
+  })
+
+  it('History: saves a named version, shows what changed since it, and restores it after saving the present article', async () => {
+    const s = await services({}, MD)
+    render(<WriteApp services={s} />)
+    const box = (await screen.findByLabelText('Article text')) as HTMLTextAreaElement
+    vi.spyOn(window, 'prompt').mockReturnValue('First draft')
+    vi.spyOn(window, 'confirm').mockReturnValue(true)
+    await userEvent.click(screen.getByRole('button', { name: 'History' }))
+    await userEvent.click(screen.getByRole('button', { name: 'Save version' }))
+    expect(await screen.findByText('First draft')).toBeInTheDocument()
+    fireEvent.change(box, { target: { value: MD.replace('18 ms', '41 ms') } })
+    await userEvent.click(screen.getByRole('button', { name: 'Compare with now' }))
+    const detail = await screen.findByLabelText('Version detail')
+    expect(within(detail).getByText(/changed lines/)).toBeInTheDocument()
+    await userEvent.click(screen.getByRole('button', { name: 'Restore' }))
+    await waitFor(() => expect(box.value).toContain('18 ms'))
+    expect(await screen.findByText('Before restoring an earlier version')).toBeInTheDocument()
+  })
+
+  it('shows the article under the title taken from its heading, and keeps the actions together', async () => {
+    const s = await services({}, MD)
+    render(<WriteApp services={s} />)
+    await screen.findByLabelText('Article text')
+    expect(screen.getByRole('option', { name: 'Post' })).toBeInTheDocument()
+    fireEvent.change(screen.getByLabelText('Article text'), { target: { value: MD.replace('# Post', '# Renamed in the text') } })
+    expect(await screen.findByRole('option', { name: 'Renamed in the text' }, { timeout: 3000 })).toBeInTheDocument()
+  })
+})
+
 describe('WriteApp settings', () => {
   it('shows the defaults, saves a change, and uses it for the next automatic check', async () => {
     const s = await services({}, MD)
@@ -70,7 +130,7 @@ describe('WriteApp', () => {
     const box = (await screen.findByLabelText('Article text')) as HTMLTextAreaElement
     expect(box.value).toContain('# My post')
     await userEvent.click(screen.getByRole('button', { name: 'Outline' }))
-    expect(within(screen.getByLabelText('Outline')).getByText('My post')).toBeInTheDocument()
+    expect(within(screen.getByRole('region', { name: 'Outline' })).getByText('My post')).toBeInTheDocument()
   })
 
   it('finds the claims on request and shows them as having no source', async () => {
