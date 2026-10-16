@@ -1,11 +1,12 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
-import { collectIssues, computeReadiness, effectiveSourceStatus, issueCount, type ArticleBundle, type ChangeSummary, type DependencyKind, type IssueCategory, type StyleProfile, type WritePermissions } from '@buildaharness/aielia'
+import { claimMarks, collectIssues, computeReadiness, effectiveSourceStatus, issueCount, type ArticleBundle, type ChangeSummary, type DependencyKind, type IssueCategory, type StyleProfile, type WritePermissions } from '@buildaharness/aielia'
 import type { ChatAction } from './AdjustBar'
 import { ArticleSwitcher, type ArticleItem } from './ArticleSwitcher'
 import { ChatPane, type ChatLine } from './ChatPane'
 import { HistoryPanel, type VersionRow, type Viewing } from './HistoryPanel'
 import { IdeasPanel } from './IdeasPanel'
 import { StylePanel } from './StylePanel'
+import { MarkedText } from './MarkedText'
 import { IssuesPanel, type ResolveNote } from './IssuesPanel'
 import { LinksPanel } from './LinksPanel'
 import { OutlinePanel } from './OutlinePanel'
@@ -456,7 +457,7 @@ export function WriteApp({ services }: { services: WriteServices }): React.JSX.E
         </aside>
         {ready && meta ? (
           <section className={`write__pane write__pane--text ${tab === 'text' ? 'is-shown' : ''}`} aria-label="Text">
-            <textarea ref={textRef} aria-label="Article text" value={draft} onChange={(e) => onType(e.target.value)} onSelect={(e) => setSelection({ start: e.currentTarget.selectionStart, end: e.currentTarget.selectionEnd })} onClick={(e) => setSelection({ start: e.currentTarget.selectionStart, end: e.currentTarget.selectionEnd })} spellCheck />
+            <MarkedText textRef={textRef} value={draft} marks={claimMarks(meta, draft)} onChange={onType} onSelection={setSelection} />
             <TextNotes
               meta={meta}
               markdown={draft}

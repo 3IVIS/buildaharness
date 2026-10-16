@@ -39,7 +39,20 @@
 .write__pane { display: none; }
 .write__pane.is-shown { display: block; }
 .write__panel { display: contents; }
-.write__pane--text > textarea { width: 100%; min-height: 48dvh; resize: vertical; font-family: ui-monospace, Menlo, monospace; line-height: 1.6; }
+.write__editor { position: relative; display: flex; flex-direction: column; flex: 1; min-height: 0; }
+.write__editbox { position: relative; display: flex; flex-direction: column; flex: 1; min-height: 0; }
+.write__editor textarea, .write__backdrop { width: 100%; box-sizing: border-box; min-height: 48dvh; margin: 0; padding: 6px 10px; border: 1px solid transparent; font-family: ui-monospace, Menlo, monospace; font-size: inherit; line-height: 1.6; white-space: pre-wrap; overflow-wrap: break-word; word-break: normal; overflow-y: scroll; }
+.write__editor textarea { position: relative; resize: vertical; background: transparent; border-color: color-mix(in srgb, var(--border) 55%, transparent); }
+.write__backdrop { position: absolute; inset: 0 0 auto 0; height: 100%; color: transparent; pointer-events: none; overflow: hidden; overflow-y: scroll; scrollbar-color: transparent transparent; }
+.write__mark { color: transparent; background: none; border-radius: 2px; text-decoration: underline wavy; text-decoration-thickness: 1.5px; text-underline-offset: 3px; }
+.write__mark--ok { text-decoration-color: #2e9e5b; }
+.write__mark--look { text-decoration-color: #d89a1c; }
+.write__mark--bad { text-decoration-color: #d64545; }
+.write__marklegend { margin: 4px 0 0; font-size: 0.82rem; color: var(--muted); }
+.write__tone { margin-left: 8px; text-decoration: underline wavy; text-underline-offset: 3px; }
+.write__tone--ok { text-decoration-color: #2e9e5b; }
+.write__tone--look { text-decoration-color: #d89a1c; }
+.write__tone--bad { text-decoration-color: #d64545; }
 .write__panehead { font-size: 1rem; margin: 0 0 4px; }
 .write__list { list-style: none; margin: 0 0 16px; padding: 0; display: grid; gap: 10px; }
 .write__list li { border: 1px solid var(--border); border-radius: 8px; padding: 10px 12px; background: var(--surface); }
@@ -115,7 +128,7 @@
 
 /* Phones: one panel at a time, picked from a bottom bar; nothing scrolls sideways. */
 @media (max-width: 959px) {
-  .write__rail { position: fixed; left: 0; right: 0; bottom: 0; z-index: 5; display: grid; grid-template-columns: repeat(8, 1fr); gap: 1px; padding: 6px 2px calc(6px + env(safe-area-inset-bottom)); background: var(--surface); border-top: 1px solid var(--border); }
+  .write__rail { position: fixed; left: 0; right: 0; bottom: 0; z-index: 5; display: grid; grid-auto-flow: column; grid-auto-columns: 1fr; gap: 1px; padding: 6px 2px calc(6px + env(safe-area-inset-bottom)); background: var(--surface); border-top: 1px solid var(--border); }
   .write__rail button { font-size: 0.6rem; padding: 4px 0; }
   .write__main { padding-bottom: 92px; }
 }
@@ -134,7 +147,8 @@
   .write__main[data-open='false'] .write__panel { display: none; }
   .write__pane--text { display: flex; grid-column: 3; min-height: 0; padding: 14px; }
   .write__pane--text { flex-direction: column; }
-  .write__pane--text > textarea { flex: 1; min-height: 120px; resize: none; }
+  .write__editor textarea { flex: 1; min-height: 120px; resize: none; }
+  .write__backdrop { min-height: 120px; }
   .write__dock { flex: none; max-height: 52%; display: flex; flex-direction: column; }
   .write__dockbody { max-height: none; flex: 1 1 auto; }
   .write__empty { grid-column: 3; padding: 14px; }

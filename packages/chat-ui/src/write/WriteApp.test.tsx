@@ -231,6 +231,20 @@ describe('chat: model, check and adjust', () => {
     expect(screen.getAllByTitle('The model that wrote this').at(-1)).toHaveTextContent(s.models.chat())
   })
 
+  it('underlines the claims it found in the text, and says what the tones mean', async () => {
+    const s = await services({ capture: { articleId: null, ops: [] }, claims: { claims: [{ quote: 'The p99 was 18 ms.', kind: 'factual', matchesId: null, sure: true }] }, resolve: { affected: [] } }, MD)
+    const { container } = render(<WriteApp services={s} />)
+    await waitForText()
+    expect(container.querySelector('mark')).toBeNull()
+    await userEvent.click(rail('Chat'))
+    await userEvent.selectOptions(screen.getByLabelText('Adjust', { selector: 'select' }), 'action:check')
+    await screen.findByText(/I found 1 factual claim/)
+    await waitFor(() => expect(container.querySelector('mark')?.textContent).toBe('The p99 was 18 ms.'))
+    expect(container.querySelector('mark')).toHaveClass('write__mark--look')
+    expect(screen.getByText(/Underlined claims:/)).toHaveTextContent('needs a look')
+    expect(container.querySelector('.write__backdrop')).toHaveAttribute('aria-hidden', 'true')
+  })
+
   it('an adjustment is sent with Enter as an ordinary chat message, and the edits come back as suggestions', async () => {
     const s = await services({ capture: { articleId: null, ops: [] }, edits: { suggestions: [{ quote: 'It is quick.', replacement: 'It is, well, quick.', reason: 'more conversational' }] } }, MD2)
     render(<WriteApp services={s} />)
