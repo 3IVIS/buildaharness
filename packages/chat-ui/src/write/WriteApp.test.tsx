@@ -137,7 +137,7 @@ describe('rail and panels', () => {
       const { container } = render(<WriteApp services={s} />)
       await waitForText()
       const main = container.querySelector('.write__main') as HTMLElement
-      expect(within(screen.getByRole('navigation', { name: 'Panels' })).getAllByRole('button').map((b) => b.getAttribute('aria-label'))).toEqual(['Text', 'Outline', 'Ideas', 'Issues', 'Links', 'History', 'Chat', 'Settings'])
+      expect(within(screen.getByRole('navigation', { name: 'Panels' })).getAllByRole('button').map((b) => b.getAttribute('aria-label'))).toEqual(['Text', 'Outline', 'Style', 'Ideas', 'Issues', 'Links', 'History', 'Chat', 'Settings'])
       expect(main.dataset.open).toBe('true')
       await userEvent.click(rail('Outline'))
       expect(main.dataset.open).toBe('false')
@@ -498,6 +498,30 @@ describe('ideas', () => {
     await userEvent.click(rail('Issues'))
     await userEvent.click(await within(panel('Issues')).findByRole('button', { name: 'Accept' }))
     await waitFor(async () => expect((await s.service.get(id)).meta.ideas.find((i) => i.id === 'id2')?.state).toBe('used'))
+  })
+})
+
+describe('style', () => {
+  it('fills the brief by clicking, saves a writing profile once and uses it in the article', async () => {
+    const s = await services({}, MD)
+    const id = (await s.service.list())[0].id
+    render(<WriteApp services={s} />)
+    await waitForText()
+    await userEvent.click(rail('Style'))
+    const style = panel('Style')
+    await userEvent.click(within(style).getByRole('button', { name: 'Audience' }))
+    await userEvent.type(screen.getByLabelText('Audience'), 'SREs on call{Enter}')
+    await waitFor(async () => expect((await s.service.get(id)).meta.brief).toEqual({ audience: 'SREs on call' }))
+    await userEvent.click(within(style).getByRole('button', { name: 'New profile' }))
+    await userEvent.type(within(style).getByLabelText('Profile name'), 'House')
+    await userEvent.type(within(style).getByLabelText('Voice'), 'plain and direct')
+    await userEvent.type(within(style).getByLabelText('Terms'), 'customer | user')
+    await userEvent.click(within(style).getByRole('button', { name: 'Save profile' }))
+    await waitFor(async () => expect((await s.service.get(id)).meta.style).toMatchObject({ name: 'House', voice: 'plain and direct', terms: [{ use: 'customer', instead: 'user' }] }))
+    expect(await within(style).findByText(/plain and direct · 1 term/)).toBeInTheDocument()
+    await userEvent.selectOptions(within(style).getByLabelText('Writing profile'), '')
+    await waitFor(async () => expect((await s.service.get(id)).meta.style).toBeUndefined())
+    expect((await s.service.profiles()).map((p) => p.name)).toEqual(['House'])
   })
 })
 

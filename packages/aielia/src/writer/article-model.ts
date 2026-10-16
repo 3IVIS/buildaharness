@@ -111,6 +111,26 @@ export const SuggestionSchema = z.object({
 })
 export type Suggestion = z.infer<typeof SuggestionSchema>
 
+/** The reusable brief for one article: who it is for and what it should do. Every field is optional text the writer fills in. */
+export const BriefSchema = z.object({
+  audience: z.string().optional(),
+  purpose: z.string().optional(),
+  tone: z.string().optional(),
+  length: z.string().optional(),
+  notes: z.string().optional(),
+})
+export type Brief = z.infer<typeof BriefSchema>
+
+/** A writing profile (brand voice and terminology). A copy lives in each article that uses it, so an export is self-contained. */
+export const StyleProfileSchema = z.object({
+  id: z.string(),
+  name: z.string(),
+  voice: z.string().default(''),
+  /** Words the writer wants used, and the words they replace. */
+  terms: z.array(z.object({ use: z.string(), instead: z.string().optional() })).default([]),
+})
+export type StyleProfile = z.infer<typeof StyleProfileSchema>
+
 export const IdeaSchema = z.object({
   id: z.string(),
   text: z.string(),
@@ -143,6 +163,9 @@ export const ArticleMetaSchema = z.object({
   suggestions: z.array(SuggestionSchema),
   /** Ideas: material the writer or the assistant collected, to be written into the article. */
   ideas: z.array(IdeaSchema).default([]),
+  /** The brief and the writing profile the assistant follows when it proposes text. */
+  brief: BriefSchema.optional(),
+  style: StyleProfileSchema.optional(),
 })
 export type ArticleMeta = z.infer<typeof ArticleMetaSchema>
 

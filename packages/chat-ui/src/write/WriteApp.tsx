@@ -1,10 +1,11 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
-import { collectIssues, computeReadiness, effectiveSourceStatus, issueCount, type ArticleBundle, type ChangeSummary, type DependencyKind, type IssueCategory, type WritePermissions } from '@buildaharness/aielia'
+import { collectIssues, computeReadiness, effectiveSourceStatus, issueCount, type ArticleBundle, type ChangeSummary, type DependencyKind, type IssueCategory, type StyleProfile, type WritePermissions } from '@buildaharness/aielia'
 import type { ChatAction } from './AdjustBar'
 import { ArticleSwitcher, type ArticleItem } from './ArticleSwitcher'
 import { ChatPane, type ChatLine } from './ChatPane'
 import { HistoryPanel, type VersionRow, type Viewing } from './HistoryPanel'
 import { IdeasPanel } from './IdeasPanel'
+import { StylePanel } from './StylePanel'
 import { IssuesPanel, type ResolveNote } from './IssuesPanel'
 import { LinksPanel } from './LinksPanel'
 import { OutlinePanel } from './OutlinePanel'
@@ -14,11 +15,12 @@ import { Icon } from './icons'
 import type { WriteServices } from './write-services'
 import './write.css'
 
-type Tab = 'text' | 'outline' | 'ideas' | 'issues' | 'links' | 'history' | 'chat' | 'settings'
+type Tab = 'text' | 'outline' | 'style' | 'ideas' | 'issues' | 'links' | 'history' | 'chat' | 'settings'
 
 const TABS: { id: Tab; label: string }[] = [
   { id: 'text', label: 'Text' },
   { id: 'outline', label: 'Outline' },
+  { id: 'style', label: 'Style' },
   { id: 'ideas', label: 'Ideas' },
   { id: 'issues', label: 'Issues' },
   { id: 'links', label: 'Links' },
@@ -30,6 +32,7 @@ const TABS: { id: Tab; label: string }[] = [
 const RAIL_ICONS: Record<Tab, string> = {
   text: 'M5 5h14M5 9h14M5 13h14M5 17h9',
   outline: 'M8 6h12M8 12h12M8 18h12M4 6h.01M4 12h.01M4 18h.01',
+  style: 'M12 20h9M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4z',
   ideas: 'M9 18h6M10 21h4M12 3a6 6 0 0 0-3.5 10.9c.6.5 1 1.2 1 2.1h5c0-.9.4-1.6 1-2.1A6 6 0 0 0 12 3z',
   issues: 'M12 3 2.5 20h19L12 3zM12 10v4M12 17h.01',
   links: 'M10 14a4 4 0 0 0 5.7 0l3-3a4 4 0 0 0-5.7-5.7l-1 1M14 10a4 4 0 0 0-5.7 0l-3 3a4 4 0 0 0 5.7 5.7l1-1',
@@ -134,6 +137,9 @@ export function WriteApp({ services }: { services: WriteServices }): React.JSX.E
   }
 
   /** Runs a change to the article that starts from the saved text, then shows the result. */
+  const [profiles, setProfiles] = useState<StyleProfile[]>([])
+  useEffect(() => { void service.profiles().then(setProfiles).catch(() => undefined) }, [service])
+
   const change = (label: string, work: (id: string) => Promise<void>): void => {
     if (!activeId) return
     void run(label, async () => { await flushDraft(); await work(activeId); await reload(activeId) })
@@ -401,6 +407,9 @@ export function WriteApp({ services }: { services: WriteServices }): React.JSX.E
             <>
               <section className={`write__pane write__panel-pane ${tab === 'outline' ? 'is-shown' : ''}`} aria-label="Outline">
                 <OutlinePanel meta={meta} onJump={jumpTo} onRename={(sid, h) => change('Renaming the heading', async (id) => { const r = await service.renameSection(id, sid, h); if (!r.ok) setNotice(r.reason) })} onPurpose={(sid, t) => change('Saving', async (id) => { await service.setSectionPurpose(id, sid, t) })} onClear={(sid) => change('Saving', async (id) => { await service.setReview(id, sid, 'clean') })} />
+              </section>
+              <section className={`write__pane write__panel-pane ${tab === 'style' ? 'is-shown' : ''}`} aria-label="Style">
+                <StylePanel meta={meta} profiles={profiles} busy={busy !== null} onBrief={(b) => change('Saving the brief', async (id) => { await service.setBrief(id, b) })} onUse={(pid) => change('Saving', async (id) => { const r = await service.useProfile(id, pid); if (!r.ok && r.reason) setNotice(r.reason) })} onSaveProfile={(p) => change('Saving the profile', async (id) => { const saved = await service.saveProfile(p); if (saved) await service.useProfile(id, saved.id); setProfiles(await service.profiles()) })} onDeleteProfile={(pid) => change('Deleting the profile', async () => { await service.deleteProfile(pid); setProfiles(await service.profiles()) })} />
               </section>
               <section className={`write__pane write__panel-pane ${tab === 'ideas' ? 'is-shown' : ''}`} aria-label="Ideas">
                 <IdeasPanel meta={meta} busy={busy !== null} model={chatModel} onAdd={(t) => change('Adding the idea', async (id) => { const r = await service.addIdea(id, { text: t }); if (!r.ok) setNotice(r.reason) })} onSuggest={suggestIdeas} onEdit={(iid, t) => change('Saving', async (id) => { await service.updateIdea(id, iid, { text: t }) })} onWrite={writeIdeas} onRemove={(iid) => change('Saving', async (id) => { await service.deleteIdea(id, iid) })} />

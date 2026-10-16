@@ -5,6 +5,8 @@ import { createArticleMeta, type ArticleMeta, type Claim, type Idea, type Link, 
 import { resolveChange, type ResolveResult } from './article-resolver.js'
 import { addCommentOnText, refreshComments } from './article-comments.js'
 import { checkableClaims, unsupportedClaims, type IssueCategory } from './article-issues.js'
+import { applyProfile, renderStyleGuide, setBrief, deleteProfile, loadProfiles, saveProfile } from './article-style.js'
+import type { Brief, StyleProfile } from './article-model.js'
 import { addIdea, editIdea, removeIdea, setIdeaState, suggestIdeas, type IdeaSuggestion } from './article-ideas.js'
 import { attachSourceToText, proposeSourceLinks, type SourceLinkProposal, type TextRange } from './article-source-links.js'
 import { addDrawnLink, proposeDependencies, type DependencyKind, type DependencyProposal } from './article-dependencies.js'
@@ -479,6 +481,35 @@ export class ArticleService {
     return this.suggest(id, text, modelOverride, { ideaIds })
   }
 
+  // ---- brief and writing profile
+
+  async setBrief(id: string, brief: Brief): Promise<void> {
+    const b = await this.get(id)
+    await this.store.save(id, { ...b, meta: setBrief(b.meta, brief) })
+  }
+
+  /** Saves a profile in the writer's settings (new, or replacing one with the same id). Returns it, or undefined when it has no name. */
+  saveProfile(profile: { id?: string; name: string; voice?: string; terms?: { use: string; instead?: string }[] }): Promise<StyleProfile | undefined> {
+    return saveProfile(this.store, profile, this.newId)
+  }
+
+  profiles(): Promise<StyleProfile[]> {
+    return loadProfiles(this.store)
+  }
+
+  async deleteProfile(profileId: string): Promise<void> {
+    await deleteProfile(this.store, profileId)
+  }
+
+  /** Gives the article a copy of a saved profile (null removes it). A later edit of the saved profile does not change articles that already use it until the writer applies it again. */
+  async useProfile(id: string, profileId: string | null): Promise<{ ok: boolean; reason?: string }> {
+    const b = await this.get(id)
+    const profile = profileId === null ? null : (await loadProfiles(this.store)).find((p) => p.id === profileId)
+    if (profile === undefined) return { ok: false, reason: `No profile ${profileId}.` }
+    await this.store.save(id, { ...b, meta: applyProfile(b.meta, profile) })
+    return { ok: true }
+  }
+
   // ---- editing in place
 
   /** Renames a section by changing its heading line in the text, which is where the heading lives. The section keeps its identity. */
@@ -707,6 +738,10 @@ const PENDING_KEY = 'writer:pending-ops'
 export function createArticleChatPort(store: ArticleStore): WriterChatPort {
   return {
     articles: () => store.list(),
+    async styleText(articleId) {
+      const m = (await store.load(articleId))?.meta
+      return m ? renderStyleGuide(m) : ''
+    },
     async ideasText(articleId) {
       const open = ((await store.load(articleId))?.meta.ideas ?? []).filter((i) => i.state === 'open')
       return open.map((i) => i.text)

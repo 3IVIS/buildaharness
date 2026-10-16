@@ -203,3 +203,6 @@
 .write .write__send:hover:not(:disabled) { background: var(--accent-solid); color: var(--on-accent); }
 .write__linkform { display: grid; gap: 6px; margin-top: 6px; }
 .write__linkform > * { min-width: 0; width: 100%; box-sizing: border-box; }
+
+.write__subhead { font-size: 0.95rem; margin: 14px 0 6px; }
+.write__field { display: grid; gap: 4px; margin-bottom: 8px; }
