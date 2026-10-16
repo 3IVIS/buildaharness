@@ -151,3 +151,9 @@ export { estimateCostUsd } from './model-pricing.js'
 // First-run setup pieces shared by the CLI (first-run.ts) and chat-ui's SetupWizard — browser-safe.
 export { PROVIDER_SETUP, getProviderSetup, cleanApiKey, checkApiKeyFormat, testApiKey } from './provider-setup.js'
 export type { KeyedBackend, ProviderSetupInfo, KeyTestResult } from './provider-setup.js'
+
+// Aielia Write: state the writer gives in chat (plans/aielia_write_article_model_plan.html, section 8)
+export { WriterChatStateSchema, WriterCommentSchema, WriterCorrectionSchema, WRITER_CHAT_STATE_VERSION, createEmptyWriterChatState, applyCaptureOps, renderWriterChatBlock } from './writer/writer-chat-state.js'
+export type { WriterChatState, WriterComment, WriterCorrection, ArticleRef, CaptureOp, ApplyResult } from './writer/writer-chat-state.js'
+export { captureChatState } from './writer/writer-chat-capture.js'
+export type { CaptureResult, CaptureStatus } from './writer/writer-chat-capture.js'
