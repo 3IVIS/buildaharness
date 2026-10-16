@@ -167,3 +167,5 @@ export type { Actor, Problem, Readiness, Snapshot } from './writer/article-rules
 export { serializeArticle, loadArticleFolder } from './writer/article-folder.js'
 export type { ArticleFolder, ArticleBundle, FolderLoad } from './writer/article-folder.js'
 export { fingerprintPassage, createSource, applyRecheck, acceptNewPassage } from './writer/article-sources.js'
+export { extractClaims, batchSections } from './writer/article-claims.js'
+export type { ExtractionResult } from './writer/article-claims.js'
