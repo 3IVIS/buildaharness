@@ -17,7 +17,12 @@
 .write__model input { width: 100%; min-width: 0; font-size: 0.85rem; padding: 4px 8px; }
 .write__model { display: inline-block; min-width: 0; flex: 1 1 140px; }
 .write__actions { display: flex; flex-wrap: wrap; gap: 8px; }
-.write button, .write select, .write input, .write textarea, .write__import { font: inherit; color: var(--text); background: var(--tint-2); border: 1px solid var(--border); border-radius: 6px; padding: 6px 10px; }
+.write button, .write select, .write input, .write textarea, .write__import { font: inherit; color: var(--text); border-radius: 6px; padding: 6px 10px; }
+.write button, .write__import { background: var(--tint-2); border: 1px solid var(--border); }
+/* Text boxes blend into the page: no grey fill, only a soft outline that sharpens when the box is in use. */
+.write select, .write input, .write textarea { background: transparent; border: 1px solid color-mix(in srgb, var(--border) 55%, transparent); }
+.write select:focus, .write input:focus, .write textarea:focus { outline: none; border-color: var(--accent); }
+.write input::placeholder, .write textarea::placeholder { color: var(--muted); opacity: 0.8; }
 .write button { cursor: pointer; min-height: 40px; }
 .write button:disabled { opacity: 0.5; cursor: default; }
 .write__import { position: relative; cursor: pointer; min-height: 40px; display: inline-flex; align-items: center; }
@@ -83,7 +88,6 @@
 /* Sources for the text under the cursor, at the bottom of the text. */
 .write__dock { margin-top: 10px; border: 1px solid var(--border); border-radius: 8px; background: var(--surface); min-width: 0; }
 .write__dock.is-over { border-color: var(--accent); background: var(--accent-a08); }
-.write__dockhead { display: flex; align-items: baseline; gap: 10px; padding: 8px 12px; border-bottom: 1px solid var(--border); }
 .write__dockfor { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--muted); font-size: 0.9rem; }
 .write__dockbody { display: flex; flex-direction: column; max-height: 300px; min-height: 0; padding: 8px 12px 10px; }
 .write__dockscroll { flex: 1 1 auto; min-height: 120px; overflow: auto; }
@@ -137,3 +141,65 @@
   .write__pane--chat { display: flex; flex-direction: column; grid-column: 4; min-height: 0; padding: 14px; border-left: 1px solid var(--border); }
     .write__pane--chat .write__chat { flex: 1; overflow: auto; min-height: 0; }
 }
+
+
+/* Rows: one line of content on the left, small icon actions on the right. */
+.write__rows { list-style: none; margin: 8px 0 12px; padding: 0; display: grid; gap: 2px; }
+.write__rows > li { display: flex; gap: 8px; align-items: flex-start; padding: 6px 0; border-bottom: 1px solid color-mix(in srgb, var(--border) 50%, transparent); }
+.write__rowicon { flex: none; color: var(--muted); padding-top: 3px; }
+.write__rowmain { flex: 1; min-width: 0; overflow-wrap: anywhere; }
+.write__rowacts { flex: none; display: inline-flex; gap: 2px; align-items: center; }
+.write__choice .write__rowmain { color: var(--text); }
+.write .write__iconbtn { display: inline-flex; align-items: center; justify-content: center; min-width: 32px; min-height: 32px; padding: 3px; margin: 0; background: transparent; border-color: transparent; color: var(--muted); }
+.write .write__iconbtn:hover:not(:disabled) { background: var(--tint-2); color: var(--text); }
+.write__editable { cursor: text; border-radius: 4px; padding: 0 2px; margin: 0 -2px; }
+.write__editable:hover { background: var(--tint-1); box-shadow: 0 0 0 1px color-mix(in srgb, var(--border) 60%, transparent); }
+.write__editable.is-empty { color: var(--muted); font-style: italic; }
+.write__editing { width: 100%; min-width: 0; box-sizing: border-box; font: inherit; }
+.write__headingtext { font-weight: 600; }
+.write__purpose { font-size: 0.85rem; color: var(--muted); }
+.write__wide { width: 100%; box-sizing: border-box; margin-bottom: 8px; }
+
+/* Primary actions: one per section. */
+.write .write__primary { background: var(--accent-solid); border-color: var(--accent-solid); color: var(--on-accent); font-weight: 600; }
+.write .write__primary:disabled { opacity: 0.5; }
+.write__resolvebar { display: flex; align-items: center; justify-content: space-between; gap: 10px; margin: 6px 0 10px; }
+.write__notes { list-style: none; margin: 0 0 10px; padding: 8px 10px; background: var(--accent-a08); border-radius: 8px; font-size: 0.9rem; }
+.write__notes li { margin: 2px 0; }
+
+/* Issue categories. */
+.write__batch { border-top: 1px solid var(--border); padding: 4px 0; }
+.write__batch > summary { display: flex; align-items: center; gap: 8px; cursor: pointer; padding: 6px 0; list-style: none; }
+.write__batch > summary::-webkit-details-marker { display: none; }
+.write__batchtitle { font-weight: 600; flex: 1; min-width: 0; }
+.write .write__batchbtn { min-height: 30px; padding: 2px 10px; font-size: 0.85rem; }
+
+/* The rail badge counts what needs attention. */
+.write__rail button { position: relative; }
+.write__railbadge { position: absolute; top: 2px; right: 6px; min-width: 18px; padding: 0 5px; border-radius: 999px; background: var(--red); color: #fff; font-size: 0.65rem; line-height: 16px; text-align: center; }
+
+/* The box under the text: comments and sources for the text under the cursor. */
+.write .write__dockhead { display: flex; align-items: baseline; gap: 10px; width: 100%; border: none; border-bottom: 1px solid var(--border); border-radius: 8px 8px 0 0; background: transparent; padding: 8px 12px; text-align: left; min-height: 0; }
+.write__seg { display: inline-flex; border: 1px solid color-mix(in srgb, var(--border) 70%, transparent); border-radius: 8px; overflow: hidden; flex: none; }
+.write .write__seg button { border: none; border-radius: 0; min-height: 32px; padding: 2px 10px; background: transparent; font-size: 0.85rem; }
+.write .write__seg button.is-on { background: var(--accent-solid); color: var(--on-accent); }
+.write__dockadd { display: flex; gap: 6px; align-items: center; padding-top: 8px; flex: none; }
+.write__dockadd > input[type='text'], .write__dockadd > input:not([type]) { flex: 1; min-width: 0; }
+.write__claimrow .write__rowmain > span:first-child { margin-right: 4px; }
+.write__dsrc { margin: 4px 0 0 8px; padding-left: 8px; border-left: 2px solid color-mix(in srgb, var(--border) 70%, transparent); display: flex; flex-wrap: wrap; gap: 4px 8px; align-items: center; }
+.write__dsrcname { font-weight: 600; }
+.write__dsrc .write__reason { flex-basis: 100%; margin: 0; }
+
+/* Model picker with a dropdown on its right. */
+.write__model { position: relative; display: inline-flex; flex: 1 1 140px; min-width: 0; align-items: stretch; }
+.write__model input { flex: 1; min-width: 0; border-top-right-radius: 0; border-bottom-right-radius: 0; font-size: 0.85rem; padding: 4px 8px; }
+.write .write__chev { min-height: 0; padding: 0 6px; border-top-left-radius: 0; border-bottom-left-radius: 0; background: transparent; border: 1px solid color-mix(in srgb, var(--border) 55%, transparent); border-left: none; color: var(--muted); }
+.write__menu--right { left: auto; right: 0; min-width: 100%; width: max-content; max-width: min(320px, 90vw); }
+.write__menu--right button { white-space: nowrap; }
+
+/* Chat composer. */
+.write__switch2 { display: inline-flex; gap: 6px; align-items: center; color: var(--muted); font-size: 0.9rem; cursor: pointer; }
+.write .write__send { background: var(--accent-solid); border-color: var(--accent-solid); color: var(--on-accent); }
+.write .write__send:hover:not(:disabled) { background: var(--accent-solid); color: var(--on-accent); }
+.write__linkform { display: grid; gap: 6px; margin-top: 6px; }
+.write__linkform > * { min-width: 0; width: 100%; box-sizing: border-box; }

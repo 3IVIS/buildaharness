@@ -1,11 +1,14 @@
 import { useId, useState } from 'react'
 import { PARAMETER_GROUPS, WRITE_PARAMETERS, adjustmentInstruction, findParameter } from '@buildaharness/aielia'
 
+export type ChatAction = 'check'
+
 /**
- * Two dropdowns for the chat: first what to adjust (a parameter, or "something else"), then a box where the writer picks an option or types
- * their own. Sending composes an instruction and hands it to the chat as an ordinary message.
+ * One dropdown for the chat: what to adjust (a parameter from the table, or "something else"), or an action to run (check the article). Pick a
+ * parameter and a box appears to choose an option or type your own; press Enter and it is sent as an ordinary chat message. An action runs
+ * as soon as it is picked.
  */
-export function AdjustBar({ disabled, onSend }: { disabled: boolean; onSend: (message: string) => void }): React.JSX.Element {
+export function AdjustBar({ disabled, checkLabel, onSend, onAction }: { disabled: boolean; checkLabel: string; onSend: (message: string) => void; onAction: (action: ChatAction) => void }): React.JSX.Element {
   const listId = useId()
   const [paramId, setParamId] = useState('')
   const [aspect, setAspect] = useState('')
@@ -16,15 +19,27 @@ export function AdjustBar({ disabled, onSend }: { disabled: boolean; onSend: (me
   const ready = label.trim() !== '' && value.trim() !== ''
 
   function send(): void {
-    if (!ready) return
+    if (!ready || disabled) return
     onSend(adjustmentInstruction(label, value, param?.kind ?? 'setting'))
     setValue('')
   }
 
   return (
     <div className="write__adjust" role="group" aria-label="Adjust">
-      <select aria-label="Adjust" value={paramId} onChange={(e) => { setParamId(e.target.value); setValue('') }}>
-        <option value="">Adjust…</option>
+      <select
+        aria-label="Adjust"
+        value={paramId}
+        disabled={disabled}
+        onChange={(e) => {
+          if (e.target.value === 'action:check') { setParamId(''); onAction('check'); return }
+          setParamId(e.target.value)
+          setValue('')
+        }}
+      >
+        <option value="">Adjust or do…</option>
+        <optgroup label="Do">
+          <option value="action:check">{checkLabel}</option>
+        </optgroup>
         {PARAMETER_GROUPS.map((g) => (
           <optgroup key={g.id} label={g.label}>
             {WRITE_PARAMETERS.filter((x) => x.group === g.id).map((x) => <option key={x.id} value={x.id}>{x.label}</option>)}
@@ -32,12 +47,11 @@ export function AdjustBar({ disabled, onSend }: { disabled: boolean; onSend: (me
         ))}
         <option value="other">Something else…</option>
       </select>
-      {other && <input aria-label="What to adjust" value={aspect} onChange={(e) => setAspect(e.target.value)} placeholder="What to adjust, e.g. pacing" />}
+      {other && <input aria-label="What to adjust" value={aspect} onChange={(e) => setAspect(e.target.value)} placeholder="What to adjust, for example pacing" />}
       {paramId !== '' && (
         <>
-          <input aria-label="How" list={listId} value={value} onChange={(e) => setValue(e.target.value)} onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); send() } }} placeholder={other ? 'How, in your own words' : 'Pick an option or type your own'} />
+          <input aria-label="How" list={listId} value={value} onChange={(e) => setValue(e.target.value)} onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); send() } }} placeholder={other ? 'How, in your own words, then Enter' : 'Pick an option or type your own, then Enter'} />
           <datalist id={listId}>{(param?.options ?? []).map((o) => <option key={o} value={o} />)}</datalist>
-          <button type="button" onClick={send} disabled={disabled || !ready}>Send adjustment</button>
         </>
       )}
     </div>

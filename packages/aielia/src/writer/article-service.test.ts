@@ -500,3 +500,21 @@ describe('resolving issues in batches', () => {
     expect((await s.get(id)).markdown).toContain('So p99 stays under 41 ms.')
   })
 })
+
+
+describe('editing a suggestion before accepting it', () => {
+  it('changes the replacement text of a pending suggestion, and the accepted text is the edited one', async () => {
+    const store = createMemoryArticleStore()
+    const s = new ArticleService({ store, llm: routed({}), now: () => NOW, newId: () => 'a1' })
+    const id = await s.create('Post', MD)
+    const b = await s.get(id)
+    const p = proposeSuggestion(b.meta, b.markdown, { quote: '18 ms', replacement: '41 ms', reason: 'r', by: 'assistant', now: NOW })
+    if (!p.ok) throw new Error('setup')
+    await store.save(id, { ...b, meta: p.meta })
+    expect(await s.editSuggestion(id, 'sg1', '41 milliseconds')).toEqual({ ok: true })
+    await s.acceptSuggestionAndUpdate(id, 'sg1', undefined, { analyze: false })
+    expect((await s.get(id)).markdown).toContain('41 milliseconds')
+    expect(await s.editSuggestion(id, 'sg1', 'again')).toMatchObject({ ok: false })
+    expect(await s.editSuggestion(id, 'nope', 'x')).toMatchObject({ ok: false })
+  })
+})

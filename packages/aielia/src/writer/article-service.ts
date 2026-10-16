@@ -657,6 +657,16 @@ export class ArticleService {
     return reports
   }
 
+  /** The writer changes the replacement text of a waiting suggestion before accepting it. */
+  async editSuggestion(id: string, suggestionId: string, replacement: string): Promise<{ ok: boolean; reason?: string }> {
+    const b = await this.get(id)
+    const sg = b.meta.suggestions.find((x) => x.id === suggestionId)
+    if (!sg) return { ok: false, reason: `No suggestion ${suggestionId}.` }
+    if (sg.state !== 'pending') return { ok: false, reason: `Suggestion ${suggestionId} is ${sg.state}, not pending.` }
+    await this.store.save(id, { ...b, meta: { ...b.meta, suggestions: b.meta.suggestions.map((x) => (x.id === suggestionId ? { ...x, replacement } : x)) } })
+    return { ok: true }
+  }
+
   readiness(bundle: ArticleBundle): { readiness: Readiness; problems: Problem[] } {
     return { readiness: computeReadiness(bundle.meta), problems: checkIntegrity(bundle.meta) }
   }
