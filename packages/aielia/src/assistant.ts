@@ -35,6 +35,7 @@ import type { ShellToolsContext } from './shell-tools.js'
 import type { ActionToolsContext } from './action-tools.js'
 import type { SpendCapConfig, SpendState } from './spend-cap.js'
 import { SYSTEM_PROMPT } from './system-prompt.js'
+import { processWriterMessage, type WriterChatPort } from './writer/writer-chat-turn.js'
 import type { TraceEvent } from './trace-events.js'
 import type { AssistantToolStep } from './tool-step.js'
 
@@ -330,6 +331,12 @@ export interface PersonalAssistantOptions {
    */
   dangerouslySkipPermissions?: boolean
   /**
+   * Aielia Write (T13): when set, each writer message is read for reviewer comments, decisions and corrections to sources, the result is
+   * stored per article through this port (not per session), and the open items of the active article are added to the system prompt
+   * on every turn. Unset (every other caller) means none of this runs. See plans/aielia_write_article_model_plan.html, section 8.
+   */
+  writerChat?: WriterChatPort
+  /**
    * Opt-in session spend/turn-count ceilings — see spend-cap.ts. Undefined by default, same as
    * every other field here that changes behavior only when a caller sets it: no ceiling means
    * exactly today's unbounded behavior. Checked once per turn, before any LLM call that turn
@@ -420,6 +427,7 @@ export class PersonalAssistant {
   private readonly onTrace?: (event: TraceEvent) => void
   private readonly onDebugLog?: (entry: DebugLogEntry) => void
   private readonly dangerouslySkipPermissions: boolean
+  private readonly writerChat: WriterChatPort | undefined
   /** Whenever any of fileTools/webTools/shellTools is configured, `turn()` routes through AgentLoop instead of a single plain chat call — computed once here since it never changes for the lifetime of an instance. */
   private readonly toolLoopWillRun: boolean
   /** R3 of the internal plan — mirrors the same flag HarnessBridge was given at construction, kept here too so runTurn can decide whether to defer the tool loop into a harness-driven proposer instead of precomputing draftReply. See PersonalAssistantOptions.oneLoopMode's doc comment. */
@@ -491,6 +499,7 @@ export class PersonalAssistant {
     this.onTrace = options.onTrace
     this.onDebugLog = options.onDebugLog
     this.dangerouslySkipPermissions = options.dangerouslySkipPermissions ?? false
+    this.writerChat = options.writerChat
     const spendCap = options.spendCap
     this.toolLoopWillRun = Boolean(fileTools || this.webTools || shellTools || actionTools)
     this.oneLoopMode = options.oneLoopMode ?? DEFAULT_ONE_LOOP_MODE
@@ -1366,6 +1375,9 @@ export class PersonalAssistant {
       if (!('fallThrough' in draftOutcome)) return draftOutcome
     }
 
+    // Aielia Write: read this message for chat-held state (comments, decisions, corrections) before the prompt is built. Inert without a port.
+    const writerBlock = this.writerChat ? await processWriterMessage({ message: userMessage, port: this.writerChat }, this.llmClient, this.model, accumulateUsage) : ''
+
     const transcript = await this.session.loadAndCompactTranscript(
       sessionId,
       semanticCompactionEnabled() ? (older) => summarizeOlderMessages(older, this.llmClient, this.model, accumulateUsage) : undefined,
@@ -1379,7 +1391,7 @@ export class PersonalAssistant {
     const memoryStateBlock = (await this.memoryService.isMemoryOff())
       ? '\n\n[Memory state, set by the user: memory writes are OFF from now on. What the user says from this message on is not saved and will not be remembered after this conversation, so do not say it was or will be. Facts saved earlier (including earlier in this conversation, while memory was on) stay saved and readable: do not withdraw or contradict what you said about those before.]'
       : '\n\n[Memory state: memory writes are ON. The system saves what the user tells you about themselves, so do not say that nothing is being saved. Anything the user said while memory was off was NOT saved: do not say it was, and do not offer to keep or remember it unless they say it again now.]'
-    let systemPrompt = `${SYSTEM_PROMPT}${factsBlock}${recallBlock}${remindersBlock}${memoryStateBlock}`
+    let systemPrompt = `${SYSTEM_PROMPT}${factsBlock}${recallBlock}${remindersBlock}${memoryStateBlock}${writerBlock}`
 
     const interpretation = await this.turnInterpreter.interpretIntent({
       userMessage,

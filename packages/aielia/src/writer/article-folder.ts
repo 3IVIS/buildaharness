@@ -71,7 +71,7 @@ export function loadArticleFolder(folder: ArticleFolder): FolderLoad {
   if (missing.length > 0) return { ok: false, reason: `Stored source passages are missing: ${missing.join(', ')}.` }
 
   const snapshots: Snapshot[] = []
-  const versionPaths = Object.keys(folder).filter((p) => /^versions\/\d+\.json$/.test(p)).sort()
+  const versionPaths = Object.keys(folder).filter((p) => p.startsWith('versions/') && p.endsWith('.json')).sort()
   for (const path of versionPaths) {
     let snap: unknown
     try {
