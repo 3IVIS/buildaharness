@@ -4,7 +4,7 @@ import { serializeArticle, loadArticleFolder, type ArticleBundle, type ArticleFo
 import { createArticleMeta, type ArticleMeta, type Claim, type Idea, type Link, type Source } from './article-model.js'
 import { assessSourceChange, resolveChange, type ResolveResult, type SourceImpact } from './article-resolver.js'
 import { addCommentOnText, refreshComments } from './article-comments.js'
-import { checkableClaims, unsupportedClaims, type IssueCategory } from './article-issues.js'
+import { checkableClaims, renderIssuesForChat, unsupportedClaims, type IssueCategory } from './article-issues.js'
 import { applyProfile, renderStyleGuide, setBrief, deleteProfile, loadProfiles, saveProfile } from './article-style.js'
 import type { Brief, StyleProfile } from './article-model.js'
 import { addIdea, editIdea, removeIdea, setIdeaState, suggestIdeas, type IdeaSuggestion } from './article-ideas.js'
@@ -836,6 +836,10 @@ const PENDING_KEY = 'writer:pending-ops'
 export function createArticleChatPort(store: ArticleStore): WriterChatPort {
   return {
     articles: () => store.list(),
+    async openItemsText(articleId) {
+      const m = (await store.load(articleId))?.meta
+      return m ? renderIssuesForChat(m) : ''
+    },
     async styleText(articleId) {
       const m = (await store.load(articleId))?.meta
       return m ? renderStyleGuide(m) : ''

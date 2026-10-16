@@ -66,3 +66,21 @@ describe('brief and writing profile', () => {
     expect((await svc.get(id)).meta.style).toBeUndefined()
   })
 })
+
+describe('what is left, for the chat', () => {
+  it('lists open items from the article\'s own records, or says nothing is open', async () => {
+    const store = createMemoryArticleStore()
+    const svc = new ArticleService({ store, llm: llmNever, now: () => NOW })
+    const id = await svc.create('Post', '# Post\n\nThe p99 was 18 ms.\n')
+    const port = createArticleChatPort(store)
+    await port.setActive(id)
+    const model = { callChatStructured: async () => ({ content: '{"ops":[],"articleId":null}' }) } as unknown as ILLMClient
+    expect(await processWriterMessage({ port, message: 'what is left?', now: NOW }, model)).toContain('Nothing is open on this article')
+    const b = await svc.get(id)
+    await store.save(id, { ...b, meta: { ...b.meta, comments: [{ id: 'wc1', articleId: id, label: 'C1', text: 'Check the figure', state: 'open', conflictsWith: [], origin: 'reviewer', capturedAt: NOW }] } })
+    const block = await processWriterMessage({ port, message: 'what is left?', now: NOW }, model)
+    expect(block).toContain('What is still open on this article')
+    expect(block).toContain('Reviewer comments (1):')
+    expect(block).toContain('Check the figure')
+  })
+})

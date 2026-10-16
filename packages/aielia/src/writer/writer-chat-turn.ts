@@ -32,6 +32,8 @@ export interface WriterChatPort {
   ideasText?(articleId: string): Promise<string[]>
   /** The writer's brief and writing profile for the article as plain text, or '' when there is none. */
   styleText?(articleId: string): Promise<string>
+  /** What is still open before the article is ready, as plain lines, or '' when nothing is. */
+  openItemsText?(articleId: string): Promise<string>
 }
 
 const STATE_KEY = 'writer:chat-state'
@@ -132,7 +134,12 @@ export async function processWriterMessage(
       const style = await port.styleText(active)
       if (style) styleBlock = `\n\n[The writer's brief and writing profile for this article. Follow them when you write or suggest text.]\n${style}`
     }
-    return renderWriterChatBlock(state, active, articles) + articleBlock + styleBlock + ideasBlock + note
+    let openBlock = ''
+    if (active && port.openItemsText) {
+      const open = await port.openItemsText(active)
+      openBlock = open ? `\n\n[What is still open on this article, from its own records. Use it to answer "what is left?". Do not invent items.]\n${open}` : '\n\n[Nothing is open on this article: no suggested changes, open comments, unchecked or unsupported claims, or sections to review.]'
+    }
+    return renderWriterChatBlock(state, active, articles) + articleBlock + styleBlock + openBlock + ideasBlock + note
   } catch {
     return NOT_CAPTURED_NOTE
   }
