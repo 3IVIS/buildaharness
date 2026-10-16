@@ -1,9 +1,9 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
-import { computeReadiness, effectiveSourceStatus, sourcesForClaim, type ArticleBundle, type Claim, type Source } from '@buildaharness/aielia'
+import { computeReadiness, effectiveSourceStatus, sourcesForClaim, type ArticleBundle, type Claim, type Source, type WritePermissions } from '@buildaharness/aielia'
 import type { WriteServices } from './write-services'
 import './write.css'
 
-type Tab = 'text' | 'outline' | 'issues' | 'sources' | 'chat'
+type Tab = 'text' | 'outline' | 'issues' | 'sources' | 'chat' | 'settings'
 interface ChatLine { id: number; from: 'you' | 'aielia'; text: string }
 
 const TABS: { id: Tab; label: string }[] = [
@@ -12,6 +12,7 @@ const TABS: { id: Tab; label: string }[] = [
   { id: 'issues', label: 'Issues' },
   { id: 'sources', label: 'Sources' },
   { id: 'chat', label: 'Chat' },
+  { id: 'settings', label: 'Settings' },
 ]
 
 const STATUS_LABEL: Record<string, string> = {
@@ -39,6 +40,8 @@ export function WriteApp({ services }: { services: WriteServices }): React.JSX.E
   const [chat, setChat] = useState<ChatLine[]>([])
   const [chatInput, setChatInput] = useState('')
   const [askForEdits, setAskForEdits] = useState(false)
+  const [perms, setPerms] = useState<WritePermissions | undefined>()
+  const permsRef = useRef<WritePermissions | undefined>(undefined)
   const saveTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
 
   const refreshList = useCallback(async () => setArticles(await service.list()), [service])
@@ -52,6 +55,7 @@ export function WriteApp({ services }: { services: WriteServices }): React.JSX.E
   )
 
   useEffect(() => {
+    void services.permissions.get().then((p) => { permsRef.current = p; setPerms(p) })
     void (async () => {
       await refreshList()
       const remembered = await port.getActive()
@@ -97,8 +101,8 @@ export function WriteApp({ services }: { services: WriteServices }): React.JSX.E
     if (saveTimer.current) clearTimeout(saveTimer.current)
     saveTimer.current = setTimeout(() => {
       if (!activeId) return
-      // Structure only (no model call): sections re-anchor, suggestions refresh. Checking is on request.
-      void service.updateText(activeId, value, { analyze: false }).then((o) => setBundle(o.bundle), (err) => setNotice(String(err)))
+      // Structure only (no model call) unless the writer allowed automatic checks: sections re-anchor, suggestions refresh.
+      void service.updateText(activeId, value, { analyze: permsRef.current?.autoCheck === true }).then((o) => setBundle(o.bundle), (err) => setNotice(String(err)))
     }, 800)
   }
 
@@ -296,6 +300,9 @@ export function WriteApp({ services }: { services: WriteServices }): React.JSX.E
             </section>
           </>
         )}
+        <section className={`write__pane ${tab === 'settings' ? 'is-shown' : ''}`} aria-label="Settings">
+          <SettingsPane perms={perms} spent={services.spentUsd()} onSave={(p) => run('Saving', async () => { await services.permissions.set(p); permsRef.current = p; setPerms(p) })} />
+        </section>
         <section className={`write__pane write__pane--chat ${tab === 'chat' ? 'is-shown' : ''}`} aria-label="Chat">
           <ul className="write__chat" aria-live="polite">
             {chat.map((l) => <li key={l.id} className={`write__line write__line--${l.from}`}>{l.text}</li>)}
@@ -343,5 +350,23 @@ function AttachControl({ claims, sourceId, attached, onAttach }: { claims: Claim
       <option value="">Attach to a claim…</option>
       {free.map((c) => <option key={c.id} value={c.id}>{c.quote.slice(0, 70)}</option>)}
     </select>
+  )
+}
+
+function SettingsPane({ perms, spent, onSave }: { perms: WritePermissions | undefined; spent: number; onSave: (p: WritePermissions) => Promise<void> }): React.JSX.Element {
+  const [cap, setCap] = useState<string>('')
+  useEffect(() => setCap(perms?.spendCapUsd !== undefined ? String(perms.spendCapUsd) : ''), [perms])
+  if (!perms) return <p className="write__muted">Loading…</p>
+  const save = (next: Partial<WritePermissions>): Promise<void> => onSave({ ...perms, ...next })
+  return (
+    <div className="write__form">
+      <p>Aielia only ever changes your text as suggestions you accept. These are the other things it may do on its own.</p>
+      <label><input type="checkbox" checked={perms.captureChat} onChange={(e) => void save({ captureChat: e.target.checked })} /> Remember reviewer comments, decisions and corrections I mention in chat</label>
+      <label><input type="checkbox" checked={perms.autoCheck} onChange={(e) => void save({ autoCheck: e.target.checked })} /> Check claims and effects by itself when I stop typing (uses your key)</label>
+      <label>Stop using my key after this much, in US dollars (blank for no limit)
+        <input aria-label="Spending cap" inputMode="decimal" value={cap} onChange={(e) => setCap(e.target.value)} onBlur={() => { const n = Number(cap); void save({ spendCapUsd: cap.trim() !== '' && Number.isFinite(n) && n > 0 ? n : undefined }) }} />
+      </label>
+      <p className="write__muted">Spent so far in this browser: ${spent.toFixed(2)}</p>
+    </div>
   )
 }

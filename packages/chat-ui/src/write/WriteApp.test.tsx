@@ -18,10 +18,11 @@ function llm(replies: Partial<Record<keyof typeof MARK, unknown>>): ILLMClient {
     },
   } as unknown as ILLMClient
 }
+async function servicesOn(store: ReturnType<typeof createMemoryArticleStore>, replies: Parameters<typeof llm>[0]) {
+  return assembleWriteServices({ store, llm: llm(replies), buildAssistant: async () => ({ turn: async () => ({ reply: 'Noted.' }) }) as unknown as PersonalAssistant })
+}
 async function services(replies: Parameters<typeof llm>[0], seed?: string) {
-  const store = createMemoryArticleStore()
-  const client = llm(replies)
-  const s = await assembleWriteServices({ store, llm: client, buildAssistant: async () => ({ turn: async () => ({ reply: 'Noted.' }) }) as unknown as PersonalAssistant })
+  const s = await servicesOn(createMemoryArticleStore(), replies)
   if (seed) await s.service.create('Post', seed)
   return s
 }
@@ -30,6 +31,35 @@ afterEach(() => {
 })
 
 const MD = '# Post\n\n## Latency\n\nThe p99 was 18 ms.\n'
+
+describe('WriteApp settings', () => {
+  it('shows the defaults, saves a change, and uses it for the next automatic check', async () => {
+    const s = await services({}, MD)
+    render(<WriteApp services={s} />)
+    await screen.findByLabelText('Article text')
+    await userEvent.click(screen.getByRole('button', { name: 'Settings' }))
+    const auto = await screen.findByLabelText(/Check claims and effects by itself/)
+    expect(auto).not.toBeChecked()
+    expect(screen.getByLabelText(/Remember reviewer comments/)).toBeChecked()
+    await userEvent.click(auto)
+    await waitFor(async () => expect((await s.permissions.get()).autoCheck).toBe(true))
+    await userEvent.type(screen.getByLabelText('Spending cap'), '2')
+    fireEvent.blur(screen.getByLabelText('Spending cap'))
+    await waitFor(async () => expect((await s.permissions.get()).spendCapUsd).toBe(2))
+  })
+
+  it('refuses model calls once the cap is reached and says why', async () => {
+    const store = createMemoryArticleStore()
+    const s = await servicesOn(store, { claims: { claims: [] }, resolve: { affected: [] } })
+    await s.service.create('Post', MD)
+    await s.permissions.set({ captureChat: true, autoCheck: false, spendCapUsd: 0.01 })
+    await store.setSetting('writer:spent-usd', 1)
+    const fresh = await servicesOn(store, { claims: { claims: [] }, resolve: { affected: [] } })
+    expect(fresh.spentUsd()).toBe(1)
+    const out = await fresh.service.analyze((await fresh.service.list())[0].id)
+    expect(out.extraction?.status).toBe('not_extracted')
+  })
+})
 
 describe('WriteApp', () => {
   it('starts empty, creates an article, and shows its sections in the outline', async () => {
@@ -77,7 +107,7 @@ describe('WriteApp', () => {
     const mk = (n: number, label: string, other: string) => ({ id: `wc${n}`, articleId: id, label, reviewer: 'Dana', text: `${label} text`, state: 'open' as const, conflictsWith: [`wc${other}`], origin: 'reviewer' as const, capturedAt: 'now' })
     await store.save(id, { ...b, meta: { ...b.meta, comments: [mk(1, 'C4', '2'), mk(2, 'C5', '1')] } })
     const port = createArticleChatPort(store)
-    render(<WriteApp services={{ service: svc, store, port, chat: async () => 'ok' }} />)
+    render(<WriteApp services={{ ...(await servicesOn(store, {})), service: svc, port }} />)
     await screen.findByLabelText('Article text')
     await userEvent.click(screen.getByRole('button', { name: 'Issues' }))
     expect(screen.getAllByText(/You have not chosen/)).toHaveLength(2)
@@ -91,7 +121,7 @@ describe('WriteApp', () => {
     const b = await svc.get(id)
     await store.save(id, { ...b, meta: { ...b.meta, comments: [{ id: 'wc1', articleId: id, text: 't', state: 'open', conflictsWith: [], origin: 'reviewer', capturedAt: 'now' }] } })
     vi.spyOn(window, 'prompt').mockReturnValue('v1')
-    render(<WriteApp services={{ service: svc, store, port: createArticleChatPort(store), chat: async () => 'ok' }} />)
+    render(<WriteApp services={{ ...(await servicesOn(store, {})), service: svc }} />)
     await screen.findByLabelText('Article text')
     await userEvent.click(screen.getByRole('button', { name: 'Publish' }))
     expect(await screen.findByText(/1 item was still open/)).toBeInTheDocument()

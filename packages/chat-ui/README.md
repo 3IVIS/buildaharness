@@ -237,6 +237,21 @@ npm test --workspace=packages/chat-ui
 npm run typecheck --workspace=packages/chat-ui
 ```
 
+## Aielia Write (`/write`)
+
+A second page in this package: writing an article with Aielia beside it. It has its own entry (`write/index.html`) and build config (`vite.write.config.ts`); the sources are shared with the chat app, and the `/try` build is not touched.
+
+```bash
+npm run dev:write --workspace=packages/chat-ui     # http://localhost:3011
+CHAT_UI_BASE=/write/ npm run build:write --workspace=packages/chat-ui   # output: dist-write/
+```
+
+- **Own key:** like `/try`, the visitor brings an Anthropic, OpenAI or OpenRouter key. It is kept in this browser (localStorage); articles are kept in IndexedDB (`aielia-write`).
+- **What it does:** the text is ordinary Markdown. The page tracks sections, claims and their sources, reviewer comments you paste into the chat, and corrections you state ("the re-run gives 41 ms"). The assistant changes the text only as suggestions you accept. Publishing is always allowed and freezes a dated snapshot that records what was still open.
+- **Settings tab:** remember comments and corrections from chat (on), check by itself after you stop typing (off), and a spending cap in dollars that stops all model calls once reached.
+- **Shared code:** everything that is not rendering lives in `packages/aielia/src/writer/` (exported from `@buildaharness/aielia`). Design: `plans/aielia_write_plan.html` and `plans/aielia_write_article_model_plan.html` (private repo).
+- **Deploy:** `.github/workflows/deploy-write.yml` publishes to `myaielia.com/write`. It runs only when started by hand, never on push.
+
 ## Plan graph (optional)
 
 With `VITE_ASSISTANT_PLAN_GRAPH=enabled` (or `planGraphMode` in settings), a plan shows a "Plan graph" header button, a "View as graph" link under its checklist and on the approval card. It opens a read-only dependency graph in a sandboxed right-hand drawer (full-screen toggle, "Export HTML snapshot"). Off by default: no button, no asset loaded. Status mapping and the terminal equivalent: `docs/plan-visualization.md`.

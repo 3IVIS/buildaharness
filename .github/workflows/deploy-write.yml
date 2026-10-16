@@ -1,0 +1,81 @@
+name: Deploy Aielia Write to /write
+
+# Builds the Aielia Write page (packages/chat-ui, vite.write.config.ts) and publishes it to the myaielia repo under
+# /write/, which GitHub Pages serves at https://myaielia.com/write. Like /try, it is bring-your-own-key: the visitor's key
+# stays in their browser. MANUAL ONLY (workflow_dispatch): it does not run on push, so merging code never publishes the
+# page by itself. Run it from the Actions tab when the page is ready to be public.
+#
+# Needs secrets.MYAIELIA_DEPLOY_KEY, the same write-enabled deploy key deploy-chat-ui.yml uses.
+
+on:
+  workflow_dispatch:
+
+concurrency:
+  group: deploy-write
+  cancel-in-progress: true
+
+jobs:
+  build-and-deploy:
+    name: Build and publish
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout buildaharness
+        uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+
+      - name: Install deps
+        run: npm ci
+
+      - name: Build workspace deps
+        run: |
+          npm run build --workspace=packages/harness
+          npm run build --workspace=packages/runtime
+          npm run build --workspace=packages/aielia
+
+      - name: Build the Write page
+        env:
+          CHAT_UI_BASE: /write/
+        run: npm run build:write --workspace=packages/chat-ui
+
+      - name: Check deploy key is present
+        run: |
+          if [ -z "${{ secrets.MYAIELIA_DEPLOY_KEY }}" ]; then
+            echo "❌  secrets.MYAIELIA_DEPLOY_KEY is not set — cannot push to 3IVIS/myaielia."
+            exit 1
+          fi
+
+      - name: Checkout myaielia
+        uses: actions/checkout@v4
+        with:
+          repository: 3IVIS/myaielia
+          ssh-key: ${{ secrets.MYAIELIA_DEPLOY_KEY }}
+          path: pages
+
+      - name: Sync build into pages/write
+        run: |
+          rm -rf pages/write
+          mkdir -p pages/write
+          cp -R packages/chat-ui/dist-write/. pages/write/
+
+      - name: Commit and push if changed
+        working-directory: pages
+        run: |
+          git config user.name  "buildaharness-ci"
+          git config user.email "ci@buildaharness.com"
+          git add write
+          if git diff --cached --quiet; then
+            echo "No changes to /write — nothing to deploy."
+            exit 0
+          fi
+          git commit -m "deploy: Aielia Write build from ${GITHUB_SHA::7}"
+          for attempt in 1 2 3; do
+            if git push; then exit 0; fi
+            echo "push failed (attempt $attempt) — rebasing onto origin and retrying"
+            git pull --rebase origin main
+          done
+          echo "❌  Could not push after 3 attempts"
+          exit 1

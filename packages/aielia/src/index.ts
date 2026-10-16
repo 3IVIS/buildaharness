@@ -182,3 +182,5 @@ export type { ArticleStore, ArticleServiceOptions, UpdateOutcome } from './write
 export { createMemoryAdapterArticleStore } from './writer/article-memory-store.js'
 export { suggestEdits } from './writer/article-edit-suggest.js'
 export type { EditSuggestResult } from './writer/article-edit-suggest.js'
+export { WritePermissionsSchema, DEFAULT_WRITE_PERMISSIONS, loadPermissions, savePermissions, createSpendMeter, withSpendCap, SpendCapReachedError } from './writer/write-permissions.js'
+export type { WritePermissions, SpendMeter, SettingsStore } from './writer/write-permissions.js'

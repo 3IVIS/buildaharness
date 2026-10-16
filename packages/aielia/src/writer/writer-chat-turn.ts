@@ -26,6 +26,8 @@ export interface WriterChatPort {
   setPending(ops: CaptureOp[] | undefined): Promise<void>
   /** The current text of an article, when the host can give it. Shown to the answering model so it can talk about what is on the page (clipped). */
   articleText?(articleId: string): Promise<string | undefined>
+  /** False when the writer has turned chat capture off: the message is not read, but what is already recorded is still shown. */
+  captureEnabled?(): Promise<boolean>
 }
 
 const STATE_KEY = 'writer:chat-state'
@@ -87,7 +89,8 @@ export async function processWriterMessage(
     let active = await port.getActive()
     const pending = await port.getPending()
 
-    const result = await captureChatState({ message: input.message, state, articles, now: input.now }, llmClient, model, onUsage)
+    const capturing = port.captureEnabled ? await port.captureEnabled() : true
+    const result = capturing ? await captureChatState({ message: input.message, state, articles, now: input.now }, llmClient, model, onUsage) : { status: 'captured' as const, state, applied: [] as string[], skipped: [] as string[], articleId: undefined }
     let note = ''
     if (result.status === 'not_captured') {
       note = NOT_CAPTURED_NOTE

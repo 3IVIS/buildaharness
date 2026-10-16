@@ -62,6 +62,18 @@ describe('processWriterMessage', () => {
     expect((await p.load()).comments).toHaveLength(1)
   })
 
+  it('does not read the message when the writer turned capture off, but still shows what is recorded', async () => {
+    const p = port()
+    await processWriterMessage({ message: 'a', port: p }, client([JSON.stringify({ articleId: 'bakery', ops: [add('C1', 'Fix')] })]))
+    let calls = 0
+    const spy = { callChatStructured: async () => { calls++; return { content: '{}' } } } as unknown as ILLMClient
+    const off = { ...p, captureEnabled: async () => false }
+    const block = await processWriterMessage({ message: 'Dana says C2: remove the intro', port: off }, spy)
+    expect(calls).toBe(0)
+    expect(block).toContain('comment C1')
+    expect((await p.load()).comments).toHaveLength(1)
+  })
+
   it('never throws, even when the port does', async () => {
     const broken = { ...port(), load: async () => { throw new Error('disk') } }
     expect(await processWriterMessage({ message: 'a', port: broken }, client(['{}']))).toContain('could not record')

@@ -9,6 +9,7 @@ import { reconcileSections } from './article-sections.js'
 import { createSource } from './article-sources.js'
 import { acceptSuggestion, refreshSuggestions, rejectSuggestion } from './article-suggestions.js'
 import { checkClaimSupport, needsAutoCheck, type SupportCheck } from './article-support.js'
+import { loadPermissions } from './write-permissions.js'
 import type { WriterChatPort } from './writer-chat-turn.js'
 import { createEmptyWriterChatState, type ArticleRef, type CaptureOp, type WriterChatState } from './writer-chat-state.js'
 
@@ -302,6 +303,9 @@ const PENDING_KEY = 'writer:pending-ops'
 export function createArticleChatPort(store: ArticleStore): WriterChatPort {
   return {
     articles: () => store.list(),
+    async captureEnabled() {
+      return (await loadPermissions(store)).captureChat
+    },
     async articleText(articleId) {
       return (await store.load(articleId))?.markdown
     },
