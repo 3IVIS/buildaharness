@@ -30,7 +30,7 @@ export function createMemoryAdapterArticleStore(memory: MemoryAdapter): ArticleS
     async save(id: string, bundle: ArticleBundle) {
       await memory.set(articleKey(id), serializeArticle(bundle))
       const index = await readIndex()
-      const next = index.some((r) => r.id === id) ? index.map((r) => (r.id === id ? { id, title: bundle.meta.title } : r)) : [...index, { id, title: bundle.meta.title }]
+      const next = index.some((r) => r.id === id) ? index.map((r) => (r.id === id ? { id, title: bundle.meta.title, name: bundle.meta.name } : r)) : [...index, { id, title: bundle.meta.title, name: bundle.meta.name }]
       await memory.set(INDEX_KEY, next)
     },
     async remove(id) {

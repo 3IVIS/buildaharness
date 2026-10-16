@@ -55,6 +55,8 @@ export type WriterChatState = z.infer<typeof WriterChatStateSchema>
 export interface ArticleRef {
   id: string
   title: string
+  /** The short name shown in the header; the title is shown when there is none. */
+  name?: string
 }
 
 export function createEmptyWriterChatState(): WriterChatState {

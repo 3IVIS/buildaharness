@@ -98,6 +98,8 @@ export const SuggestionSchema = z.object({
   replacement: z.string(),
   reason: z.string(),
   proposedBy: z.enum(['assistant', 'writer']),
+  /** The model that proposed it, when the assistant did. */
+  model: z.string().optional(),
   state: z.enum(['pending', 'accepted', 'rejected', 'edited_accepted', 'stale']),
   createdAt: z.string(),
 })
@@ -107,6 +109,8 @@ export const ArticleMetaSchema = z.object({
   formatVersion: z.number().int(),
   id: z.string(),
   title: z.string(),
+  /** The short name the writer files the article under (shown in the page header). Separate from the title, which is the first heading of the text. */
+  name: z.string().optional(),
   status: z.enum(['drafting', 'ready', 'published']),
   sections: z.array(SectionSchema),
   claims: z.array(ClaimSchema),

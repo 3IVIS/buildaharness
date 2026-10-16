@@ -28,12 +28,12 @@ function find(markdown: string, quote: string, hint: number): number {
 export function proposeSuggestion(
   meta: ArticleMeta,
   markdown: string,
-  input: { quote: string; replacement: string; reason: string; by: 'assistant' | 'writer'; now: string },
+  input: { quote: string; replacement: string; reason: string; by: 'assistant' | 'writer'; now: string; model?: string },
 ): SuggestionResult {
   if (!input.quote) return { ok: false, reason: 'A suggestion needs the text it replaces.' }
   const start = markdown.indexOf(input.quote)
   if (start === -1) return { ok: false, reason: 'The text to replace is not in the article.' }
-  const s: Suggestion = { id: nextId(meta), span: { start, end: start + input.quote.length, quote: input.quote }, replacement: input.replacement, reason: input.reason, proposedBy: input.by, state: 'pending', createdAt: input.now }
+  const s: Suggestion = { id: nextId(meta), span: { start, end: start + input.quote.length, quote: input.quote }, replacement: input.replacement, reason: input.reason, proposedBy: input.by, ...(input.model ? { model: input.model } : {}), state: 'pending', createdAt: input.now }
   return { ok: true, markdown, meta: { ...meta, suggestions: [...meta.suggestions, s] } }
 }
 

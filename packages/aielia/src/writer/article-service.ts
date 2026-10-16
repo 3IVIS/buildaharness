@@ -3,6 +3,7 @@ import { extractClaims, type ExtractionResult } from './article-claims.js'
 import { serializeArticle, loadArticleFolder, type ArticleBundle, type ArticleFolder } from './article-folder.js'
 import { createArticleMeta, type ArticleMeta, type Claim, type Link, type Source } from './article-model.js'
 import { resolveChange, type ResolveResult } from './article-resolver.js'
+import { attachSourceToText, proposeSourceLinks, type SourceLinkProposal, type TextRange } from './article-source-links.js'
 import { addDrawnLink, proposeDependencies, type DependencyKind, type DependencyProposal } from './article-dependencies.js'
 import { addSnapshot, compareVersions, isLargeChange, summarizeChange, type ChangeSummary, type VersionComparison } from './article-history.js'
 import { checkIntegrity, computeReadiness, confirmLink, createSnapshot, removeLink, restoreSnapshot, setSectionReview, type Problem, type Readiness, type Snapshot } from './article-rules.js'
@@ -34,7 +35,7 @@ export function createMemoryArticleStore(): ArticleStore {
   const settings = new Map<string, unknown>()
   return {
     async list() {
-      return [...bundles.entries()].map(([id, b]) => ({ id, title: b.meta.title }))
+      return [...bundles.entries()].map(([id, b]) => ({ id, title: b.meta.title, name: b.meta.name }))
     },
     async load(id) {
       const b = bundles.get(id)
@@ -58,10 +59,12 @@ export function createMemoryArticleStore(): ArticleStore {
 
 export interface ArticleServiceOptions {
   store: ArticleStore
-  /** Model for the structural and checking calls. */
   llm: ILLMClient
+  /** Model for every call when `modelFor` is not given. */
   model?: string
-  /** The name stored with a check result ("which model ran it"). */
+  /** The model for each role, read at call time so the writer can change it between calls: the writer model drafts edit suggestions; the checker model runs claim extraction, support checks, link finding and the effects check. */
+  modelFor?: (role: 'writer' | 'checker') => string | undefined
+  /** The name stored with a check result ("which model ran it"); defaults to the checker model. */
   modelName?: string
   onUsage?: (usage: TokenUsage) => void
   now?: () => string
@@ -94,6 +97,14 @@ export class ArticleService {
     this.newId = opts.newId ?? ((): string => `a-${crypto.randomUUID().slice(0, 8)}`)
   }
 
+  private checker(): string | undefined {
+    return this.opts.modelFor?.('checker') ?? this.opts.model
+  }
+
+  private writer(): string | undefined {
+    return this.opts.modelFor?.('writer') ?? this.opts.model
+  }
+
   list(): Promise<ArticleRef[]> {
     return this.store.list()
   }
@@ -112,8 +123,17 @@ export class ArticleService {
       while (taken.has(`s${n}`)) n++
       return `s${n}`
     }).sections
-    await this.store.save(id, { markdown, meta: { ...meta, sections }, snapshots: [] })
+    const heading = sections.find((x) => x.level === 1 && x.heading.trim() !== '')?.heading.trim()
+    await this.store.save(id, { markdown, meta: { ...meta, title: heading ?? title, name: title, sections }, snapshots: [] })
     return id
+  }
+
+  /** The short name the writer files the article under. It does not change the text or the title. */
+  async rename(id: string, name: string): Promise<void> {
+    const b = await this.get(id)
+    const trimmed = name.trim()
+    if (!trimmed) throw new Error('A name cannot be empty.')
+    await this.store.save(id, { ...b, meta: { ...b.meta, name: trimmed } })
   }
 
   /**
@@ -121,7 +141,7 @@ export class ArticleService {
    * `analyze` is false, the model judgements: extract claims, run the automatic checks on text the model wrote, and judge what
    * the edit means for the other sections. A failed model step leaves its part as it was and is reported in the outcome.
    */
-  async updateText(id: string, markdown: string, options: { analyze?: boolean } = {}): Promise<UpdateOutcome> {
+  async updateText(id: string, markdown: string, options: { analyze?: boolean; model?: string } = {}): Promise<UpdateOutcome> {
     const before = await this.get(id)
     const rec = reconcileSections(before.meta.sections, markdown, (taken) => {
       let n = taken.size + 1
@@ -144,9 +164,10 @@ export class ArticleService {
     const outcome: UpdateOutcome = { bundle, changedSectionIds, removedSections: rec.removed.map((s) => s.heading), autoChecks: [] }
     if (options.analyze === false || changedSectionIds.length === 0) return outcome
 
-    meta = await this.extractAndCheck(meta, markdown, outcome)
+    meta = await this.extractAndCheck(meta, markdown, outcome, options.model)
 
-    const { llm, model, onUsage } = this.opts
+    const { llm, onUsage } = this.opts
+    const model = options.model ?? this.checker()
     const summary = changedSectionIds
       .map((sid) => {
         const old = oldById.get(sid)
@@ -165,17 +186,18 @@ export class ArticleService {
   }
 
   /** Claim extraction and the automatic checks over the whole article: the first pass for a new article, or on request. Model steps that fail are reported and leave their part as it was. */
-  async analyze(id: string): Promise<UpdateOutcome> {
+  async analyze(id: string, model?: string): Promise<UpdateOutcome> {
     const b = await this.get(id)
     const outcome: UpdateOutcome = { bundle: b, changedSectionIds: b.meta.sections.map((x) => x.id), removedSections: [], autoChecks: [] }
-    const meta = await this.extractAndCheck(b.meta, b.markdown, outcome)
+    const meta = await this.extractAndCheck(b.meta, b.markdown, outcome, model)
     outcome.bundle = { ...b, meta }
     await this.store.save(id, outcome.bundle)
     return outcome
   }
 
-  private async extractAndCheck(start: ArticleMeta, markdown: string, outcome: UpdateOutcome): Promise<ArticleMeta> {
-    const { llm, model, onUsage } = this.opts
+  private async extractAndCheck(start: ArticleMeta, markdown: string, outcome: UpdateOutcome, override?: string): Promise<ArticleMeta> {
+    const { llm, onUsage } = this.opts
+    const model = override ?? this.checker()
     let meta = start
     const extraction = await extractClaims({ markdown, sections: meta.sections, claims: meta.claims, now: this.now() }, llm, model, onUsage)
     outcome.extraction = extraction
@@ -183,7 +205,7 @@ export class ArticleService {
     for (const claimId of [...extraction.added, ...extraction.matched]) {
       const claim = meta.claims.find((c) => c.id === claimId)
       if (!claim || !needsAutoCheck(claim) || (claim.sourceStatus === 'supported' && claim.check)) continue
-      const check = await checkClaimSupport({ meta, markdown, claimId, modelName: this.opts.modelName ?? this.opts.model ?? 'model', now: this.now() }, llm, model, onUsage)
+      const check = await checkClaimSupport({ meta, markdown, claimId, modelName: this.opts.modelName ?? model ?? 'model', now: this.now() }, llm, model, onUsage)
       outcome.autoChecks.push({ claimId, status: check.status })
       meta = check.meta
     }
@@ -212,9 +234,10 @@ export class ArticleService {
     await this.store.save(id, { ...b, meta: { ...b.meta, claims, links: [...b.meta.links, link] } })
   }
 
-  async checkClaim(id: string, claimId: string): Promise<SupportCheck> {
+  async checkClaim(id: string, claimId: string, modelOverride?: string): Promise<SupportCheck> {
     const b = await this.get(id)
-    const { llm, model, onUsage } = this.opts
+    const { llm, onUsage } = this.opts
+    const model = modelOverride ?? this.checker()
     const check = await checkClaimSupport({ meta: b.meta, markdown: b.markdown, claimId, modelName: this.opts.modelName ?? model ?? 'model', now: this.now() }, llm, model, onUsage)
     if (check.meta !== b.meta) await this.store.save(id, { ...b, meta: check.meta })
     return check
@@ -229,10 +252,11 @@ export class ArticleService {
   }
 
   /** The assistant turns the writer\'s instruction into suggestions; nothing is applied until the writer accepts. */
-  async suggest(id: string, instruction: string): Promise<EditSuggestResult> {
+  async suggest(id: string, instruction: string, modelOverride?: string): Promise<EditSuggestResult> {
     const b = await this.get(id)
-    const { llm, model, onUsage } = this.opts
-    const r = await suggestEdits({ meta: b.meta, markdown: b.markdown, instruction, now: this.now() }, llm, model, onUsage)
+    const { llm, onUsage } = this.opts
+    const model = modelOverride ?? this.writer()
+    const r = await suggestEdits({ meta: b.meta, markdown: b.markdown, instruction, now: this.now(), modelName: model }, llm, model, onUsage)
     if (r.status === 'suggested' && r.added.length > 0) await this.store.save(id, { ...b, meta: r.meta })
     return r
   }
@@ -329,9 +353,10 @@ export class ArticleService {
   }
 
   /** The assistant reads the whole article and proposes dependencies between sections. Proposals wait for the writer to confirm them. */
-  async findDependencies(id: string): Promise<DependencyProposal> {
+  async findDependencies(id: string, modelOverride?: string): Promise<DependencyProposal> {
     const b = await this.get(id)
-    const { llm, model, onUsage } = this.opts
+    const { llm, onUsage } = this.opts
+    const model = modelOverride ?? this.checker()
     const r = await proposeDependencies({ meta: b.meta, markdown: b.markdown, now: this.now() }, llm, model, onUsage)
     if (r.status === 'proposed' && r.added.length > 0) await this.store.save(id, { ...b, meta: r.meta })
     return r
@@ -360,6 +385,38 @@ export class ArticleService {
     const r = removeLink(b.meta, linkId, 'writer')
     if (!r.ok) return r
     await this.store.save(id, { ...b, meta: r.meta })
+    return { ok: true }
+  }
+
+  /** Attaches a stored source to the text in a range (a phrase, a sentence or what is selected), creating a claim for that text if there is none. */
+  async attachSourceToText(id: string, range: TextRange, sourceId: string): Promise<{ ok: true; claimIds: string[]; createdClaim: boolean } | { ok: false; reason: string }> {
+    const b = await this.get(id)
+    const r = attachSourceToText(b.meta, b.markdown, range, sourceId, this.now())
+    if (!r.ok) return r
+    await this.store.save(id, { ...b, meta: r.meta })
+    return { ok: true, claimIds: r.claimIds, createdClaim: r.createdClaim }
+  }
+
+  /** A source stored without saying what it is for: the assistant proposes which claims it bears on, and the writer confirms. */
+  async proposeLinksForSource(id: string, sourceId: string, modelOverride?: string): Promise<SourceLinkProposal> {
+    const b = await this.get(id)
+    const { llm, onUsage } = this.opts
+    const model = modelOverride ?? this.checker()
+    const r = await proposeSourceLinks({ meta: b.meta, sourceId, now: this.now() }, llm, model, onUsage)
+    if (r.status === 'proposed' && r.added.length > 0) await this.store.save(id, { ...b, meta: r.meta })
+    return r
+  }
+
+  /** The writer removes a source from a claim (the link only; the stored source stays). Proposals and drawn links alike. */
+  async detachSource(id: string, claimId: string, sourceId: string): Promise<{ ok: boolean; reason?: string }> {
+    const b = await this.get(id)
+    const link = b.meta.links.find((l) => l.kind === 'supported_by' && l.from.id === claimId && l.to.id === sourceId)
+    if (!link) return { ok: false, reason: 'That source is not attached to that claim.' }
+    const r = removeLink(b.meta, link.id, 'writer')
+    if (!r.ok) return r
+    const stillBacked = r.meta.links.some((l) => l.kind === 'supported_by' && l.from.id === claimId)
+    const claims = r.meta.claims.map((c) => (c.id === claimId && !stillBacked && c.sourceStatus === 'attached' ? { ...c, sourceStatus: 'none' as const } : c))
+    await this.store.save(id, { ...b, meta: { ...r.meta, claims } })
     return { ok: true }
   }
 

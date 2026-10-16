@@ -33,7 +33,7 @@ describe('ArticleService', () => {
   it('creates an article with sections and lists it', async () => {
     const { svc: s } = svc()
     const id = await s.create('Post', MD)
-    expect((await s.list())).toEqual([{ id, title: 'Post' }])
+    expect((await s.list())).toEqual([{ id, title: 'Post', name: 'Post' }])
     expect((await s.get(id)).meta.sections.map((x) => x.heading)).toEqual(['Post', 'Latency', 'Conclusion'])
   })
 
@@ -42,7 +42,7 @@ describe('ArticleService', () => {
     const id = await s.create('Working title', MD)
     await s.updateText(id, MD.replace('# Post', '# A better title'), { analyze: false })
     expect((await s.get(id)).meta.title).toBe('A better title')
-    expect(await s.list()).toEqual([{ id, title: 'A better title' }])
+    expect(await s.list()).toEqual([{ id, title: 'A better title', name: 'Working title' }])
     await s.updateText(id, 'No heading at all.\n', { analyze: false })
     expect((await s.get(id)).meta.title).toBe('A better title') // nothing to take it from: keeps the last one
   })
@@ -250,3 +250,87 @@ describe('dependencies through the service', () => {
 function routedLinks(reply: unknown): ILLMClient {
   return { callChatStructured: async () => ({ content: JSON.stringify(reply) }) } as unknown as ILLMClient
 }
+
+describe('a model for each role', () => {
+  it('uses the writer model for edit suggestions and the checker model for everything that checks, and records who proposed what', async () => {
+    const used: { role: string; model?: string }[] = []
+    const llm = {
+      callChatStructured: async (messages: { role: string; content: string }[], _t: unknown, o?: { model?: string }) => {
+        const sys = messages.find((m) => m.role === 'system')!.content
+        const role = sys.includes('You propose edits') ? 'edits' : sys.includes('You read parts of an article') ? 'claims' : sys.includes('You map how the sections') ? 'links' : sys.includes('You check whether a claim') ? 'support' : 'other'
+        used.push({ role, model: o?.model })
+        if (role === 'edits') return { content: JSON.stringify({ suggestions: [{ quote: '18 ms', replacement: '41 ms', reason: 'r' }] }) }
+        if (role === 'claims') return { content: JSON.stringify({ claims: [] }) }
+        return { content: JSON.stringify({ links: [] }) }
+      },
+    } as unknown as ILLMClient
+    let writer = 'writer-big'
+    const s = new ArticleService({ store: createMemoryArticleStore(), llm, now: () => NOW, newId: () => 'a1', modelFor: (role) => (role === 'writer' ? writer : 'checker-small') })
+    const id = await s.create('Post', MD)
+    const r = await s.suggest(id, 'update the figure')
+    expect(r.meta.suggestions[0].model).toBe('writer-big')
+    await s.analyze(id)
+    await s.findDependencies(id)
+    expect(used.filter((u) => u.role === 'edits').map((u) => u.model)).toEqual(['writer-big'])
+    expect(used.filter((u) => u.role !== 'edits').every((u) => u.model === 'checker-small')).toBe(true)
+    writer = 'writer-other' // changed between calls: the next call uses it
+    await s.suggest(id, 'again')
+    expect(used.filter((u) => u.role === 'edits').map((u) => u.model)).toEqual(['writer-big', 'writer-other'])
+  })
+})
+
+describe('article name', () => {
+  it('starts as what the writer called the article, can be renamed, and does not follow the heading in the text', async () => {
+    const { svc: s } = svc()
+    const id = await s.create('Dashboard post', MD)
+    expect(await s.list()).toEqual([{ id, title: 'Post', name: 'Dashboard post' }]) // the title is the heading; the name is what it was filed as
+    await s.rename(id, '  Q3 write-up ')
+    await s.updateText(id, MD.replace('# Post', '# A completely different heading'), { analyze: false })
+    expect((await s.list())[0]).toEqual({ id, title: 'A completely different heading', name: 'Q3 write-up' })
+    await expect(s.rename(id, '   ')).rejects.toThrow('empty')
+  })
+})
+
+describe('sources for the text under the cursor, through the service', () => {
+  const build = (reply: unknown = {}) => {
+    const store = createMemoryArticleStore()
+    return { store, s: new ArticleService({ store, llm: routedLinks(reply), now: () => NOW, newId: () => 'a1' }) }
+  }
+  it('attaches a stored source to the sentence at the cursor and detaches it again', async () => {
+    const { s } = build()
+    const id = await s.create('Post', MD)
+    const src = await s.addSource(id, { kind: 'upload', address: 'bench.txt', passage: 'p99: 18 ms' })
+    const at = MD.indexOf('18 ms')
+    const r = await s.attachSourceToText(id, { start: at, end: at }, src)
+    expect(r).toMatchObject({ ok: true, createdClaim: true })
+    let b = await s.get(id)
+    expect(b.meta.claims[0]).toMatchObject({ quote: 'The p99 was 18 ms.', author: 'writer', sourceStatus: 'attached' })
+    expect(await s.detachSource(id, b.meta.claims[0].id, src)).toEqual({ ok: true })
+    b = await s.get(id)
+    expect(b.meta.links).toHaveLength(0)
+    expect(b.meta.claims[0].sourceStatus).toBe('none')
+    expect(await s.detachSource(id, 'k1', src)).toMatchObject({ ok: false })
+  })
+  it('proposes which claims a dropped source bears on', async () => {
+    const { s } = build({ claims: [{ claimId: 'k1', relation: 'supports', reason: 'same figure', confidence: 0.9 }] })
+    const id = await s.create('Post', MD)
+    const a = MD.indexOf('18 ms')
+    const first = await s.addSource(id, { kind: 'upload', passage: 'x' })
+    await s.attachSourceToText(id, { start: a, end: a }, first) // creates claim k1
+    const dropped = await s.addSource(id, { kind: 'upload', address: 'notes.txt', passage: 'p99 is 18 ms' })
+    const r = await s.proposeLinksForSource(id, dropped)
+    expect(r.added).toHaveLength(1)
+    expect((await s.get(id)).meta.links.some((l) => l.origin === 'proposed' && l.to.id === dropped)).toBe(true)
+  })
+  it('lets a call name its own model, over the defaults', async () => {
+    const used: (string | undefined)[] = []
+    const llm = { callChatStructured: async (_m: unknown, _t: unknown, o?: { model?: string }) => { used.push(o?.model); return { content: JSON.stringify({ claims: [], links: [], suggestions: [] }) } } } as unknown as ILLMClient
+    const s = new ArticleService({ store: createMemoryArticleStore(), llm, now: () => NOW, newId: () => 'a1', modelFor: () => 'default-model' })
+    const id = await s.create('Post', MD)
+    await s.analyze(id, 'chosen-for-this-check')
+    await s.findDependencies(id, 'chosen-too')
+    await s.suggest(id, 'x', 'chosen-writer')
+    await s.analyze(id)
+    expect(used).toEqual(['chosen-for-this-check', 'chosen-too', 'chosen-writer', 'default-model'])
+  })
+})

@@ -14,7 +14,7 @@ describe('createMemoryAdapterArticleStore', () => {
     await s.addSource(id, { kind: 'upload', passage: 'a passage' })
     // a second service on the same memory sees it (a new page load)
     const again = new ArticleService({ store: createMemoryAdapterArticleStore(memory), llm })
-    expect(await again.list()).toEqual([{ id, title: 'Post' }])
+    expect(await again.list()).toEqual([{ id, title: 'Post', name: 'Post' }])
     expect((await again.get(id)).meta.sources[0].passage).toBe('a passage')
   })
 
