@@ -169,3 +169,5 @@ export type { ArticleFolder, ArticleBundle, FolderLoad } from './writer/article-
 export { fingerprintPassage, createSource, applyRecheck, acceptNewPassage } from './writer/article-sources.js'
 export { extractClaims, batchSections } from './writer/article-claims.js'
 export type { ExtractionResult } from './writer/article-claims.js'
+export { checkClaimSupport, sourcesForClaim, needsAutoCheck } from './writer/article-support.js'
+export type { SupportCheck, SupportVerdict } from './writer/article-support.js'
