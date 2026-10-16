@@ -70,3 +70,16 @@ describe('spend by type', () => {
     expect(again.byType()).toEqual(by)
   })
 })
+
+describe('pricing by the model that made the call', () => {
+  it('prices each call by its own model, not the chat model', async () => {
+    const meter = await createSpendMeter(createMemoryArticleStore(), { model: 'claude-opus-5-5' })
+    const usage = { inputTokens: 1_000_000, outputTokens: 0 } as never
+    await meter.record(usage, 'chat')
+    const big = meter.spentUsd()
+    await meter.record(usage, 'claims', 'claude-haiku-5-5')
+    const small = meter.spentUsd() - big
+    expect(big).toBeGreaterThan(0)
+    expect(small).toBeLessThan(big)
+  })
+})

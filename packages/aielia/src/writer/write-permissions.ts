@@ -47,7 +47,8 @@ export class SpendCapReachedError extends Error {
 /** Running total of what the model calls cost, persisted so a reload does not reset the cap. */
 export interface SpendMeter {
   spentUsd(): number
-  record(usage: TokenUsage, callType?: string): Promise<void>
+  /** `model` is the model that made the call; it is priced by that model, falling back to the meter's default. */
+  record(usage: TokenUsage, callType?: string, model?: string): Promise<void>
   /** Dollars and number of calls so far for each kind of call (the chat, the claim check, ...). Calls made before this was kept are in the total only. */
   byType(): Record<string, { usd: number; calls: number }>
   /** Throws SpendCapReachedError when the cap is set and reached. */
@@ -70,8 +71,8 @@ export async function createSpendMeter(store: SettingsStore, pricing: { backend?
   return {
     spentUsd: () => total,
     byType: () => ({ ...types }),
-    async record(usage, callType) {
-      const cost = withCostEstimate(usage, pricing).costUsd ?? 0
+    async record(usage, callType, model) {
+      const cost = withCostEstimate(usage, { ...pricing, model: model ?? pricing.model }).costUsd ?? 0
       total += cost
       if (callType) types[callType] = { usd: (types[callType]?.usd ?? 0) + cost, calls: (types[callType]?.calls ?? 0) + 1 }
       await store.setSetting(SPEND_KEY, total)
@@ -90,7 +91,7 @@ export async function createSpendMeter(store: SettingsStore, pricing: { backend?
 export function withSpendCap(inner: ILLMClient, meter: SpendMeter, getCap: () => number | undefined): ILLMClient {
   const counted = (messages: ChatMessage[], o?: ChatOptions): ChatOptions => {
     const type = classifyCall(messages).id
-    return { ...o, onUsage: (u) => { void meter.record(u, type); o?.onUsage?.(u) } }
+    return { ...o, onUsage: (u) => { void meter.record(u, type, o?.model); o?.onUsage?.(u) } }
   }
   return {
     async *callChat(messages: ChatMessage[], options?: ChatOptions) {
