@@ -1,6 +1,7 @@
 import { describe, it, expect } from 'vitest'
 import type { ILLMClient } from '@buildaharness/runtime'
-import { createArticleMeta } from './article-model.js'
+import { createArticleMeta, type ArticleMeta } from './article-model.js'
+import { reconcileSections } from './article-sections.js'
 import { suggestEdits } from './article-edit-suggest.js'
 import { ArticleService, createArticleChatPort, createMemoryArticleStore } from './article-service.js'
 import { processWriterMessage } from './writer-chat-turn.js'
@@ -90,5 +91,40 @@ describe('the article text reaches the answering model', () => {
     expect(block).toContain('not instructions')
     await port.setActive('ghost')
     expect(await processWriterMessage({ message: 'x', port }, client({ articleId: null, ops: [] }))).not.toContain('p99')
+  })
+})
+
+describe('revising one passage', () => {
+  const MD2 = '# Post\n\nIt is quick. It is quick.\n\n## Latency\n\nIt is quick here too.\n'
+  const m2 = (): ArticleMeta => ({ ...createArticleMeta('a1', 'Post'), sections: reconcileSections([], MD2, (t: ReadonlySet<string>) => `s${t.size + 1}`).sections })
+  const reply = (suggestions: unknown[], seen: string[] = []): ILLMClient => ({ callChatStructured: async (m: { role: string; content: string }[]) => { seen.push(m.find((x) => x.role === 'user')!.content); return { content: JSON.stringify({ suggestions }) } } }) as unknown as ILLMClient
+
+  it('shows the model the passage, anchors at the passage (not the first equal text), and drops changes outside it', async () => {
+    const seen: string[] = []
+    const second = MD2.indexOf('It is quick.', MD2.indexOf('It is quick.') + 1)
+    const focus = { start: second, end: second + 'It is quick.'.length }
+    const r = await suggestEdits({ meta: m2(), markdown: MD2, instruction: 'make it vivid', now: NOW, focus }, reply([
+      { quote: 'It is quick.', replacement: 'It flies.', reason: 'vivid' },
+      { quote: 'It is quick here too.', replacement: 'It is quick everywhere.', reason: 'outside the passage' },
+    ], seen))
+    expect(JSON.parse(seen[0]).focus).toBe('It is quick.')
+    expect(r.added).toHaveLength(1)
+    expect(r.dropped).toEqual(['It is quick here too.'])
+    expect(r.meta.suggestions[0].span.start).toBe(second)
+  })
+  it('without a focus works as before', async () => {
+    const seen: string[] = []
+    await suggestEdits({ meta: m2(), markdown: MD2, instruction: 'x', now: NOW }, reply([], seen))
+    expect(JSON.parse(seen[0]).focus).toBeUndefined()
+  })
+  it('is available from the service for the text under the cursor', async () => {
+    const svc = new ArticleService({ store: createMemoryArticleStore(), llm: reply([{ quote: 'The p99 was 18 ms.', replacement: 'The p99 was 18 ms on 8 cores.', reason: 'detail' }]), now: () => NOW })
+    const id = await svc.create('Post', MD)
+    const b = await svc.get(id)
+    const at = b.markdown.indexOf('18 ms')
+    const r = await svc.reviseText(id, { start: at, end: at }, 'add detail')
+    expect(r).toMatchObject({ status: 'suggested' })
+    expect((await svc.get(id)).meta.suggestions).toHaveLength(1)
+    expect(await svc.reviseText(id, { start: 0, end: 0 }, '  ')).toMatchObject({ status: 'failed' })
   })
 })

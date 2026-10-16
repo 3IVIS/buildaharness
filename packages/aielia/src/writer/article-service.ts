@@ -8,7 +8,7 @@ import { checkableClaims, unsupportedClaims, type IssueCategory } from './articl
 import { applyProfile, renderStyleGuide, setBrief, deleteProfile, loadProfiles, saveProfile } from './article-style.js'
 import type { Brief, StyleProfile } from './article-model.js'
 import { addIdea, editIdea, removeIdea, setIdeaState, suggestIdeas, type IdeaSuggestion } from './article-ideas.js'
-import { attachSourceToText, proposeSourceLinks, type SourceLinkProposal, type TextRange } from './article-source-links.js'
+import { attachSourceToText, proposeSourceLinks, textUnitAt, type SourceLinkProposal, type TextRange } from './article-source-links.js'
 import { addDrawnLink, proposeDependencies, type DependencyKind, type DependencyProposal } from './article-dependencies.js'
 import { addSnapshot, compareVersions, isLargeChange, summarizeChange, type ChangeSummary, type VersionComparison } from './article-history.js'
 import { checkIntegrity, computeReadiness, confirmLink, createSnapshot, removeLink, restoreSnapshot, setSectionReview, type Problem, type Readiness, type Snapshot } from './article-rules.js'
@@ -328,13 +328,21 @@ export class ArticleService {
   }
 
   /** The assistant turns the writer\'s instruction into suggestions; nothing is applied until the writer accepts. */
-  async suggest(id: string, instruction: string, modelOverride?: string, refs: { ideaIds?: string[]; commentIds?: string[]; sectionIds?: string[] } = {}): Promise<EditSuggestResult> {
+  async suggest(id: string, instruction: string, modelOverride?: string, refs: { ideaIds?: string[]; commentIds?: string[]; sectionIds?: string[]; focus?: { start: number; end: number } } = {}): Promise<EditSuggestResult> {
     const b = await this.get(id)
     const { llm, onUsage } = this.opts
     const model = modelOverride ?? this.writer()
     const r = await suggestEdits({ meta: b.meta, markdown: b.markdown, instruction, now: this.now(), modelName: model, ...refs }, llm, model, onUsage)
     if (r.status === 'suggested' && r.added.length > 0) await this.store.save(id, { ...b, meta: r.meta })
     return r
+  }
+
+  /** The writer asks for the passage under the cursor or selection to be revised: the result is suggested changes inside that passage only. */
+  async reviseText(id: string, range: TextRange, instruction: string, modelOverride?: string): Promise<EditSuggestResult | { status: 'failed'; reason: string }> {
+    const b = await this.get(id)
+    const unit = textUnitAt(b.markdown, range.start, range.end)
+    if (!unit) return { status: 'failed', reason: 'There is no text there to revise.' }
+    return this.suggest(id, instruction, modelOverride, { focus: { start: unit.start, end: unit.end } })
   }
 
   /** Accepts a suggestion (optionally with the writer\'s own wording): the Markdown changes, then the usual update runs. */

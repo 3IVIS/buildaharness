@@ -495,6 +495,22 @@ describe('comments and sources under the text', () => {
   })
 })
 
+describe('revise the text under the cursor', () => {
+  it('asks for a revision of just that text and gets suggested changes to accept in Issues', async () => {
+    const s = await services({ edits: { suggestions: [{ quote: 'The p99 was 18 ms.', replacement: 'The p99 was 18 ms on 8 cores.', reason: 'detail' }] } }, MD)
+    const id = (await s.service.list())[0].id
+    render(<WriteApp services={s} />)
+    await waitForText()
+    putCursor('18 ms')
+    const dock = screen.getByLabelText('Comments and sources for this text')
+    await userEvent.click(within(dock).getByRole('button', { name: 'Revise' }))
+    await userEvent.type(within(dock).getByLabelText('Add to this text', { selector: 'input' }), 'add the hardware{Enter}')
+    expect(await screen.findByText(/added 1 suggested change to that text/)).toBeInTheDocument()
+    expect((await s.service.get(id)).meta.suggestions[0]).toMatchObject({ state: 'pending', replacement: 'The p99 was 18 ms on 8 cores.' })
+    expect((await s.service.get(id)).markdown).toBe(MD)
+  })
+})
+
 describe('web links', () => {
   it('reads a pasted link when the browser can, shows when the page changes, and takes the new text only on the writer\'s say', async () => {
     let page = 'p99 latency is 18 ms.'

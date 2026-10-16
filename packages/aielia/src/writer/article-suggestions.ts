@@ -28,10 +28,10 @@ function find(markdown: string, quote: string, hint: number): number {
 export function proposeSuggestion(
   meta: ArticleMeta,
   markdown: string,
-  input: { quote: string; replacement: string; reason: string; by: 'assistant' | 'writer'; now: string; model?: string; ideaIds?: string[]; commentIds?: string[]; sectionIds?: string[] },
+  input: { quote: string; replacement: string; reason: string; by: 'assistant' | 'writer'; now: string; model?: string; ideaIds?: string[]; commentIds?: string[]; sectionIds?: string[]; /** Look for the quote from here on, so the first of several equal passages is not always the one meant. */ from?: number },
 ): SuggestionResult {
   if (!input.quote) return { ok: false, reason: 'A suggestion needs the text it replaces.' }
-  const start = markdown.indexOf(input.quote)
+  const start = markdown.indexOf(input.quote, input.from)
   if (start === -1) return { ok: false, reason: 'The text to replace is not in the article.' }
   const s: Suggestion = { id: nextId(meta), span: { start, end: start + input.quote.length, quote: input.quote }, replacement: input.replacement, reason: input.reason, proposedBy: input.by, ...(input.model ? { model: input.model } : {}), ...(input.ideaIds && input.ideaIds.length > 0 ? { ideaIds: input.ideaIds } : {}), ...(input.commentIds && input.commentIds.length > 0 ? { commentIds: input.commentIds } : {}), ...(input.sectionIds && input.sectionIds.length > 0 ? { sectionIds: input.sectionIds } : {}), state: 'pending', createdAt: input.now }
   return { ok: true, markdown, meta: { ...meta, suggestions: [...meta.suggestions, s] } }

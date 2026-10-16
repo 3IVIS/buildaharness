@@ -213,8 +213,8 @@
 .write__seg { display: inline-flex; border: 1px solid color-mix(in srgb, var(--border) 70%, transparent); border-radius: 8px; overflow: hidden; flex: none; }
 .write .write__seg button { border: none; border-radius: 0; min-height: 32px; padding: 2px 10px; background: transparent; font-size: 0.85rem; }
 .write .write__seg button.is-on { background: var(--accent-solid); color: var(--on-accent); }
-.write__dockadd { display: flex; gap: 6px; align-items: center; padding-top: 8px; flex: none; }
-.write__dockadd > input[type='text'], .write__dockadd > input:not([type]) { flex: 1; min-width: 0; }
+.write__dockadd { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; padding-top: 8px; flex: none; }
+.write__dockadd > input[type='text'], .write__dockadd > input:not([type]) { flex: 1 1 160px; min-width: 0; }
 .write__claimrow .write__rowmain > span:first-child { margin-right: 4px; }
 .write__dsrc { margin: 4px 0 0 8px; padding-left: 8px; border-left: 2px solid color-mix(in srgb, var(--border) 70%, transparent); display: flex; flex-wrap: wrap; gap: 4px 8px; align-items: center; }
 .write__dsrcname { font-weight: 600; }

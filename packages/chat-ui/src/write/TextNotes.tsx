@@ -14,7 +14,7 @@ const STATUS_LABEL: Record<string, string> = {
   not_checked: 'not checked',
 }
 
-export type NoteKind = 'comment' | 'source' | 'say_so'
+export type NoteKind = 'comment' | 'source' | 'say_so' | 'revise'
 
 interface Props {
   meta: ArticleMeta
@@ -42,6 +42,7 @@ const PLACEHOLDER: Record<NoteKind, string> = {
   comment: 'Write a comment on this text',
   source: 'Paste a link or a passage that backs this text',
   say_so: 'What you know, in a sentence',
+  revise: 'Ask Aielia to revise this text, for example: tighten it',
 }
 
 /**
@@ -128,8 +129,8 @@ export function TextNotes({ meta, markdown, selection, busy, model, onAdd, onFil
           </div>
           <div className="write__dockadd" role="group" aria-label="Add to this text">
             <div className="write__seg" role="group" aria-label="What to add">
-              {(['comment', 'source', 'say_so'] as const).map((k) => (
-                <button key={k} type="button" aria-pressed={kind === k} className={kind === k ? 'is-on' : ''} onClick={() => setKind(k)}>{k === 'comment' ? 'Comment' : k === 'source' ? 'Source' : 'My word'}</button>
+              {(['comment', 'source', 'say_so', 'revise'] as const).map((k) => (
+                <button key={k} type="button" aria-pressed={kind === k} className={kind === k ? 'is-on' : ''} onClick={() => setKind(k)}>{k === 'comment' ? 'Comment' : k === 'source' ? 'Source' : k === 'say_so' ? 'My word' : 'Revise'}</button>
               ))}
             </div>
             <input

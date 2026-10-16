@@ -283,6 +283,13 @@ export function WriteApp({ services }: { services: WriteServices }): React.JSX.E
 
   const addNote = (kind: NoteKind, text: string): void => {
     if (!selection) return
+    if (kind === 'revise') {
+      change(`Revising with ${chatModel}`, async (id) => {
+        const r = await service.reviseText(id, selection, text, chatModel)
+        setNotice(r.status === 'failed' ? ('reason' in r ? r.reason : 'The revision could not run.') : r.added.length === 0 ? 'I found nothing to change in that text.' : `I added ${r.added.length} suggested change${r.added.length === 1 ? '' : 's'} to that text (${chatModel}). Accept ${r.added.length === 1 ? 'it' : 'them'} in Issues.`)
+      })
+      return
+    }
     change(kind === 'comment' ? 'Adding the comment' : 'Adding the source', async (id) => {
       if (kind === 'comment') {
         const r = await service.addComment(id, selection, text)
