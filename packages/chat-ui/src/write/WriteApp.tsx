@@ -34,7 +34,7 @@ export function WriteApp({ services }: { services: WriteServices }): React.JSX.E
   const [activeId, setActiveId] = useState<string | undefined>()
   const [bundle, setBundle] = useState<ArticleBundle | undefined>()
   const [draft, setDraft] = useState('')
-  const [tab, setTab] = useState<Tab>('text')
+  const [tab, setTab] = useState<Tab>(() => (typeof window !== 'undefined' && window.matchMedia?.('(min-width: 960px)').matches ? 'issues' : 'text'))
   const [notice, setNotice] = useState<string | null>(null)
   const [busy, setBusy] = useState<string | null>(null)
   const [chat, setChat] = useState<ChatLine[]>([])
@@ -198,9 +198,14 @@ export function WriteApp({ services }: { services: WriteServices }): React.JSX.E
       </header>
       {(busy || notice) && <p className="write__notice" role="status">{busy ? `${busy}…` : notice}</p>}
 
+      {readiness && (
+        <p className="write__status" aria-label="How close the article is to publishable">
+          {readiness.unsourcedFactualClaims} unsourced · {readiness.staleOrUnsupportedClaims} stale or unsupported · {readiness.openComments} open comment{readiness.openComments === 1 ? '' : 's'} · {readiness.sectionsNeedingReview} section{readiness.sectionsNeedingReview === 1 ? '' : 's'} to review
+        </p>
+      )}
       <nav className="write__tabs" aria-label="Sections of the page">
         {TABS.map((t) => (
-          <button key={t.id} type="button" className={tab === t.id ? 'is-on' : ''} aria-pressed={tab === t.id} onClick={() => setTab(t.id)}>{t.label}</button>
+          <button key={t.id} type="button" data-tab={t.id} className={tab === t.id ? 'is-on' : ''} aria-pressed={tab === t.id} onClick={() => setTab(t.id)}>{t.label}</button>
         ))}
       </nav>
 
@@ -212,7 +217,7 @@ export function WriteApp({ services }: { services: WriteServices }): React.JSX.E
             <section className={`write__pane write__pane--text ${tab === 'text' ? 'is-shown' : ''}`} aria-label="Text">
               <textarea aria-label="Article text" value={draft} onChange={(e) => onType(e.target.value)} spellCheck />
             </section>
-            <section className={`write__pane ${tab === 'outline' ? 'is-shown' : ''}`} aria-label="Outline">
+            <section className={`write__pane write__pane--outline ${tab === 'outline' ? 'is-shown' : ''}`} aria-label="Outline">
               <ul className="write__list">
                 {meta.sections.map((s) => (
                   <li key={s.id}>
@@ -229,11 +234,6 @@ export function WriteApp({ services }: { services: WriteServices }): React.JSX.E
               </ul>
             </section>
             <section className={`write__pane ${tab === 'issues' ? 'is-shown' : ''}`} aria-label="Issues">
-              {readiness && (
-                <p className="write__counts">
-                  {readiness.unsourcedFactualClaims} unsourced · {readiness.staleOrUnsupportedClaims} stale or unsupported · {readiness.openComments} open comments · {readiness.sectionsNeedingReview} sections to review
-                </p>
-              )}
               <h2>Suggested changes</h2>
               <ul className="write__list">
                 {meta.suggestions.filter((s) => s.state === 'pending').map((s) => (

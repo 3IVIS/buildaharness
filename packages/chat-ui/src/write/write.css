@@ -21,7 +21,7 @@
 .write__list button { margin: 6px 6px 0 0; }
 .write__reason, .write__muted { color: var(--muted); margin: 4px 0 0; font-size: 0.9rem; }
 .write__warn { color: var(--amber); margin: 4px 0 0; }
-.write__counts { color: var(--muted); }
+.write__status { margin: 0; padding: 6px 16px; color: var(--muted); font-size: 0.9rem; border-bottom: 1px solid var(--border); background: var(--tint-1); }
 .write__badge { display: inline-block; margin-left: 8px; padding: 1px 8px; border-radius: 999px; font-size: 0.8rem; background: var(--tint-2); border: 1px solid var(--border); }
 .write__badge--needs_review, .write__badge--stale, .write__badge--contradicted, .write__badge--not_supported { background: var(--red-a18); border-color: var(--red); }
 .write__badge--supported { background: var(--accent-a18); border-color: var(--green); }
@@ -35,10 +35,22 @@
 .write__compose textarea { width: 100%; }
 .write__empty { color: var(--muted); }
 
-/* Wide screens: the text and the side panel are shown together. Phones: one panel at a time, picked by the tabs. */
+/* Phones: one panel at a time, picked from a bottom tab bar; nothing scrolls sideways. */
+.write { overflow-x: hidden; }
+.write__bar select { flex: 1 1 100%; min-width: 0; max-width: 100%; }
+@media (max-width: 959px) {
+  .write__tabs { position: fixed; left: 0; right: 0; bottom: 0; z-index: 5; display: grid; grid-template-columns: repeat(6, 1fr); gap: 2px; padding: 6px 6px calc(6px + env(safe-area-inset-bottom)); background: var(--surface); border-top: 1px solid var(--border); overflow: visible; }
+  .write__tabs button { min-height: 44px; padding: 4px 2px; font-size: 0.74rem; border-radius: 6px; }
+  .write__main { padding-bottom: 84px; }
+}
+
+/* Wide screens: outline on the left, the text in the middle, a panel on the right that switches between issues, sources, chat and settings. */
 @media (min-width: 960px) {
-  .write__tabs button[data-tab='text'] { display: none; }
-  .write__main { display: grid; grid-template-columns: minmax(0, 3fr) minmax(320px, 2fr); gap: 16px; align-items: start; }
-  .write__pane--text { display: block; grid-column: 1; grid-row: 1 / span 6; position: sticky; top: 8px; }
-  .write__pane:not(.write__pane--text) { grid-column: 2; }
+  .write__tabs button[data-tab='text'], .write__tabs button[data-tab='outline'] { display: none; }
+  .write__bar select { flex: 0 1 360px; }
+  .write__main { display: grid; grid-template-columns: 220px minmax(0, 3fr) minmax(340px, 2fr); gap: 16px; align-items: start; }
+  .write__pane--outline { display: block; grid-column: 1; grid-row: 1 / span 6; position: sticky; top: 8px; }
+  .write__pane--text { display: block; grid-column: 2; grid-row: 1 / span 6; position: sticky; top: 8px; }
+  .write__pane:not(.write__pane--text):not(.write__pane--outline) { grid-column: 3; }
+  .write__pane--text textarea { min-height: 75dvh; }
 }
