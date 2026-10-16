@@ -19,6 +19,10 @@
 .write__list { list-style: none; margin: 0 0 16px; padding: 0; display: grid; gap: 10px; }
 .write__list li { border: 1px solid var(--border); border-radius: 8px; padding: 10px 12px; background: var(--surface); }
 .write__list button { margin: 6px 6px 0 0; }
+.write__list select, .write__list li { max-width: 100%; min-width: 0; }
+.write__list select { width: 100%; }
+.write__pane { min-width: 0; }
+.write__reason, .write__list li p { overflow-wrap: anywhere; }
 .write__reason, .write__muted { color: var(--muted); margin: 4px 0 0; font-size: 0.9rem; }
 .write__warn { color: var(--amber); margin: 4px 0 0; }
 .write__status { margin: 0; padding: 6px 16px; color: var(--muted); font-size: 0.9rem; border-bottom: 1px solid var(--border); background: var(--tint-1); }
