@@ -3,10 +3,11 @@ import { extractClaims, type ExtractionResult } from './article-claims.js'
 import { serializeArticle, loadArticleFolder, type ArticleBundle, type ArticleFolder } from './article-folder.js'
 import { createArticleMeta, type ArticleMeta, type Claim, type Link, type Source } from './article-model.js'
 import { resolveChange, type ResolveResult } from './article-resolver.js'
-import { checkIntegrity, computeReadiness, createSnapshot, type Problem, type Readiness } from './article-rules.js'
+import { checkIntegrity, computeReadiness, createSnapshot, setSectionReview, type Problem, type Readiness } from './article-rules.js'
+import { suggestEdits, type EditSuggestResult } from './article-edit-suggest.js'
 import { reconcileSections } from './article-sections.js'
 import { createSource } from './article-sources.js'
-import { refreshSuggestions } from './article-suggestions.js'
+import { acceptSuggestion, refreshSuggestions, rejectSuggestion } from './article-suggestions.js'
 import { checkClaimSupport, needsAutoCheck, type SupportCheck } from './article-support.js'
 import type { WriterChatPort } from './writer-chat-turn.js'
 import { createEmptyWriterChatState, type ArticleRef, type CaptureOp, type WriterChatState } from './writer-chat-state.js'
@@ -220,6 +221,47 @@ export class ArticleService {
     await this.store.save(id, { ...b, meta: { ...b.meta, claims } })
   }
 
+  /** The assistant turns the writer\'s instruction into suggestions; nothing is applied until the writer accepts. */
+  async suggest(id: string, instruction: string): Promise<EditSuggestResult> {
+    const b = await this.get(id)
+    const { llm, model, onUsage } = this.opts
+    const r = await suggestEdits({ meta: b.meta, markdown: b.markdown, instruction, now: this.now() }, llm, model, onUsage)
+    if (r.status === 'suggested' && r.added.length > 0) await this.store.save(id, { ...b, meta: r.meta })
+    return r
+  }
+
+  /** Accepts a suggestion (optionally with the writer\'s own wording): the Markdown changes, then the usual update runs. */
+  async acceptSuggestionAndUpdate(id: string, suggestionId: string, edited?: string, options: { analyze?: boolean } = {}): Promise<{ ok: true; outcome: UpdateOutcome } | { ok: false; reason: string }> {
+    const b = await this.get(id)
+    const r = acceptSuggestion(b.meta, b.markdown, suggestionId, edited)
+    if (!r.ok) return r
+    await this.store.save(id, { ...b, meta: r.meta })
+    return { ok: true, outcome: await this.updateText(id, r.markdown, options) }
+  }
+
+  async rejectSuggestionById(id: string, suggestionId: string): Promise<{ ok: boolean; reason?: string }> {
+    const b = await this.get(id)
+    const r = rejectSuggestion(b.meta, suggestionId)
+    if (!r.ok) return { ok: false, reason: r.reason }
+    await this.store.save(id, { ...b, meta: r.meta })
+    return { ok: true }
+  }
+
+  /** Only the writer clears a section\'s needs-review (or sets it held / clean). */
+  async setReview(id: string, sectionId: string, state: 'clean' | 'held' | 'needs_review'): Promise<{ ok: boolean; reason?: string }> {
+    const b = await this.get(id)
+    const r = setSectionReview(b.meta, sectionId, state, undefined, 'writer', this.now())
+    if (!r.ok) return { ok: false, reason: r.reason }
+    await this.store.save(id, { ...b, meta: r.meta })
+    return { ok: true }
+  }
+
+  async setCommentState(id: string, commentId: string, state: 'open' | 'addressed' | 'dismissed'): Promise<void> {
+    const b = await this.get(id)
+    if (!b.meta.comments.some((c) => c.id === commentId)) throw new Error(`No comment ${commentId}.`)
+    await this.store.save(id, { ...b, meta: { ...b.meta, comments: b.meta.comments.map((c) => (c.id === commentId ? { ...c, state } : c)) } })
+  }
+
   readiness(bundle: ArticleBundle): { readiness: Readiness; problems: Problem[] } {
     return { readiness: computeReadiness(bundle.meta), problems: checkIntegrity(bundle.meta) }
   }
@@ -260,6 +302,9 @@ const PENDING_KEY = 'writer:pending-ops'
 export function createArticleChatPort(store: ArticleStore): WriterChatPort {
   return {
     articles: () => store.list(),
+    async articleText(articleId) {
+      return (await store.load(articleId))?.markdown
+    },
     async load(): Promise<WriterChatState> {
       const state = createEmptyWriterChatState()
       for (const ref of await store.list()) {

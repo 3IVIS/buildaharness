@@ -179,3 +179,6 @@ export { proposeSuggestion, refreshSuggestions, acceptSuggestion, rejectSuggesti
 export type { SuggestionResult } from './writer/article-suggestions.js'
 export { ArticleService, createArticleChatPort, createMemoryArticleStore } from './writer/article-service.js'
 export type { ArticleStore, ArticleServiceOptions, UpdateOutcome } from './writer/article-service.js'
+export { createMemoryAdapterArticleStore } from './writer/article-memory-store.js'
+export { suggestEdits } from './writer/article-edit-suggest.js'
+export type { EditSuggestResult } from './writer/article-edit-suggest.js'
