@@ -39,6 +39,11 @@ jobs:
       - name: Build the Write page
         env:
           CHAT_UI_BASE: /write/
+          # Same default as deploy-chat-ui.yml: pages are read through the deployed proxy Worker without the visitor setting
+          # anything up (a visitor can still give their own address). No search key is baked in; each visitor brings theirs.
+          VITE_ASSISTANT_PROXY_URL: https://buildaharness-proxy.buildaharness.workers.dev
+          VITE_ASSISTANT_ENABLE_WEB: 'true'
+          VITE_ASSISTANT_WEB_BACKEND: proxy
         run: npm run build:write --workspace=packages/chat-ui
 
       - name: Check deploy key is present

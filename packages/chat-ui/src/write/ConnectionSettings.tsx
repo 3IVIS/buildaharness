@@ -22,14 +22,27 @@ export function ConnectionSettings({ value, onSave, onForget }: Props): React.JS
           <option value="anthropic">Anthropic</option>
           <option value="openai">OpenAI</option>
           <option value="openrouter">OpenRouter</option>
+          <option value="proxy">A proxy I run (self-hosted)</option>
         </select>
       </label>
-      <label>Your key for that provider
-        <input aria-label="API key" type="password" autoComplete="off" value={draft.apiKey} onChange={(e) => set({ apiKey: e.target.value })} />
-      </label>
+      {draft.provider === 'proxy' ? (
+        <>
+          <p className="write__muted">Model calls go to a proxy you run, for example one on this computer. Your key, or your Claude login, stays on that machine and never reaches this page.</p>
+          <label>Proxy address for the model
+            <input aria-label="Model proxy address" inputMode="url" placeholder="http://localhost:8787" value={draft.modelUrl ?? ''} onChange={(e) => set({ modelUrl: e.target.value })} />
+          </label>
+          <label>Access token for that proxy
+            <input aria-label="API key" type="password" autoComplete="off" value={draft.apiKey} onChange={(e) => set({ apiKey: e.target.value })} />
+          </label>
+        </>
+      ) : (
+        <label>Your key for that provider
+          <input aria-label="API key" type="password" autoComplete="off" value={draft.apiKey} onChange={(e) => set({ apiKey: e.target.value })} />
+        </label>
+      )}
       <details className="write__allsrc" open={Boolean(draft.pagesUrl || draft.searchKey)}>
         <summary>Reading web pages and finding sources (optional)</summary>
-        <p className="write__muted">Browsers cannot read most web pages directly. A proxy you run does it for this page. Without one, links stay links and you paste the passage.</p>
+        <p className="write__muted">Browsers cannot read most web pages directly. This page uses the Aielia proxy for it unless you give your own address. If none works, links stay links and you paste the passage.</p>
         <label>Proxy address
           <input aria-label="Proxy address" inputMode="url" placeholder="https://" value={draft.pagesUrl ?? ''} onChange={(e) => set({ pagesUrl: e.target.value })} />
         </label>
@@ -41,7 +54,7 @@ export function ConnectionSettings({ value, onSave, onForget }: Props): React.JS
         </label>
       </details>
       <div className="write__rowacts">
-        <button type="button" className="write__primary" disabled={!dirty || !draft.apiKey.trim()} onClick={() => onSave(draft)}>Save connection</button>
+        <button type="button" className="write__primary" disabled={!dirty || (draft.provider === 'proxy' ? !draft.modelUrl?.trim() : !draft.apiKey.trim())} onClick={() => onSave(draft)}>Save connection</button>
         {onForget && <button type="button" className="write__link" onClick={() => { if (window.confirm('Forget the key and the other connection settings from this browser? Your articles stay.')) onForget() }}>Forget these</button>}
       </div>
       <p className="write__muted">Saving reconnects the page. Your articles are not touched.</p>

@@ -5,8 +5,11 @@ import { resolveConfig, type AssistantConfig } from '@buildaharness/aielia'
  * change the settings of the /try page, so the two can be set up, changed and cleared on their own.
  */
 export interface WriteConnection {
-  provider: 'anthropic' | 'openai' | 'openrouter'
+  provider: 'anthropic' | 'openai' | 'openrouter' | 'proxy'
+  /** The provider key; for a self-hosted model proxy, the access token that proxy asks for (may be empty). */
   apiKey: string
+  /** Only for provider 'proxy': the address of a proxy you run that answers model calls (a self-hosted @buildaharness/proxy, or a bridge that speaks the same /llm/chat). */
+  modelUrl?: string
   /** The address of a Aielia proxy that reads web pages and searches for this page (optional; without it links stay links). */
   pagesUrl?: string
   /** The access token that proxy asks for, if it asks. */
@@ -17,7 +20,7 @@ export interface WriteConnection {
 
 const STORAGE_KEY = 'aielia-write.connection'
 
-const PROVIDERS = ['anthropic', 'openai', 'openrouter']
+const PROVIDERS = ['anthropic', 'openai', 'openrouter', 'proxy']
 
 function clean(raw: unknown): WriteConnection | undefined {
   if (typeof raw !== 'object' || raw === null) return undefined
@@ -25,8 +28,10 @@ function clean(raw: unknown): WriteConnection | undefined {
   const text = (v: unknown): string | undefined => (typeof v === 'string' && v.trim() ? v.trim() : undefined)
   const provider = PROVIDERS.includes(r.provider as string) ? (r.provider as WriteConnection['provider']) : undefined
   const apiKey = text(r.apiKey)
-  if (!provider || !apiKey) return undefined
-  return { provider, apiKey, pagesUrl: text(r.pagesUrl)?.replace(/\/+$/, ''), pagesToken: text(r.pagesToken), searchKey: text(r.searchKey) }
+  const modelUrl = text(r.modelUrl)?.replace(/\/+$/, '')
+  // A self-hosted proxy is identified by its address and may need no token; every other provider needs a key.
+  if (!provider || (provider === 'proxy' ? !modelUrl : !apiKey)) return undefined
+  return { provider, apiKey: apiKey ?? '', ...(provider === 'proxy' ? { modelUrl } : {}), pagesUrl: text(r.pagesUrl)?.replace(/\/+$/, ''), pagesToken: text(r.pagesToken), searchKey: text(r.searchKey) }
 }
 
 /** Reads the saved connection; a missing, unreadable or incomplete one is undefined. Storage failures never throw. */
@@ -62,10 +67,18 @@ export function toAssistantConfig(c: WriteConnection | undefined, buildDefaults:
   const mine: Partial<AssistantConfig> = c
     ? {
         llmBackend: c.provider,
-        apiKey: c.apiKey,
-        ...(c.pagesUrl ? { webBackend: 'proxy' as const, proxyUrl: c.pagesUrl, authToken: c.pagesToken ?? '' } : { webBackend: 'direct' as const }),
+        ...(c.provider === 'proxy' ? { proxyUrl: c.modelUrl, authToken: c.apiKey } : { apiKey: c.apiKey }),
+        // No address of their own: the build's default stands (the hosted proxy on /write, as on /try), else pages are not read.
+        ...(c.pagesUrl && c.provider !== 'proxy' ? { webBackend: 'proxy' as const, proxyUrl: c.pagesUrl, authToken: c.pagesToken ?? '' } : {}),
         braveApiKey: c.searchKey,
       }
     : {}
   return resolveConfig({ ...buildDefaults, ...mine }).config
+}
+
+/** The proxy that reads web pages and searches: the one the writer set, else the build's default; none means links stay links. Separate from the model proxy, which may be a different machine. */
+export function webProxyOf(c: WriteConnection | undefined, buildDefaults: Partial<AssistantConfig>): { url: string; token: string } | undefined {
+  if (c?.pagesUrl) return { url: c.pagesUrl, token: c.pagesToken ?? '' }
+  if (buildDefaults.webBackend === 'proxy' && buildDefaults.proxyUrl) return { url: buildDefaults.proxyUrl, token: buildDefaults.authToken ?? '' }
+  return undefined
 }

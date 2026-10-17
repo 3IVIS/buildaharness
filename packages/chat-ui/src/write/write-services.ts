@@ -133,9 +133,12 @@ export async function assembleWriteServices(parts: {
   }
 }
 
+/** The proxy that reads pages and searches: its address and access token (the token may be empty, as on the hosted one). */
+export interface WebProxy { url: string; token: string }
+
 /** Page reading and search through the proxy, sharing one set of search results so a found page can be read. Search needs the visitor's search key too. */
-function proxyWeb(config: AssistantConfig): { fetchWeb: (url: string) => Promise<string>; searchWeb?: (query: string) => Promise<{ title: string; url: string; snippet: string }[]> } {
-  const ctx = createProxyWebTools(config)
+function proxyWeb(config: AssistantConfig, proxy: WebProxy): { fetchWeb: (url: string) => Promise<string>; searchWeb?: (query: string) => Promise<{ title: string; url: string; snippet: string }[]> } {
+  const ctx = createProxyWebTools({ ...config, proxyUrl: proxy.url, authToken: proxy.token })
   return {
     fetchWeb: async (url) => {
       rememberUserUrls(url)
@@ -146,13 +149,13 @@ function proxyWeb(config: AssistantConfig): { fetchWeb: (url: string) => Promise
 }
 
 /** The real thing: IndexedDB storage, the visitor's own key, a plain browser (no file or shell tools). */
-export function createWriteServices(config: AssistantConfig): Promise<WriteServices> {
+export function createWriteServices(config: AssistantConfig, webProxy?: WebProxy): Promise<WriteServices> {
   const memory = new IndexedDBAdapter({ namespace: 'aielia-write' })
   const store = createMemoryAdapterArticleStore(memory)
   const llm = createLlmClient(config, { claudeCli: () => undefined })
   // A plain browser tab cannot fetch arbitrary pages (CORS, and no DNS to check the address). Pages are read through the proxy
   // when the visitor set one up; otherwise the writer pastes the passage.
-  const web = config.webBackend === 'proxy' ? proxyWeb(config) : undefined
+  const web = webProxy ? proxyWeb(config, webProxy) : undefined
   return assembleWriteServices({
     fetchWeb: web?.fetchWeb,
     pickFolder: browserFolderPicker(),

@@ -3,7 +3,7 @@ import { createRoot } from 'react-dom/client'
 import { envOverridesFromImportMetaEnv } from '../browser-config'
 import { ConnectionSettings } from './ConnectionSettings'
 import { WriteApp } from './WriteApp'
-import { clearConnection, loadConnection, saveConnection, toAssistantConfig, type WriteConnection } from './write-config'
+import { clearConnection, loadConnection, saveConnection, toAssistantConfig, webProxyOf, type WriteConnection } from './write-config'
 import { createWriteServices, type WriteServices } from './write-services'
 
 /**
@@ -18,7 +18,8 @@ function Root(): React.JSX.Element {
   useEffect(() => {
     if (!connection) { setServices(undefined); return }
     let live = true
-    createWriteServices(toAssistantConfig(connection, envOverridesFromImportMetaEnv(import.meta.env))).then((s) => { if (live) setServices(s) }, (e) => setError(String(e)))
+    const defaults = envOverridesFromImportMetaEnv(import.meta.env)
+    createWriteServices(toAssistantConfig(connection, defaults), webProxyOf(connection, defaults)).then((s) => { if (live) setServices(s) }, (e) => setError(String(e)))
     return () => { live = false }
   }, [connection])
 
