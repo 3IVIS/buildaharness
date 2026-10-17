@@ -616,6 +616,16 @@
       "batch": null,
       "rationale": "HTML tag and entity names are syntax, not natural language; nothing about the page's meaning is decided",
       "class": "A"
+    },
+    {
+      "id": "repo-noise-paths",
+      "file": "packages/aielia/src/writer/article-repo.ts",
+      "line": 26,
+      "decides": "leaves test, fixture and example files out of a very long list of repository paths before the list is cut to its size limit",
+      "inputs": null,
+      "batch": null,
+      "rationale": "Matches folder and file-name conventions in file paths (a structural filter on paths, not on the writer's words or any natural-language text); which files help a claim is left to the model",
+      "class": "A"
     }
   ],
   "scanBaseline": {
@@ -634,6 +644,7 @@
     "packages/aielia/src/tui-app.tsx": 2,
     "packages/harness/src/harness-runtime.ts": 1,
     "packages/runtime/src/openai-compatible-client.ts": 3,
-    "packages/aielia/src/html-to-markdown.ts": 11
+    "packages/aielia/src/html-to-markdown.ts": 11,
+    "packages/aielia/src/writer/article-repo.ts": 1
   }
 }
