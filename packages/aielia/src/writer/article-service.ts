@@ -1143,3 +1143,30 @@ export function createArticleChatPort(store: ArticleStore): WriterChatPort {
     },
   }
 }
+
+/** Methods that only read; they do not wait behind a long model step on the same article. */
+const READ_ONLY = new Set(['get', 'list', 'readiness', 'history', 'getVersion', 'compareWithCurrent', 'changeSinceLastVersion', 'profiles', 'exportArticle'])
+
+/**
+ * The service with each article's calls run one after another. A step reads the article, waits for the model and saves, so two steps on the same
+ * article at once would each save from the text they first read and the later save would erase the earlier one (found in pilot P1: three
+ * source-link proposals started together left only one set of links). Calls on different articles still run together, and reads never wait.
+ * The calls the service makes on itself are not queued again, so a step that calls another cannot wait on itself.
+ */
+export function serializeByArticle<T extends object>(service: T): T {
+  const tails = new Map<string, Promise<unknown>>()
+  return new Proxy(service, {
+    get(target, prop) {
+      const member = Reflect.get(target, prop, target) as unknown
+      if (typeof member !== 'function' || typeof prop !== 'string' || READ_ONLY.has(prop)) return member
+      return (...args: unknown[]): Promise<unknown> => {
+        const key = typeof args[0] === 'string' ? args[0] : ''
+        const run = (): unknown => (member as (...a: unknown[]) => unknown).apply(target, args)
+        if (!key) return Promise.resolve(run())
+        const result = (tails.get(key) ?? Promise.resolve()).then(run, run)
+        tails.set(key, result.catch(() => undefined))
+        return result as Promise<unknown>
+      }
+    },
+  })
+}

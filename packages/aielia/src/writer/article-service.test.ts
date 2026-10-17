@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest'
 import type { ILLMClient } from '@buildaharness/runtime'
-import { ArticleService, createArticleChatPort, createMemoryArticleStore } from './article-service.js'
+import { ArticleService, createArticleChatPort, createMemoryArticleStore, serializeByArticle } from './article-service.js'
 import { processWriterMessage } from './writer-chat-turn.js'
 import { proposeSuggestion } from './article-suggestions.js'
 import type { ArticleMeta } from './article-model.js'
@@ -534,5 +534,28 @@ describe('editing a suggestion before accepting it', () => {
     expect((await s.get(id)).markdown).toContain('41 milliseconds')
     expect(await s.editSuggestion(id, 'sg1', 'again')).toMatchObject({ ok: false })
     expect(await s.editSuggestion(id, 'nope', 'x')).toMatchObject({ ok: false })
+  })
+})
+
+describe('serializeByArticle', () => {
+  it('keeps both results when two source-link proposals start together (the plain service loses one), and reads do not wait', async () => {
+    const claim = { id: 'k1', sectionId: 's1', quote: 'The p99 was 18 ms.', position: 0, kind: 'factual' as const, author: 'model' as const, authorAt: NOW, confirmed: false, sourceStatus: 'none' as const }
+    const reply = { claims: [{ claimId: 'k1', relation: 'supports', reason: 'same figure', confidence: 0.9 }] }
+    const build = async (wrap: boolean) => {
+      const store = createMemoryArticleStore()
+      const llm = { callChatStructured: async () => { await new Promise((r) => setTimeout(r, 20)); return { content: JSON.stringify(reply) } } } as unknown as ILLMClient
+      const raw = new ArticleService({ store, llm, now: () => NOW, newId: () => 'art1' })
+      const s = wrap ? serializeByArticle(raw) : raw
+      const id = await s.create('Post', MD)
+      const b = await s.get(id)
+      await store.save(id, { ...b, meta: { ...b.meta, claims: [{ ...claim, sectionId: b.meta.sections[0].id }] } })
+      const a = await s.addSource(id, { kind: 'upload', address: 'a.txt', passage: 'p99 18 ms' })
+      const c = await s.addSource(id, { kind: 'upload', address: 'c.txt', passage: 'p99 is 18 ms too' })
+      await Promise.all([s.proposeLinksForSource(id, a), s.proposeLinksForSource(id, c)])
+      return (await s.get(id)).meta.links.filter((l) => l.kind === 'supported_by').map((l) => l.to.id).sort()
+    }
+    expect(await build(false)).toHaveLength(1) // the lost update this wrapper exists for
+    expect(await build(true)).toEqual(expect.arrayContaining([expect.any(String)]))
+    expect((await build(true))).toHaveLength(2)
   })
 })

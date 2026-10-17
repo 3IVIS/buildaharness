@@ -1,6 +1,7 @@
 import {
   type FolderReader,
   ArticleService,
+  serializeByArticle,
   PersonalAssistant,
   WEB_FEATURES,
   buildAssistantOptions,
@@ -87,7 +88,7 @@ export async function assembleWriteServices(parts: {
   // Every model call, the article steps and the chat alike, goes through the cap.
   const llm = withSpendCap(parts.llm, meter, () => cap)
   const port = createArticleChatPort(store)
-  const service = new ArticleService({ store, llm, fetchWeb: parts.fetchWeb, searchWeb: parts.searchWeb, modelFor: (role) => (role === 'writer' ? chatModel : autoModel) })
+  const service = serializeByArticle(new ArticleService({ store, llm, fetchWeb: parts.fetchWeb, searchWeb: parts.searchWeb, modelFor: (role) => (role === 'writer' ? chatModel : autoModel) }))
   const assistant = await parts.buildAssistant(port, llm, chatModel)
 
   return {
