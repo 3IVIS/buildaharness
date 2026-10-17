@@ -106,7 +106,7 @@ describe('verifying claims', () => {
     expect(r.entries[0]).toMatchObject({ claimId: 'c1', outcome: 'supported' })
     expect(r.leftOver).toBe(1)
     expect(searches).toBe(0)
-    expect(summarizeVerify(r)).toBe('Verified 1 claim: 1 backed. 1 more are left; run it again for them.')
+    expect(summarizeVerify(r)).toBe('Looked at 1 claim: 1 backed. 1 more claims are left; each run takes 1, so run it again for the rest.')
   })
   it('a lookup stops applying once the claim text changes', async () => {
     const { svc, id } = await setup({ search: async () => [] })

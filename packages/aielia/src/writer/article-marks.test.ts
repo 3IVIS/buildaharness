@@ -36,11 +36,11 @@ describe('claim marks', () => {
 })
 
 describe('a claim that was searched for and not backed', () => {
-  it('stays orange (it still needs a source) with its own status', () => {
+  it('has its own grey tone (it still needs a source, but it was looked for), unlike a claim nobody looked at or one that could not be searched', () => {
     const md = 'The p99 was 18 ms.'
     const base = { id: 'c1', sectionId: 's1', quote: md, position: 0, kind: 'factual' as const, author: 'writer' as const, authorAt: 'x', confirmed: true, sourceStatus: 'none' as const }
     const meta = { claims: [{ ...base, lookup: { at: '2026-10-17T00:00:00Z', claimText: md, outcome: 'none_supported' as const, tried: [] } }], sources: [] } as never
-    expect(claimMarks(meta, md)).toEqual([{ start: 0, end: md.length, claimId: 'c1', tone: 'look', status: 'none_found' }])
+    expect(claimMarks(meta, md)).toEqual([{ start: 0, end: md.length, claimId: 'c1', tone: 'tried', status: 'none_found' }])
     const unavailable = { claims: [{ ...base, lookup: { at: 'x', claimText: md, outcome: 'unavailable' as const, tried: [] } }], sources: [] } as never
     expect(claimMarks(unavailable, md)[0]).toMatchObject({ tone: 'look', status: 'none' })
   })

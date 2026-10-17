@@ -26,7 +26,7 @@ interface Range {
   end: number
 }
 
-const WORSE: Record<MarkTone, number> = { ok: 0, look: 1, bad: 2 }
+const WORSE: Record<MarkTone, number> = { ok: 0, tried: 1, look: 2, bad: 3 }
 
 export function textPieces(meta: ArticleMeta, markdown: string): TextPiece[] {
   const marks = claimMarks(meta, markdown)

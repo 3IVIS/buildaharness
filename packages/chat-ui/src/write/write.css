@@ -46,6 +46,7 @@
 .write__backdrop { position: absolute; inset: 0 0 auto 0; height: 100%; color: transparent; pointer-events: none; overflow: hidden; overflow-y: scroll; scrollbar-color: transparent transparent; }
 .write__mark { color: transparent; background: none; border-radius: 3px; }
 .write__mark--ok { background: rgba(46, 158, 91, 0.16); }
+.write__mark--tried { background: rgba(120, 130, 150, 0.2); box-shadow: inset 0 -2px 0 rgba(120, 130, 150, 0.55); }
 .write__mark--look { background: rgba(216, 154, 28, 0.2); }
 .write__mark--bad { background: rgba(214, 69, 69, 0.2); }
 .write__mark.has-comment { text-decoration: underline dotted #3b82c4; text-decoration-thickness: 2px; text-underline-offset: 3px; }
@@ -58,6 +59,7 @@
 .write__here { color: var(--fg, inherit); font-weight: 600; }
 .write__tone { margin-left: 0; padding: 0 5px; border-radius: 3px; }
 .write__tone--ok { background: rgba(46, 158, 91, 0.16); }
+.write__tone--tried { background: rgba(120, 130, 150, 0.2); box-shadow: inset 0 -2px 0 rgba(120, 130, 150, 0.55); }
 .write__tone--look { background: rgba(216, 154, 28, 0.2); }
 .write__tone--bad { background: rgba(214, 69, 69, 0.2); }
 .write__tone--comment { text-decoration: underline dotted #3b82c4; text-decoration-thickness: 2px; text-underline-offset: 3px; }

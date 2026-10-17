@@ -79,7 +79,8 @@ export function MarkedText({ textRef, value, pieces, caret, onChange, onSelectio
           {tint && (
             <>
               {has((p) => p.tone === 'ok') && <span className="write__tone write__tone--ok">backed by a source</span>}
-              {has((p) => p.tone === 'look') && <span className="write__tone write__tone--look">needs a source</span>}
+              {has((p) => p.tone === 'tried') && <span className="write__tone write__tone--tried">looked for, none found</span>}
+              {has((p) => p.tone === 'look') && <span className="write__tone write__tone--look">not looked at yet</span>}
               {has((p) => p.tone === 'bad') && <span className="write__tone write__tone--bad">against a source</span>}
               {has((p) => p.commentIds.length > 0) && <span className="write__tone write__tone--comment">open comment</span>}
               {has((p) => p.suggestionIds.length > 0) && <span className="write__tone write__tone--suggestion">suggested change</span>}

@@ -11,7 +11,7 @@ import { currentLookup } from './article-verify.js'
  * out of date, partly or not backed, or searched for and not found). bad (red): a source says the opposite.
  */
 
-export type MarkTone = 'ok' | 'look' | 'bad'
+export type MarkTone = 'ok' | 'tried' | 'look' | 'bad'
 
 export interface ClaimMark {
   /** The sentence the tint covers. */
@@ -24,7 +24,7 @@ export interface ClaimMark {
 }
 
 const SENTENCE_END = new Set(['.', '!', '?'])
-const WORSE: Record<MarkTone, number> = { ok: 0, look: 1, bad: 2 }
+const WORSE: Record<MarkTone, number> = { ok: 0, tried: 1, look: 2, bad: 3 }
 
 /** The sentence around a quote: back to the end of the previous sentence or the start of the line, forward to the end punctuation or the end of the line. */
 export function sentenceAround(text: string, start: number, end: number): { start: number; end: number } {
@@ -45,7 +45,8 @@ export function claimMarks(meta: ArticleMeta, markdown: string): ClaimMark[] {
     const status = effectiveSourceStatus(c, meta.sources)
     // A claim that was searched for and not backed has its own status; it still needs a source, so it is orange, not red.
     const searchedNone = status === 'none' && currentLookup(c)?.outcome !== undefined && currentLookup(c)?.outcome !== 'unavailable'
-    const tone: MarkTone = status === 'contradicted' ? 'bad' : status === 'supported' && !c.needsRecheck ? 'ok' : 'look'
+    // 'tried': looked for and nothing found. Still unbacked, but not the same as a claim nobody has looked at.
+    const tone: MarkTone = status === 'contradicted' ? 'bad' : status === 'supported' && !c.needsRecheck ? 'ok' : searchedNone ? 'tried' : 'look'
     const shown = searchedNone ? 'none_found' : status
     const sentence = sentenceAround(markdown, c.position, end)
     const prev = marks[marks.length - 1]

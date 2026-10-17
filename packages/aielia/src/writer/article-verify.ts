@@ -76,5 +76,10 @@ export function summarizeVerify(report: VerifyReport): string {
     count('search_failed') && `${count('search_failed')} where the search failed`,
     count('could_not_check') && `${count('could_not_check')} that could not be checked`,
   ].filter(Boolean)
-  return `Verified ${report.entries.length} claim${report.entries.length === 1 ? '' : 's'}: ${parts.join(', ')}.${report.leftOver > 0 ? ` ${report.leftOver} more are left; run it again for them.` : ''}`
+  const backed = count('supported') + count('partly_supported')
+  const n = report.entries.length
+  // "Verified" is only said of claims a source backed; otherwise the run only looked.
+  const head = `Looked at ${n} claim${n === 1 ? '' : 's'}${backed === 0 ? ', none backed' : ''}`
+  const why = count('cannot_search') > 0 ? ' Nothing could look anything up here: attach a repository in the chat pane, or add a search key and a page proxy in Settings.' : ''
+  return `${head}: ${parts.join(', ')}.${why}${report.leftOver > 0 ? ` ${report.leftOver} more claims are left; each run takes ${n}, so run it again for the rest.` : ''}`
 }
