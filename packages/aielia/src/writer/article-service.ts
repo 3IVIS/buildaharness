@@ -16,6 +16,7 @@ import { suggestEdits, type EditSuggestResult } from './article-edit-suggest.js'
 import { reconcileSections } from './article-sections.js'
 import { DEFAULT_VERIFY_LIMIT, DEFAULT_VERIFY_PAGES, verifyTargets, type VerifyEntry, type VerifyReport } from './article-verify.js'
 import { folderFileAddress, pathInFolder, type FolderReader } from './local-folder.js'
+import { checkConsistency, type ConsistencyResult } from './article-consistency.js'
 import { looksLikeHtml } from '../html-to-markdown.js'
 import { acceptNewPassage, applyRecheck, createSource, excerptFor, pageToArticle, sourceKindForFile, parseRepoFileLink, sliceLines, type LineRange } from './article-sources.js'
 import { acceptSuggestion, refreshSuggestions, rejectSuggestion } from './article-suggestions.js'
@@ -90,6 +91,8 @@ export interface UpdateOutcome {
   extraction?: ExtractionResult
   resolution?: ResolveResult
   autoChecks: { claimId: string; status: SupportCheck['status'] }[]
+  /** The pass over the whole article for conflicts and overreach (one model call); absent when extraction did not run. */
+  consistency?: ConsistencyResult
 }
 
 /** True for an http or https address; anything else (file:, javascript:, a bare word) is never fetched. */
@@ -265,6 +268,11 @@ export class ArticleService {
       const check = await checkClaimSupport({ meta, markdown, claimId, modelName: this.opts.modelName ?? model ?? 'model', now: this.now() }, llm, model, onUsage)
       outcome.autoChecks.push({ claimId, status: check.status })
       meta = check.meta
+    }
+    if (extraction.status === 'extracted') {
+      const consistency = await checkConsistency({ meta, markdown, now: this.now() }, llm, model, onUsage)
+      outcome.consistency = consistency
+      meta = consistency.meta
     }
     return meta
   }

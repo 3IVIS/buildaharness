@@ -15,6 +15,7 @@ export interface CallType {
 export const CALL_TYPES: readonly CallType[] = [
   { id: 'claims', label: 'Finding claims', marker: 'You read parts of an article and list the claims' },
   { id: 'support', label: 'Checking claims against sources', marker: 'You check whether a claim from an article' },
+  { id: 'consistency', label: 'Checking the article against itself and its sources', marker: 'You check an article for two kinds of problem' },
   { id: 'impact', label: 'Judging what an edit affects', marker: 'You help a writer keep an article consistent' },
   { id: 'source_change', label: 'Judging a changed source', marker: 'A source an article relies on was read again' },
   { id: 'source_links', label: 'Placing a new source', marker: 'A writer added a source to an article' },

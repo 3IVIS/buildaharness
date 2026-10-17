@@ -8,7 +8,7 @@ import { effectiveSourceStatus } from './article-rules.js'
 
 const NOW = '2026-10-16T10:00:00.000Z'
 const MD = '# Post\n\nIntro: p99 under 20 ms.\n\n## Latency\n\nThe p99 was 18 ms.\n\n## Conclusion\n\nSo p99 stays under 20 ms.\n'
-const MARK = { claims: 'You read parts of an article and list the claims', resolve: 'You help a writer keep an article consistent', support: 'You check whether a claim from an article', capture: 'A writer is working with an assistant', edits: 'You propose edits to an article' }
+const MARK = { claims: 'You read parts of an article and list the claims', resolve: 'You help a writer keep an article consistent', support: 'You check whether a claim from an article', capture: 'A writer is working with an assistant', edits: 'You propose edits to an article', consistency: 'You check an article for two kinds of problem' }
 
 type Router = Partial<Record<keyof typeof MARK, unknown | ((user: string) => unknown)>>
 function routed(r: Router, calls: string[] = []): ILLMClient {
@@ -80,7 +80,7 @@ describe('ArticleService', () => {
     expect(out.autoChecks).toEqual([{ claimId: 'k1', status: 'no_sources' }])
     expect(out.resolution?.flagged.map((f) => f.sectionId).sort()).toEqual(['s1', 's3'])
     expect(out.bundle.meta.sections.filter((x) => x.review.state === 'needs_review')).toHaveLength(2)
-    expect(calls).toEqual(['claims', 'resolve'])
+    expect(calls).toEqual(['claims', 'consistency', 'resolve'])
     expect(JSON.stringify(calls)).not.toContain('support')
   })
 
@@ -351,7 +351,7 @@ describe('sources for the text under the cursor, through the service', () => {
     await s.findDependencies(id, 'chosen-too')
     await s.suggest(id, 'x', 'chosen-writer')
     await s.analyze(id)
-    expect(used).toEqual(['chosen-for-this-check', 'chosen-too', 'chosen-writer', 'default-model'])
+    expect(used).toEqual(['chosen-for-this-check', 'chosen-for-this-check', 'chosen-too', 'chosen-writer', 'default-model', 'default-model'])
   })
 })
 
