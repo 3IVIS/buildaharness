@@ -53,15 +53,26 @@ describe('resolveChange', () => {
     const meta = build()
     meta.links.push({ id: 'lk1', from: { type: 'section', id: conclusion }, to: { type: 'section', id: latency }, kind: 'repeats', origin: 'confirmed', at: NOW })
     const seen = { users: [] as string[] }
-    const long = MD.replace('It uses 40 MB.', 'It uses 40 MB. ' + 'x'.repeat(400))
+    const long = MD.replace('It uses 40 MB.', 'It uses 40 MB. ' + 'x'.repeat(13_000))
     const sections = reconcileSections(meta.sections, long, ids).sections
     await resolveChange({ meta: { ...meta, sections }, markdown: long, change, now: NOW }, client({ affected: [] }, seen))
     const sent = JSON.parse(seen.users[0])
     expect(linkedSectionIds(meta, [latency])).toEqual(new Set([conclusion]))
     const memText = sent.sections.find((s: { id: string }) => s.id === memory).text as string
     expect(memText).toContain('…')
+    expect(memText).toMatch(/\d+ more characters not shown/)
     expect(memText).toContain('<untrusted_external_content>')
     expect(sent.sections.find((s: { id: string }) => s.id === conclusion).text).not.toContain('…')
+  })
+
+  it('sends a short article whole, so no section reaches the model cut off', async () => {
+    const seen = { users: [] as string[] }
+    const long = MD.replace('It uses 40 MB.', 'It uses 40 MB. ' + 'x'.repeat(400))
+    const sections = reconcileSections(build().sections, long, ids).sections
+    await resolveChange({ meta: { ...build(), sections }, markdown: long, change, now: NOW }, client({ affected: [] }, seen))
+    const sent = JSON.parse(seen.users[0])
+    expect(sent.sections.map((s: { text: string }) => s.text).join('')).not.toContain('not shown')
+    expect(sent.sections.find((s: { id: string }) => s.id === memory).text).toContain('x'.repeat(400))
   })
 
   it('reports ids that do not exist instead of applying them, and keeps the article on failure', async () => {

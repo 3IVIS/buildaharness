@@ -184,3 +184,11 @@ export async function extractClaims(
   const claims = [...result.values()].sort((a, b) => a.position - b.position)
   return { status: 'extracted', claims, added, matched, flagged, removed, unanchored }
 }
+
+/** Links that start or end at a claim the article no longer has (an unconfirmed claim whose sentence was reworded is dropped by extraction): left in place they fail the integrity check. */
+export function dropLinksToMissingClaims<M extends { claims: readonly { id: string }[]; links: readonly { from: { type: string; id: string }; to: { type: string; id: string } }[] }>(meta: M): M {
+  const live = new Set(meta.claims.map((c) => c.id))
+  const gone = (end: { type: string; id: string }): boolean => end.type === 'claim' && !live.has(end.id)
+  const links = meta.links.filter((l) => !gone(l.from) && !gone(l.to))
+  return links.length === meta.links.length ? meta : { ...meta, links }
+}

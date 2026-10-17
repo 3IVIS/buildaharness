@@ -93,6 +93,24 @@ describe('ArticleService', () => {
     expect((await s.get(id)).markdown).toContain('More.')
   })
 
+  it('drops the source link of a claim that a rewording replaced, so the integrity check stays clean', async () => {
+    const { svc: s } = svc({
+      // the model does not match the reworded sentence to the old claim, so the old (unconfirmed) claim goes and a new one appears
+      claims: (u: string) => ({ claims: [{ quote: JSON.parse(u).sections.map((x: { text: string }) => x.text).join('').includes('41') ? 'The p99 was 41 ms.' : 'The p99 was 18 ms.', kind: 'factual', matchesId: null, sure: true }] }),
+      resolve: { affected: [] },
+      support: { verdict: 'supported', reason: 'ok' },
+    })
+    const id = await s.create('Post', MD)
+    await s.analyze(id)
+    const claimId = (await s.get(id)).meta.claims[0].id
+    const src = await s.addSource(id, { kind: 'upload', address: 'bench.txt', passage: 'p99 latency: 18 ms' })
+    await s.attachSource(id, claimId, src)
+    await s.updateText(id, MD.replace('18 ms', '41 ms'))
+    const b = await s.get(id)
+    expect(b.meta.claims.map((c) => c.id)).not.toContain(claimId)
+    expect(s.readiness(b).problems).toEqual([])
+  })
+
   it('attaches a source by a hand-drawn link, checks the claim, and a later wording change resets the verdict', async () => {
     const calls: string[] = []
     const { svc: s } = svc({

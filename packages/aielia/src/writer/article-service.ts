@@ -1,5 +1,5 @@
 import type { ILLMClient, TokenUsage } from '@buildaharness/runtime'
-import { extractClaims, type ExtractionResult } from './article-claims.js'
+import { dropLinksToMissingClaims, extractClaims, type ExtractionResult } from './article-claims.js'
 import { serializeArticle, loadArticleFolder, type ArticleBundle, type ArticleFolder } from './article-folder.js'
 import { createArticleMeta, type ArticleMeta, type Claim, type Idea, type Link, type Source } from './article-model.js'
 import { assessSourceChange, resolveChange, type ResolveResult, type SourceImpact } from './article-resolver.js'
@@ -257,7 +257,7 @@ export class ArticleService {
     let meta = start
     const extraction = await extractClaims({ markdown, sections: meta.sections, claims: meta.claims, now: this.now() }, llm, model, onUsage)
     outcome.extraction = extraction
-    if (extraction.status === 'extracted') meta = { ...meta, claims: extraction.claims }
+    if (extraction.status === 'extracted') meta = dropLinksToMissingClaims({ ...meta, claims: extraction.claims })
     for (const claimId of [...extraction.added, ...extraction.matched]) {
       const claim = meta.claims.find((c) => c.id === claimId)
       if (!claim || !needsAutoCheck(claim) || (claim.sourceStatus === 'supported' && claim.check)) continue

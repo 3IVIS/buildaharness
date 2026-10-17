@@ -2,7 +2,7 @@ import { describe, it, expect } from 'vitest'
 import type { ILLMClient } from '@buildaharness/runtime'
 import type { Claim } from './article-model.js'
 import { reconcileSections } from './article-sections.js'
-import { batchSections, extractClaims } from './article-claims.js'
+import { batchSections, dropLinksToMissingClaims, extractClaims } from './article-claims.js'
 
 const NOW = '2026-10-16T10:00:00.000Z'
 const ids = (t: ReadonlySet<string>): string => `s${t.size + 1}`
@@ -108,5 +108,21 @@ describe('extractClaims', () => {
     await extractClaims({ markdown: big, sections: secs, claims: [], now: NOW }, client({ claims: [] }, seen))
     expect(seen.calls).toBe(1) // default bound is large: one batch
     expect(JSON.parse(seen.users[0]).sections).toHaveLength(3)
+  })
+})
+
+describe('dropLinksToMissingClaims', () => {
+  it('removes links to a claim that is gone and keeps the rest (the same object when nothing changes)', () => {
+    const meta = {
+      claims: [{ id: 'k2' }],
+      links: [
+        { id: 'a', from: { type: 'claim', id: 'k1' }, to: { type: 'source', id: 's1' } },
+        { id: 'b', from: { type: 'claim', id: 'k2' }, to: { type: 'source', id: 's1' } },
+        { id: 'c', from: { type: 'section', id: 'x' }, to: { type: 'section', id: 'y' } },
+      ],
+    }
+    expect(dropLinksToMissingClaims(meta).links.map((l) => l.id)).toEqual(['b', 'c'])
+    const clean = { claims: [{ id: 'k2' }], links: [meta.links[1]] }
+    expect(dropLinksToMissingClaims(clean)).toBe(clean)
   })
 })
