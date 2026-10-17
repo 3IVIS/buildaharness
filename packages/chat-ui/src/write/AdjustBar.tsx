@@ -1,14 +1,14 @@
 import { useId, useState } from 'react'
 import { PARAMETER_GROUPS, WRITE_PARAMETERS, adjustmentInstruction, findParameter } from '@buildaharness/aielia'
 
-export type ChatAction = 'check' | 'verify'
+export type ChatAction = 'check' | 'verify' | 'verify_repo'
 
 /**
  * One dropdown for the chat: what to adjust (a parameter from the table, or "something else"), or an action to run (check the article). Pick a
  * parameter and a box appears to choose an option or type your own; press Enter and it is sent as an ordinary chat message. An action runs
  * as soon as it is picked.
  */
-export function AdjustBar({ disabled, checkLabel, verifyLabel, onSend, onAction }: { disabled: boolean; checkLabel: string; verifyLabel: string; onSend: (message: string) => void; onAction: (action: ChatAction) => void }): React.JSX.Element {
+export function AdjustBar({ disabled, checkLabel, verifyLabel, repoLabel, onSend, onAction }: { disabled: boolean; checkLabel: string; verifyLabel: string; repoLabel?: string; onSend: (message: string) => void; onAction: (action: ChatAction) => void }): React.JSX.Element {
   const listId = useId()
   const [paramId, setParamId] = useState('')
   const [aspect, setAspect] = useState('')
@@ -33,6 +33,7 @@ export function AdjustBar({ disabled, checkLabel, verifyLabel, onSend, onAction 
         onChange={(e) => {
           if (e.target.value === 'action:check') { setParamId(''); onAction('check'); return }
           if (e.target.value === 'action:verify') { setParamId(''); onAction('verify'); return }
+          if (e.target.value === 'action:verify_repo') { setParamId(''); onAction('verify_repo'); return }
           setParamId(e.target.value)
           setValue('')
         }}
@@ -41,6 +42,7 @@ export function AdjustBar({ disabled, checkLabel, verifyLabel, onSend, onAction 
         <optgroup label="Do">
           <option value="action:check">{checkLabel}</option>
           <option value="action:verify">{verifyLabel}</option>
+          {repoLabel && <option value="action:verify_repo">{repoLabel}</option>}
         </optgroup>
         {PARAMETER_GROUPS.map((g) => (
           <optgroup key={g.id} label={g.label}>

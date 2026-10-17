@@ -604,16 +604,16 @@ export class ArticleService {
     return { tried, cutOff }
   }
 
-  async verifyClaims(id: string, opts: { claimIds?: string[]; limit?: number; pages?: number; model?: string } = {}): Promise<VerifyReport> {
+  async verifyClaims(id: string, opts: { claimIds?: string[]; limit?: number; pages?: number; model?: string; repoOnly?: boolean } = {}): Promise<VerifyReport> {
     let b = await this.get(id)
     if (b.meta.claims.length === 0) b = (await this.analyze(id, opts.model)).bundle
     const { ids, leftOver } = verifyTargets(b.meta, opts.claimIds, opts.limit ?? DEFAULT_VERIFY_LIMIT)
     const entries: VerifyEntry[] = []
-    for (const claimId of ids) entries.push(await this.verifyOne(id, claimId, opts.pages ?? DEFAULT_VERIFY_PAGES, opts.model))
+    for (const claimId of ids) entries.push(await this.verifyOne(id, claimId, opts.pages ?? DEFAULT_VERIFY_PAGES, opts.model, opts.repoOnly === true))
     return { entries, leftOver }
   }
 
-  private async verifyOne(id: string, claimId: string, pages: number, model?: string): Promise<VerifyEntry> {
+  private async verifyOne(id: string, claimId: string, pages: number, model?: string, repoOnly = false): Promise<VerifyEntry> {
     const first = (await this.get(id)).meta.claims.find((c) => c.id === claimId)
     if (!first) return { claimId, quote: '', outcome: 'could_not_check', found: [], reason: `No claim ${claimId}.` }
     const entry = (outcome: VerifyEntry['outcome'], found: string[] = [], reason?: string): VerifyEntry => ({ claimId, quote: first.quote, outcome, found, reason })
@@ -625,7 +625,9 @@ export class ArticleService {
       if (inRepos.entry) return inRepos.entry
       tried.push(...inRepos.tried)
       const cutNote = inRepos.cutOff.length > 0 ? `${inRepos.cutOff.join(', ')} has more than ${REPO_LIST_LIMIT} files, so only the shallowest were listed. Pick a folder inside it to search the rest.` : undefined
-      if (!this.opts.searchWeb || !this.opts.fetchWeb) {
+      // Asked to look in the repository only: a claim it does not settle stays unsettled, and the web is not searched.
+      if (repoOnly || !this.opts.searchWeb || !this.opts.fetchWeb) {
+        if (repoOnly && (this.repos.get(id) ?? []).length === 0) return entry('cannot_search', [], 'No repository is attached to this article.')
         if ((this.repos.get(id) ?? []).length > 0) {
           await this.setLookup(id, claimId, 'no_results', tried)
           return entry('no_source_found', [], cutNote)
@@ -1235,7 +1237,7 @@ export function createArticleChatPort(store: ArticleStore): WriterChatPort {
 }
 
 /** Methods that only read; they do not wait behind a long model step on the same article. */
-const READ_ONLY = new Set(['get', 'list', 'readiness', 'history', 'getVersion', 'compareWithCurrent', 'changeSinceLastVersion', 'profiles', 'exportArticle'])
+const READ_ONLY = new Set(['get', 'list', 'readiness', 'history', 'getVersion', 'compareWithCurrent', 'changeSinceLastVersion', 'profiles', 'exportArticle', 'attachRepo', 'detachRepo', 'attachedRepos'])
 
 /**
  * The service with each article's calls run one after another. A step reads the article, waits for the model and saves, so two steps on the same

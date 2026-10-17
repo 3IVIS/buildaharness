@@ -634,4 +634,18 @@ describe('verifying claims in an attached repository', () => {
     expect(r.entries[0]).toMatchObject({ outcome: 'no_source_found' })
     expect(r.entries[0].reason).toContain('o/huge has more than 20000 files')
   })
+
+  it('with repository only, does not search the web, and says so when no repository is attached', async () => {
+    const searched: string[] = []
+    const { svc: s } = svc({ claims: { claims: [{ quote: 'Intro: p99 under 20 ms.', kind: 'factual', matchesId: null, sure: true }] }, resolve: { affected: [] }, repo: { paths: [] } })
+    const s2 = new ArticleService({ store: createMemoryArticleStore(), llm: routed({ claims: { claims: [{ quote: 'Intro: p99 under 20 ms.', kind: 'factual', matchesId: null, sure: true }] }, resolve: { affected: [] }, repo: { paths: [] } }), now: () => NOW, newId: () => 'art1', searchWeb: async (q) => { searched.push(q); return [] }, fetchWeb: async () => 'x' })
+    void s
+    const id = await s2.create('Post', MD)
+    expect((await s2.verifyClaims(id, { repoOnly: true })).entries[0]).toMatchObject({ outcome: 'cannot_search', reason: 'No repository is attached to this article.' })
+    s2.attachRepo(id, { name: 'o/r', files: async () => ['a.ts'], read: async () => 'x' })
+    expect((await s2.verifyClaims(id, { repoOnly: true })).entries[0].outcome).toBe('no_source_found')
+    expect(searched).toEqual([])
+    await s2.verifyClaims(id) // without repoOnly the web is searched as before
+    expect(searched).toHaveLength(1)
+  })
 })

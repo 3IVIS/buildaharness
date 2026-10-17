@@ -42,7 +42,7 @@ export function ConnectionSettings({ value, onSave, onForget, showWeb = true }: 
           <input aria-label="API key" type="password" autoComplete="off" value={draft.apiKey} onChange={(e) => set({ apiKey: e.target.value })} />
         </label>
       )}
-      {showWeb && <details className="write__allsrc" open={Boolean(draft.pagesUrl || draft.searchKey)}>
+      {showWeb && <details className="write__allsrc" open={Boolean(draft.pagesUrl || draft.searchKey || draft.githubToken)}>
         <summary>Reading web pages and finding sources (optional)</summary>
         <p className="write__muted">Browsers cannot read most web pages directly. This page uses the Aielia proxy for it unless you give your own address. If none works, links stay links and you paste the passage.</p>
         <label>Proxy address
@@ -50,6 +50,9 @@ export function ConnectionSettings({ value, onSave, onForget, showWeb = true }: 
         </label>
         <label>Proxy access token
           <input aria-label="Proxy access token" type="password" autoComplete="off" value={draft.pagesToken ?? ''} onChange={(e) => set({ pagesToken: e.target.value })} />
+        </label>
+        <label>GitHub token (only for a private repository)
+          <input aria-label="GitHub token" type="password" autoComplete="off" value={draft.githubToken ?? ''} onChange={(e) => set({ githubToken: e.target.value })} />
         </label>
         <label>Brave Search key (for finding sources)
           <input aria-label="Search key" type="password" autoComplete="off" value={draft.searchKey ?? ''} onChange={(e) => set({ searchKey: e.target.value })} />

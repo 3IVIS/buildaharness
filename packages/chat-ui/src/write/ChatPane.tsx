@@ -1,5 +1,6 @@
 import { AdjustBar, type ChatAction } from './AdjustBar'
 import { ModelPicker } from './ModelPicker'
+import { RepoBar } from './RepoBar'
 import { ICON_PATHS, Icon, IconButton } from './icons'
 
 export interface ChatLine {
@@ -25,6 +26,11 @@ interface Props {
   onAdjust: (message: string) => void
   onAction: (action: ChatAction) => void
   onSaveIdea: (line: ChatLine) => void
+  /** Repositories handed to the open article for verifying claims. */
+  repos: string[]
+  onAddGithub: (address: string) => void
+  onPickRepoFolder?: () => void
+  onRemoveRepo: (name: string) => void
   onDropFiles: (files: File[]) => void
   /** Closes the chat sheet on a phone. */
   onClose: () => void
@@ -58,7 +64,8 @@ export function ChatPane(p: Props): React.JSX.Element {
         ))}
         {p.lines.length === 0 && <li className="write__muted">Talk to Aielia about the article, paste reviewer comments, or drop a file here to use it as a source.</li>}
       </ul>
-      <AdjustBar disabled={p.busy || !p.canAct} checkLabel={`Check the article with ${p.model}`} verifyLabel="Verify the claims and look for sources" onSend={p.onAdjust} onAction={p.onAction} />
+      <AdjustBar disabled={p.busy || !p.canAct} checkLabel={`Check the article with ${p.model}`} verifyLabel="Verify the claims and look for sources" repoLabel={p.repos.length > 0 ? 'Verify the claims against the repository' : undefined} onSend={p.onAdjust} onAction={p.onAction} />
+      {p.canAct && <RepoBar repos={p.repos} busy={p.busy} onAddGithub={p.onAddGithub} onPickFolder={p.onPickRepoFolder} onRemove={p.onRemoveRepo} />}
       <div className="write__compose">
         <textarea
           aria-label="Message"

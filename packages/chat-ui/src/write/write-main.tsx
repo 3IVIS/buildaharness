@@ -19,7 +19,7 @@ function Root(): React.JSX.Element {
     if (!connection) { setServices(undefined); return }
     let live = true
     const defaults = envOverridesFromImportMetaEnv(import.meta.env)
-    createWriteServices(toAssistantConfig(connection, defaults), webProxyOf(connection, defaults)).then((s) => { if (live) setServices(s) }, (e) => setError(String(e)))
+    createWriteServices(toAssistantConfig(connection, defaults), webProxyOf(connection, defaults), connection.githubToken).then((s) => { if (live) setServices(s) }, (e) => setError(String(e)))
     return () => { live = false }
   }, [connection])
 

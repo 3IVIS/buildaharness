@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
-import { type FolderReader, expandSelection, summarizeVerify, type VerifyReport, textPieces, collectIssues, parseLineRange, sourceKindForFile, computeReadiness, effectiveSourceStatus, issueCount, type ArticleBundle, type ChangeSummary, type DependencyKind, type IssueCategory, type StyleProfile, type WritePermissions } from '@buildaharness/aielia'
+import { githubRepoReader, parseGithubRepoAddress, type FolderReader, expandSelection, summarizeVerify, type VerifyReport, textPieces, collectIssues, parseLineRange, sourceKindForFile, computeReadiness, effectiveSourceStatus, issueCount, type ArticleBundle, type ChangeSummary, type DependencyKind, type IssueCategory, type StyleProfile, type WritePermissions } from '@buildaharness/aielia'
 import type { ChatAction } from './AdjustBar'
 import { ArticleSwitcher, type ArticleItem } from './ArticleSwitcher'
 import { ChatPane, type ChatLine } from './ChatPane'
@@ -167,6 +167,7 @@ export function WriteApp({ services, connection }: { services: WriteServices; co
     setGrownUnit(growth.current.at(-1)?.unit)
     applySelection(back.range)
   }
+  const [repoTick, setRepoTick] = useState(0)
   const [folder, setFolder] = useState<{ reader: FolderReader; files: string[] } | undefined>()
   const folderRef = useRef(folder)
   folderRef.current = folder
@@ -343,6 +344,30 @@ export function WriteApp({ services, connection }: { services: WriteServices; co
     }
   }
 
+  /** A GitHub repository handed to the open article: listed once now, so a wrong or private address is told at once. */
+  const addGithubRepo = (address: string): void => {
+    if (!activeId) return
+    const spec = parseGithubRepoAddress(address)
+    if (!spec) { setNotice('Type a GitHub address like github.com/owner/repo.'); return }
+    const id = activeId
+    void run('Listing the repository', async () => {
+      const reader = githubRepoReader(spec, { token: services.githubToken })
+      try {
+        const files = await reader.files()
+        service.attachRepo(id, reader)
+        setRepoTick((n) => n + 1)
+        setNotice(`${reader.name} added: ${files.length} files. Verify the claims to look in it.`)
+      } catch (e) {
+        setNotice(e instanceof Error ? e.message : String(e))
+      }
+    })
+  }
+  const removeRepo = (name: string): void => {
+    if (!activeId) return
+    service.detachRepo(activeId, name)
+    setRepoTick((n) => n + 1)
+  }
+
   const pickFolder = (): void => {
     void (async () => {
       try {
@@ -350,6 +375,8 @@ export function WriteApp({ services, connection }: { services: WriteServices; co
         if (!reader) return
         setBusy('Listing the folder')
         setFolder({ reader, files: await reader.files() })
+        // The folder is also searched when claims are verified.
+        if (activeId) { service.attachRepo(activeId, reader); setRepoTick((n) => n + 1) }
       } catch (e) {
         setNotice(e instanceof Error ? e.message : String(e))
       } finally {
@@ -433,13 +460,13 @@ export function WriteApp({ services, connection }: { services: WriteServices; co
     const lines = r.entries.filter((e) => e.outcome === 'no_source_found' || e.outcome === 'contradicted').map((e) => `• ${e.outcome === 'contradicted' ? 'Contradicted' : 'No source found'}: ${e.quote.slice(0, 100)}`)
     return [summarizeVerify(r), ...lines, r.entries.some((e) => e.found.length > 0) ? 'Pages that were found are kept as suggested sources under the text: confirm the ones that are right.' : ''].filter(Boolean).join('\n')
   }
-  const verifyFromChat = (): void => {
+  const verifyFromChat = (repoOnly = false): void => {
     if (!activeId) return
     const used = services.models.chat()
-    setChat((c) => [...c, { id: ++lineId, from: 'you', text: 'Verify the claims and look for sources' }])
+    setChat((c) => [...c, { id: ++lineId, from: 'you', text: repoOnly ? 'Verify the claims against the repository' : 'Verify the claims and look for sources' }])
     void run(`Verifying with ${used}`, async () => {
       await flushDraft()
-      const r = await service.verifyClaims(activeId, { model: used })
+      const r = await service.verifyClaims(activeId, { model: used, repoOnly })
       setBundle(await service.get(activeId))
       setChat((c) => [...c, { id: ++lineId, from: 'aielia', text: verifyText(r), model: used }])
     })
@@ -640,7 +667,11 @@ export function WriteApp({ services, connection }: { services: WriteServices; co
           shown={tab === 'chat'}
           onSend={() => void sendChat()}
           onAdjust={(m) => { setAskForEdits(true); void sendChat(m, true) }}
-          onAction={(a: ChatAction) => { if (a === 'check') checkFromChat(); else verifyFromChat() }}
+          onAction={(a: ChatAction) => { if (a === 'check') checkFromChat(); else verifyFromChat(a === 'verify_repo') }}
+          repos={activeId ? (void repoTick, service.attachedRepos(activeId)) : []}
+          onAddGithub={addGithubRepo}
+          onPickRepoFolder={services.pickFolder ? pickFolder : undefined}
+          onRemoveRepo={removeRepo}
           onSaveIdea={(l) => change('Saving', async (id) => { const r = await service.addIdea(id, { text: l.text, origin: 'assistant', model: l.model }); if (!r.ok) setNotice(r.reason) })}
           onDropFiles={(files) => dropFiles(files, false, true)}
         />

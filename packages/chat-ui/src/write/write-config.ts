@@ -16,6 +16,8 @@ export interface WriteConnection {
   pagesToken?: string
   /** A Brave Search key, sent with each search and kept only in this browser (optional; without it there is no source search). */
   searchKey?: string
+  /** A GitHub token for a private repository handed to Write for verifying claims. Sent only to GitHub. */
+  githubToken?: string
 }
 
 const STORAGE_KEY = 'aielia-write.connection'
@@ -31,7 +33,7 @@ function clean(raw: unknown): WriteConnection | undefined {
   const modelUrl = text(r.modelUrl)?.replace(/\/+$/, '')
   // A self-hosted proxy is identified by its address and may need no token; every other provider needs a key.
   if (!provider || (provider === 'proxy' ? !modelUrl : !apiKey)) return undefined
-  return { provider, apiKey: apiKey ?? '', ...(provider === 'proxy' ? { modelUrl } : {}), pagesUrl: text(r.pagesUrl)?.replace(/\/+$/, ''), pagesToken: text(r.pagesToken), searchKey: text(r.searchKey) }
+  return { provider, apiKey: apiKey ?? '', ...(provider === 'proxy' ? { modelUrl } : {}), pagesUrl: text(r.pagesUrl)?.replace(/\/+$/, ''), pagesToken: text(r.pagesToken), searchKey: text(r.searchKey), githubToken: text(r.githubToken) }
 }
 
 /** Reads the saved connection; a missing, unreadable or incomplete one is undefined. Storage failures never throw. */

@@ -52,6 +52,8 @@ export interface WriteServices {
   canReadPages: boolean
   /** Asks the writer for a folder on their computer to take source files from. Absent where the browser cannot (Safari, Firefox). Resolves to undefined when cancelled. */
   pickFolder?: () => Promise<FolderReader | undefined>
+  /** The writer's GitHub token, for reading a private repository. */
+  githubToken?: string
   /** Dollars and calls so far for each kind of call, biggest first. */
   spendByType(): { id: string; usd: number; calls: number }[]
 }
@@ -72,6 +74,7 @@ export async function assembleWriteServices(parts: {
   /** Searches the web for pages that might back a claim. Absent when no search is set up. */
   searchWeb?: (query: string) => Promise<{ title: string; url: string; snippet: string }[]>
   pickFolder?: () => Promise<FolderReader | undefined>
+  githubToken?: string
 }): Promise<WriteServices> {
   const { store } = parts
   const backend = parts.backend ?? 'anthropic'
@@ -129,6 +132,7 @@ export async function assembleWriteServices(parts: {
     canSearch: parts.searchWeb !== undefined,
     canReadPages: parts.fetchWeb !== undefined,
     pickFolder: parts.pickFolder,
+    githubToken: parts.githubToken,
     spentUsd: () => meter.spentUsd(),
     spendByType: () => Object.entries(meter.byType()).map(([id, v]) => ({ id, ...v })).sort((a, b) => b.usd - a.usd),
   }
@@ -150,7 +154,7 @@ function proxyWeb(config: AssistantConfig, proxy: WebProxy): { fetchWeb: (url: s
 }
 
 /** The real thing: IndexedDB storage, the visitor's own key, a plain browser (no file or shell tools). */
-export function createWriteServices(config: AssistantConfig, webProxy?: WebProxy): Promise<WriteServices> {
+export function createWriteServices(config: AssistantConfig, webProxy?: WebProxy, githubToken?: string): Promise<WriteServices> {
   const memory = new IndexedDBAdapter({ namespace: 'aielia-write' })
   const store = createMemoryAdapterArticleStore(memory)
   const llm = createLlmClient(config, { claudeCli: () => undefined })
@@ -160,6 +164,7 @@ export function createWriteServices(config: AssistantConfig, webProxy?: WebProxy
   return assembleWriteServices({
     fetchWeb: web?.fetchWeb,
     pickFolder: browserFolderPicker(),
+    githubToken,
     searchWeb: web?.searchWeb,
     store,
     llm,
