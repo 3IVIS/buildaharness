@@ -1,4 +1,5 @@
 import {
+  type FolderReader,
   ArticleService,
   PersonalAssistant,
   WEB_FEATURES,
@@ -21,6 +22,7 @@ import {
 import { IndexedDBAdapter, type ILLMClient } from '@buildaharness/runtime'
 import { rememberUserUrls } from '../user-urls'
 import { createProxyWebTools } from '../web-context'
+import { browserFolderPicker } from './folder-access'
 
 /** The models the page uses. `chat` is for the chat, edit suggestions and checks started from the chat; `auto` is for checks that run by themselves. */
 export interface WriteModels {
@@ -45,6 +47,8 @@ export interface WriteServices {
   spentUsd(): number
   /** Whether this page can search the web for sources (a proxy and a search key are set up). */
   canSearch: boolean
+  /** Asks the writer for a folder on their computer to take source files from. Absent where the browser cannot (Safari, Firefox). Resolves to undefined when cancelled. */
+  pickFolder?: () => Promise<FolderReader | undefined>
   /** Dollars and calls so far for each kind of call, biggest first. */
   spendByType(): { id: string; usd: number; calls: number }[]
 }
@@ -64,6 +68,7 @@ export async function assembleWriteServices(parts: {
   fetchWeb?: (url: string) => Promise<string>
   /** Searches the web for pages that might back a claim. Absent when no search is set up. */
   searchWeb?: (query: string) => Promise<{ title: string; url: string; snippet: string }[]>
+  pickFolder?: () => Promise<FolderReader | undefined>
 }): Promise<WriteServices> {
   const { store } = parts
   const backend = parts.backend ?? 'anthropic'
@@ -119,6 +124,7 @@ export async function assembleWriteServices(parts: {
       },
     },
     canSearch: parts.searchWeb !== undefined,
+    pickFolder: parts.pickFolder,
     spentUsd: () => meter.spentUsd(),
     spendByType: () => Object.entries(meter.byType()).map(([id, v]) => ({ id, ...v })).sort((a, b) => b.usd - a.usd),
   }
@@ -146,6 +152,7 @@ export function createWriteServices(config: AssistantConfig): Promise<WriteServi
   const web = config.webBackend === 'proxy' ? proxyWeb(config) : undefined
   return assembleWriteServices({
     fetchWeb: web?.fetchWeb,
+    pickFolder: browserFolderPicker(),
     searchWeb: web?.searchWeb,
     store,
     llm,

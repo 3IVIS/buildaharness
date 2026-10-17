@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
-import { claimMarks, collectIssues, parseLineRange, sourceKindForFile, computeReadiness, effectiveSourceStatus, issueCount, type ArticleBundle, type ChangeSummary, type DependencyKind, type IssueCategory, type StyleProfile, type WritePermissions } from '@buildaharness/aielia'
+import { type FolderReader, claimMarks, collectIssues, parseLineRange, sourceKindForFile, computeReadiness, effectiveSourceStatus, issueCount, type ArticleBundle, type ChangeSummary, type DependencyKind, type IssueCategory, type StyleProfile, type WritePermissions } from '@buildaharness/aielia'
 import type { ChatAction } from './AdjustBar'
 import { ArticleSwitcher, type ArticleItem } from './ArticleSwitcher'
 import { ChatPane, type ChatLine } from './ChatPane'
@@ -138,6 +138,9 @@ export function WriteApp({ services }: { services: WriteServices }): React.JSX.E
   }
 
   /** Runs a change to the article that starts from the saved text, then shows the result. */
+  const [folder, setFolder] = useState<{ reader: FolderReader; files: string[] } | undefined>()
+  const folderRef = useRef(folder)
+  folderRef.current = folder
   const [candidates, setCandidates] = useState<Record<string, { title: string; url: string; snippet: string }[]>>({})
   const [profiles, setProfiles] = useState<StyleProfile[]>([])
   useEffect(() => { void service.profiles().then(setProfiles).catch(() => undefined) }, [service])
@@ -207,12 +210,14 @@ export function WriteApp({ services }: { services: WriteServices }): React.JSX.E
     await run('Publishing', async () => {
       await flushDraft()
       const recheck = (permsRef.current ?? perms)?.recheckBeforePublish !== false ? await service.recheckSources(activeId, services.models.auto()) : undefined
+      const folderReport = folderRef.current && (permsRef.current ?? perms)?.recheckBeforePublish !== false ? await service.recheckFolder(activeId, folderRef.current.reader, services.models.auto()) : undefined
       const b = await service.publish(activeId, label?.trim() || undefined)
       setBundle(b)
       const r = computeReadiness(b.meta)
       const open = r.unsourcedFactualClaims + r.staleOrUnsupportedClaims + r.openComments + r.sectionsNeedingReview
       const sources = recheck ? [recheck.changed.length > 0 ? `${recheck.changed.length} web source${recheck.changed.length === 1 ? ' has' : 's have'} changed since you read ${recheck.changed.length === 1 ? 'it' : 'them'}` : '', recheck.unreachable.length > 0 ? `${recheck.unreachable.length} could not be reached` : ''].filter(Boolean).join(' and ') : ''
-      setNotice(`Published as a frozen snapshot.${open > 0 ? ` ${open} item${open === 1 ? ' was' : 's were'} still open; ${open === 1 ? 'it is' : 'they are'} recorded with it.` : ''}${sources ? ` ${sources}: see Issues.` : ''}`)
+      const files = folderReport && (folderReport.changed.length > 0 || folderReport.missing.length > 0) ? [folderReport.changed.length > 0 ? `${folderReport.changed.length} file${folderReport.changed.length === 1 ? '' : 's'} from the folder ${folderReport.changed.length === 1 ? 'has' : 'have'} changed` : '', folderReport.missing.length > 0 ? `${folderReport.missing.length} could not be found` : ''].filter(Boolean).join(' and ') : ''
+      setNotice(`Published as a frozen snapshot.${open > 0 ? ` ${open} item${open === 1 ? ' was' : 's were'} still open; ${open === 1 ? 'it is' : 'they are'} recorded with it.` : ''}${sources ? ` ${sources}: see Issues.` : ''}${files ? ` ${files} since you read them: see the sources.` : ''}`)
     })
   }
 
@@ -275,6 +280,11 @@ export function WriteApp({ services }: { services: WriteServices }): React.JSX.E
       if (read.status === 'read') setNotice('I read the page and stored its text.')
       else if (read.reason) setNotice(`Link stored. ${read.reason}${read.status === 'unreachable' ? ' Paste the passage instead.' : ''}`)
     }
+    await placeSource(sid, attach)
+  }
+
+  async function placeSource(sid: string, attach: boolean): Promise<void> {
+    if (!activeId) return
     if (attach && selection) {
       const r = await service.attachSourceToText(activeId, selection, sid)
       if (!r.ok) setNotice(r.reason)
@@ -282,6 +292,33 @@ export function WriteApp({ services }: { services: WriteServices }): React.JSX.E
       const r = await service.proposeLinksForSource(activeId, sid, chatModel)
       setNotice(r.status === 'failed' ? 'Source stored. Finding where it belongs could not run.' : r.added.length === 0 ? 'Source stored. I did not find a claim it bears on.' : `Source stored. It may back ${r.added.length} claim${r.added.length === 1 ? '' : 's'}: click in the text to confirm.`)
     }
+  }
+
+  const pickFolder = (): void => {
+    void (async () => {
+      try {
+        const reader = await services.pickFolder?.()
+        if (!reader) return
+        setBusy('Listing the folder')
+        setFolder({ reader, files: await reader.files() })
+      } catch (e) {
+        setNotice(e instanceof Error ? e.message : String(e))
+      } finally {
+        setBusy(null)
+      }
+    })()
+  }
+  const useFolderFile = (path: string): void => {
+    const f = folder
+    if (!f) return
+    change('Adding the file', async (id) => {
+      const r = await service.addFolderFile(id, f.reader, path, services.models.auto())
+      if (r.status === 'missing') setNotice(`${path} could not be read. Choose the folder again if it moved.`)
+      else if (r.status === 'unsupported') setNotice(`${path}: only text and code files can be read for now.`)
+      else if (r.status === 'added' && r.sourceId) await placeSource(r.sourceId, true)
+      else if (r.status === 'changed') setNotice(`${path} has changed since you read it. ${r.impacts.length === 0 ? 'No claim looks affected.' : `${r.impacts.length} claim${r.impacts.length === 1 ? '' : 's'} may be affected.`} Use the new text from the source row when you are ready.`)
+      else setNotice(`${path} is already a source and is unchanged.`)
+    })
   }
 
   const addNote = (kind: NoteKind, text: string): void => {
@@ -505,6 +542,10 @@ export function WriteApp({ services }: { services: WriteServices }): React.JSX.E
                 setNotice(!r.ok ? r.reason ?? 'That page could not be used.' : r.read === 'read' || r.read === 'unchanged' ? 'Source added and read. Check the claim against it when you like.' : 'Source added, but the page could not be read here. Paste the passage to check against it.')
               })}
               onDismissCandidates={(claimId) => setCandidates((c) => { const { [claimId]: _gone, ...rest } = c; void _gone; return rest })}
+              folder={folder ? { name: folder.reader.name, files: folder.files } : undefined}
+              onPickFolder={services.pickFolder ? pickFolder : undefined}
+              onUseFolderFile={useFolderFile}
+              onCloseFolder={() => setFolder(undefined)}
               onLines={(sourceId) => {
                 const answer = window.prompt('Keep only these lines of the file (for example 40-60). Leave empty to keep all of it.')
                 if (answer === null) return

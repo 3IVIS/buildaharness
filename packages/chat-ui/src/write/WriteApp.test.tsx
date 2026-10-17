@@ -611,6 +611,36 @@ describe('code sources', () => {
   })
 })
 
+describe('files from a folder on the computer', () => {
+  it('lists a chosen folder, adds a picked file as code for the text, and shows when it changes', async () => {
+    const files: Record<string, string> = { 'src/cache.ts': 'const LIMIT = 100', 'README.md': 'hello' }
+    const reader = { name: 'repo', files: async () => Object.keys(files), read: async (p: string) => files[p] }
+    const base = await services({ sourceLinks: { claims: [] }, resolve: { impacts: [] } }, MD)
+    const s = { ...base, pickFolder: async () => reader }
+    const id = (await s.service.list())[0].id
+    render(<WriteApp services={s} />)
+    await waitForText()
+    putCursor('18 ms')
+    const dock = screen.getByLabelText('Comments and sources for this text')
+    await userEvent.click(within(dock).getByRole('button', { name: 'Use files from a folder on this computer' }))
+    const group = await within(dock).findByRole('group', { name: 'Files in the folder' })
+    await userEvent.type(within(group).getByLabelText('Find a file in the folder'), 'cache')
+    expect(within(group).queryByRole('button', { name: 'README.md' })).toBeNull()
+    await userEvent.click(within(group).getByRole('button', { name: 'src/cache.ts' }))
+    await waitFor(async () => expect((await s.service.get(id)).meta.sources[0]).toMatchObject({ kind: 'code', address: 'repo/src/cache.ts', passage: 'const LIMIT = 100' }))
+    files['src/cache.ts'] = 'const LIMIT = 50'
+    await userEvent.click(within(group).getByRole('button', { name: 'src/cache.ts' }))
+    await waitFor(async () => expect((await s.service.get(id)).meta.sources[0].fetchedPassage).toBe('const LIMIT = 50'))
+  })
+  it('offers no folder button where the browser cannot pick a folder', async () => {
+    const s = await services({}, MD)
+    render(<WriteApp services={s} />)
+    await waitForText()
+    putCursor('18 ms')
+    expect(screen.queryByRole('button', { name: 'Use files from a folder on this computer' })).toBeNull()
+  })
+})
+
 describe('ideas', () => {
   it('adds an idea with Enter, edits it where it stands, asks Aielia for more with Enter, and writes one or all into the article', async () => {
     const s = await services({

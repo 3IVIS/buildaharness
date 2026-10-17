@@ -1,5 +1,5 @@
 import { useRef, useState } from 'react'
-import { claimsInRange, commentsInRange, effectiveSourceStatus, sourcesForClaim, textUnitAt, type ArticleMeta } from '@buildaharness/aielia'
+import { claimsInRange, commentsInRange, effectiveSourceStatus, matchFolderFiles, sourcesForClaim, textUnitAt, type ArticleMeta } from '@buildaharness/aielia'
 import { EditableText } from './EditableText'
 import { ICON_PATHS, Icon, IconButton } from './icons'
 
@@ -34,6 +34,11 @@ interface Props {
   onAcceptNew(sourceId: string): void
   /** Asks the writer which lines of a file to keep. */
   onLines(sourceId: string): void
+  /** Files of a folder on the writer's computer, once one was chosen; `onPickFolder` is absent where the browser cannot pick one. */
+  folder?: { name: string; files: string[] }
+  onPickFolder?: () => void
+  onUseFolderFile(path: string): void
+  onCloseFolder(): void
   onCheck(claimId: string): void
   /** Whether the page can search the web for a source. */
   canSearch: boolean
@@ -59,12 +64,13 @@ const PLACEHOLDER: Record<NoteKind, string> = {
  * paragraph or a section: its comments and sources show here. One line adds to it: type a comment, paste a link or passage, or state your own
  * word; drop a file anywhere in this box, or use the paperclip.
  */
-export function TextNotes({ meta, markdown, selection, busy, model, onAdd, onFiles, onEditComment, onResolveComment, onDeleteComment, onDetach, onConfirm, onRead, onAcceptNew, onLines, onCheck, canSearch, candidates, onFindSources, onUseCandidate, onDismissCandidates }: Props): React.JSX.Element {
+export function TextNotes({ meta, markdown, selection, busy, model, onAdd, onFiles, onEditComment, onResolveComment, onDeleteComment, onDetach, onConfirm, onRead, onAcceptNew, onLines, folder, onPickFolder, onUseFolderFile, onCloseFolder, onCheck, canSearch, candidates, onFindSources, onUseCandidate, onDismissCandidates }: Props): React.JSX.Element {
   const [collapsed, setCollapsed] = useState(false)
   const [kind, setKind] = useState<NoteKind>('comment')
   const [text, setText] = useState('')
   const [over, setOver] = useState(false)
   const picker = useRef<HTMLInputElement | null>(null)
+  const [fileQuery, setFileQuery] = useState('')
   const unit = selection ? textUnitAt(markdown, selection.start, selection.end) : undefined
   const claims = unit ? claimsInRange(meta, unit) : []
   const comments = unit ? commentsInRange(meta, unit) : []
@@ -150,6 +156,18 @@ export function TextNotes({ meta, markdown, selection, busy, model, onAdd, onFil
               })}
             </ul>
           </div>
+          {folder && (
+            <div className="write__found" role="group" aria-label="Files in the folder">
+              <div className="write__dsrc">
+                <span className="write__dsrcname">{folder.name} · {folder.files.length} files</span>
+                <span className="write__rowacts"><IconButton label="Close the folder" icon="close" onClick={onCloseFolder} /></span>
+              </div>
+              <input aria-label="Find a file in the folder" value={fileQuery} onChange={(e) => setFileQuery(e.target.value)} placeholder="Type part of a file name" />
+              {matchFolderFiles(folder.files, fileQuery).map((f) => (
+                <button key={f} type="button" className="write__link" disabled={!unit || busy} title={unit ? 'Use this file as a source for the text' : 'Click in the text first'} onClick={() => onUseFolderFile(f)}>{f}</button>
+              ))}
+            </div>
+          )}
           <div className="write__dockadd" role="group" aria-label="Add to this text">
             <div className="write__seg" role="group" aria-label="What to add">
               {(['comment', 'source', 'say_so', 'revise'] as const).map((k) => (
@@ -165,6 +183,7 @@ export function TextNotes({ meta, markdown, selection, busy, model, onAdd, onFil
               placeholder={unit ? PLACEHOLDER[kind] : 'Click in the text first'}
             />
             <button type="button" className="write__iconbtn" aria-label="Add a file as a source" title="Add a file as a source" onClick={() => picker.current?.click()}><Icon d={ICON_PATHS.attach} /></button>
+            {onPickFolder && <button type="button" className="write__iconbtn" aria-label="Use files from a folder on this computer" title="Use files from a folder on this computer" onClick={onPickFolder}><Icon d={ICON_PATHS.folder} /></button>}
             <input ref={picker} type="file" multiple hidden aria-label="Choose files" onChange={(e) => { const files = Array.from(e.target.files ?? []); if (files.length > 0) onFiles(files); e.target.value = '' }} />
           </div>
         </div>
