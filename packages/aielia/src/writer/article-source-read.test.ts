@@ -27,6 +27,15 @@ describe('reading a web source', () => {
     pages['https://x.test/a'] = 'p99   is 18 ms.'
     expect((await svc.readSource(id, sid)).status).toBe('unchanged')
   })
+  it('stores the readable text of an HTML page, not its markup, even when the head is long', async () => {
+    const html = `<!doctype html><html><head><title>How it works</title><script>var klaroConfig = {${'a:1,'.repeat(12_000)}}</script><style>body{color:red}</style></head><body><nav><a href="/">Home</a><a href="/x">Menu</a></nav><main><h1>How it works</h1><p>The p99 fell from <b>240 ms</b> to 85 ms.</p></main></body></html>`
+    const { svc, id } = await setup({ 'https://x.test/h': html })
+    const sid = await svc.addSource(id, { kind: 'web', address: 'https://x.test/h' })
+    expect((await svc.readSource(id, sid)).status).toBe('read')
+    const passage = (await svc.get(id)).meta.sources[0].passage as string
+    expect(passage.replace(/[*_]/g, '')).toContain('The p99 fell from 240 ms to 85 ms.')
+    expect(passage).not.toMatch(/<script|klaroConfig|<p>|color:red/)
+  })
   it('holds changed text until accepted, marks citing claims for recheck, and keeps the stored passage meanwhile', async () => {
     const { svc, id, pages } = await setup({ 'https://x.test/a': 'p99 is 18 ms.' }, [{ claimId: 'c1', impact: 'likely_wrong', reason: 'now 30 ms' }])
     const sid = await svc.addSource(id, { kind: 'web', address: 'https://x.test/a' })

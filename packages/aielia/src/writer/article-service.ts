@@ -16,6 +16,7 @@ import { suggestEdits, type EditSuggestResult } from './article-edit-suggest.js'
 import { reconcileSections } from './article-sections.js'
 import { DEFAULT_VERIFY_LIMIT, DEFAULT_VERIFY_PAGES, verifyTargets, type VerifyEntry, type VerifyReport } from './article-verify.js'
 import { folderFileAddress, pathInFolder, type FolderReader } from './local-folder.js'
+import { looksLikeHtml } from './html-to-markdown.js'
 import { acceptNewPassage, applyRecheck, createSource, excerptFor, pageToArticle, sourceKindForFile, parseRepoFileLink, sliceLines, type LineRange } from './article-sources.js'
 import { acceptSuggestion, refreshSuggestions, rejectSuggestion } from './article-suggestions.js'
 import { checkClaimSupport, needsAutoCheck, sourcesForClaim, type SupportCheck } from './article-support.js'
@@ -294,7 +295,10 @@ export class ArticleService {
     const address = src.address as string
     let text: string
     try {
-      text = (await this.opts.fetchWeb(parseRepoFileLink(address)?.rawUrl ?? address)).slice(0, MAX_SOURCE_CHARS).trim()
+      const raw = await this.opts.fetchWeb(parseRepoFileLink(address)?.rawUrl ?? address)
+      // A web page comes back as its HTML; the passage is the readable text of it, not the markup (a code file is kept exactly as it is).
+      const readable = src.kind === 'web' && looksLikeHtml(raw) ? pageToArticle(raw.slice(0, MAX_PAGE_HTML_CHARS), address).markdown : raw
+      text = readable.slice(0, MAX_SOURCE_CHARS).trim()
     } catch (e) {
       await this.saveSource(id, b, applyRecheck(src, { unreachable: true }, this.now()))
       return { status: 'unreachable', impacts: [], reason: e instanceof Error ? e.message : String(e) }
