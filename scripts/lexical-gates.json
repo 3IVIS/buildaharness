@@ -609,7 +609,7 @@
     },
     {
       "id": "html-reader",
-      "file": "packages/aielia/src/writer/html-to-markdown.ts",
+      "file": "packages/aielia/src/html-to-markdown.ts",
       "line": 1,
       "decides": "reads HTML markup (tag and entity names) to turn a fetched page into markdown",
       "inputs": null,
@@ -634,6 +634,6 @@
     "packages/aielia/src/tui-app.tsx": 2,
     "packages/harness/src/harness-runtime.ts": 1,
     "packages/runtime/src/openai-compatible-client.ts": 3,
-    "packages/aielia/src/writer/html-to-markdown.ts": 11
+    "packages/aielia/src/html-to-markdown.ts": 11
   }
 }
