@@ -14,10 +14,11 @@ import { addSnapshot, compareVersions, isLargeChange, summarizeChange, type Chan
 import { checkIntegrity, computeReadiness, confirmLink, createSnapshot, removeLink, restoreSnapshot, setSectionReview, type Problem, type Readiness, type Snapshot } from './article-rules.js'
 import { suggestEdits, type EditSuggestResult } from './article-edit-suggest.js'
 import { reconcileSections } from './article-sections.js'
+import { DEFAULT_VERIFY_LIMIT, DEFAULT_VERIFY_PAGES, verifyTargets, type VerifyEntry, type VerifyReport } from './article-verify.js'
 import { folderFileAddress, pathInFolder, type FolderReader } from './local-folder.js'
 import { acceptNewPassage, applyRecheck, createSource, excerptFor, pageToArticle, sourceKindForFile, parseRepoFileLink, sliceLines, type LineRange } from './article-sources.js'
 import { acceptSuggestion, refreshSuggestions, rejectSuggestion } from './article-suggestions.js'
-import { checkClaimSupport, needsAutoCheck, type SupportCheck } from './article-support.js'
+import { checkClaimSupport, needsAutoCheck, sourcesForClaim, type SupportCheck } from './article-support.js'
 import { loadPermissions } from './write-permissions.js'
 import type { WriterChatPort } from './writer-chat-turn.js'
 import { createEmptyWriterChatState, type ArticleRef, type CaptureOp, type WriterChatState } from './writer-chat-state.js'
@@ -505,6 +506,88 @@ export class ArticleService {
     const check = await checkClaimSupport({ meta: b.meta, markdown: b.markdown, claimId, modelName: this.opts.modelName ?? model ?? 'model', now: this.now() }, llm, model, onUsage)
     if (check.meta !== b.meta) await this.store.save(id, { ...b, meta: check.meta })
     return check
+  }
+
+  /**
+   * Verifies factual claims: a claim with sources that have passages is checked against them; a claim with none is searched for (the web search on
+   * the claim's own words), the first few pages are read and kept as proposed sources, and one check says whether they back it. If none does, the
+   * pages are dropped and the claim records that it was looked for and not backed. Nothing in the text changes. At most `limit` claims per run.
+   */
+  async verifyClaims(id: string, opts: { claimIds?: string[]; limit?: number; pages?: number; model?: string } = {}): Promise<VerifyReport> {
+    let b = await this.get(id)
+    if (b.meta.claims.length === 0) b = (await this.analyze(id, opts.model)).bundle
+    const { ids, leftOver } = verifyTargets(b.meta, opts.claimIds, opts.limit ?? DEFAULT_VERIFY_LIMIT)
+    const entries: VerifyEntry[] = []
+    for (const claimId of ids) entries.push(await this.verifyOne(id, claimId, opts.pages ?? DEFAULT_VERIFY_PAGES, opts.model))
+    return { entries, leftOver }
+  }
+
+  private async verifyOne(id: string, claimId: string, pages: number, model?: string): Promise<VerifyEntry> {
+    const first = (await this.get(id)).meta.claims.find((c) => c.id === claimId)
+    if (!first) return { claimId, quote: '', outcome: 'could_not_check', found: [], reason: `No claim ${claimId}.` }
+    const entry = (outcome: VerifyEntry['outcome'], found: string[] = [], reason?: string): VerifyEntry => ({ claimId, quote: first.quote, outcome, found, reason })
+    const hasPassage = sourcesForClaim((await this.get(id)).meta, claimId).some((x) => x.passage?.trim())
+    const added: string[] = []
+    const tried: string[] = []
+    if (!hasPassage) {
+      if (!this.opts.searchWeb || !this.opts.fetchWeb) {
+        await this.setLookup(id, claimId, 'unavailable', [])
+        return entry('cannot_search')
+      }
+      const found = await this.findSourceCandidates(id, claimId)
+      if (found.status !== 'found') return entry('search_failed', [], found.reason)
+      if (found.results.length === 0) {
+        await this.setLookup(id, claimId, 'no_results', [])
+        return entry('no_source_found')
+      }
+      for (const r of found.results.slice(0, pages)) {
+        const sid = await this.addSource(id, { kind: 'web', address: r.url, note: 'Found by a search for this claim.' })
+        const read = await this.readSource(id, sid)
+        if (read.status !== 'read') { await this.dropFoundSources(id, claimId, [sid]); continue }
+        await this.attachProposed(id, claimId, sid, r.title)
+        added.push(sid)
+        tried.push(r.url)
+      }
+      if (added.length === 0) {
+        await this.setLookup(id, claimId, 'no_results', [])
+        return entry('no_source_found')
+      }
+    }
+    const check = await this.checkClaim(id, claimId, model)
+    if (check.status !== 'checked') return entry('could_not_check', tried, check.status === 'not_checked' ? check.reason : undefined)
+    if (check.verdict === 'not_supported' && added.length > 0) {
+      await this.dropFoundSources(id, claimId, added)
+      await this.setLookup(id, claimId, 'none_supported', tried)
+      return entry('no_source_found', [], check.reason)
+    }
+    return entry(check.verdict, tried, check.reason)
+  }
+
+  private async setLookup(id: string, claimId: string, outcome: NonNullable<Claim['lookup']>['outcome'], tried: string[]): Promise<void> {
+    const b = await this.get(id)
+    const claims = b.meta.claims.map((c): Claim => (c.id === claimId ? { ...c, lookup: { at: this.now(), claimText: c.quote, outcome, tried } } : c))
+    await this.store.save(id, { ...b, meta: { ...b.meta, claims } })
+  }
+
+  /** A page found by search is tied to the claim by a proposed link, which the writer can confirm or dismiss like any other proposal. */
+  private async attachProposed(id: string, claimId: string, sourceId: string, title: string): Promise<void> {
+    const b = await this.get(id)
+    let n = b.meta.links.length + 1
+    while (b.meta.links.some((l) => l.id === `lk${n}`)) n++
+    const link: Link = { id: `lk${n}`, from: { type: 'claim', id: claimId }, to: { type: 'source', id: sourceId }, kind: 'supported_by', origin: 'proposed', reason: `Found by a search${title ? `: ${title.slice(0, 120)}` : ''}`, at: this.now() }
+    const claims = b.meta.claims.map((c): Claim => (c.id === claimId && c.sourceStatus === 'none' ? { ...c, sourceStatus: 'attached' } : c))
+    await this.store.save(id, { ...b, meta: { ...b.meta, claims, links: [...b.meta.links, link] } })
+  }
+
+  /** Removes sources this run added and the links to them; a claim left with none goes back to having no source. */
+  private async dropFoundSources(id: string, claimId: string, sourceIds: string[]): Promise<void> {
+    const b = await this.get(id)
+    const gone = new Set(sourceIds)
+    const sources = b.meta.sources.filter((x) => !gone.has(x.id))
+    const links = b.meta.links.filter((l) => !(l.to.type === 'source' && gone.has(l.to.id)))
+    const remaining = sourcesForClaim({ ...b.meta, sources, links }, claimId).length
+    const claims = b.meta.claims.map((c): Claim => (c.id === claimId && remaining === 0 ? { ...c, sourceStatus: 'none', check: undefined } : c))
+    await this.store.save(id, { ...b, meta: { ...b.meta, claims, sources, links } })
   }
 
   /** The writer confirms a claim (and may change its kind). A confirmed claim is matched first on re-extraction and never dropped silently. */

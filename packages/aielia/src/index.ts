@@ -199,6 +199,7 @@ export { addIdea, editIdea, setIdeaState, removeIdea, suggestIdeas } from './wri
 export type { IdeaSuggestion } from './writer/article-ideas.js'
 export { setBrief, applyProfile, cleanProfile, renderStyleGuide, loadProfiles, saveProfile, deleteProfile } from './writer/article-style.js'
 export { folderFileAddress, pathInFolder, walkFolder, folderFromFsBackend, matchFolderFiles, isSkippedFolder, type FolderReader } from './writer/local-folder.js'
+export { verifyTargets, lookupNote, currentLookup, summarizeVerify, DEFAULT_VERIFY_LIMIT, type VerifyEntry, type VerifyOutcome, type VerifyReport } from './writer/article-verify.js'
 export { htmlToMarkdown, looksLikeHtml } from './writer/html-to-markdown.js'
 export { pageToArticle, sourceKindForFile, parseLineRange, parseRepoFileLink, sliceLines, excerptFor, type LineRange } from './writer/article-sources.js'
 export { CALL_TYPES, callTypeLabel, classifyCall } from './writer/write-spend.js'

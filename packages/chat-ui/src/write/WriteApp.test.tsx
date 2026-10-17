@@ -546,6 +546,33 @@ describe('finding sources', () => {
     await waitFor(async () => expect((await s.service.get(id)).meta.sources[0]).toMatchObject({ address: 'https://example.com/report', passage: 'p99 was 18 ms in the benchmark.' }))
     expect(screen.queryByRole('group', { name: 'Pages that may back this claim' })).toBeNull()
   })
+  it('looks for a source, reads it and checks the claim from one click; with nothing found it says so', async () => {
+    const claims = { claims: [{ quote: 'The p99 was 18 ms.', kind: 'factual', matchesId: null, sure: true }] }
+    const s = await services({ claims, resolve: { affected: [] }, support: { verdict: 'supported', reason: 'the report says 18 ms' } }, MD, async () => 'p99 was 18 ms in the benchmark.', async () => [{ title: 'Benchmark report', url: 'https://example.com/report', snippet: '' }])
+    const id = (await s.service.list())[0].id
+    await s.service.analyze(id)
+    render(<WriteApp services={s} />)
+    await waitForText()
+    putCursor('18 ms')
+    const dock = screen.getByLabelText('Comments and sources for this text')
+    await userEvent.click(await within(dock).findByRole('button', { name: 'Look for a source and check this claim' }))
+    await waitFor(async () => expect((await s.service.get(id)).meta.claims[0]).toMatchObject({ sourceStatus: 'supported' }))
+    expect((await s.service.get(id)).meta.sources[0]).toMatchObject({ address: 'https://example.com/report' })
+    expect((await s.service.get(id)).meta.links[0]).toMatchObject({ origin: 'proposed' })
+  })
+  it('says no source was found when the search comes back empty, and verifies every claim from the chat menu', async () => {
+    const claims = { claims: [{ quote: 'The p99 was 18 ms.', kind: 'factual', matchesId: null, sure: true }] }
+    const s = await services({ claims, resolve: { affected: [] } }, MD, async () => 'x', async () => [])
+    const id = (await s.service.list())[0].id
+    await s.service.analyze(id)
+    render(<WriteApp services={s} />)
+    await waitForText()
+    await userEvent.selectOptions(screen.getByLabelText('Adjust', { selector: 'select' }), 'action:verify')
+    expect(await screen.findByText(/Verified 1 claim: 1 with no source found/)).toBeInTheDocument()
+    expect((await s.service.get(id)).meta.claims[0].lookup).toMatchObject({ outcome: 'no_results' })
+    putCursor('18 ms')
+    expect(await within(screen.getByLabelText('Comments and sources for this text')).findByText(/No source found: searched the web/)).toBeInTheDocument()
+  })
   it('offers no search button when no search is set up', async () => {
     const s = await services({ claims: { claims: [{ quote: 'The p99 was 18 ms.', kind: 'factual', matchesId: null, sure: true }] }, resolve: { affected: [] } }, MD)
     await s.service.analyze((await s.service.list())[0].id)

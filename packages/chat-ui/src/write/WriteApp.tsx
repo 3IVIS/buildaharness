@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
-import { type FolderReader, claimMarks, collectIssues, parseLineRange, sourceKindForFile, computeReadiness, effectiveSourceStatus, issueCount, type ArticleBundle, type ChangeSummary, type DependencyKind, type IssueCategory, type StyleProfile, type WritePermissions } from '@buildaharness/aielia'
+import { type FolderReader, summarizeVerify, type VerifyReport, claimMarks, collectIssues, parseLineRange, sourceKindForFile, computeReadiness, effectiveSourceStatus, issueCount, type ArticleBundle, type ChangeSummary, type DependencyKind, type IssueCategory, type StyleProfile, type WritePermissions } from '@buildaharness/aielia'
 import type { ChatAction } from './AdjustBar'
 import { ArticleSwitcher, type ArticleItem } from './ArticleSwitcher'
 import { ChatPane, type ChatLine } from './ChatPane'
@@ -400,6 +400,21 @@ export function WriteApp({ services }: { services: WriteServices }): React.JSX.E
   })
 
   // ---- chat
+  const verifyText = (r: VerifyReport): string => {
+    const lines = r.entries.filter((e) => e.outcome === 'no_source_found' || e.outcome === 'contradicted').map((e) => `• ${e.outcome === 'contradicted' ? 'Contradicted' : 'No source found'}: ${e.quote.slice(0, 100)}`)
+    return [summarizeVerify(r), ...lines, r.entries.some((e) => e.found.length > 0) ? 'Pages that were found are kept as suggested sources under the text: confirm the ones that are right.' : ''].filter(Boolean).join('\n')
+  }
+  const verifyFromChat = (): void => {
+    if (!activeId) return
+    const used = services.models.chat()
+    setChat((c) => [...c, { id: ++lineId, from: 'you', text: 'Verify the claims and look for sources' }])
+    void run(`Verifying with ${used}`, async () => {
+      await flushDraft()
+      const r = await service.verifyClaims(activeId, { model: used })
+      setBundle(await service.get(activeId))
+      setChat((c) => [...c, { id: ++lineId, from: 'aielia', text: verifyText(r), model: used }])
+    })
+  }
   /** A check started from the chat, with the model chosen there. The result is said in the chat, with the model's name. */
   const checkFromChat = (): void => {
     if (!activeId) return
@@ -574,6 +589,7 @@ export function WriteApp({ services }: { services: WriteServices }): React.JSX.E
                 change('Keeping those lines', async (id) => { const r = await service.setSourceLines(id, sourceId, range); setNotice(r.ok ? (range ? `Keeping lines ${range.from}–${range.to}. Claims checked on the old text need checking again.` : 'Keeping all of it.') : (r.reason ?? 'That did not work.')) })
               }}
               onAcceptNew={(sourceId) => change('Saving', async (id) => { const r = await service.acceptSourceChange(id, sourceId); if (!r.ok && r.reason) setNotice(r.reason) })}
+              onVerify={(claimId) => change(`Looking for a source with ${chatModel}`, async (id) => { const r = await service.verifyClaims(id, { claimIds: [claimId], model: chatModel }); setNotice(verifyText(r)) })}
               onCheck={(claimId) => change(`Checking with ${chatModel}`, async (id) => { const r = await service.checkClaim(id, claimId, chatModel); setNotice(r.status === 'checked' ? `Checked with ${chatModel}: ${r.verdict.replace('_', ' ')}. ${r.reason}` : r.status === 'no_sources' ? 'There is no stored passage to check against.' : r.reason) })}
             />
           </section>
@@ -595,7 +611,7 @@ export function WriteApp({ services }: { services: WriteServices }): React.JSX.E
           shown={tab === 'chat'}
           onSend={() => void sendChat()}
           onAdjust={(m) => { setAskForEdits(true); void sendChat(m, true) }}
-          onAction={(a: ChatAction) => { if (a === 'check') checkFromChat() }}
+          onAction={(a: ChatAction) => { if (a === 'check') checkFromChat(); else verifyFromChat() }}
           onSaveIdea={(l) => change('Saving', async (id) => { const r = await service.addIdea(id, { text: l.text, origin: 'assistant', model: l.model }); if (!r.ok) setNotice(r.reason) })}
           onDropFiles={(files) => dropFiles(files, false, true)}
         />

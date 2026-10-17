@@ -58,7 +58,7 @@ export function ChatPane(p: Props): React.JSX.Element {
         ))}
         {p.lines.length === 0 && <li className="write__muted">Talk to Aielia about the article, paste reviewer comments, or drop a file here to use it as a source.</li>}
       </ul>
-      <AdjustBar disabled={p.busy || !p.canAct} checkLabel={`Check the article with ${p.model}`} onSend={p.onAdjust} onAction={p.onAction} />
+      <AdjustBar disabled={p.busy || !p.canAct} checkLabel={`Check the article with ${p.model}`} verifyLabel="Verify the claims and look for sources" onSend={p.onAdjust} onAction={p.onAction} />
       <div className="write__compose">
         <textarea
           aria-label="Message"

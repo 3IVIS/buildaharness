@@ -34,3 +34,14 @@ describe('claim marks', () => {
     expect(claimMarks({ ...base, sources: [src], claims: [ok] }, MD)[0].tone).toBe('look')
   })
 })
+
+describe('a claim that was searched for and not backed', () => {
+  it('is marked as not supported, with its own status', () => {
+    const md = 'The p99 was 18 ms.'
+    const base = { id: 'c1', sectionId: 's1', quote: md, position: 0, kind: 'factual' as const, author: 'writer' as const, authorAt: 'x', confirmed: true, sourceStatus: 'none' as const }
+    const meta = { claims: [{ ...base, lookup: { at: '2026-10-17T00:00:00Z', claimText: md, outcome: 'none_supported' as const, tried: [] } }], sources: [] } as never
+    expect(claimMarks(meta, md)).toEqual([{ start: 0, end: md.length, claimId: 'c1', tone: 'bad', status: 'none_found' }])
+    const unavailable = { claims: [{ ...base, lookup: { at: 'x', claimText: md, outcome: 'unavailable' as const, tried: [] } }], sources: [] } as never
+    expect(claimMarks(unavailable, md)[0]).toMatchObject({ tone: 'look', status: 'none' })
+  })
+})

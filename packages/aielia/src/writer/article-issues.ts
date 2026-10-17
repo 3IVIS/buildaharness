@@ -1,3 +1,4 @@
+import { currentLookup } from './article-verify.js'
 import type { ArticleMeta, Claim } from './article-model.js'
 import { effectiveSourceStatus } from './article-rules.js'
 import { sourcesForClaim } from './article-support.js'
@@ -65,7 +66,7 @@ export function unsupportedClaims(meta: ArticleMeta): Claim[] {
 
 function unsupportedDetail(meta: ArticleMeta, c: Claim): string {
   const status = effectiveSourceStatus(c, meta.sources)
-  if (status === 'none') return 'no source'
+  if (status === 'none') return currentLookup(c) && currentLookup(c)?.outcome !== 'unavailable' ? 'no source found when searched' : 'no source'
   if (status === 'attached' || status === 'not_checked' || status === 'stale') return 'no passage to check against'
   return status.replace('_', ' ')
 }

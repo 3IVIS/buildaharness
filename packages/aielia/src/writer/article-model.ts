@@ -61,6 +61,16 @@ export const ClaimSchema = z.object({
     .optional(),
   /** Set when re-anchoring was unsure: "moved or changed, check". */
   needsRecheck: z.boolean().optional(),
+  /** The last time a source was looked for and not found, kept so the page can say so. It only counts while `claimText` is still the claim's text. */
+  lookup: z
+    .object({
+      at: z.string(),
+      claimText: z.string(),
+      outcome: z.enum(['no_results', 'none_supported', 'unavailable']),
+      /** Addresses of the pages read and found not to back the claim. */
+      tried: z.array(z.string()),
+    })
+    .optional(),
 })
 export type Claim = z.infer<typeof ClaimSchema>
 
