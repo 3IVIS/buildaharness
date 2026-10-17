@@ -14,7 +14,8 @@ import { addSnapshot, compareVersions, isLargeChange, summarizeChange, type Chan
 import { checkIntegrity, computeReadiness, confirmLink, createSnapshot, removeLink, restoreSnapshot, setSectionReview, type Problem, type Readiness, type Snapshot } from './article-rules.js'
 import { suggestEdits, type EditSuggestResult } from './article-edit-suggest.js'
 import { reconcileSections } from './article-sections.js'
-import { acceptNewPassage, applyRecheck, createSource, excerptFor, parseRepoFileLink, sliceLines, type LineRange } from './article-sources.js'
+import { folderFileAddress, pathInFolder, type FolderReader } from './local-folder.js'
+import { acceptNewPassage, applyRecheck, createSource, excerptFor, sourceKindForFile, parseRepoFileLink, sliceLines, type LineRange } from './article-sources.js'
 import { acceptSuggestion, refreshSuggestions, rejectSuggestion } from './article-suggestions.js'
 import { checkClaimSupport, needsAutoCheck, type SupportCheck } from './article-support.js'
 import { loadPermissions } from './write-permissions.js'
@@ -332,6 +333,38 @@ export class ArticleService {
     if (!src) return { status: 'no_match', impacts: [] }
     const r = await this.receiveText(id, b, src, excerptFor(src, text.slice(0, MAX_SOURCE_CHARS * 4)), modelOverride)
     return { ...r, sourceId: src.id }
+  }
+
+  /**
+   * Uses a file from a folder the writer allowed: stored as a code or text source under the address `<folder>/<path>`. A file already stored
+   * under that address is compared instead, like a new version of a dropped file.
+   */
+  async addFolderFile(id: string, folder: FolderReader, path: string, modelOverride?: string): Promise<{ status: 'added' | 'read' | 'unchanged' | 'changed' | 'missing' | 'unsupported'; sourceId?: string; impacts: SourceImpact[] }> {
+    const kind = sourceKindForFile({ name: path })
+    if (!kind) return { status: 'unsupported', impacts: [] }
+    const text = await folder.read(path)
+    if (text === undefined || !text.trim()) return { status: 'missing', impacts: [] }
+    const address = folderFileAddress(folder.name, path)
+    const again = await this.offerFileVersion(id, address, text, modelOverride)
+    if (again.status !== 'no_match') return { status: again.status, sourceId: again.sourceId, impacts: again.impacts }
+    const sourceId = await this.addSource(id, { kind, address, passage: text.slice(0, MAX_SOURCE_CHARS * 4) })
+    return { status: 'added', sourceId, impacts: [] }
+  }
+
+  /** Reads again every source stored from this folder, before publishing or when asked. Changed files wait for the writer; files that are gone are reported. */
+  async recheckFolder(id: string, folder: FolderReader, modelOverride?: string): Promise<{ unchanged: number; changed: string[]; missing: string[] }> {
+    const b = await this.get(id)
+    const report = { unchanged: 0, changed: [] as string[], missing: [] as string[] }
+    for (const s of b.meta.sources) {
+      const path = (s.kind === 'code' || s.kind === 'upload') && s.address ? pathInFolder(folder.name, s.address) : undefined
+      if (path === undefined) continue
+      const text = await folder.read(path)
+      if (text === undefined) { report.missing.push(s.address as string); continue }
+      const r = await this.offerFileVersion(id, s.address as string, text, modelOverride)
+      if (r.status === 'changed') report.changed.push(s.address as string)
+      else report.unchanged++
+    }
+    return report
   }
 
   /**
