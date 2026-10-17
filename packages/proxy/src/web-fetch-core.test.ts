@@ -42,6 +42,18 @@ describe('assertPublicHttpUrl resolved-address ranges', () => {
   })
 })
 
+describe('fetchTextSafely HTML pages', () => {
+  it('gives a web page as readable text, so the character cap is spent on the page and not on its scripts and styles', async () => {
+    const dns = fakeDns({ 'public.example': ['93.184.216.34'] })
+    const html = `<!doctype html><html><head><title>Guide</title><style>${'.a{color:red}'.repeat(3000)}</style><script>var x=${JSON.stringify('z'.repeat(5000))}</script></head><body><nav><a href="/">Home</a></nav><main><h1>Guide</h1><p>The answer is <b>42</b>.</p></main></body></html>`
+    const fetchImpl = (async () => new Response(html, { status: 200, headers: { 'content-type': 'text/html; charset=utf-8' } })) as typeof fetch
+    const result = await fetchTextSafely({ url: 'http://public.example/', dns, fetchImpl, maxBytes: 200_000 })
+    expect(result.text.replace(/[*_]/g, '')).toContain('The answer is 42.')
+    expect(result.text).not.toMatch(/<style|<script|color:red|zzzz/)
+    expect(result.truncated).toBe(false)
+  })
+})
+
 describe('fetchTextSafely body timeout', () => {
   it('aborts a response whose body stalls after the headers', async () => {
     const dns = fakeDns({ 'slow.example': ['93.184.216.34'] })

@@ -77,6 +77,15 @@ describe('fetchTextSafely', () => {
     expect(result).toEqual({ text: 'hello world', finalUrl: 'http://public.example/', truncated: false })
   })
 
+  it('gives a web page as readable text, so the character cap is spent on the page and not on its scripts and styles', async () => {
+    const html = `<!doctype html><html><head><title>Guide</title><style>${'.a{color:red}'.repeat(3000)}</style><script>var x=${JSON.stringify('z'.repeat(5000))}</script></head><body><nav><a href="/">Home</a></nav><main><h1>Guide</h1><p>The answer is <b>42</b>.</p></main></body></html>`
+    const fetchImpl = (async () => new Response(html, { status: 200, headers: { 'content-type': 'text/html; charset=utf-8' } })) as typeof fetch
+    const result = await fetchTextSafely({ url: 'http://public.example/', dns: publicDns, fetchImpl, maxBytes: 200_000 })
+    expect(result.text.replace(/[*_]/g, '')).toContain('The answer is 42.')
+    expect(result.text).not.toMatch(/<style|<script|color:red|zzzz/)
+    expect(result.truncated).toBe(false)
+  })
+
   it('rejects a response whose body looks binary regardless of a missing/wrong content-type header', async () => {
     const pdfBytes = new Uint8Array([0x25, 0x50, 0x44, 0x46, 0x2d, 0x31, 0x2e, 0x34])
     const fetchImpl = (async () => new Response(pdfBytes, { status: 200 })) as typeof fetch

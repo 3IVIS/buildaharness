@@ -18,7 +18,7 @@
  * between resolve and connect is accepted for v1 the same way this plan already accepts it for
  * the Cloudflare Worker deploy target (which can't pin sockets at all).
  */
-
+import { htmlToMarkdown, looksLikeHtml } from './html-to-markdown'
 /**
  * Thrown by assertPublicHttpUrl instead of returning a falsy value, so callers
  * can't accidentally proceed past a rejected URL.
@@ -383,7 +383,9 @@ export async function fetchTextSafely(options: FetchTextSafelyOptions): Promise<
       )
     }
 
-    const text = new TextDecoder('utf-8', { fatal: false }).decode(bytes)
+    const decoded = new TextDecoder('utf-8', { fatal: false }).decode(bytes)
+    // A web page is HTML, and its first 15,000 characters are mostly the head (scripts, styles); read it as text before the cap is applied.
+    const text = /html/i.test(headerContentType) || looksLikeHtml(decoded) ? htmlToMarkdown(decoded) || decoded : decoded
     const finalText = truncateFetchedText(text)
     return { text: finalText, finalUrl: currentUrl, truncated: byteTruncated || finalText.length !== text.length }
   }

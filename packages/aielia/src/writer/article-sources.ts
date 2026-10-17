@@ -1,5 +1,5 @@
 import type { Source } from './article-model.js'
-import { htmlTitle, htmlToMarkdown, looksLikeHtml } from './html-to-markdown.js'
+import { htmlTitle, htmlToMarkdown, looksLikeHtml } from '../html-to-markdown.js'
 
 /**
  * Stored source passages (T6): the passage as read, its address, the date and a fingerprint, so a later recheck can tell

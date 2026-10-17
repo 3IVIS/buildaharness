@@ -1,7 +1,7 @@
 import { describe, it, expect } from 'vitest'
 import { htmlToMarkdown, looksLikeHtml } from './html-to-markdown.js'
-import { pageToArticle } from './article-sources.js'
-import { ArticleService, createMemoryArticleStore } from './article-service.js'
+import { pageToArticle } from './writer/article-sources.js'
+import { ArticleService, createMemoryArticleStore } from './writer/article-service.js'
 import type { ILLMClient } from '@buildaharness/runtime'
 
 const PAGE = `<!doctype html><html><head><title>Site</title><style>p{}</style><script>var x = "<p>no</p>"</script></head>
