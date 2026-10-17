@@ -8,7 +8,7 @@ import { effectiveSourceStatus } from './article-rules.js'
 
 const NOW = '2026-10-16T10:00:00.000Z'
 const MD = '# Post\n\nIntro: p99 under 20 ms.\n\n## Latency\n\nThe p99 was 18 ms.\n\n## Conclusion\n\nSo p99 stays under 20 ms.\n'
-const MARK = { claims: 'You read parts of an article and list the claims', resolve: 'You help a writer keep an article consistent', support: 'You check whether a claim from an article', capture: 'A writer is working with an assistant', edits: 'You propose edits to an article', consistency: 'You check an article for two kinds of problem', repo: 'You help check a claim from an article against a software repository' }
+const MARK = { claims: 'You read parts of an article and list the claims', resolve: 'You help a writer keep an article consistent', support: 'You check whether a claim from an article', capture: 'A writer is working with an assistant', edits: 'You propose edits to an article', consistency: 'You check an article for two kinds of problem', repo: 'You help check a claim from an article against a software repository', repoFolders: 'You narrow down where in a software repository' }
 
 type Router = Partial<Record<keyof typeof MARK, unknown | ((user: string) => unknown)>>
 function routed(r: Router, calls: string[] = []): ILLMClient {
@@ -605,5 +605,24 @@ describe('verifying claims in an attached repository', () => {
     s.detachRepo(id, 'o/r')
     expect(s.attachedRepos(id)).toEqual([])
     expect((await s.verifyClaims(id)).entries[0].outcome).toBe('cannot_search')
+  })
+
+  it('narrows a large repository by folder first, then picks files only from those folders', async () => {
+    const calls: string[] = []
+    const seenPaths: string[][] = []
+    const big = ['README.md', ...Array.from({ length: 1700 }, (_, i) => `data/d${i}.json`), 'src/limit.ts', 'src/other.ts']
+    const { svc: s } = svc({
+      claims: { claims: [{ quote: 'Intro: p99 under 20 ms.', kind: 'factual', matchesId: null, sure: true }] },
+      resolve: { affected: [] },
+      repoFolders: { folders: ['src/'] },
+      repo: (u: string) => { seenPaths.push(JSON.parse(u).paths); return { paths: ['src/limit.ts'] } },
+      support: { verdict: 'supported', reason: 'ok' },
+    }, calls)
+    const id = await s.create('Post', MD)
+    s.attachRepo(id, { name: 'o/r', files: async () => big, read: async (p: string) => (p === 'src/limit.ts' ? 'LIMIT=20' : undefined) })
+    const r = await s.verifyClaims(id)
+    expect(r.entries[0].outcome).toBe('supported')
+    expect(seenPaths[0]).toEqual(['src/limit.ts', 'src/other.ts'])
+    expect(calls.filter((c) => c === 'repoFolders' || c === 'repo')).toEqual(['repoFolders', 'repo'])
   })
 })

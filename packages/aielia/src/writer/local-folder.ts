@@ -16,7 +16,7 @@ export interface FolderReader {
 
 /** Folders that hold other people's code, builds or history: never listed. */
 const SKIPPED_FOLDERS = new Set(['.git', 'node_modules', 'dist', 'build', 'target', '.next', '.venv', '__pycache__', 'vendor'])
-const MAX_FILES = 5000
+const MAX_FILES = 20000
 const MAX_DEPTH = 8
 
 export function isSkippedFolder(name: string): boolean {
@@ -39,23 +39,26 @@ export function pathInFolder(folderName: string, address: string): string | unde
  */
 export async function walkFolder(list: (dir: string) => Promise<{ name: string; directory: boolean }[]>): Promise<string[]> {
   const found: string[] = []
-  async function visit(dir: string, depth: number): Promise<void> {
-    if (found.length >= MAX_FILES) return
-    let entries: { name: string; directory: boolean }[]
-    try {
-      entries = await list(dir)
-    } catch {
-      return
+  // Level by level, so that when a very large folder hits the file limit it is the deepest files that are left out, not whole top-level folders.
+  let level: string[] = ['']
+  for (let depth = 0; depth <= MAX_DEPTH && level.length > 0 && found.length < MAX_FILES; depth++) {
+    const next: string[] = []
+    for (const dir of level) {
+      let entries: { name: string; directory: boolean }[]
+      try {
+        entries = await list(dir)
+      } catch {
+        continue
+      }
+      for (const e of [...entries].sort((a, b) => a.name.localeCompare(b.name))) {
+        const path = dir ? `${dir}/${e.name}` : e.name
+        if (e.directory) {
+          if (depth < MAX_DEPTH && !isSkippedFolder(e.name)) next.push(path)
+        } else if (sourceKindForFile({ name: e.name }) && found.length < MAX_FILES) found.push(path)
+      }
     }
-    for (const e of [...entries].sort((a, b) => a.name.localeCompare(b.name))) {
-      if (found.length >= MAX_FILES) return
-      const path = dir ? `${dir}/${e.name}` : e.name
-      if (e.directory) {
-        if (depth < MAX_DEPTH && !isSkippedFolder(e.name)) await visit(path, depth + 1)
-      } else if (sourceKindForFile({ name: e.name })) found.push(path)
-    }
+    level = next
   }
-  await visit('', 0)
   return found
 }
 

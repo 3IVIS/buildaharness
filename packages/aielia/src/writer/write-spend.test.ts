@@ -10,7 +10,7 @@ const MD = '# Post\n\n## Latency\n\nThe p99 was 18 ms.\n\n## Conclusion\n\nSo p9
 
 /** Answers every step with something each of them can read, and records what kind of call it thought it was. */
 function recording(seen: string[]): ILLMClient {
-  const reply = { claims: [{ quote: 'The p99 was 19 ms.', kind: 'factual', matchesId: null, sure: true }], affected: [], impacts: [], links: [], suggestions: [], ideas: [], ops: [], articleId: null }
+  const reply = { claims: [{ quote: 'The p99 was 19 ms.', kind: 'factual', matchesId: null, sure: true }], affected: [], impacts: [], links: [], suggestions: [], ideas: [], ops: [], articleId: null, folders: ['d0/'] }
   return {
     callChatStructured: async (messages: ChatMessage[]) => {
       seen.push(classifyCall(messages).id)
@@ -39,7 +39,7 @@ describe('call types', () => {
     await svc.findDependencies(id) // links
     const id2 = await svc.create('Other', MD.replace('18 ms', '19 ms')) // a claim with no source, so a repository is looked in
     await svc.analyze(id2)
-    svc.attachRepo(id2, { name: 'o/r', files: async () => ['a.ts'], read: async () => 'x' })
+    svc.attachRepo(id2, { name: 'o/r', files: async () => Array.from({ length: 1600 }, (_, i) => `d${i % 5}/f${i}.ts`), read: async () => 'x' })
     await svc.verifyClaims(id2) // repo files
     await svc.suggest(id, 'tighten it') // edits
     await svc.suggestIdeas(id) // ideas

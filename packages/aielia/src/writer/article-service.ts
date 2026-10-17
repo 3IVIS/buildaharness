@@ -16,7 +16,7 @@ import { suggestEdits, type EditSuggestResult } from './article-edit-suggest.js'
 import { reconcileSections } from './article-sections.js'
 import { DEFAULT_VERIFY_LIMIT, DEFAULT_VERIFY_PAGES, verifyTargets, type VerifyEntry, type VerifyReport } from './article-verify.js'
 import { folderFileAddress, pathInFolder, type FolderReader } from './local-folder.js'
-import { pickRepoFiles } from './article-repo.js'
+import { MAX_PATHS_SENT, pathsUnder, pickRepoFiles, pickRepoFolders } from './article-repo.js'
 import type { RepoReader } from './repo-reader.js'
 import { checkConsistency, type ConsistencyResult } from './article-consistency.js'
 import { looksLikeHtml } from '../html-to-markdown.js'
@@ -567,7 +567,14 @@ export class ArticleService {
         }
         this.repoFiles.set(reader, paths)
       }
-      const pick = await pickRepoFiles({ claim: quote, paths }, this.opts.llm, model ?? this.checker(), this.opts.onUsage)
+      // A large repository is narrowed by folder first, so the file list the model sees is the part that matters.
+      let candidates = paths
+      if (paths.length > MAX_PATHS_SENT) {
+        const folders = await pickRepoFolders({ claim: quote, paths }, this.opts.llm, model ?? this.checker(), this.opts.onUsage)
+        if (folders.folders.length === 0) continue
+        candidates = pathsUnder(paths, folders.folders)
+      }
+      const pick = await pickRepoFiles({ claim: quote, paths: candidates }, this.opts.llm, model ?? this.checker(), this.opts.onUsage)
       const added: string[] = []
       for (const path of pick.paths) {
         const text = await reader.read(path)
