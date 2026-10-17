@@ -5,7 +5,8 @@ describe('parseGithubRepoAddress', () => {
   it('reads a repository address, with an optional branch, and the o/r shorthand; anything else is undefined', () => {
     expect(parseGithubRepoAddress('https://github.com/3IVIS/buildaharness')).toEqual({ owner: '3IVIS', repo: 'buildaharness' })
     expect(parseGithubRepoAddress('https://github.com/3IVIS/buildaharness.git/')).toEqual({ owner: '3IVIS', repo: 'buildaharness' })
-    expect(parseGithubRepoAddress('https://github.com/o/r/tree/feature-x/src')).toEqual({ owner: 'o', repo: 'r', ref: 'feature-x' })
+    expect(parseGithubRepoAddress('https://github.com/o/r/tree/feature-x/src')).toEqual({ owner: 'o', repo: 'r', ref: 'feature-x', path: 'src' })
+    expect(parseGithubRepoAddress('https://github.com/o/r/tree/main/packages/x')).toEqual({ owner: 'o', repo: 'r', ref: 'main', path: 'packages/x' })
     expect(parseGithubRepoAddress('o/r')).toEqual({ owner: 'o', repo: 'r' })
     expect(parseGithubRepoAddress('https://example.com/o/r')).toBeUndefined()
     expect(parseGithubRepoAddress('http://github.com/o/r')).toBeUndefined()
@@ -37,6 +38,11 @@ describe('githubRepoReader', () => {
     expect(await r.files()).toEqual(['README.md', 'src/a.ts'])
     expect(calls[0].url).toBe('https://api.github.com/repos/o/r/git/trees/HEAD?recursive=1')
     expect(r.addressOf?.('src/a.ts')).toBe('https://github.com/o/r/blob/HEAD/src/a.ts')
+  })
+  it('lists only the files under a folder when the address names one, and names the reader after it', async () => {
+    const r = githubRepoReader({ owner: 'o', repo: 'r', path: 'src' }, { fetchImpl: fake([]) })
+    expect(r.name).toBe('o/r/src')
+    expect(await r.files()).toEqual(['src/a.ts'])
   })
   it('reads a file from raw.githubusercontent.com, or through the API with the token for a private repository, and says plainly when it cannot list', async () => {
     const calls: { url: string; headers?: Record<string, string> }[] = []

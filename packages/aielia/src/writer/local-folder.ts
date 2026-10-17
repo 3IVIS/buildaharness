@@ -16,7 +16,8 @@ export interface FolderReader {
 
 /** Folders that hold other people's code, builds or history: never listed. */
 const SKIPPED_FOLDERS = new Set(['.git', 'node_modules', 'dist', 'build', 'target', '.next', '.venv', '__pycache__', 'vendor'])
-const MAX_FILES = 20000
+/** The most files a listing keeps; a repository with more is listed level by level and the deepest are left out. */
+export const MAX_FILES = 20000
 const MAX_DEPTH = 8
 
 export function isSkippedFolder(name: string): boolean {

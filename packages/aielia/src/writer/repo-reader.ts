@@ -1,4 +1,4 @@
-import { isSkippedFolder, type FolderReader } from './local-folder.js'
+import { isSkippedFolder, MAX_FILES, type FolderReader } from './local-folder.js'
 import { sourceKindForFile } from './article-sources.js'
 
 /**
@@ -12,7 +12,6 @@ export interface RepoReader extends FolderReader {
   addressOf?(path: string): string
 }
 
-const MAX_FILES = 5000
 const MAX_FILE_BYTES = 300_000
 
 export interface GithubRepoSpec {
@@ -20,6 +19,8 @@ export interface GithubRepoSpec {
   repo: string
   /** A branch, tag or commit; the repository's default branch when absent. */
   ref?: string
+  /** Only the files under this folder (from an address like github.com/o/r/tree/main/packages/x). */
+  path?: string
 }
 
 /** The repository named by a GitHub address (github.com/o/r, with an optional /tree/<ref>), or `o/r`. Anything else is undefined. */
@@ -36,8 +37,8 @@ export function parseGithubRepoAddress(input: string): GithubRepoSpec | undefine
   if (u.protocol !== 'https:' || u.hostname !== 'github.com') return undefined
   const parts = u.pathname.split('/').filter(Boolean)
   if (parts.length < 2) return undefined
-  const [owner, repo, kind, ref] = parts
-  return { owner, repo: repo.replace(/\.git$/i, ''), ...(kind === 'tree' && ref ? { ref } : {}) }
+  const [owner, repo, kind, ref, ...rest] = parts
+  return { owner, repo: repo.replace(/\.git$/i, ''), ...(kind === 'tree' && ref ? { ref } : {}), ...(kind === 'tree' && ref && rest.length > 0 ? { path: rest.join('/') } : {}) }
 }
 
 export interface GithubReaderOptions {
@@ -53,7 +54,7 @@ export function githubRepoReader(spec: GithubRepoSpec, options: GithubReaderOpti
   const auth: Record<string, string> = options.token ? { Authorization: `Bearer ${options.token}` } : {}
   const encode = (path: string): string => path.split('/').map(encodeURIComponent).join('/')
   return {
-    name: `${spec.owner}/${spec.repo}`,
+    name: spec.path ? `${spec.owner}/${spec.repo}/${spec.path}` : `${spec.owner}/${spec.repo}`,
     addressOf: (path) => `https://github.com/${spec.owner}/${spec.repo}/blob/${ref}/${path}`,
     async files() {
       const res = await fetchImpl(`${base}/git/trees/${encodeURIComponent(ref)}?recursive=1`, { headers: { Accept: 'application/vnd.github+json', ...auth } })
@@ -69,6 +70,7 @@ export function githubRepoReader(spec: GithubRepoSpec, options: GithubReaderOpti
         if (segments.slice(0, -1).some(isSkippedFolder)) continue
         if (!sourceKindForFile({ name: segments[segments.length - 1] })) continue
         if (typeof e.size === 'number' && e.size > MAX_FILE_BYTES) continue
+        if (spec.path && !e.path.startsWith(`${spec.path}/`)) continue
         out.push(e.path)
         if (out.length >= MAX_FILES) break
       }

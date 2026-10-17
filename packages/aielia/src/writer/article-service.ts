@@ -18,6 +18,7 @@ import { DEFAULT_VERIFY_LIMIT, DEFAULT_VERIFY_PAGES, verifyTargets, type VerifyE
 import { folderFileAddress, pathInFolder, type FolderReader } from './local-folder.js'
 import { MAX_PATHS_SENT, pathsUnder, pickRepoFiles, pickRepoFolders } from './article-repo.js'
 import type { RepoReader } from './repo-reader.js'
+import { MAX_FILES as REPO_LIST_LIMIT } from './local-folder.js'
 import { checkConsistency, type ConsistencyResult } from './article-consistency.js'
 import { looksLikeHtml } from '../html-to-markdown.js'
 import { acceptNewPassage, applyRecheck, createSource, excerptFor, pageToArticle, sourceKindForFile, parseRepoFileLink, sliceLines, type LineRange } from './article-sources.js'
@@ -554,9 +555,11 @@ export class ArticleService {
    * keeps them as proposed sources and checks the claim. Files that do not back the claim are dropped again. Returns the entry when a repository
    * answered (supported, contradicted and so on), else undefined and the web search is tried.
    */
-  private async verifyInRepos(id: string, claimId: string, quote: string, model?: string): Promise<{ entry?: VerifyEntry; tried: string[] }> {
+  private async verifyInRepos(id: string, claimId: string, quote: string, model?: string): Promise<{ entry?: VerifyEntry; tried: string[]; cutOff: string[] }> {
     const readers = this.repos.get(id) ?? []
     const tried: string[] = []
+    /** Repositories whose listing hit the limit, so some files were never seen. */
+    const cutOff: string[] = []
     for (const reader of readers) {
       let paths = this.repoFiles.get(reader)
       if (!paths) {
@@ -567,6 +570,7 @@ export class ArticleService {
         }
         this.repoFiles.set(reader, paths)
       }
+      if (paths.length >= REPO_LIST_LIMIT) cutOff.push(reader.name)
       // A large repository is narrowed by folder first, so the file list the model sees is the part that matters.
       let candidates = paths
       if (paths.length > MAX_PATHS_SENT) {
@@ -595,9 +599,9 @@ export class ArticleService {
         await this.dropFoundSources(id, claimId, added)
         continue
       }
-      return { entry: { claimId, quote, outcome: check.verdict, found: tried, reason: check.reason }, tried }
+      return { entry: { claimId, quote, outcome: check.verdict, found: tried, reason: check.reason }, tried, cutOff }
     }
-    return { tried }
+    return { tried, cutOff }
   }
 
   async verifyClaims(id: string, opts: { claimIds?: string[]; limit?: number; pages?: number; model?: string } = {}): Promise<VerifyReport> {
@@ -620,10 +624,11 @@ export class ArticleService {
       const inRepos = await this.verifyInRepos(id, claimId, first.quote, model)
       if (inRepos.entry) return inRepos.entry
       tried.push(...inRepos.tried)
+      const cutNote = inRepos.cutOff.length > 0 ? `${inRepos.cutOff.join(', ')} has more than ${REPO_LIST_LIMIT} files, so only the shallowest were listed. Pick a folder inside it to search the rest.` : undefined
       if (!this.opts.searchWeb || !this.opts.fetchWeb) {
         if ((this.repos.get(id) ?? []).length > 0) {
           await this.setLookup(id, claimId, 'no_results', tried)
-          return entry('no_source_found')
+          return entry('no_source_found', [], cutNote)
         }
         await this.setLookup(id, claimId, 'unavailable', [])
         return entry('cannot_search')

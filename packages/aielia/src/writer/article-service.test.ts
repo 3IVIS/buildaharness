@@ -625,4 +625,13 @@ describe('verifying claims in an attached repository', () => {
     expect(seenPaths[0]).toEqual(['src/limit.ts', 'src/other.ts'])
     expect(calls.filter((c) => c === 'repoFolders' || c === 'repo')).toEqual(['repoFolders', 'repo'])
   })
+
+  it('says so when a repository has more files than are listed and nothing was found', async () => {
+    const s = setup({ repoFolders: { folders: [] } })
+    const id = await s.create('Post', MD)
+    s.attachRepo(id, { name: 'o/huge', files: async () => Array.from({ length: 20_000 }, (_, i) => `d/f${i}.ts`), read: async () => 'x' })
+    const r = await s.verifyClaims(id)
+    expect(r.entries[0]).toMatchObject({ outcome: 'no_source_found' })
+    expect(r.entries[0].reason).toContain('o/huge has more than 20000 files')
+  })
 })
