@@ -168,6 +168,7 @@ export function WriteApp({ services, connection }: { services: WriteServices; co
     applySelection(back.range)
   }
   const [repoTick, setRepoTick] = useState(0)
+  const [repoBarOpen, setRepoBarOpen] = useState(false)
   const [folder, setFolder] = useState<{ reader: FolderReader; files: string[] } | undefined>()
   const folderRef = useRef(folder)
   folderRef.current = folder
@@ -462,6 +463,11 @@ export function WriteApp({ services, connection }: { services: WriteServices; co
   }
   const verifyFromChat = (repoOnly = false): void => {
     if (!activeId) return
+    if (repoOnly && service.attachedRepos(activeId).length === 0) {
+      setRepoBarOpen(true)
+      setNotice('Add a repository first: type a GitHub address in the box above the message field, or choose a folder.')
+      return
+    }
     const used = services.models.chat()
     setChat((c) => [...c, { id: ++lineId, from: 'you', text: repoOnly ? 'Verify the claims against the repository' : 'Verify the claims and look for sources' }])
     void run(`Verifying with ${used}`, async () => {
@@ -669,6 +675,7 @@ export function WriteApp({ services, connection }: { services: WriteServices; co
           onAdjust={(m) => { setAskForEdits(true); void sendChat(m, true) }}
           onAction={(a: ChatAction) => { if (a === 'check') checkFromChat(); else verifyFromChat(a === 'verify_repo') }}
           repos={activeId ? (void repoTick, service.attachedRepos(activeId)) : []}
+          repoBarOpen={repoBarOpen}
           onAddGithub={addGithubRepo}
           onPickRepoFolder={services.pickFolder ? pickFolder : undefined}
           onRemoveRepo={removeRepo}

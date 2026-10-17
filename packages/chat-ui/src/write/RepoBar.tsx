@@ -5,7 +5,7 @@ import { ICON_PATHS, Icon, IconButton } from './icons'
  * The repositories handed to the open article, searched when claims are verified. A GitHub address is typed here; a folder on this computer is
  * chosen with the folder button where the browser can. Held for this visit only: a folder or token never goes into the article.
  */
-export function RepoBar({ repos, busy, onAddGithub, onPickFolder, onRemove }: { repos: string[]; busy: boolean; onAddGithub: (address: string) => void; onPickFolder?: () => void; onRemove: (name: string) => void }): React.JSX.Element {
+export function RepoBar({ repos, busy, open, onAddGithub, onPickFolder, onRemove }: { repos: string[]; busy: boolean; /** Opened from outside, when the writer chose the repository action with none attached. */ open?: boolean; onAddGithub: (address: string) => void; onPickFolder?: () => void; onRemove: (name: string) => void }): React.JSX.Element {
   const [address, setAddress] = useState('')
   function add(): void {
     const a = address.trim()
@@ -14,8 +14,8 @@ export function RepoBar({ repos, busy, onAddGithub, onPickFolder, onRemove }: { 
     setAddress('')
   }
   return (
-    <details className="write__allsrc write__repos" open={repos.length > 0}>
-      <summary>Repositories to check claims against{repos.length > 0 ? ` (${repos.length})` : ''}</summary>
+    <details className="write__allsrc write__repos" open={repos.length > 0 || open === true}>
+      <summary>{repos.length > 0 ? `Repositories to check claims against (${repos.length})` : 'Add a repository to check claims against'}</summary>
       <ul className="write__list" aria-label="Repositories">
         {repos.map((r) => (
           <li key={r} className="write__dsrc">

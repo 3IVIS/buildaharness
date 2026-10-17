@@ -31,6 +31,8 @@ interface Props {
   onAddGithub: (address: string) => void
   onPickRepoFolder?: () => void
   onRemoveRepo: (name: string) => void
+  /** True after the repository action was chosen with none attached, so the add box opens. */
+  repoBarOpen?: boolean
   onDropFiles: (files: File[]) => void
   /** Closes the chat sheet on a phone. */
   onClose: () => void
@@ -64,8 +66,8 @@ export function ChatPane(p: Props): React.JSX.Element {
         ))}
         {p.lines.length === 0 && <li className="write__muted">Talk to Aielia about the article, paste reviewer comments, or drop a file here to use it as a source.</li>}
       </ul>
-      <AdjustBar disabled={p.busy || !p.canAct} checkLabel={`Check the article with ${p.model}`} verifyLabel="Verify the claims and look for sources" repoLabel={p.repos.length > 0 ? 'Verify the claims against the repository' : undefined} onSend={p.onAdjust} onAction={p.onAction} />
-      {p.canAct && <RepoBar repos={p.repos} busy={p.busy} onAddGithub={p.onAddGithub} onPickFolder={p.onPickRepoFolder} onRemove={p.onRemoveRepo} />}
+      <AdjustBar disabled={p.busy || !p.canAct} checkLabel={`Check the article with ${p.model}`} verifyLabel="Verify the claims and look for sources" repoLabel={p.repos.length > 0 ? 'Verify the claims against the repository' : 'Verify the claims against a repository (add one first)'} onSend={p.onAdjust} onAction={p.onAction} />
+      {p.canAct && <RepoBar repos={p.repos} busy={p.busy} open={p.repoBarOpen} onAddGithub={p.onAddGithub} onPickFolder={p.onPickRepoFolder} onRemove={p.onRemoveRepo} />}
       <div className="write__compose">
         <textarea
           aria-label="Message"

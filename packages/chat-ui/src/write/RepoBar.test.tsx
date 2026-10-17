@@ -37,3 +37,12 @@ describe('the repository action in the chat menu', () => {
     expect(onAction).toHaveBeenCalledWith('verify_repo')
   })
 })
+
+describe('the repository box when none is attached', () => {
+  it('says how to add one, and opens when asked from outside', () => {
+    const { rerender } = render(<RepoBar repos={[]} busy={false} onAddGithub={vi.fn()} onRemove={vi.fn()} />)
+    expect(screen.getByText('Add a repository to check claims against').closest('details')).not.toHaveAttribute('open')
+    rerender(<RepoBar repos={[]} busy={false} open onAddGithub={vi.fn()} onRemove={vi.fn()} />)
+    expect(screen.getByText('Add a repository to check claims against').closest('details')).toHaveAttribute('open')
+  })
+})
