@@ -37,7 +37,7 @@ describe('call types', () => {
     await svc.readSource(id, src) // source change
     await svc.proposeLinksForSource(id, src) // source links
     await svc.findDependencies(id) // links
-    const id2 = await svc.create('Other', MD) // a claim with no source, so a repository is looked in
+    const id2 = await svc.create('Other', MD.replace('18 ms', '19 ms')) // a claim with no source, so a repository is looked in
     await svc.analyze(id2)
     svc.attachRepo(id2, { name: 'o/r', files: async () => ['a.ts'], read: async () => 'x' })
     await svc.verifyClaims(id2) // repo files
