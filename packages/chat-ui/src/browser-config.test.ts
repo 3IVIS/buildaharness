@@ -1,5 +1,5 @@
 import { describe, it, expect, vi } from 'vitest'
-import { envOverridesFromImportMetaEnv, ENV_VAR_FOR_CONFIG_KEY } from './browser-config'
+import { envOverridesFromImportMetaEnv, ENV_VAR_FOR_CONFIG_KEY, splitBuildDefaults } from './browser-config'
 import { DEFAULT_ONE_LOOP_MODE, DEFAULT_GOAL_GRAPH_MODE, DEFAULT_GOAL_GRAPH_SUGGEST_MODE, DEFAULT_PLAN_GRAPH_MODE } from '@buildaharness/aielia'
 
 /** A minimal ImportMetaEnv stand-in — the real one has an index signature, so this is enough. */
@@ -131,5 +131,16 @@ describe('envOverridesFromImportMetaEnv', () => {
     expect(warn.mock.calls[0][0]).toContain('VITE_ASSISTANT_MEMORY_WRITE_MODE')
     warn.mockRestore()
     expect(ENV_VAR_FOR_CONFIG_KEY.memoryWriteMode).toBe('VITE_ASSISTANT_MEMORY_WRITE_MODE')
+  })
+})
+
+describe('splitBuildDefaults', () => {
+  it('keeps pins pinned and moves only the named keys to defaults', () => {
+    const all = { proxyUrl: 'https://hosted.test', webBackend: 'proxy' as const, enableWeb: true, model: 'm' }
+    expect(splitBuildDefaults({ VITE_ASSISTANT_DEFAULTS_ONLY: 'proxyUrl, enableWeb,webBackend' } as unknown as ImportMetaEnv, all)).toEqual({
+      pins: { model: 'm' },
+      defaults: { proxyUrl: 'https://hosted.test', webBackend: 'proxy', enableWeb: true },
+    })
+    expect(splitBuildDefaults({} as ImportMetaEnv, all)).toEqual({ pins: all, defaults: {} })
   })
 })

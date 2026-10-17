@@ -76,7 +76,7 @@ import { MemoryPanel, type MemoryPanelData } from './components/MemoryPanel'
 import { NextStepChips } from './components/NextStepChips'
 import { BrowserConfigStore } from './browser-config-store'
 import { TauriConfigStore } from './tauri-config-store'
-import { envOverridesFromImportMetaEnv, llmBackendFromEnvValue } from './browser-config'
+import { envOverridesFromImportMetaEnv, llmBackendFromEnvValue, splitBuildDefaults } from './browser-config'
 import { applyBrowserLayerSettings } from './layer-env'
 import { getAssistantTestHooks } from './assistant-test-hooks'
 import { DEMO_USER_MESSAGE, DEMO_APPROVAL_REASON, DEMO_NOTE } from './demo-seed'
@@ -112,7 +112,9 @@ function accumulateUsage(prev: TokenUsage | undefined, usage: TokenUsage): Token
 // Env/build-time vars still win over persisted config — see browser-config.ts and
 // config.ts's resolveConfig — so nothing changes for a deployed build that already sets
 // VITE_ASSISTANT_PROXY_URL/_TOKEN/_MODEL and never opens Settings.
-const envOverrides = envOverridesFromImportMetaEnv(import.meta.env)
+const { pins: envOverrides, defaults: envDefaults } = splitBuildDefaults(import.meta.env, envOverridesFromImportMetaEnv(import.meta.env))
+/** Keys whose build value is only a default: they count as set for the first-run check, but are not pinned in Settings. */
+const envDefaultKeys = new Set(Object.keys(envDefaults) as (keyof AssistantConfig)[])
 
 const PLAN_VIZ_OPEN_KEY = 'aielia.planViz.open'
 const PLAN_VIZ_FULLSCREEN_KEY = 'aielia.planViz.fullscreen'
@@ -346,7 +348,7 @@ export function App(): React.JSX.Element {
   // value once createConfigStore().load() resolves, a moment later (see the mount effect).
   // Build-time overrides, plus (desktop only) ASSISTANT_LLM_BACKEND once the mount effect has read it from the host process.
   const envOverridesRef = useRef<Partial<AssistantConfig>>(envOverrides)
-  const initialResolved = resolveConfig({}, envOverrides)
+  const initialResolved = resolveConfig(envDefaults, envOverrides)
   const [config, setConfig] = useState<AssistantConfig>(initialResolved.config)
   const [overriddenKeys, setOverriddenKeys] = useState<ReadonlySet<keyof AssistantConfig>>(initialResolved.overriddenKeys)
   // Phase 8 of plans/hierarchical_goal_tree_and_steering_plan.html — now derived from the same
@@ -681,14 +683,14 @@ export function App(): React.JSX.Element {
           console.warn('Could not read ASSISTANT_LLM_BACKEND from the host environment:', err)
         }
       }
-      const resolved = resolveConfig(persisted, envOverridesRef.current)
+      const resolved = resolveConfig({ ...envDefaults, ...persisted }, envOverridesRef.current)
       if (cancelled) return
       configStoreRef.current = store
       setConfig(resolved.config)
       setOverriddenKeys(resolved.overriddenKeys)
       setLayerPins(applyBrowserLayerSettings(resolved.config.layers))
       if (store instanceof TauriConfigStore) setApiKeyMigrationNotice(store.consumeMigrationNotice())
-      setNeedsSetup(isFirstRun(persisted, resolved.overriddenKeys))
+      setNeedsSetup(isFirstRun(persisted, new Set([...resolved.overriddenKeys, ...envDefaultKeys])))
       const assistant = await buildAssistant(resolved.config)
       if (!cancelled) {
         assistantRef.current = assistant
@@ -719,7 +721,7 @@ export function App(): React.JSX.Element {
     }
     await store.save(patch)
     const persisted = await store.load()
-    const resolved = resolveConfig(persisted, envOverridesRef.current)
+    const resolved = resolveConfig({ ...envDefaults, ...persisted }, envOverridesRef.current)
     setConfig(resolved.config)
     setOverriddenKeys(resolved.overriddenKeys)
     // Before the rebuild: layers read their flags per turn, but a hook wired at build time must see the new choice too.

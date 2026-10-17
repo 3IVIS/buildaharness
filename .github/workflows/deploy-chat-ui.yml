@@ -70,6 +70,9 @@ jobs:
           # "Bring your own AI key" notice and makes Send open key setup until a key is saved
           # (packages/chat-ui/src/key-gate.ts). Unset for every other build.
           VITE_ASSISTANT_REQUIRE_KEY: 'true'
+          # The three web values above are defaults, not pins: a visitor can point /try at a proxy of their own (a self-hosted one,
+          # or the local Claude bridge) from Settings. Without this the proxy address and web backend are read-only on this build.
+          VITE_ASSISTANT_DEFAULTS_ONLY: 'proxyUrl,enableWeb,webBackend'
         run: npm run build --workspace=packages/chat-ui
 
       - name: Check deploy key is present
