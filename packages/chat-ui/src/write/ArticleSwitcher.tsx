@@ -9,7 +9,7 @@ export interface ArticleItem {
 const shownName = (a: ArticleItem): string => (a.name ?? a.title) || 'Untitled'
 
 /** The article's short name in the header, cut off with an ellipsis when it is long. Opens a list of articles and a way to rename the current one. */
-export function ArticleSwitcher({ articles, activeId, onSelect, onRename, onNew, onExport, onImport }: { articles: ArticleItem[]; activeId: string | undefined; onSelect: (id: string) => void; onRename: () => void; onNew: () => void; onExport: () => void; onImport: (file: File) => void }): React.JSX.Element {
+export function ArticleSwitcher({ articles, activeId, onSelect, onRename, onNew, onExport, onImport, onOpenPage }: { articles: ArticleItem[]; activeId: string | undefined; onSelect: (id: string) => void; onRename: () => void; onNew: () => void; onExport: () => void; onImport: (file: File) => void; /** Absent where pages cannot be read. */ onOpenPage?: () => void }): React.JSX.Element {
   const [open, setOpen] = useState(false)
   const box = useRef<HTMLDivElement | null>(null)
   const picker = useRef<HTMLInputElement | null>(null)
@@ -26,7 +26,7 @@ export function ArticleSwitcher({ articles, activeId, onSelect, onRename, onNew,
         <span className="write__switchname">{active ? shownName(active) : 'No articles yet'}</span>
         <svg viewBox="0 0 24 24" width="16" height="16" aria-hidden="true" focusable="false"><path d="M6 9l6 6 6-6" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" /></svg>
       </button>
-      <input ref={picker} type="file" accept="application/json,.json" hidden aria-label="Choose an exported article" onChange={(e) => { const f = e.target.files?.[0]; if (f) onImport(f); e.target.value = '' }} />
+      <input ref={picker} type="file" accept="application/json,.json,.md,.mdx,.markdown,.txt,.html,.htm" hidden aria-label="Choose an exported article" onChange={(e) => { const f = e.target.files?.[0]; if (f) onImport(f); e.target.value = '' }} />
       {open && (
         <ul className="write__menu" role="listbox" aria-label="Articles">
           {articles.map((a) => (
@@ -37,7 +37,8 @@ export function ArticleSwitcher({ articles, activeId, onSelect, onRename, onNew,
           <li role="presentation" className="write__menu-sep"><button type="button" onClick={() => { setOpen(false); onNew() }}>New article…</button></li>
           <li role="presentation"><button type="button" onClick={() => { setOpen(false); onRename() }} disabled={!active}>Rename this article…</button></li>
           <li role="presentation"><button type="button" onClick={() => { setOpen(false); onExport() }} disabled={!active}>Export this article</button></li>
-          <li role="presentation"><button type="button" onClick={() => { setOpen(false); picker.current?.click() }}>Import an article…</button></li>
+          <li role="presentation"><button type="button" onClick={() => { setOpen(false); picker.current?.click() }}>Open or import a file…</button></li>
+          {onOpenPage && <li role="presentation"><button type="button" onClick={() => { setOpen(false); onOpenPage() }}>Open a web page to edit…</button></li>}
         </ul>
       )}
     </div>

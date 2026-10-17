@@ -47,6 +47,8 @@ export interface WriteServices {
   spentUsd(): number
   /** Whether this page can search the web for sources (a proxy and a search key are set up). */
   canSearch: boolean
+  /** Whether this page can read a web page by its address (a proxy is set up). */
+  canReadPages: boolean
   /** Asks the writer for a folder on their computer to take source files from. Absent where the browser cannot (Safari, Firefox). Resolves to undefined when cancelled. */
   pickFolder?: () => Promise<FolderReader | undefined>
   /** Dollars and calls so far for each kind of call, biggest first. */
@@ -124,6 +126,7 @@ export async function assembleWriteServices(parts: {
       },
     },
     canSearch: parts.searchWeb !== undefined,
+    canReadPages: parts.fetchWeb !== undefined,
     pickFolder: parts.pickFolder,
     spentUsd: () => meter.spentUsd(),
     spendByType: () => Object.entries(meter.byType()).map(([id, v]) => ({ id, ...v })).sort((a, b) => b.usd - a.usd),

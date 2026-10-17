@@ -606,6 +606,16 @@
       "batch": null,
       "rationale": "Boolean parse of an operator-set env var, not user natural language (D5).",
       "class": "A"
+    },
+    {
+      "id": "html-reader",
+      "file": "packages/aielia/src/writer/html-to-markdown.ts",
+      "line": 1,
+      "decides": "reads HTML markup (tag and entity names) to turn a fetched page into markdown",
+      "inputs": null,
+      "batch": null,
+      "rationale": "HTML tag and entity names are syntax, not natural language; nothing about the page's meaning is decided",
+      "class": "A"
     }
   ],
   "scanBaseline": {
@@ -623,6 +633,7 @@
     "packages/aielia/src/shell-tools.ts": 1,
     "packages/aielia/src/tui-app.tsx": 2,
     "packages/harness/src/harness-runtime.ts": 1,
-    "packages/runtime/src/openai-compatible-client.ts": 3
+    "packages/runtime/src/openai-compatible-client.ts": 3,
+    "packages/aielia/src/writer/html-to-markdown.ts": 8
   }
 }

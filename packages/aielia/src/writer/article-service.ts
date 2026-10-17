@@ -15,7 +15,7 @@ import { checkIntegrity, computeReadiness, confirmLink, createSnapshot, removeLi
 import { suggestEdits, type EditSuggestResult } from './article-edit-suggest.js'
 import { reconcileSections } from './article-sections.js'
 import { folderFileAddress, pathInFolder, type FolderReader } from './local-folder.js'
-import { acceptNewPassage, applyRecheck, createSource, excerptFor, sourceKindForFile, parseRepoFileLink, sliceLines, type LineRange } from './article-sources.js'
+import { acceptNewPassage, applyRecheck, createSource, excerptFor, pageToArticle, sourceKindForFile, parseRepoFileLink, sliceLines, type LineRange } from './article-sources.js'
 import { acceptSuggestion, refreshSuggestions, rejectSuggestion } from './article-suggestions.js'
 import { checkClaimSupport, needsAutoCheck, type SupportCheck } from './article-support.js'
 import { loadPermissions } from './write-permissions.js'
@@ -333,6 +333,36 @@ export class ArticleService {
     if (!src) return { status: 'no_match', impacts: [] }
     const r = await this.receiveText(id, b, src, excerptFor(src, text.slice(0, MAX_SOURCE_CHARS * 4)), modelOverride)
     return { ...r, sourceId: src.id }
+  }
+
+  /**
+   * Pulls a web page (or a repository file, by its GitHub link) in as a new article to edit: the page text becomes the article text, and the address is kept
+   * as a source marked as where it came from. Nothing in the text is treated as checked.
+   */
+  async importPage(address: string): Promise<{ ok: true; id: string } | { ok: false; reason: string }> {
+    const url = address.trim()
+    if (!isHttpAddress(url)) return { ok: false, reason: 'Type a web address that starts with http:// or https://.' }
+    if (!this.opts.fetchWeb) return { ok: false, reason: 'This browser cannot read web pages. Paste the text into a new article instead.' }
+    let text: string
+    try {
+      text = await this.opts.fetchWeb(parseRepoFileLink(url)?.rawUrl ?? url)
+    } catch (e) {
+      return { ok: false, reason: `The page could not be read: ${e instanceof Error ? e.message : String(e)}` }
+    }
+    const page = pageToArticle(text.slice(0, MAX_SOURCE_CHARS * 4), url)
+    if (!page.markdown) return { ok: false, reason: 'The page had no text.' }
+    const id = await this.create(page.title.slice(0, 120), page.markdown)
+    await this.addSource(id, { kind: 'web', address: url, passage: page.markdown.slice(0, MAX_SOURCE_CHARS), note: 'The page this article was imported from.' })
+    return { ok: true, id }
+  }
+
+  /** A text, markdown, MDX or HTML file the writer opens to edit becomes a new article (HTML is turned into markdown). */
+  async importTextFile(name: string, text: string): Promise<{ ok: true; id: string } | { ok: false; reason: string }> {
+    if (!sourceKindForFile({ name })) return { ok: false, reason: 'Only text, markdown, MDX, HTML and code files can be opened to edit.' }
+    const page = pageToArticle(text.slice(0, MAX_SOURCE_CHARS * 4), name)
+    if (!page.markdown) return { ok: false, reason: 'The file had no text.' }
+    const base = name.replace(/\.[^./]+$/, '')
+    return { ok: true, id: await this.create(page.title.length <= 120 && page.title !== name ? page.title : base, page.markdown) }
   }
 
   /**

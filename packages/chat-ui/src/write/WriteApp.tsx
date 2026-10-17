@@ -234,12 +234,32 @@ export function WriteApp({ services }: { services: WriteServices }): React.JSX.E
 
   async function importArticle(file: File): Promise<void> {
     await run('Importing', async () => {
+      if (!file.name.toLowerCase().endsWith('.json')) {
+        const r = await service.importTextFile(file.name, await file.text())
+        if (!r.ok) throw new Error(r.reason)
+        await refreshList()
+        await select(r.id)
+        setNotice('This is a copy of the file. Editing it does not change the original.')
+        return
+      }
       let folder: Record<string, string>
       try { folder = JSON.parse(await file.text()) as Record<string, string> } catch { throw new Error('That file is not an exported article.') }
       const r = await service.importArticle(folder)
       if (!r.ok) throw new Error(r.reason)
       await refreshList()
       await select(r.id)
+    })
+  }
+
+  async function openPage(): Promise<void> {
+    const address = window.prompt('Address of the web page to bring in and edit (http:// or https://)?')
+    if (!address?.trim()) return
+    await run('Reading the page', async () => {
+      const r = await service.importPage(address)
+      if (!r.ok) throw new Error(r.reason)
+      await refreshList()
+      await select(r.id)
+      setNotice('This is a copy of the page as it reads now. Editing it does not change the original, and the page is kept as a source so you can see where it came from.')
     })
   }
 
@@ -439,7 +459,7 @@ export function WriteApp({ services }: { services: WriteServices }): React.JSX.E
     <div className="write">
       <header className="write__bar">
         <h1 className="write__title">Aielia Write</h1>
-        <ArticleSwitcher articles={articles} activeId={activeId} onSelect={(id) => void select(id)} onRename={() => void renameArticle()} onNew={() => void createArticle()} onExport={() => void exportArticle()} onImport={(f) => void importArticle(f)} />
+        <ArticleSwitcher articles={articles} activeId={activeId} onSelect={(id) => void select(id)} onRename={() => void renameArticle()} onNew={() => void createArticle()} onExport={() => void exportArticle()} onImport={(f) => void importArticle(f)} onOpenPage={services.canReadPages ? () => void openPage() : undefined} />
         <div className="write__actions">
           <button type="button" className="write__primary" onClick={() => void publish()} disabled={!activeId || busy !== null}>Publish</button>
         </div>

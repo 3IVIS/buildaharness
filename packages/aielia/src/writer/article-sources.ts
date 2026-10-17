@@ -1,4 +1,5 @@
 import type { Source } from './article-model.js'
+import { htmlToMarkdown, looksLikeHtml } from './html-to-markdown.js'
 
 /**
  * Stored source passages (T6): the passage as read, its address, the date and a fingerprint, so a later recheck can tell
@@ -89,7 +90,7 @@ export function acceptNewPassage(source: Source, passage: string, now: string): 
   return { ...source, passage, readAt: now, fingerprint: fingerprintPassage(passage), freshness: 'current' }
 }
 
-const TEXT_EXTENSIONS = ['.txt', '.md', '.markdown', '.csv', '.tsv', '.json', '.log']
+const TEXT_EXTENSIONS = ['.txt', '.md', '.mdx', '.markdown', '.rst', '.csv', '.tsv', '.json', '.log']
 const CODE_EXTENSIONS = ['.ts', '.tsx', '.js', '.jsx', '.mjs', '.cjs', '.py', '.rb', '.go', '.rs', '.java', '.kt', '.swift', '.c', '.h', '.cc', '.cpp', '.hpp', '.cs', '.php', '.sh', '.bash', '.sql', '.yaml', '.yml', '.toml', '.ini', '.xml', '.html', '.css', '.scss', '.lua', '.r', '.scala']
 
 /**
@@ -101,4 +102,21 @@ export function sourceKindForFile(file: { name: string; type?: string }): 'code'
   if (CODE_EXTENSIONS.some((e) => name.endsWith(e))) return 'code'
   if (TEXT_EXTENSIONS.some((e) => name.endsWith(e)) || (file.type ?? '').startsWith('text/')) return 'upload'
   return undefined
+}
+
+/**
+ * The text of a fetched page made ready to edit: line endings normalised, runs of blank lines cut to one, trailing spaces dropped. The title is the first
+ * heading or, failing that, the first short line; the page's host if there is no text line to use.
+ */
+export function pageToArticle(text: string, address: string): { title: string; markdown: string } {
+  const readable = looksLikeHtml(text) ? htmlToMarkdown(text) : text
+  const markdown = readable.replace(/\r\n?/g, '\n').replace(/[ \t]+\n/g, '\n').replace(/\n{3,}/g, '\n\n').trim()
+  const first = markdown.split('\n').map((l) => l.replace(/^#+\s*/, '').trim()).find((l) => l.length > 0 && l.length <= 120)
+  let host = address
+  try {
+    host = new URL(address).hostname
+  } catch {
+    // keep the address as given
+  }
+  return { title: first ?? host, markdown: markdown ? `${markdown}\n` : '' }
 }

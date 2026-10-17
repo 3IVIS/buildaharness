@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, afterEach } from 'vitest'
-import { render, screen, waitFor, fireEvent, within } from '@testing-library/react'
+import { render, screen, waitFor, fireEvent, within, cleanup } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { ArticleService, createMemoryArticleStore, type PersonalAssistant } from '@buildaharness/aielia'
 import type { ILLMClient } from '@buildaharness/runtime'
@@ -66,7 +66,7 @@ describe('header and article menu', () => {
     for (const gone of ['New', 'Export', 'Import', 'Check article']) expect(screen.queryByRole('button', { name: gone })).toBeNull()
     await openMenu()
     const menu = screen.getByRole('listbox', { name: 'Articles' })
-    for (const item of [/New article/, /Rename this article/, /Export this article/, /Import an article/]) expect(within(menu).getByRole('button', { name: item })).toBeInTheDocument()
+    for (const item of [/New article/, /Rename this article/, /Export this article/, /Open or import a file/]) expect(within(menu).getByRole('button', { name: item })).toBeInTheDocument()
   })
 
   it('starts empty, creates an article from the menu, and shows its sections in the outline', async () => {
@@ -608,6 +608,37 @@ describe('code sources', () => {
     await userEvent.click(within(dock).getByRole('button', { name: 'Change which lines are kept' }))
     await waitFor(async () => expect((await s.service.get(id)).meta.sources[0]).toMatchObject({ passage: 'one\ntwo\nthree\nfour', lines: { from: 1, to: 4 } }))
     ask.mockRestore()
+  })
+})
+
+describe('bringing a page or file in to edit', () => {
+  it('reads a web page into a new article, says it is a copy, and offers it only where pages can be read', async () => {
+    const base = await services({}, MD, async () => '<html><body><h1>Caching</h1><p>The cache holds 100 items.</p></body></html>')
+    vi.spyOn(window, 'prompt').mockReturnValue('https://example.com/post')
+    render(<WriteApp services={base} />)
+    await waitForText()
+    await openMenu()
+    await userEvent.click(screen.getByRole('button', { name: /Open a web page to edit/ }))
+    expect(await screen.findByText(/This is a copy of the page/)).toBeInTheDocument()
+    await waitFor(async () => expect((await base.service.list()).length).toBe(2))
+    const made = (await base.service.list()).find((a) => a.name === 'Caching' || a.title === 'Caching')
+    if (!made) throw new Error('no imported article')
+    expect((await base.service.get(made.id)).markdown).toBe('# Caching\n\nThe cache holds 100 items.\n')
+    cleanup()
+    const none = await services({}, MD)
+    render(<WriteApp services={none} />)
+    await waitForText()
+    await openMenu()
+    expect(screen.queryByRole('button', { name: /Open a web page to edit/ })).toBeNull()
+  })
+  it('opens an HTML or MDX file as a copy to edit', async () => {
+    const s = await services({}, MD)
+    render(<WriteApp services={s} />)
+    await waitForText()
+    const file = new File(['<html><body><h1>From a file</h1><p>Body.</p></body></html>'], 'page.html', { type: 'text/html' })
+    await userEvent.upload(screen.getByLabelText('Choose an exported article'), file)
+    expect(await screen.findByText(/This is a copy of the file/)).toBeInTheDocument()
+    await waitFor(async () => expect((await s.service.list()).length).toBe(2))
   })
 })
 

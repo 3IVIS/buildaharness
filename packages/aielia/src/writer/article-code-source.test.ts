@@ -103,3 +103,32 @@ describe('a new version of a dropped file', () => {
     expect(await svc.offerFileVersion(id, 'a.ts', 'X\nb\nc\nY')).toMatchObject({ status: 'unchanged' })
   })
 })
+
+describe('pulling a page in to edit', () => {
+  const PAGE = 'Caching in practice\r\n\r\n\r\n\r\nThe cache holds 100 items.   \r\nIt is quick.\r\n'
+  it('makes a new article from the page text with the page kept as its origin', async () => {
+    const calls: string[] = []
+    const svc = new ArticleService({ store: createMemoryArticleStore(), llm: llm(), now: () => NOW, fetchWeb: async (u) => { calls.push(u); return PAGE } })
+    const r = await svc.importPage(' https://example.com/post ')
+    if (!r.ok) throw new Error(r.reason)
+    const b = await svc.get(r.id)
+    expect(calls).toEqual(['https://example.com/post'])
+    expect(b.markdown).toBe('Caching in practice\n\nThe cache holds 100 items.\nIt is quick.\n')
+    expect(b.meta.name).toBe('Caching in practice')
+    expect(b.meta.sources[0]).toMatchObject({ kind: 'web', address: 'https://example.com/post', note: 'The page this article was imported from.' })
+    expect(b.meta.claims).toEqual([])
+  })
+  it('reads a GitHub markdown file from its raw address, and says why when it cannot import', async () => {
+    const calls: string[] = []
+    const svc = new ArticleService({ store: createMemoryArticleStore(), llm: llm(), now: () => NOW, fetchWeb: async (u) => { calls.push(u); return '# Notes\n\nHello.\n' } })
+    const r = await svc.importPage('https://github.com/o/r/blob/main/NOTES.md')
+    expect(r.ok).toBe(true)
+    expect(calls).toEqual(['https://raw.githubusercontent.com/o/r/main/NOTES.md'])
+    expect(await svc.importPage('not a link')).toMatchObject({ ok: false })
+    expect(await new ArticleService({ store: createMemoryArticleStore(), llm: llm() }).importPage('https://x.test')).toMatchObject({ ok: false })
+    const down = new ArticleService({ store: createMemoryArticleStore(), llm: llm(), fetchWeb: async () => { throw new Error('503') } })
+    expect(await down.importPage('https://x.test')).toMatchObject({ ok: false, reason: expect.stringContaining('503') })
+    const empty = new ArticleService({ store: createMemoryArticleStore(), llm: llm(), fetchWeb: async () => '  \n ' })
+    expect(await empty.importPage('https://x.test')).toMatchObject({ ok: false })
+  })
+})
