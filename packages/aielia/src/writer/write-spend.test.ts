@@ -37,6 +37,10 @@ describe('call types', () => {
     await svc.readSource(id, src) // source change
     await svc.proposeLinksForSource(id, src) // source links
     await svc.findDependencies(id) // links
+    const id2 = await svc.create('Other', MD) // a claim with no source, so a repository is looked in
+    await svc.analyze(id2)
+    svc.attachRepo(id2, { name: 'o/r', files: async () => ['a.ts'], read: async () => 'x' })
+    await svc.verifyClaims(id2) // repo files
     await svc.suggest(id, 'tighten it') // edits
     await svc.suggestIdeas(id) // ideas
     await processWriterMessage({ port: createArticleChatPort(store), message: 'Dana says check the figure', now: NOW }, recording(seen)) // capture

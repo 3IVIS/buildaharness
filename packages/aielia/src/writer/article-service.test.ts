@@ -8,7 +8,7 @@ import { effectiveSourceStatus } from './article-rules.js'
 
 const NOW = '2026-10-16T10:00:00.000Z'
 const MD = '# Post\n\nIntro: p99 under 20 ms.\n\n## Latency\n\nThe p99 was 18 ms.\n\n## Conclusion\n\nSo p99 stays under 20 ms.\n'
-const MARK = { claims: 'You read parts of an article and list the claims', resolve: 'You help a writer keep an article consistent', support: 'You check whether a claim from an article', capture: 'A writer is working with an assistant', edits: 'You propose edits to an article', consistency: 'You check an article for two kinds of problem' }
+const MARK = { claims: 'You read parts of an article and list the claims', resolve: 'You help a writer keep an article consistent', support: 'You check whether a claim from an article', capture: 'A writer is working with an assistant', edits: 'You propose edits to an article', consistency: 'You check an article for two kinds of problem', repo: 'You help check a claim from an article against a software repository' }
 
 type Router = Partial<Record<keyof typeof MARK, unknown | ((user: string) => unknown)>>
 function routed(r: Router, calls: string[] = []): ILLMClient {
@@ -557,5 +557,53 @@ describe('serializeByArticle', () => {
     expect(await build(false)).toHaveLength(1) // the lost update this wrapper exists for
     expect(await build(true)).toEqual(expect.arrayContaining([expect.any(String)]))
     expect((await build(true))).toHaveLength(2)
+  })
+})
+
+describe('verifying claims in an attached repository', () => {
+  const reader = (files: Record<string, string>, name = 'o/r') => ({
+    name,
+    files: async () => Object.keys(files),
+    read: async (p: string) => files[p],
+    addressOf: (p: string) => `https://github.com/${name}/blob/HEAD/${p}`,
+  })
+  const setup = (r: Router, calls: string[] = []) => {
+    const { svc: s } = svc({ claims: { claims: [{ quote: 'Intro: p99 under 20 ms.', kind: 'factual', matchesId: null, sure: true }] }, resolve: { affected: [] }, ...r }, calls)
+    return s
+  }
+
+  it('picks files, keeps the ones that back the claim as sources and says which', async () => {
+    const calls: string[] = []
+    const s = setup({ repo: { paths: ['src/limit.ts', 'nope.ts'] }, support: { verdict: 'supported', reason: 'the limit is 20' } }, calls)
+    const id = await s.create('Post', MD)
+    s.attachRepo(id, reader({ 'src/limit.ts': 'const P99_LIMIT_MS = 20', 'README.md': 'x' }))
+    const report = await s.verifyClaims(id)
+    expect(report.entries[0]).toMatchObject({ outcome: 'supported', found: ['https://github.com/o/r/blob/HEAD/src/limit.ts'] })
+    const b = await s.get(id)
+    expect(b.meta.sources).toEqual([expect.objectContaining({ kind: 'code', address: 'https://github.com/o/r/blob/HEAD/src/limit.ts', passage: 'const P99_LIMIT_MS = 20' })])
+    expect(calls).toContain('repo')
+  })
+
+  it('drops the files again when they do not back the claim, and says no source was found when nothing else can search', async () => {
+    const s = setup({ repo: { paths: ['src/limit.ts'] }, support: { verdict: 'not_supported', reason: 'unrelated' } })
+    const id = await s.create('Post', MD)
+    s.attachRepo(id, reader({ 'src/limit.ts': 'const x = 1' }))
+    const report = await s.verifyClaims(id)
+    expect(report.entries[0].outcome).toBe('no_source_found')
+    expect((await s.get(id)).meta.sources).toEqual([])
+    expect((await s.get(id)).meta.claims[0].lookup).toMatchObject({ outcome: 'no_results' })
+  })
+
+  it('reads no file when the model names none, and the detached repository is not used', async () => {
+    const reads: string[] = []
+    const s = setup({ repo: { paths: [] } })
+    const id = await s.create('Post', MD)
+    s.attachRepo(id, { ...reader({ 'a.ts': 'x' }), read: async (p: string) => { reads.push(p); return 'x' } })
+    expect(s.attachedRepos(id)).toEqual(['o/r'])
+    expect((await s.verifyClaims(id)).entries[0].outcome).toBe('no_source_found')
+    expect(reads).toEqual([])
+    s.detachRepo(id, 'o/r')
+    expect(s.attachedRepos(id)).toEqual([])
+    expect((await s.verifyClaims(id)).entries[0].outcome).toBe('cannot_search')
   })
 })
