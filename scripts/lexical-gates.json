@@ -634,6 +634,6 @@
     "packages/aielia/src/tui-app.tsx": 2,
     "packages/harness/src/harness-runtime.ts": 1,
     "packages/runtime/src/openai-compatible-client.ts": 3,
-    "packages/aielia/src/writer/html-to-markdown.ts": 8
+    "packages/aielia/src/writer/html-to-markdown.ts": 11
   }
 }

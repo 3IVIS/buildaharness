@@ -250,7 +250,7 @@ describe('chat: model, check and adjust', () => {
     expect(screen.getAllByTitle('The model that wrote this').at(-1)).toHaveTextContent(s.models.chat())
   })
 
-  it('underlines the claims it found in the text, and says what the tones mean', async () => {
+  it('tints the sentences of the claims it found, says what the colours mean, and the marks can be switched off', async () => {
     const s = await services({ capture: { articleId: null, ops: [] }, claims: { claims: [{ quote: 'The p99 was 18 ms.', kind: 'factual', matchesId: null, sure: true }] }, resolve: { affected: [] } }, MD)
     const { container } = render(<WriteApp services={s} />)
     await waitForText()
@@ -260,8 +260,14 @@ describe('chat: model, check and adjust', () => {
     await screen.findByText(/I found 1 factual claim/)
     await waitFor(() => expect(container.querySelector('mark')?.textContent).toBe('The p99 was 18 ms.'))
     expect(container.querySelector('mark')).toHaveClass('write__mark--look')
-    expect(screen.getByText(/Underlined claims:/)).toHaveTextContent('needs a look')
+    expect(screen.getByText('needs a source')).toBeInTheDocument()
     expect(container.querySelector('.write__backdrop')).toHaveAttribute('aria-hidden', 'true')
+    putCursor('18 ms')
+    expect(await screen.findByText(/Here: needs a source/)).toBeInTheDocument()
+    await userEvent.click(screen.getByRole('checkbox', { name: 'Show marks in the text' }))
+    expect(container.querySelector('mark')).toBeNull()
+    expect(screen.queryByText(/Here:/)).toBeNull()
+    localStorage.removeItem('aielia-write.tint')
   })
 
   it('an adjustment is sent with Enter as an ordinary chat message, and the edits come back as suggestions', async () => {
@@ -666,6 +672,30 @@ describe('bringing a page or file in to edit', () => {
     await userEvent.upload(screen.getByLabelText('Choose an exported article'), file)
     expect(await screen.findByText(/This is a copy of the file/)).toBeInTheDocument()
     await waitFor(async () => expect((await s.service.list()).length).toBe(2))
+  })
+})
+
+describe('selecting by sentence, paragraph and section', () => {
+  const TEXT = '# Post\n\nFirst one. The p99 was 18 ms. Last one.\n\n## Latency\n\nIt is quick.\n'
+  const selected = (): string => { const t = screen.getByLabelText('Article text') as HTMLTextAreaElement; return t.value.slice(t.selectionStart, t.selectionEnd) }
+  it('grows from the cursor to the sentence, paragraph and section with one button, shrinks back, and works from the keyboard', async () => {
+    const s = await services({}, TEXT)
+    render(<WriteApp services={s} />)
+    await waitForText()
+    putCursor('18 ms')
+    const more = screen.getByRole('button', { name: /Select more/ })
+    await userEvent.click(more)
+    expect(selected()).toBe('The p99 was 18 ms.')
+    expect(await screen.findByText('Selected: sentence')).toBeInTheDocument()
+    await userEvent.click(more)
+    expect(selected()).toBe('First one. The p99 was 18 ms. Last one.')
+    await userEvent.click(more)
+    expect(selected()).toBe(TEXT.trim())
+    expect(await screen.findByText('Selected: section')).toBeInTheDocument()
+    await userEvent.click(screen.getByRole('button', { name: /Select less/ }))
+    expect(selected()).toBe('First one. The p99 was 18 ms. Last one.')
+    fireEvent.keyDown(screen.getByLabelText('Article text'), { key: 'ArrowUp', altKey: true, shiftKey: true })
+    expect(await screen.findByText('Selected: section')).toBeInTheDocument()
   })
 })
 

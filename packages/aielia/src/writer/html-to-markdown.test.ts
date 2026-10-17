@@ -36,6 +36,32 @@ describe('HTML to markdown', () => {
   })
 })
 
+describe('HTML as found on real pages', () => {
+  it('joins the lines of a hard-wrapped paragraph, so a sentence is not cut at the source line breaks', () => {
+    expect(htmlToMarkdown('<p>The cache holds\n   100 items. It is\nquick.</p>')).toBe('The cache holds 100 items. It is quick.\n')
+  })
+  it('drops navigation, menus and cookie banners that are plain divs, but never the column that holds the article', () => {
+    const page = '<body><div class="site-nav"><ul><li><a href="/">Home</a></li></ul></div><div id="cookie-banner">We use cookies</div><div class="content with-sidebar"><h1>Title</h1><p>Real text here.</p><div class="sidebar"><p>Related stuff</p></div></div></body>'
+    const md = htmlToMarkdown(page)
+    expect(md).toBe('# Title\n\nReal text here.\n')
+  })
+  it('keeps a header that holds the article heading and drops one that does not', () => {
+    expect(htmlToMarkdown('<article><header><h1>Post</h1><p class="by">By me</p></header><p>Body.</p></article>')).toBe('# Post\n\nBy me\n\nBody.\n')
+    expect(htmlToMarkdown('<body><header><a href="/">Logo</a></header><p>Body.</p></body>')).toBe('Body.\n')
+  })
+  it('reads past a ">" inside an attribute value', () => {
+    expect(htmlToMarkdown('<p>One <span data-x="a > b</code>">two</span> three</p>')).toBe('One two three\n')
+  })
+  it('makes tight lists without empty bullets', () => {
+    expect(htmlToMarkdown('<ul>\n <li>\n  <a href="/a">one</a>\n </li>\n <li></li>\n <li>two</li>\n</ul>')).toBe('- [one](/a)\n- two\n')
+  })
+  it('titles the article from its heading, else the page title without the site name, else the first line', () => {
+    expect(pageToArticle('<html><head><title>Post | Site</title></head><body><h1>The Post</h1><p>x</p></body></html>', 'https://s.test').title).toBe('The Post')
+    expect(pageToArticle('<html><head><title>Example Domain - Site</title></head><body><p>No heading here.</p></body></html>', 'https://s.test').title).toBe('Example Domain')
+    expect(pageToArticle('Just a line\n\nMore.', 'https://s.test').title).toBe('Just a line')
+  })
+})
+
 describe('opening a file to edit', () => {
   const svc = new ArticleService({ store: createMemoryArticleStore(), llm: {} as unknown as ILLMClient })
   it('turns MDX, markdown and HTML files into articles and refuses other kinds', async () => {

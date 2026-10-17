@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
-import { type FolderReader, summarizeVerify, type VerifyReport, claimMarks, collectIssues, parseLineRange, sourceKindForFile, computeReadiness, effectiveSourceStatus, issueCount, type ArticleBundle, type ChangeSummary, type DependencyKind, type IssueCategory, type StyleProfile, type WritePermissions } from '@buildaharness/aielia'
+import { type FolderReader, expandSelection, summarizeVerify, type VerifyReport, textPieces, collectIssues, parseLineRange, sourceKindForFile, computeReadiness, effectiveSourceStatus, issueCount, type ArticleBundle, type ChangeSummary, type DependencyKind, type IssueCategory, type StyleProfile, type WritePermissions } from '@buildaharness/aielia'
 import type { ChatAction } from './AdjustBar'
 import { ArticleSwitcher, type ArticleItem } from './ArticleSwitcher'
 import { ChatPane, type ChatLine } from './ChatPane'
@@ -139,6 +139,34 @@ export function WriteApp({ services, connection }: { services: WriteServices; co
   }
 
   /** Runs a change to the article that starts from the saved text, then shows the result. */
+  // Growing the selection by sentence, paragraph, section: the earlier selections are kept so it can shrink back.
+  const growth = useRef<{ range: { start: number; end: number }; unit: string }[]>([])
+  const [grownUnit, setGrownUnit] = useState<string | undefined>()
+  const grownTo = useRef<{ start: number; end: number } | undefined>()
+  const applySelection = (range: { start: number; end: number }): void => {
+    const t = textRef.current
+    if (!t) return
+    t.focus({ preventScroll: true })
+    t.setSelectionRange(range.start, range.end)
+    grownTo.current = range
+    setSelection(range)
+  }
+  const growSelection = (): void => {
+    const t = textRef.current
+    if (!t) return
+    const now = { start: t.selectionStart, end: t.selectionEnd }
+    const next = expandSelection(t.value, now)
+    if (!next) { setNotice('The whole article is already selected.'); return }
+    growth.current.push({ range: now, unit: next.unit })
+    setGrownUnit(next.unit)
+    applySelection(next.range)
+  }
+  const shrinkSelection = (): void => {
+    const back = growth.current.pop()
+    if (!back) { const t = textRef.current; if (t) applySelection({ start: t.selectionStart, end: t.selectionStart }); setGrownUnit(undefined); return }
+    setGrownUnit(growth.current.at(-1)?.unit)
+    applySelection(back.range)
+  }
   const [folder, setFolder] = useState<{ reader: FolderReader; files: string[] } | undefined>()
   const folderRef = useRef(folder)
   folderRef.current = folder
@@ -547,7 +575,7 @@ export function WriteApp({ services, connection }: { services: WriteServices; co
         </aside>
         {ready && meta ? (
           <section className={`write__pane write__pane--text ${tab === 'text' || tab === 'chat' ? 'is-shown' : ''}`} aria-label="Text">
-            <MarkedText textRef={textRef} value={draft} marks={claimMarks(meta, draft)} onChange={onType} onSelection={setSelection} />
+            <MarkedText textRef={textRef} value={draft} pieces={textPieces(meta, draft)} caret={selection?.start ?? 0} onChange={onType} onSelection={(r) => { setSelection(r); const g = grownTo.current; if (!g || g.start !== r.start || g.end !== r.end) { growth.current = []; grownTo.current = undefined; setGrownUnit(undefined) } }} onGrow={growSelection} onShrink={shrinkSelection} unit={grownUnit} />
             <TextNotes
               meta={meta}
               markdown={draft}

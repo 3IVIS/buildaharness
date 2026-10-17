@@ -106,6 +106,9 @@ function isReadableLink(s: Source): boolean {
   return (s.kind === 'web' || s.kind === 'code') && !!s.address && isHttpAddress(s.address)
 }
 
+/** The most of a page's markup read when it is brought in to edit; the text made from it is cut separately. */
+const MAX_PAGE_HTML_CHARS = 3_000_000
+
 /** The most of a page kept as a source passage. */
 const MAX_SOURCE_CHARS = 30000
 
@@ -350,8 +353,9 @@ export class ArticleService {
     } catch (e) {
       return { ok: false, reason: `The page could not be read: ${e instanceof Error ? e.message : String(e)}` }
     }
-    const page = pageToArticle(text.slice(0, MAX_SOURCE_CHARS * 4), url)
-    if (!page.markdown) return { ok: false, reason: 'The page had no text.' }
+    const page = pageToArticle(text.slice(0, MAX_PAGE_HTML_CHARS), url)
+    page.markdown = page.markdown.slice(0, MAX_SOURCE_CHARS * 4)
+    if (!page.markdown.trim()) return { ok: false, reason: 'The page had no text.' }
     const id = await this.create(page.title.slice(0, 120), page.markdown)
     await this.addSource(id, { kind: 'web', address: url, passage: page.markdown.slice(0, MAX_SOURCE_CHARS), note: 'The page this article was imported from.' })
     return { ok: true, id }
@@ -360,8 +364,9 @@ export class ArticleService {
   /** A text, markdown, MDX or HTML file the writer opens to edit becomes a new article (HTML is turned into markdown). */
   async importTextFile(name: string, text: string): Promise<{ ok: true; id: string } | { ok: false; reason: string }> {
     if (!sourceKindForFile({ name })) return { ok: false, reason: 'Only text, markdown, MDX, HTML and code files can be opened to edit.' }
-    const page = pageToArticle(text.slice(0, MAX_SOURCE_CHARS * 4), name)
-    if (!page.markdown) return { ok: false, reason: 'The file had no text.' }
+    const page = pageToArticle(text.slice(0, MAX_PAGE_HTML_CHARS), name)
+    page.markdown = page.markdown.slice(0, MAX_SOURCE_CHARS * 4)
+    if (!page.markdown.trim()) return { ok: false, reason: 'The file had no text.' }
     const base = name.replace(/\.[^./]+$/, '')
     return { ok: true, id: await this.create(page.title.length <= 120 && page.title !== name ? page.title : base, page.markdown) }
   }

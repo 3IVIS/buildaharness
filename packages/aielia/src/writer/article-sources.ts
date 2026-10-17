@@ -1,5 +1,5 @@
 import type { Source } from './article-model.js'
-import { htmlToMarkdown, looksLikeHtml } from './html-to-markdown.js'
+import { htmlTitle, htmlToMarkdown, looksLikeHtml } from './html-to-markdown.js'
 
 /**
  * Stored source passages (T6): the passage as read, its address, the date and a fingerprint, so a later recheck can tell
@@ -109,14 +109,18 @@ export function sourceKindForFile(file: { name: string; type?: string }): 'code'
  * heading or, failing that, the first short line; the page's host if there is no text line to use.
  */
 export function pageToArticle(text: string, address: string): { title: string; markdown: string } {
-  const readable = looksLikeHtml(text) ? htmlToMarkdown(text) : text
+  const isHtml = looksLikeHtml(text)
+  const readable = isHtml ? htmlToMarkdown(text) : text
   const markdown = readable.replace(/\r\n?/g, '\n').replace(/[ \t]+\n/g, '\n').replace(/\n{3,}/g, '\n\n').trim()
-  const first = markdown.split('\n').map((l) => l.replace(/^#+\s*/, '').trim()).find((l) => l.length > 0 && l.length <= 120)
+  const lines = markdown.split('\n')
+  const heading = lines.find((l) => /^# \S/.test(l))?.replace(/^#\s*/, '').trim()
+  const first = lines.map((l) => l.replace(/^#+\s*/, '').trim()).find((l) => l.length > 0 && l.length <= 120)
   let host = address
   try {
     host = new URL(address).hostname
   } catch {
     // keep the address as given
   }
-  return { title: first ?? host, markdown: markdown ? `${markdown}\n` : '' }
+  const title = heading && heading.length <= 120 ? heading : (isHtml ? htmlTitle(text) : undefined) ?? first ?? host
+  return { title, markdown: markdown ? `${markdown}\n` : '' }
 }

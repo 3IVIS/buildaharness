@@ -6,7 +6,7 @@ const MD = '# Post\n\nThe p99 was 18 ms. We ran it on 8 cores. It is fast.\n'
 const claim = (id: string, quote: string, extra: Partial<Claim> = {}): Claim => ({ id, sectionId: 's1', quote, position: MD.indexOf(quote), kind: 'factual', author: 'model', authorAt: 'x', confirmed: false, sourceStatus: 'none', ...extra }) as Claim
 
 describe('claim marks', () => {
-  it('marks factual claims where the quote stands, in three tones', () => {
+  it('marks factual claims where the quote stands: green when backed, orange when a source is still needed, red when a source says the opposite', () => {
     const meta = {
       ...createArticleMeta('a', 'Post'),
       sources: [{ id: 'src1', kind: 'upload' as const, trust: 'normal' as const, freshness: 'current' as const, fingerprint: 'f1', passage: 'p' }],
@@ -20,7 +20,7 @@ describe('claim marks', () => {
     const marks = claimMarks(meta, MD)
     expect(marks.map((m) => [m.claimId, m.tone, MD.slice(m.start, m.end)])).toEqual([
       ['c1', 'ok', 'The p99 was 18 ms.'],
-      ['c2', 'bad', 'We ran it on 8 cores.'],
+      ['c2', 'look', 'We ran it on 8 cores.'],
       ['c3', 'look', 'It is fast.'],
     ])
   })
@@ -36,12 +36,37 @@ describe('claim marks', () => {
 })
 
 describe('a claim that was searched for and not backed', () => {
-  it('is marked as not supported, with its own status', () => {
+  it('stays orange (it still needs a source) with its own status', () => {
     const md = 'The p99 was 18 ms.'
     const base = { id: 'c1', sectionId: 's1', quote: md, position: 0, kind: 'factual' as const, author: 'writer' as const, authorAt: 'x', confirmed: true, sourceStatus: 'none' as const }
     const meta = { claims: [{ ...base, lookup: { at: '2026-10-17T00:00:00Z', claimText: md, outcome: 'none_supported' as const, tried: [] } }], sources: [] } as never
-    expect(claimMarks(meta, md)).toEqual([{ start: 0, end: md.length, claimId: 'c1', tone: 'bad', status: 'none_found' }])
+    expect(claimMarks(meta, md)).toEqual([{ start: 0, end: md.length, claimId: 'c1', tone: 'look', status: 'none_found' }])
     const unavailable = { claims: [{ ...base, lookup: { at: 'x', claimText: md, outcome: 'unavailable' as const, tried: [] } }], sources: [] } as never
     expect(claimMarks(unavailable, md)[0]).toMatchObject({ tone: 'look', status: 'none' })
+  })
+})
+
+describe('the tint covers the whole sentence', () => {
+  const TEXT = '# Post\n\nWe tried it. The p99 was 18.5 ms on 8 cores, which is fine. Then we left.\n\nNext paragraph here.\n'
+  const base = createArticleMeta('a', 'Post')
+  const c = (id: string, quote: string, extra: Partial<Claim> = {}): Claim => ({ id, sectionId: 's1', quote, position: TEXT.indexOf(quote), kind: 'factual', author: 'model', authorAt: 'x', confirmed: false, sourceStatus: 'none', ...extra }) as Claim
+  it('extends a partial quote to its sentence, not across a decimal point or into the next sentence', () => {
+    const [m] = claimMarks({ ...base, claims: [c('c1', 'p99 was 18.5 ms')] }, TEXT)
+    expect(TEXT.slice(m.start, m.end)).toBe('The p99 was 18.5 ms on 8 cores, which is fine.')
+  })
+  it('gives two claims in one sentence one tint in the worse tone, red above orange above green', () => {
+    const src = { id: 'src1', kind: 'upload' as const, trust: 'normal' as const, freshness: 'current' as const, fingerprint: 'f1', passage: 'p' }
+    const check = (q: string): never => ({ claimText: q, sourceFingerprints: { src1: 'f1' } }) as never
+    const ok = c('c1', 'p99 was 18.5 ms', { sourceStatus: 'supported', check: check('p99 was 18.5 ms') })
+    const against = c('c2', 'on 8 cores', { sourceStatus: 'contradicted', check: check('on 8 cores') })
+    const marks = claimMarks({ ...base, sources: [src], claims: [ok, against] }, TEXT)
+    expect(marks).toHaveLength(1)
+    expect(marks[0]).toMatchObject({ tone: 'bad', status: 'contradicted' })
+    expect(claimMarks({ ...base, sources: [src], claims: [ok] }, TEXT)[0].tone).toBe('ok')
+  })
+  it('stops at the end of a line, so a heading or list item is not joined to the next one', () => {
+    const t = '- one fact\n- two facts\n'
+    const [m] = claimMarks({ ...base, claims: [{ ...c('c1', 'one fact'), position: t.indexOf('one fact') }] }, t)
+    expect(t.slice(m.start, m.end)).toBe('- one fact'.slice(2))
   })
 })

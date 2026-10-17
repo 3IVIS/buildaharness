@@ -205,6 +205,8 @@ export { pageToArticle, sourceKindForFile, parseLineRange, parseRepoFileLink, sl
 export { CALL_TYPES, callTypeLabel, classifyCall } from './writer/write-spend.js'
 export type { CallType } from './writer/write-spend.js'
 export { claimMarks } from './writer/article-marks.js'
+export { expandSelection, type SelectionRange, type SelectionUnit } from './writer/article-selection.js'
+export { textPieces, describeAt, type TextPiece } from './writer/article-decorations.js'
 export type { ClaimMark, MarkTone } from './writer/article-marks.js'
 export type { Brief, StyleProfile } from './writer/article-model.js'
 export { WRITE_PARAMETERS, PARAMETER_GROUPS, findParameter, adjustmentInstruction } from './writer/write-parameters.js'
