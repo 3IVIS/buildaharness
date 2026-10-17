@@ -1,6 +1,8 @@
 import { useEffect, useState } from 'react'
 import { callTypeLabel, type WritePermissions } from '@buildaharness/aielia'
 import { ModelPicker } from './ModelPicker'
+import { ConnectionSettings } from './ConnectionSettings'
+import type { WriteConnection } from './write-config'
 
 interface Props {
   perms: WritePermissions | undefined
@@ -11,9 +13,11 @@ interface Props {
   suggestions: string[]
   onAutoModel: (model: string) => void
   onSave: (p: WritePermissions) => Promise<void>
+  /** The connection to the model and the web, when this page owns it. */
+  connection?: { value: WriteConnection; onSave: (c: WriteConnection) => void; onForget: () => void }
 }
 
-export function SettingsPane({ perms, spent, spentByType, autoModel, chatModel, suggestions, onAutoModel, onSave }: Props): React.JSX.Element {
+export function SettingsPane({ perms, spent, spentByType, autoModel, chatModel, suggestions, onAutoModel, onSave, connection }: Props): React.JSX.Element {
   const [cap, setCap] = useState<string>('')
   useEffect(() => setCap(perms?.spendCapUsd !== undefined ? String(perms.spendCapUsd) : ''), [perms])
   if (!perms) return <p className="write__muted">Loading…</p>
@@ -21,6 +25,7 @@ export function SettingsPane({ perms, spent, spentByType, autoModel, chatModel, 
   return (
     <div className="write__form">
       <h2 className="write__panehead">Settings</h2>
+      {connection && <ConnectionSettings value={connection.value} onSave={connection.onSave} onForget={connection.onForget} />}
       <p className="write__muted">Aielia only ever changes your text as suggestions you accept. These are the other things it may do on its own.</p>
       <label><input type="checkbox" checked={perms.captureChat} onChange={(e) => void save({ captureChat: e.target.checked })} /> Remember reviewer comments, decisions and corrections I mention in chat</label>
       <label><input type="checkbox" checked={perms.recheckBeforePublish} onChange={(e) => void save({ recheckBeforePublish: e.target.checked })} /> Read my web sources again before I publish, and tell me which changed</label>

@@ -11,6 +11,7 @@ import { IssuesPanel, type ResolveNote } from './IssuesPanel'
 import { LinksPanel } from './LinksPanel'
 import { OutlinePanel } from './OutlinePanel'
 import { SettingsPane } from './SettingsPane'
+import type { WriteConnection } from './write-config'
 import { TextNotes, looksLikeLink, type NoteKind } from './TextNotes'
 import { Icon } from './icons'
 import type { WriteServices } from './write-services'
@@ -60,7 +61,7 @@ const STATUS_LABEL: Record<string, string> = {
 
 let lineId = 0
 
-export function WriteApp({ services }: { services: WriteServices }): React.JSX.Element {
+export function WriteApp({ services, connection }: { services: WriteServices; connection?: { value: WriteConnection; onSave: (c: WriteConnection) => void; onForget: () => void } }): React.JSX.Element {
   const { service, port } = services
   const [articles, setArticles] = useState<ArticleItem[]>([])
   const [activeId, setActiveId] = useState<string | undefined>()
@@ -541,7 +542,7 @@ export function WriteApp({ services }: { services: WriteServices }): React.JSX.E
             <p className="write__muted">Create or import an article to use the panels.</p>
           )}
           <section className={`write__pane write__panel-pane ${tab === 'settings' ? 'is-shown' : ''}`} aria-label="Settings">
-            <SettingsPane perms={perms} spent={services.spentUsd()} spentByType={services.spendByType()} autoModel={services.models.auto()} chatModel={chatModel} suggestions={services.models.suggestions} onAutoModel={(m) => void services.models.setAuto(m).then(() => setModelTick((t) => t + 1))} onSave={(p) => run('Saving', async () => { await services.permissions.set(p); permsRef.current = p; setPerms(p) })} />
+            <SettingsPane connection={connection} perms={perms} spent={services.spentUsd()} spentByType={services.spendByType()} autoModel={services.models.auto()} chatModel={chatModel} suggestions={services.models.suggestions} onAutoModel={(m) => void services.models.setAuto(m).then(() => setModelTick((t) => t + 1))} onSave={(p) => run('Saving', async () => { await services.permissions.set(p); permsRef.current = p; setPerms(p) })} />
           </section>
         </aside>
         {ready && meta ? (

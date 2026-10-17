@@ -1,48 +1,50 @@
 import { StrictMode, useEffect, useState } from 'react'
 import { createRoot } from 'react-dom/client'
-import { resolveConfig, type AssistantConfig } from '@buildaharness/aielia'
-import { BrowserConfigStore } from '../browser-config-store'
 import { envOverridesFromImportMetaEnv } from '../browser-config'
-import { hasModelCredentials } from '../key-gate'
+import { ConnectionSettings } from './ConnectionSettings'
 import { WriteApp } from './WriteApp'
+import { clearConnection, loadConnection, saveConnection, toAssistantConfig, type WriteConnection } from './write-config'
 import { createWriteServices, type WriteServices } from './write-services'
 
-/** Loads the visitor's own key, asks for one if there is none, then opens the page. The key stays in this browser. */
+/**
+ * The Write page's own connection (its own storage and settings, apart from /try): asks for a key if there is none, then opens the page.
+ * Saving changed connection settings rebuilds the services; articles live in their own storage and are untouched.
+ */
 function Root(): React.JSX.Element {
-  const store = new BrowserConfigStore()
-  const [config, setConfig] = useState<AssistantConfig | undefined>()
+  const [connection, setConnection] = useState<WriteConnection | undefined>(() => loadConnection())
   const [services, setServices] = useState<WriteServices | undefined>()
   const [error, setError] = useState<string | undefined>()
 
   useEffect(() => {
-    void store.load().then((persisted) => setConfig(resolveConfig(persisted, envOverridesFromImportMetaEnv(import.meta.env)).config))
-  }, [])
-  useEffect(() => {
-    if (config && hasModelCredentials(config)) createWriteServices(config).then(setServices, (e) => setError(String(e)))
-  }, [config])
+    if (!connection) { setServices(undefined); return }
+    let live = true
+    createWriteServices(toAssistantConfig(connection, envOverridesFromImportMetaEnv(import.meta.env))).then((s) => { if (live) setServices(s) }, (e) => setError(String(e)))
+    return () => { live = false }
+  }, [connection])
 
   if (error) return <p role="alert">Could not start: {error}</p>
-  if (!config) return <p>Loading…</p>
-  if (!hasModelCredentials(config)) return <KeyForm onSave={async (patch) => { await store.save(patch); setConfig(resolveConfig(await store.load(), envOverridesFromImportMetaEnv(import.meta.env)).config) }} />
+  if (!connection) return <FirstRun onSave={(c) => { saveConnection(c); setConnection(loadConnection()) }} />
   if (!services) return <p>Opening your articles…</p>
-  return <WriteApp services={services} />
+  return (
+    <WriteApp
+      services={services}
+      connection={{
+        value: connection,
+        onSave: (c) => { saveConnection(c); setServices(undefined); setConnection(loadConnection()) },
+        onForget: () => { clearConnection(); setServices(undefined); setConnection(undefined) },
+      }}
+    />
+  )
 }
 
-function KeyForm({ onSave }: { onSave: (patch: Partial<AssistantConfig>) => Promise<void> }): React.JSX.Element {
-  const [backend, setBackend] = useState<'anthropic' | 'openai' | 'openrouter'>('anthropic')
-  const [key, setKey] = useState('')
+/** First visit: just the key. Everything else is in Settings, when it is wanted. */
+function FirstRun({ onSave }: { onSave: (c: WriteConnection) => void }): React.JSX.Element {
+  const [draft] = useState<WriteConnection>({ provider: 'anthropic', apiKey: '' })
   return (
-    <form style={{ maxWidth: 480, margin: '10vh auto', padding: 16, font: '16px system-ui' }} onSubmit={(e) => { e.preventDefault(); void onSave({ llmBackend: backend, apiKey: key.trim() }) }}>
+    <div style={{ maxWidth: 480, margin: '10vh auto', padding: 16, font: '16px system-ui' }}>
       <h1>Aielia Write</h1>
-      <p>Aielia has no account of its own. Bring a key from Anthropic, OpenAI or OpenRouter; it stays in this browser and is sent only to that provider.</p>
-      <select aria-label="Provider" value={backend} onChange={(e) => setBackend(e.target.value as typeof backend)}>
-        <option value="anthropic">Anthropic</option>
-        <option value="openai">OpenAI</option>
-        <option value="openrouter">OpenRouter</option>
-      </select>
-      <input aria-label="API key" type="password" value={key} onChange={(e) => setKey(e.target.value)} autoComplete="off" style={{ display: 'block', width: '100%', margin: '8px 0' }} />
-      <button type="submit" disabled={!key.trim()}>Start writing</button>
-    </form>
+      <ConnectionSettings value={draft} onSave={onSave} />
+    </div>
   )
 }
 
