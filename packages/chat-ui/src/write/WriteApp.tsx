@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
-import { claimMarks, collectIssues, sourceKindForFile, computeReadiness, effectiveSourceStatus, issueCount, type ArticleBundle, type ChangeSummary, type DependencyKind, type IssueCategory, type StyleProfile, type WritePermissions } from '@buildaharness/aielia'
+import { claimMarks, collectIssues, parseLineRange, sourceKindForFile, computeReadiness, effectiveSourceStatus, issueCount, type ArticleBundle, type ChangeSummary, type DependencyKind, type IssueCategory, type StyleProfile, type WritePermissions } from '@buildaharness/aielia'
 import type { ChatAction } from './AdjustBar'
 import { ArticleSwitcher, type ArticleItem } from './ArticleSwitcher'
 import { ChatPane, type ChatLine } from './ChatPane'
@@ -270,7 +270,7 @@ export function WriteApp({ services }: { services: WriteServices }): React.JSX.E
   async function addSourceAndPlace(src: { kind: 'web' | 'upload' | 'code' | 'say_so'; address?: string; passage?: string; note?: string }, attach: boolean): Promise<void> {
     if (!activeId) return
     const sid = await service.addSource(activeId, src)
-    if (src.kind === 'web') {
+    if (src.kind === 'web' || (src.kind === 'code' && src.address && /^https?:/.test(src.address))) {
       const read = await service.readSource(activeId, sid)
       if (read.status === 'read') setNotice('I read the page and stored its text.')
       else if (read.reason) setNotice(`Link stored. ${read.reason}${read.status === 'unreachable' ? ' Paste the passage instead.' : ''}`)
@@ -308,7 +308,13 @@ export function WriteApp({ services }: { services: WriteServices }): React.JSX.E
       for (const f of files) {
         const kind = sourceKindForFile(f)
         if (!kind) { lines.push(`${f.name}: only text and code files can be read for now.`); continue }
-        await addSourceAndPlace({ kind, address: f.name, passage: await f.text() }, attach)
+        const text = await f.text()
+        const again = await service.offerFileVersion(activeId as string, f.name, text, services.models.auto())
+        if (again.status !== 'no_match') {
+          lines.push(`${f.name}: ${again.status === 'unchanged' ? 'the same as the stored copy.' : again.status === 'changed' ? `changed. ${again.impacts.length === 0 ? 'No claim looks affected.' : `${again.impacts.length} claim${again.impacts.length === 1 ? '' : 's'} may be affected.`} Use the new text from the source row when you are ready.` : 'stored.'}`)
+          continue
+        }
+        await addSourceAndPlace({ kind, address: f.name, passage: text }, attach)
         lines.push(`${f.name}: added${kind === 'code' ? ' as code' : ''}.`)
       }
       if (say) setChat((c) => [...c, { id: ++lineId, from: 'aielia', text: `${lines.join('\n')}\nI stored ${files.length === 1 ? 'it' : 'them'} and looked for the claims they bear on. Click in the text to see and confirm them under it.`, model: chatModel }])
@@ -499,6 +505,13 @@ export function WriteApp({ services }: { services: WriteServices }): React.JSX.E
                 setNotice(!r.ok ? r.reason ?? 'That page could not be used.' : r.read === 'read' || r.read === 'unchanged' ? 'Source added and read. Check the claim against it when you like.' : 'Source added, but the page could not be read here. Paste the passage to check against it.')
               })}
               onDismissCandidates={(claimId) => setCandidates((c) => { const { [claimId]: _gone, ...rest } = c; void _gone; return rest })}
+              onLines={(sourceId) => {
+                const answer = window.prompt('Keep only these lines of the file (for example 40-60). Leave empty to keep all of it.')
+                if (answer === null) return
+                const range = answer.trim() ? parseLineRange(answer) : undefined
+                if (answer.trim() && !range) { setNotice('I could not read that as lines. Type a start and an end, like 40-60.'); return }
+                change('Keeping those lines', async (id) => { const r = await service.setSourceLines(id, sourceId, range); setNotice(r.ok ? (range ? `Keeping lines ${range.from}–${range.to}. Claims checked on the old text need checking again.` : 'Keeping all of it.') : (r.reason ?? 'That did not work.')) })
+              }}
               onAcceptNew={(sourceId) => change('Saving', async (id) => { const r = await service.acceptSourceChange(id, sourceId); if (!r.ok && r.reason) setNotice(r.reason) })}
               onCheck={(claimId) => change(`Checking with ${chatModel}`, async (id) => { const r = await service.checkClaim(id, claimId, chatModel); setNotice(r.status === 'checked' ? `Checked with ${chatModel}: ${r.verdict.replace('_', ' ')}. ${r.reason}` : r.status === 'no_sources' ? 'There is no stored passage to check against.' : r.reason) })}
             />

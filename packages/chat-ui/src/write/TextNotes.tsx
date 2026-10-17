@@ -32,6 +32,8 @@ interface Props {
   onConfirm(claimId: string, sourceId: string): void
   onRead(sourceId: string): void
   onAcceptNew(sourceId: string): void
+  /** Asks the writer which lines of a file to keep. */
+  onLines(sourceId: string): void
   onCheck(claimId: string): void
   /** Whether the page can search the web for a source. */
   canSearch: boolean
@@ -57,7 +59,7 @@ const PLACEHOLDER: Record<NoteKind, string> = {
  * paragraph or a section: its comments and sources show here. One line adds to it: type a comment, paste a link or passage, or state your own
  * word; drop a file anywhere in this box, or use the paperclip.
  */
-export function TextNotes({ meta, markdown, selection, busy, model, onAdd, onFiles, onEditComment, onResolveComment, onDeleteComment, onDetach, onConfirm, onRead, onAcceptNew, onCheck, canSearch, candidates, onFindSources, onUseCandidate, onDismissCandidates }: Props): React.JSX.Element {
+export function TextNotes({ meta, markdown, selection, busy, model, onAdd, onFiles, onEditComment, onResolveComment, onDeleteComment, onDetach, onConfirm, onRead, onAcceptNew, onLines, onCheck, canSearch, candidates, onFindSources, onUseCandidate, onDismissCandidates }: Props): React.JSX.Element {
   const [collapsed, setCollapsed] = useState(false)
   const [kind, setKind] = useState<NoteKind>('comment')
   const [text, setText] = useState('')
@@ -128,15 +130,16 @@ export function TextNotes({ meta, markdown, selection, busy, model, onAdd, onFil
                         const proposed = link?.origin === 'proposed'
                         return (
                           <div key={s.id} className="write__dsrc">
-                            <span className="write__dsrcname">{s.kind === 'say_so' ? 'Your word' : s.address ?? s.kind}</span>
+                            <span className="write__dsrcname">{s.kind === 'say_so' ? 'Your word' : s.address ?? s.kind}{s.lines ? ` · lines ${s.lines.from}–${s.lines.to}` : ''}</span>
                             <span className="write__badge">{proposed ? `suggested${link?.confidence !== undefined ? ` ${Math.round(link.confidence * 100)}%` : ''}` : s.freshness}</span>
                             <span className="write__rowacts">
                               {proposed && <IconButton label="Use this source" icon="check" onClick={() => onConfirm(c.id, s.id)} />}
-                              {s.kind === 'web' && s.address && <IconButton label={s.passage ? 'Read the page again' : 'Read the page'} icon="restore" onClick={() => onRead(s.id)} disabled={busy} />}
+                              {(s.kind === 'web' || s.kind === 'code') && s.address && /^https?:/.test(s.address) && <IconButton label={s.passage ? 'Read the page again' : 'Read the page'} icon="restore" onClick={() => onRead(s.id)} disabled={busy} />}
+                              {s.kind !== 'say_so' && s.passage !== undefined && <IconButton label={s.lines ? 'Change which lines are kept' : 'Keep only some lines'} icon="lines" onClick={() => onLines(s.id)} disabled={busy} />}
                               {s.fetchedPassage && <IconButton label="Use the new text of this page" icon="check2" onClick={() => onAcceptNew(s.id)} />}
                               <IconButton label={proposed ? 'Dismiss this suggestion' : 'Remove this source from the text'} icon="close" onClick={() => onDetach(c.id, s.id)} />
                             </span>
-                            <div className="write__reason">{link?.reason ? `${link.reason} · ` : ''}{s.note ?? (s.passage ? clip(s.passage, 140) : 'A link only: paste the passage to check against it.')}{s.fetchedPassage ? ' · The page has changed since you read it.' : ''}</div>
+                            <div className="write__reason">{link?.reason ? `${link.reason} · ` : ''}{s.note ?? (s.passage ? clip(s.passage, 140) : 'A link only: paste the passage to check against it.')}{s.fetchedPassage ? (s.kind === 'code' ? ' · The file has changed since you read it.' : ' · The page has changed since you read it.') : ''}</div>
                           </div>
                         )
                       })}

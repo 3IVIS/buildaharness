@@ -7,6 +7,7 @@ export const ICON_PATHS = {
   save: 'M5 3h11l3 3v15H5zM8 3v6h7M8 21v-6h8',
   check: 'M5 12l5 5L20 7',
   close: 'M6 6l12 12M18 6L6 18',
+  lines: 'M4 7h16M4 12h9M4 17h16',
   write: 'M5 12h14M13 6l6 6-6 6',
   attach: 'M20 11l-8.5 8.5a5 5 0 0 1-7-7L13 4a3.5 3.5 0 0 1 5 5l-8.5 8.5a2 2 0 0 1-3-3L14 7',
   comment: 'M4 5h16v11H9l-5 4z',

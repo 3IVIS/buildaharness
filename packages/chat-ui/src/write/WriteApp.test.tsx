@@ -590,6 +590,27 @@ describe('web links', () => {
   })
 })
 
+describe('code sources', () => {
+  it('stores a GitHub file link as code with the lines of its fragment, and changes the kept lines from the source row', async () => {
+    const fetched: string[] = []
+    const s = await services({ sourceLinks: { claims: [] }, resolve: { impacts: [] } }, MD, async (u) => { fetched.push(u); return 'one\ntwo\nthree\nfour' })
+    const id = (await s.service.list())[0].id
+    render(<WriteApp services={s} />)
+    await waitForText()
+    putCursor('18 ms')
+    const dock = screen.getByLabelText('Comments and sources for this text')
+    await userEvent.click(within(dock).getByRole('button', { name: 'Source' }))
+    await userEvent.type(within(dock).getByLabelText('Add to this text', { selector: 'input' }), 'https://github.com/o/r/blob/main/a.ts#L2-L3{Enter}')
+    await waitFor(async () => expect((await s.service.get(id)).meta.sources[0]).toMatchObject({ kind: 'code', passage: 'two\nthree', lines: { from: 2, to: 3 } }))
+    expect(fetched).toEqual(['https://raw.githubusercontent.com/o/r/main/a.ts'])
+    expect(await within(dock).findByText(/lines 2–3/)).toBeInTheDocument()
+    const ask = vi.spyOn(window, 'prompt').mockReturnValue('1-4')
+    await userEvent.click(within(dock).getByRole('button', { name: 'Change which lines are kept' }))
+    await waitFor(async () => expect((await s.service.get(id)).meta.sources[0]).toMatchObject({ passage: 'one\ntwo\nthree\nfour', lines: { from: 1, to: 4 } }))
+    ask.mockRestore()
+  })
+})
+
 describe('ideas', () => {
   it('adds an idea with Enter, edits it where it stands, asks Aielia for more with Enter, and writes one or all into the article', async () => {
     const s = await services({
