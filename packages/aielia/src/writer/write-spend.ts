@@ -18,6 +18,7 @@ export const CALL_TYPES: readonly CallType[] = [
   { id: 'consistency', label: 'Checking the article against itself and its sources', marker: 'You check an article for two kinds of problem' },
   { id: 'repo_folders', label: 'Narrowing down where in a repository', marker: 'You narrow down where in a software repository' },
   { id: 'repo_files', label: 'Finding files in a repository', marker: 'You help check a claim from an article against a software repository' },
+  { id: 'style_derive', label: 'Drawing a style sheet from the text', marker: 'You read an article and describe it so a co-writer' },
   { id: 'impact', label: 'Judging what an edit affects', marker: 'You help a writer keep an article consistent' },
   { id: 'source_change', label: 'Judging a changed source', marker: 'A source an article relies on was read again' },
   { id: 'source_links', label: 'Placing a new source', marker: 'A writer added a source to an article' },

@@ -249,3 +249,18 @@
 .write__subhead { font-size: 0.95rem; margin: 14px 0 6px; }
 .write__field { display: grid; gap: 4px; margin-bottom: 8px; }
 .write__found { margin: 6px 0 4px; padding-left: 8px; border-left: 2px solid var(--border); display: grid; gap: 4px; }
+
+/* the repository box that opens from the chat menu */
+.write__repobox { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; margin-top: 6px; }
+.write__repobox input { flex: 1 1 180px; min-width: 0; }
+.write__chip { display: inline-flex; align-items: center; gap: 4px; padding: 2px 8px; border: 1px solid var(--border); border-radius: 999px; font-size: 0.85rem; background: var(--surface, transparent); }
+.write__chipx { border: none; background: none; cursor: pointer; padding: 0 2px; color: var(--muted); font-size: 1rem; line-height: 1; }
+
+/* "?" hints: the explanation shows on hover or focus */
+.write__hint { display: inline-flex; align-items: center; justify-content: center; width: 16px; height: 16px; margin-left: 6px; border: 1px solid var(--muted); border-radius: 50%; font-size: 11px; line-height: 1; color: var(--muted); cursor: help; position: relative; vertical-align: middle; flex: none; }
+.write__hint:hover::after, .write__hint:focus::after { content: attr(data-tip); position: fixed; z-index: 30; margin: 22px 0 0 -6px; width: max-content; max-width: 240px; padding: 6px 8px; border-radius: 6px; background: #1f2937; color: #fff; font-size: 12px; font-weight: 400; line-height: 1.35; text-align: left; white-space: normal; box-shadow: 0 2px 8px rgba(0, 0, 0, 0.25); }
+
+/* Settings: a checkbox sits in line with its words; the connection buttons do not wrap */
+.write__form label:has(> input[type='checkbox']) { display: flex; align-items: center; gap: 8px; }
+.write__connection .write__primary { white-space: nowrap; }
+.write__form label:has(> input[type='checkbox']) > input[type='checkbox'] { width: auto; flex: none; margin: 0; }

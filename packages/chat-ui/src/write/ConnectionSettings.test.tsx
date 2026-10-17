@@ -10,7 +10,7 @@ describe('connection settings', () => {
     const save = screen.getByRole('button', { name: 'Save connection' })
     expect(save).toBeDisabled()
     await userEvent.selectOptions(screen.getByLabelText('Provider'), 'openai')
-    await userEvent.click(screen.getByText(/Reading web pages and finding sources/))
+    await userEvent.click(screen.getByText(/Web pages and sources/))
     await userEvent.type(screen.getByLabelText('Proxy address'), 'https://p.test')
     expect(save).toBeEnabled()
     await userEvent.click(save)
@@ -42,7 +42,7 @@ describe('connection settings', () => {
   })
   it('leaves out the page-reading and search fields on the first visit', () => {
     render(<ConnectionSettings value={{ provider: 'anthropic', apiKey: '' }} onSave={vi.fn()} showWeb={false} />)
-    expect(screen.queryByText(/Reading web pages and finding sources/)).toBeNull()
+    expect(screen.queryByText(/Web pages and sources/)).toBeNull()
     expect(screen.queryByLabelText('Proxy address')).toBeNull()
   })
 })

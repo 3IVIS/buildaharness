@@ -1,18 +1,21 @@
 import { useId, useState } from 'react'
+import { ICON_PATHS, Icon } from './icons'
 import { PARAMETER_GROUPS, WRITE_PARAMETERS, adjustmentInstruction, findParameter } from '@buildaharness/aielia'
 
-export type ChatAction = 'check' | 'verify' | 'verify_repo'
+export type ChatAction = 'check' | 'verify' | 'prepare'
 
 /**
  * One dropdown for the chat: what to adjust (a parameter from the table, or "something else"), or an action to run (check the article). Pick a
  * parameter and a box appears to choose an option or type your own; press Enter and it is sent as an ordinary chat message. An action runs
  * as soon as it is picked.
  */
-export function AdjustBar({ disabled, checkLabel, verifyLabel, repoLabel, onSend, onAction }: { disabled: boolean; checkLabel: string; verifyLabel: string; repoLabel?: string; onSend: (message: string) => void; onAction: (action: ChatAction) => void }): React.JSX.Element {
+export function AdjustBar({ disabled, checkLabel, verifyLabel, repos = [], onRepoVerify, onPickRepoFolder, onRemoveRepo, onSend, onAction }: { disabled: boolean; checkLabel: string; verifyLabel: string; /** Repositories already handed to the article. */ repos?: string[]; /** Runs the check against a repository: the address typed (empty means the ones already attached). Absent: the option is not offered. */ onRepoVerify?: (address: string) => void; onPickRepoFolder?: () => void; onRemoveRepo?: (name: string) => void; onSend: (message: string) => void; onAction: (action: ChatAction) => void }): React.JSX.Element {
   const listId = useId()
   const [paramId, setParamId] = useState('')
   const [aspect, setAspect] = useState('')
   const [value, setValue] = useState('')
+  const repoMode = paramId === 'action:verify_repo'
+  const [repoAddress, setRepoAddress] = useState('')
   const param = findParameter(paramId)
   const other = paramId === 'other'
   const label = other ? aspect : param?.label ?? ''
@@ -33,7 +36,7 @@ export function AdjustBar({ disabled, checkLabel, verifyLabel, repoLabel, onSend
         onChange={(e) => {
           if (e.target.value === 'action:check') { setParamId(''); onAction('check'); return }
           if (e.target.value === 'action:verify') { setParamId(''); onAction('verify'); return }
-          if (e.target.value === 'action:verify_repo') { setParamId(''); onAction('verify_repo'); return }
+          if (e.target.value === 'action:prepare') { setParamId(''); onAction('prepare'); return }
           setParamId(e.target.value)
           setValue('')
         }}
@@ -42,7 +45,8 @@ export function AdjustBar({ disabled, checkLabel, verifyLabel, repoLabel, onSend
         <optgroup label="Do">
           <option value="action:check">{checkLabel}</option>
           <option value="action:verify">{verifyLabel}</option>
-          {repoLabel && <option value="action:verify_repo">{repoLabel}</option>}
+          {onRepoVerify && <option value="action:verify_repo">Verify the claims against a repository</option>}
+          <option value="action:prepare">Fill in the style and links from the article</option>
         </optgroup>
         {PARAMETER_GROUPS.map((g) => (
           <optgroup key={g.id} label={g.label}>
@@ -51,8 +55,25 @@ export function AdjustBar({ disabled, checkLabel, verifyLabel, repoLabel, onSend
         ))}
         <option value="other">Something else…</option>
       </select>
+      {repoMode && onRepoVerify && (
+        <div className="write__repobox" role="group" aria-label="Repository to check against">
+          {repos.map((r) => (
+            <span key={r} className="write__chip">{r}{onRemoveRepo && <button type="button" className="write__chipx" aria-label={`Stop using ${r}`} onClick={() => onRemoveRepo(r)}>×</button>}</span>
+          ))}
+          <input
+            aria-label="Repository address"
+            value={repoAddress}
+            disabled={disabled}
+            autoFocus
+            onChange={(e) => setRepoAddress(e.target.value)}
+            onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); const a = repoAddress; setRepoAddress(''); setParamId(''); onRepoVerify(a) } }}
+            placeholder={repos.length > 0 ? 'Another GitHub address, or Enter to use the ones above' : 'github.com/owner/repo, then Enter'}
+          />
+          {onPickRepoFolder && <button type="button" className="write__iconbtn" aria-label="Use a repository folder on this computer" title="Use a repository folder on this computer" disabled={disabled} onClick={() => { setParamId(''); onPickRepoFolder() }}><Icon d={ICON_PATHS.folder} /></button>}
+        </div>
+      )}
       {other && <input aria-label="What to adjust" value={aspect} onChange={(e) => setAspect(e.target.value)} placeholder="What to adjust, for example pacing" />}
-      {paramId !== '' && (
+      {paramId !== '' && !repoMode && (
         <>
           <input aria-label="How" list={listId} value={value} onChange={(e) => setValue(e.target.value)} onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); send() } }} placeholder={other ? 'How, in your own words, then Enter' : 'Pick an option or type your own, then Enter'} />
           <datalist id={listId}>{(param?.options ?? []).map((o) => <option key={o} value={o} />)}</datalist>

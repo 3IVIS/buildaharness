@@ -1,4 +1,5 @@
 import { useState } from 'react'
+import { Hint } from './Hint'
 import type { WriteConnection } from './write-config'
 
 interface Props {
@@ -17,9 +18,8 @@ export function ConnectionSettings({ value, onSave, onForget, showWeb = true }: 
   const dirty = JSON.stringify(draft) !== JSON.stringify(value)
   return (
     <fieldset className="write__form write__connection">
-      <legend className="write__panehead">Connection</legend>
-      <p className="write__muted">Kept in this browser only, and separate from the /try page. Aielia has no account of its own.</p>
-      <label>Model provider
+      <legend className="write__panehead">Connection<Hint text="Kept in this browser only, separate from the /try page. Aielia has no account of its own." /></legend>
+      <label>Provider
         <select aria-label="Provider" value={draft.provider} onChange={(e) => set({ provider: e.target.value as WriteConnection['provider'] })}>
           <option value="anthropic">Anthropic</option>
           <option value="openai">OpenAI</option>
@@ -29,32 +29,30 @@ export function ConnectionSettings({ value, onSave, onForget, showWeb = true }: 
       </label>
       {draft.provider === 'proxy' ? (
         <>
-          <p className="write__muted">Model calls go to a proxy you run, for example one on this computer. Your key, or your Claude login, stays on that machine and never reaches this page.</p>
-          <label>Proxy address for the model
+          <label>Model proxy<Hint text="Model calls go to a proxy you run, for example one on this computer. Your key, or your Claude login, stays on that machine and never reaches this page." />
             <input aria-label="Model proxy address" inputMode="url" placeholder="http://localhost:8787" value={draft.modelUrl ?? ''} onChange={(e) => set({ modelUrl: e.target.value })} />
           </label>
-          <label>Access token for that proxy
+          <label>Token
             <input aria-label="API key" type="password" autoComplete="off" value={draft.apiKey} onChange={(e) => set({ apiKey: e.target.value })} />
           </label>
         </>
       ) : (
-        <label>Your key for that provider
+        <label>API key
           <input aria-label="API key" type="password" autoComplete="off" value={draft.apiKey} onChange={(e) => set({ apiKey: e.target.value })} />
         </label>
       )}
       {showWeb && <details className="write__allsrc" open={Boolean(draft.pagesUrl || draft.searchKey || draft.githubToken)}>
-        <summary>Reading web pages and finding sources (optional)</summary>
-        <p className="write__muted">Browsers cannot read most web pages directly. This page uses the Aielia proxy for it unless you give your own address. If none works, links stay links and you paste the passage.</p>
-        <label>Proxy address
+        <summary>Web pages and sources (optional)</summary>
+        <label>Page proxy<Hint text="Browsers cannot read most web pages directly, so this page uses the Aielia proxy unless you give your own address. If none works, links stay links and you paste the passage." />
           <input aria-label="Proxy address" inputMode="url" placeholder="https://" value={draft.pagesUrl ?? ''} onChange={(e) => set({ pagesUrl: e.target.value })} />
         </label>
-        <label>Proxy access token
+        <label>Page proxy token
           <input aria-label="Proxy access token" type="password" autoComplete="off" value={draft.pagesToken ?? ''} onChange={(e) => set({ pagesToken: e.target.value })} />
         </label>
-        <label>GitHub token (only for a private repository)
+        <label>GitHub token<Hint text="Only needed to read a private repository, or to avoid GitHub's request limit. Sent only to GitHub." />
           <input aria-label="GitHub token" type="password" autoComplete="off" value={draft.githubToken ?? ''} onChange={(e) => set({ githubToken: e.target.value })} />
         </label>
-        <label>Brave Search key (for finding sources)
+        <label>Search key<Hint text="A Brave Search key, used to look for sources for a claim. Kept only in this browser." />
           <input aria-label="Search key" type="password" autoComplete="off" value={draft.searchKey ?? ''} onChange={(e) => set({ searchKey: e.target.value })} />
         </label>
       </details>}
@@ -62,7 +60,6 @@ export function ConnectionSettings({ value, onSave, onForget, showWeb = true }: 
         <button type="button" className="write__primary" disabled={!dirty || (draft.provider === 'proxy' ? !draft.modelUrl?.trim() : !draft.apiKey.trim())} onClick={() => onSave(draft)}>Save connection</button>
         {onForget && <button type="button" className="write__link" onClick={() => { if (window.confirm('Forget the key and the other connection settings from this browser? Your articles stay.')) onForget() }}>Forget these</button>}
       </div>
-      <p className="write__muted">Saving reconnects the page. Your articles are not touched.</p>
     </fieldset>
   )
 }

@@ -41,6 +41,7 @@ describe('call types', () => {
     await svc.analyze(id2)
     svc.attachRepo(id2, { name: 'o/r', files: async () => Array.from({ length: 1600 }, (_, i) => `d${i % 5}/f${i}.ts`), read: async () => 'x' })
     await svc.verifyClaims(id2) // repo files
+    await svc.deriveStyleFromText(id) // style sheet
     await svc.suggest(id, 'tighten it') // edits
     await svc.suggestIdeas(id) // ideas
     await processWriterMessage({ port: createArticleChatPort(store), message: 'Dana says check the figure', now: NOW }, recording(seen)) // capture

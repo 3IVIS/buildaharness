@@ -19,6 +19,7 @@ import { folderFileAddress, pathInFolder, type FolderReader } from './local-fold
 import { MAX_PATHS_SENT, pathsUnder, pickRepoFiles, pickRepoFolders } from './article-repo.js'
 import type { RepoReader } from './repo-reader.js'
 import { MAX_FILES as REPO_LIST_LIMIT } from './local-folder.js'
+import { deriveStyle } from './article-style-derive.js'
 import { checkConsistency, type ConsistencyResult } from './article-consistency.js'
 import { looksLikeHtml } from '../html-to-markdown.js'
 import { acceptNewPassage, applyRecheck, createSource, excerptFor, pageToArticle, sourceKindForFile, parseRepoFileLink, sliceLines, type LineRange } from './article-sources.js'
@@ -816,6 +817,17 @@ export class ArticleService {
     const r = await proposeDependencies({ meta: b.meta, markdown: b.markdown, now: this.now() }, llm, model, onUsage)
     if (r.status === 'proposed' && r.added.length > 0) await this.store.save(id, { ...b, meta: r.meta })
     return r
+  }
+
+  /**
+   * A first style sheet from the article's own text (brief fields and a writing profile), filling only what the writer has not set. One model call.
+   * Returns the names of what was filled in; an empty list means there was nothing to add or the call failed.
+   */
+  async deriveStyleFromText(id: string, modelOverride?: string): Promise<{ status: 'derived' | 'not_derived'; filled: string[] }> {
+    const b = await this.get(id)
+    const r = await deriveStyle({ meta: b.meta, markdown: b.markdown }, this.opts.llm, modelOverride ?? this.checker(), this.opts.onUsage)
+    if (r.status === 'derived' && r.filled.length > 0) await this.store.save(id, { ...b, meta: r.meta })
+    return { status: r.status, filled: r.filled }
   }
 
   /** The writer draws a link by hand. */

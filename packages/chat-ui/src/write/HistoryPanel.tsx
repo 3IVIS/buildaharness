@@ -1,5 +1,6 @@
 import type { ChangeSummary, VersionComparison } from '@buildaharness/aielia'
 import { EditableText } from './EditableText'
+import { Hint } from './Hint'
 import { ICON_PATHS, Icon, IconButton } from './icons'
 
 export interface VersionRow {
@@ -75,8 +76,8 @@ export function HistoryPanel({ versions, working, viewing, busy, statusLabel, on
             </div>
           </li>
         ))}
-        {versions.length === 0 && <li className="write__muted">No saved versions yet. They are saved before a large change or a suggestion you accept, and when you press Save version.</li>}
       </ul>
+      {versions.length === 0 && <p className="write__muted">No saved versions yet.<Hint text="A version is saved before a large change or a suggestion you accept, and when you press Save version." /></p>}
       {viewing && (
         <div className="write__version" aria-label="Version detail">
           <h3>{viewing.mode === 'view' ? 'Text of this version' : 'Changes since this version'}</h3>

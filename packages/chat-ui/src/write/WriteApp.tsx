@@ -168,7 +168,6 @@ export function WriteApp({ services, connection }: { services: WriteServices; co
     applySelection(back.range)
   }
   const [repoTick, setRepoTick] = useState(0)
-  const [repoBarOpen, setRepoBarOpen] = useState(false)
   const [folder, setFolder] = useState<{ reader: FolderReader; files: string[] } | undefined>()
   const folderRef = useRef(folder)
   folderRef.current = folder
@@ -270,7 +269,7 @@ export function WriteApp({ services, connection }: { services: WriteServices; co
         if (!r.ok) throw new Error(r.reason)
         await refreshList()
         await select(r.id)
-        setNotice('This is a copy of the file. Editing it does not change the original.')
+        setNotice(`This is a copy of the file. Editing it does not change the original. ${await prepareFromText(r.id)}`)
         return
       }
       let folder: Record<string, string>
@@ -290,7 +289,7 @@ export function WriteApp({ services, connection }: { services: WriteServices; co
       if (!r.ok) throw new Error(r.reason)
       await refreshList()
       await select(r.id)
-      setNotice('This is a copy of the page as it reads now. Editing it does not change the original, and the page is kept as a source so you can see where it came from.')
+      setNotice(`This is a copy of the page as it reads now. Editing it does not change the original, and the page is kept as a source. ${await prepareFromText(r.id)}`)
     })
   }
 
@@ -310,6 +309,26 @@ export function WriteApp({ services, connection }: { services: WriteServices; co
   const restoreVersion = (index: number): void => {
     if (!window.confirm('Restore this version as your working article? The article as it is now is saved first, so nothing is lost.')) return
     change('Restoring', async (id) => { await service.restore(id, index); setNotice('Restored. The article as it was before is in History.') })
+  }
+
+  // ---- style sheet and links drawn from the text
+  /** A first style sheet and the links between sections, drawn from the article's own text with the model for automatic checks; says in one sentence what it found. */
+  async function prepareFromText(id: string): Promise<string> {
+    const model = services.models.auto()
+    const style = await service.deriveStyleFromText(id, model)
+    const links = await service.findDependencies(id, model)
+    setBundle(await service.get(id))
+    const s = style.filled.length > 0 ? `drafted the style sheet (${style.filled.join(', ')})` : 'found nothing to add to the style sheet'
+    const l = links.status === 'failed' ? 'the search for links could not run' : links.added.length > 0 ? `found ${links.added.length} possible link${links.added.length === 1 ? '' : 's'} between sections to confirm` : 'found no links between sections'
+    return `I ${s} and ${l}. Edit anything that is off.`
+  }
+  const prepareFromChat = (): void => {
+    if (!activeId) return
+    const id = activeId
+    void run('Drawing the style sheet and the links from the text', async () => {
+      await flushDraft()
+      setNotice(await prepareFromText(id))
+    })
   }
 
   // ---- links
@@ -345,23 +364,52 @@ export function WriteApp({ services, connection }: { services: WriteServices; co
     }
   }
 
-  /** A GitHub repository handed to the open article: listed once now, so a wrong or private address is told at once. */
-  const addGithubRepo = (address: string): void => {
+  /**
+   * The repository action of the chat menu. A typed GitHub address is listed once now (so a wrong or private address is told at once) and
+   * attached; with nothing typed, the repositories already attached are used. Then the claims are checked against them, and only them.
+   */
+  const verifyInRepo = (address: string): void => {
     if (!activeId) return
-    const spec = parseGithubRepoAddress(address)
-    if (!spec) { setNotice('Type a GitHub address like github.com/owner/repo.'); return }
     const id = activeId
-    void run('Listing the repository', async () => {
-      const reader = githubRepoReader(spec, { token: services.githubToken })
+    const typed = address.trim()
+    if (!typed && service.attachedRepos(id).length === 0) { setNotice('Type a GitHub address like github.com/owner/repo, or choose a folder.'); return }
+    const spec = typed ? parseGithubRepoAddress(typed) : undefined
+    if (typed && !spec) { setNotice('Type a GitHub address like github.com/owner/repo.'); return }
+    void (async () => {
+      if (spec) {
+        try {
+          await run('Listing the repository', async () => {
+            const reader = githubRepoReader(spec, { token: services.githubToken })
+            await reader.files()
+            service.attachRepo(id, reader)
+            setRepoTick((n) => n + 1)
+          })
+        } catch { return }
+        if (service.attachedRepos(id).length === 0) return
+      }
+      verifyFromChat(true)
+    })()
+  }
+  /** Chooses a repository folder on this computer, attaches it and checks the claims against it. */
+  const pickRepoFolderAndVerify = (): void => {
+    if (!activeId) return
+    const id = activeId
+    void (async () => {
       try {
-        const files = await reader.files()
+        const reader = await services.pickFolder?.()
+        if (!reader) return
+        setBusy('Listing the folder')
+        await reader.files()
         service.attachRepo(id, reader)
         setRepoTick((n) => n + 1)
-        setNotice(`${reader.name} added: ${files.length} files. Verify the claims to look in it.`)
       } catch (e) {
         setNotice(e instanceof Error ? e.message : String(e))
+        return
+      } finally {
+        setBusy(null)
       }
-    })
+      verifyFromChat(true)
+    })()
   }
   const removeRepo = (name: string): void => {
     if (!activeId) return
@@ -376,8 +424,6 @@ export function WriteApp({ services, connection }: { services: WriteServices; co
         if (!reader) return
         setBusy('Listing the folder')
         setFolder({ reader, files: await reader.files() })
-        // The folder is also searched when claims are verified.
-        if (activeId) { service.attachRepo(activeId, reader); setRepoTick((n) => n + 1) }
       } catch (e) {
         setNotice(e instanceof Error ? e.message : String(e))
       } finally {
@@ -463,11 +509,6 @@ export function WriteApp({ services, connection }: { services: WriteServices; co
   }
   const verifyFromChat = (repoOnly = false): void => {
     if (!activeId) return
-    if (repoOnly && service.attachedRepos(activeId).length === 0) {
-      setRepoBarOpen(true)
-      setNotice('Add a repository first: type a GitHub address in the box above the message field, or choose a folder.')
-      return
-    }
     const used = services.models.chat()
     setChat((c) => [...c, { id: ++lineId, from: 'you', text: repoOnly ? 'Verify the claims against the repository' : 'Verify the claims and look for sources' }])
     void run(`Verifying with ${used}`, async () => {
@@ -673,11 +714,10 @@ export function WriteApp({ services, connection }: { services: WriteServices; co
           shown={tab === 'chat'}
           onSend={() => void sendChat()}
           onAdjust={(m) => { setAskForEdits(true); void sendChat(m, true) }}
-          onAction={(a: ChatAction) => { if (a === 'check') checkFromChat(); else verifyFromChat(a === 'verify_repo') }}
+          onAction={(a: ChatAction) => { if (a === 'check') checkFromChat(); else if (a === 'prepare') prepareFromChat(); else verifyFromChat() }}
           repos={activeId ? (void repoTick, service.attachedRepos(activeId)) : []}
-          repoBarOpen={repoBarOpen}
-          onAddGithub={addGithubRepo}
-          onPickRepoFolder={services.pickFolder ? pickFolder : undefined}
+          onRepoVerify={verifyInRepo}
+          onPickRepoFolder={services.pickFolder ? pickRepoFolderAndVerify : undefined}
           onRemoveRepo={removeRepo}
           onSaveIdea={(l) => change('Saving', async (id) => { const r = await service.addIdea(id, { text: l.text, origin: 'assistant', model: l.model }); if (!r.ok) setNotice(r.reason) })}
           onDropFiles={(files) => dropFiles(files, false, true)}

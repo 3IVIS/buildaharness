@@ -136,7 +136,7 @@ describe('header and article menu', () => {
     expect(await screen.findByText(/1 web source has changed since you read it/)).toBeInTheDocument()
     expect((await s.service.get(id)).snapshots).toHaveLength(1)
     await userEvent.click(rail('Settings'))
-    await userEvent.click(screen.getByLabelText(/Read my web sources again before I publish/))
+    await userEvent.click(screen.getByLabelText(/Reread web sources before publishing/))
     await waitFor(async () => expect((await s.permissions.get()).recheckBeforePublish).toBe(false))
   })
 
@@ -299,7 +299,7 @@ describe('chat: model, check and adjust', () => {
     render(<WriteApp services={s} />)
     await waitForText()
     await userEvent.click(rail('Settings'))
-    expect(await screen.findByText(/same model as the chat/)).toBeInTheDocument()
+    expect(await screen.findByText(/Same model as the chat/)).toBeInTheDocument()
   })
 
   it('shows the defaults in Settings, saves a change, and applies the spending cap', async () => {
@@ -307,7 +307,7 @@ describe('chat: model, check and adjust', () => {
     render(<WriteApp services={s} />)
     await waitForText()
     await userEvent.click(rail('Settings'))
-    const auto = await screen.findByLabelText(/Check claims and effects by itself/)
+    const auto = await screen.findByLabelText(/Check by itself when I stop typing/)
     expect(auto).not.toBeChecked()
     await userEvent.click(auto)
     await waitFor(async () => expect((await s.permissions.get()).autoCheck).toBe(true))
