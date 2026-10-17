@@ -77,6 +77,8 @@ export const SourceSchema = z.object({
   note: z.string().optional(),
   /** New text read from the address that differs from `passage`. Held until the writer accepts it; checks keep using `passage`. */
   fetchedPassage: z.string().optional(),
+  /** For a code or text file: only these lines (1-based, inclusive) are kept as the passage. */
+  lines: z.object({ from: z.number().int().min(1), to: z.number().int().min(1) }).optional(),
 })
 export type Source = z.infer<typeof SourceSchema>
 

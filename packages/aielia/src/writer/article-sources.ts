@@ -21,10 +21,57 @@ export function fingerprintPassage(passage: string): string {
   return (4294967296 * (2097151 & h2) + (h1 >>> 0)).toString(16)
 }
 
-export function createSource(input: { id: string; kind: Source['kind']; address?: string; passage?: string; note?: string; now: string }): Source {
-  const base: Source = { id: input.id, kind: input.kind, address: input.address, trust: input.kind === 'say_so' ? 'lower' : 'normal', freshness: 'unchecked', note: input.note }
+export type LineRange = { from: number; to: number }
+
+/**
+ * A line range from the text a writer types into a field or from a link fragment: "40-60", "40–60", "L40-L60", "lines 40 to 60", "40".
+ * It reads the numbers only; the first is the start and the second (if any) the end. Nothing is parsed from the meaning of words.
+ */
+export function parseLineRange(text: string): LineRange | undefined {
+  const nums = text.match(/\d+/g)?.map(Number).filter((n) => n >= 1)
+  if (!nums || nums.length === 0 || nums.length > 2) return undefined
+  const from = nums[0]
+  const to = nums[1] ?? from
+  return to >= from ? { from, to } : { from: to, to: from }
+}
+
+/** Only the given lines (1-based, inclusive) of a text; a range past the end is cut at the end, and an empty result means the range misses the text. */
+export function sliceLines(text: string, range: LineRange): string {
+  return text.split('\n').slice(range.from - 1, range.to).join('\n')
+}
+
+/** What a stored passage holds when the source keeps only some lines: the whole text otherwise. */
+export function excerptFor(source: Pick<Source, 'lines'>, text: string): string {
+  return source.lines ? sliceLines(text, source.lines) : text
+}
+
+/**
+ * A link to one file in a GitHub repository (github.com/o/r/blob/ref/path, or raw.githubusercontent.com), with the line range of an #L10-L20 fragment.
+ * `rawUrl` is where the file's text is fetched from. Anything else is undefined: such a link is an ordinary web page.
+ */
+export function parseRepoFileLink(address: string): { rawUrl: string; path: string; lines?: LineRange } | undefined {
+  let u: URL
+  try {
+    u = new URL(address)
+  } catch {
+    return undefined
+  }
+  if (u.protocol !== 'https:') return undefined
+  const lines = u.hash.startsWith('#L') ? parseLineRange(u.hash) : undefined
+  const parts = u.pathname.split('/').filter(Boolean)
+  if (u.hostname === 'github.com' && parts.length >= 5 && parts[2] === 'blob') {
+    const [owner, repo, , ref, ...rest] = parts
+    return { rawUrl: `https://raw.githubusercontent.com/${owner}/${repo}/${ref}/${rest.join('/')}`, path: rest.join('/'), lines }
+  }
+  if (u.hostname === 'raw.githubusercontent.com' && parts.length >= 4) return { rawUrl: `https://raw.githubusercontent.com${u.pathname}`, path: parts.slice(3).join('/'), lines }
+  return undefined
+}
+
+export function createSource(input: { id: string; kind: Source['kind']; address?: string; passage?: string; note?: string; lines?: LineRange; now: string }): Source {
+  const base: Source = { id: input.id, kind: input.kind, address: input.address, trust: input.kind === 'say_so' ? 'lower' : 'normal', freshness: 'unchecked', note: input.note, ...(input.lines ? { lines: input.lines } : {}) }
   if (input.passage === undefined) return base
-  return { ...base, passage: input.passage, readAt: input.now, fingerprint: fingerprintPassage(input.passage), freshness: 'current' }
+  const passage = excerptFor(base, input.passage)
+  return { ...base, passage, readAt: input.now, fingerprint: fingerprintPassage(passage), freshness: 'current' }
 }
 
 /**

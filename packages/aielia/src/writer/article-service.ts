@@ -14,7 +14,7 @@ import { addSnapshot, compareVersions, isLargeChange, summarizeChange, type Chan
 import { checkIntegrity, computeReadiness, confirmLink, createSnapshot, removeLink, restoreSnapshot, setSectionReview, type Problem, type Readiness, type Snapshot } from './article-rules.js'
 import { suggestEdits, type EditSuggestResult } from './article-edit-suggest.js'
 import { reconcileSections } from './article-sections.js'
-import { acceptNewPassage, applyRecheck, createSource } from './article-sources.js'
+import { acceptNewPassage, applyRecheck, createSource, excerptFor, parseRepoFileLink, sliceLines, type LineRange } from './article-sources.js'
 import { acceptSuggestion, refreshSuggestions, rejectSuggestion } from './article-suggestions.js'
 import { checkClaimSupport, needsAutoCheck, type SupportCheck } from './article-support.js'
 import { loadPermissions } from './write-permissions.js'
@@ -97,6 +97,11 @@ function isHttpAddress(address: string): boolean {
   } catch {
     return false
   }
+}
+
+/** A source whose text can be fetched: a web link, or a link to a repository file (stored as code). */
+function isReadableLink(s: Source): boolean {
+  return (s.kind === 'web' || s.kind === 'code') && !!s.address && isHttpAddress(s.address)
 }
 
 /** The most of a page kept as a source passage. */
@@ -258,11 +263,14 @@ export class ArticleService {
     return meta
   }
 
-  async addSource(id: string, input: { kind: Source['kind']; address?: string; passage?: string; note?: string }): Promise<string> {
+  async addSource(id: string, input: { kind: Source['kind']; address?: string; passage?: string; note?: string; lines?: LineRange }): Promise<string> {
     const b = await this.get(id)
     let n = b.meta.sources.length + 1
     while (b.meta.sources.some((s) => s.id === `src${n}`)) n++
-    const source = createSource({ id: `src${n}`, ...input, now: this.now() })
+    const repo = input.address ? parseRepoFileLink(input.address) : undefined
+    // A link to a repository file is a code source; the lines of its #L10-L20 fragment are the lines kept.
+    const kind = repo && input.kind === 'web' ? 'code' : input.kind
+    const source = createSource({ id: `src${n}`, ...input, kind, lines: input.lines ?? repo?.lines, now: this.now() })
     await this.store.save(id, { ...b, meta: { ...b.meta, sources: [...b.meta.sources, source] } })
     return source.id
   }
@@ -276,33 +284,84 @@ export class ArticleService {
     const b = await this.get(id)
     const src = b.meta.sources.find((x) => x.id === sourceId)
     if (!src) return { status: 'not_a_link', impacts: [], reason: `No source ${sourceId}.` }
-    if (src.kind !== 'web' || !src.address || !isHttpAddress(src.address)) return { status: 'not_a_link', impacts: [], reason: 'Only a web link can be read.' }
+    if (!isReadableLink(src)) return { status: 'not_a_link', impacts: [], reason: 'Only a web link or a link to a repository file can be read.' }
     if (!this.opts.fetchWeb) return { status: 'unavailable', impacts: [], reason: 'This browser cannot read web pages. Paste the passage instead.' }
-    const save = (s: Source, meta = b.meta): Promise<void> => this.store.save(id, { ...b, meta: { ...meta, sources: meta.sources.map((x) => (x.id === sourceId ? s : x)) } })
+    const address = src.address as string
     let text: string
     try {
-      text = (await this.opts.fetchWeb(src.address)).slice(0, MAX_SOURCE_CHARS).trim()
+      text = (await this.opts.fetchWeb(parseRepoFileLink(address)?.rawUrl ?? address)).slice(0, MAX_SOURCE_CHARS).trim()
     } catch (e) {
-      await save(applyRecheck(src, { unreachable: true }, this.now()))
+      await this.saveSource(id, b, applyRecheck(src, { unreachable: true }, this.now()))
       return { status: 'unreachable', impacts: [], reason: e instanceof Error ? e.message : String(e) }
     }
     if (!text) {
-      await save(applyRecheck(src, { unreachable: true }, this.now()))
+      await this.saveSource(id, b, applyRecheck(src, { unreachable: true }, this.now()))
       return { status: 'unreachable', impacts: [], reason: 'The page had no text.' }
     }
+    return this.receiveText(id, b, src, excerptFor(src, text), modelOverride)
+  }
+
+  private saveSource(id: string, b: ArticleBundle, s: Source, meta = b.meta): Promise<void> {
+    return this.store.save(id, { ...b, meta: { ...meta, sources: meta.sources.map((x) => (x.id === s.id ? s : x)) } })
+  }
+
+  /** New text for a source: the first text becomes the passage; the same text keeps it current; different text is held until accepted, and a model judges which citing claims it touches. */
+  private async receiveText(id: string, b: ArticleBundle, src: Source, text: string, modelOverride?: string): Promise<{ status: 'read' | 'unchanged' | 'changed'; impacts: SourceImpact[] }> {
     if (src.passage === undefined) {
-      await save(acceptNewPassage(src, text, this.now()))
+      await this.saveSource(id, b, acceptNewPassage(src, text, this.now()))
       return { status: 'read', impacts: [] }
     }
     const rechecked = applyRecheck(src, { passage: text }, this.now())
     if (rechecked.freshness !== 'changed') {
-      await save({ ...rechecked, fetchedPassage: undefined })
+      await this.saveSource(id, b, { ...rechecked, fetchedPassage: undefined })
       return { status: 'unchanged', impacts: [] }
     }
     const model = modelOverride ?? this.checker()
-    const assessed = await assessSourceChange({ meta: b.meta, sourceId, before: src.passage, after: text, now: this.now() }, this.opts.llm, model, this.opts.onUsage)
-    await save({ ...rechecked, fetchedPassage: text }, assessed.meta)
+    const assessed = await assessSourceChange({ meta: b.meta, sourceId: src.id, before: src.passage, after: text, now: this.now() }, this.opts.llm, model, this.opts.onUsage)
+    await this.saveSource(id, b, { ...rechecked, fetchedPassage: text }, assessed.meta)
     return { status: 'changed', impacts: assessed.impacts }
+  }
+
+  /**
+   * The writer gives a new version of a file already stored as a source (dropped again). Same text keeps it current; different text is held
+   * like a changed page, with the same impact judgement, until the writer accepts it. Without a stored file of that name the file is not matched.
+   */
+  async offerFileVersion(id: string, name: string, text: string, modelOverride?: string): Promise<{ status: 'read' | 'unchanged' | 'changed' | 'no_match'; sourceId?: string; impacts: SourceImpact[] }> {
+    const b = await this.get(id)
+    const src = b.meta.sources.find((x) => (x.kind === 'code' || x.kind === 'upload') && x.address === name && !isHttpAddress(name))
+    if (!src) return { status: 'no_match', impacts: [] }
+    const r = await this.receiveText(id, b, src, excerptFor(src, text.slice(0, MAX_SOURCE_CHARS * 4)), modelOverride)
+    return { ...r, sourceId: src.id }
+  }
+
+  /**
+   * Keeps only some lines of a source. A source with an address is read again to take them (or to widen them); a dropped file can be narrowed
+   * from the text stored, but not widened (drop the file again). The new passage replaces the old one, as an edit by the writer does.
+   * `undefined` clears the range.
+   */
+  async setSourceLines(id: string, sourceId: string, range: LineRange | undefined, modelOverride?: string): Promise<{ ok: boolean; reason?: string }> {
+    void modelOverride
+    const b = await this.get(id)
+    const src = b.meta.sources.find((x) => x.id === sourceId)
+    if (!src) return { ok: false, reason: `No source ${sourceId}.` }
+    if (src.kind !== 'code' && src.kind !== 'upload' && src.kind !== 'web') return { ok: false, reason: 'Lines can be kept only from a file or a page.' }
+    const next: Source = { ...src, lines: range, fetchedPassage: undefined }
+    if (!range) delete next.lines
+    let full: string | undefined
+    if (isReadableLink(src)) {
+      if (!this.opts.fetchWeb) return { ok: false, reason: 'This browser cannot read web pages, so the lines cannot be taken again.' }
+      try {
+        full = (await this.opts.fetchWeb(parseRepoFileLink(src.address as string)?.rawUrl ?? (src.address as string))).slice(0, MAX_SOURCE_CHARS).trim()
+      } catch (e) {
+        return { ok: false, reason: e instanceof Error ? e.message : String(e) }
+      }
+    } else if (src.passage !== undefined && !src.lines && range) full = src.passage
+    else if (src.passage !== undefined && !range && !src.lines) return { ok: true }
+    else return { ok: false, reason: 'Drop the file again to change which lines are kept.' }
+    const passage = range ? sliceLines(full, range) : full
+    if (!passage.trim()) return { ok: false, reason: 'Those lines are not in the text.' }
+    await this.saveSource(id, b, acceptNewPassage(next, passage, this.now()))
+    return { ok: true }
   }
 
   /**
@@ -340,7 +399,7 @@ export class ArticleService {
   async recheckSources(id: string, modelOverride?: string): Promise<SourceRecheckReport> {
     const b = await this.get(id)
     const report: SourceRecheckReport = { read: 0, unchanged: 0, changed: [], unreachable: [], skipped: 0 }
-    const web = b.meta.sources.filter((s) => s.kind === 'web' && s.address && isHttpAddress(s.address))
+    const web = b.meta.sources.filter(isReadableLink)
     if (!this.opts.fetchWeb) return { ...report, skipped: web.length }
     for (const s of web.slice(0, 30)) {
       const r = await this.readSource(id, s.id, modelOverride)
