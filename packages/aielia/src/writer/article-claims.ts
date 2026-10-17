@@ -45,6 +45,7 @@ const SCHEMA = {
 
 const SYSTEM_PROMPT =
   'You read parts of an article and list the claims in them. A claim is something the text asserts that could be wrong: a figure, a date, a cause, a comparison, a statement about how something works. ' +
+  'Quote at the size of a sentence: one claim is normally one whole sentence, and the next sentence is joined to it only when it cannot be understood without it (for example one that begins "that number"). Do not cut a sentence into pieces, and do not list a sentence that only repeats a claim you already listed or that states nothing that could be checked. ' +
   'Opinions, framing and advice are not factual claims: list them with kind "opinion" or "framing" only when they are stated as if they were findings. ' +
   'You are given JSON with "sections" (id, heading, text) and "known" (claims already recorded: id, quote, confirmed). ' +
   'Respond with JSON only: {"claims":[{"quote": an exact, contiguous quote of the claim from the text, "kind":"factual"|"opinion"|"framing", "matchesId": the id of the known claim this is the same claim as, or null if it is new, "sure": true when you are certain it is the same claim, false when it may be a different one}]}. ' +
