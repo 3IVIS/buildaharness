@@ -40,4 +40,9 @@ describe('connection settings', () => {
     await userEvent.click(save)
     expect(onSave).toHaveBeenCalledWith({ provider: 'proxy', apiKey: 'k1', modelUrl: 'http://localhost:8787' })
   })
+  it('leaves out the page-reading and search fields on the first visit', () => {
+    render(<ConnectionSettings value={{ provider: 'anthropic', apiKey: '' }} onSave={vi.fn()} showWeb={false} />)
+    expect(screen.queryByText(/Reading web pages and finding sources/)).toBeNull()
+    expect(screen.queryByLabelText('Proxy address')).toBeNull()
+  })
 })

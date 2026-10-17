@@ -6,10 +6,12 @@ interface Props {
   onSave: (c: WriteConnection) => void
   /** Absent on the first visit, when there is nothing to forget. */
   onForget?: () => void
+  /** The optional page-reading and search fields. Left out on the first visit, which asks only how to reach a model; they are in Settings. */
+  showWeb?: boolean
 }
 
 /** The few things this page needs to reach a model and the web. Stored in this browser only, apart from the /try page's settings. */
-export function ConnectionSettings({ value, onSave, onForget }: Props): React.JSX.Element {
+export function ConnectionSettings({ value, onSave, onForget, showWeb = true }: Props): React.JSX.Element {
   const [draft, setDraft] = useState<WriteConnection>(value)
   const set = (patch: Partial<WriteConnection>): void => setDraft((d) => ({ ...d, ...patch }))
   const dirty = JSON.stringify(draft) !== JSON.stringify(value)
@@ -40,7 +42,7 @@ export function ConnectionSettings({ value, onSave, onForget }: Props): React.JS
           <input aria-label="API key" type="password" autoComplete="off" value={draft.apiKey} onChange={(e) => set({ apiKey: e.target.value })} />
         </label>
       )}
-      <details className="write__allsrc" open={Boolean(draft.pagesUrl || draft.searchKey)}>
+      {showWeb && <details className="write__allsrc" open={Boolean(draft.pagesUrl || draft.searchKey)}>
         <summary>Reading web pages and finding sources (optional)</summary>
         <p className="write__muted">Browsers cannot read most web pages directly. This page uses the Aielia proxy for it unless you give your own address. If none works, links stay links and you paste the passage.</p>
         <label>Proxy address
@@ -52,7 +54,7 @@ export function ConnectionSettings({ value, onSave, onForget }: Props): React.JS
         <label>Brave Search key (for finding sources)
           <input aria-label="Search key" type="password" autoComplete="off" value={draft.searchKey ?? ''} onChange={(e) => set({ searchKey: e.target.value })} />
         </label>
-      </details>
+      </details>}
       <div className="write__rowacts">
         <button type="button" className="write__primary" disabled={!dirty || (draft.provider === 'proxy' ? !draft.modelUrl?.trim() : !draft.apiKey.trim())} onClick={() => onSave(draft)}>Save connection</button>
         {onForget && <button type="button" className="write__link" onClick={() => { if (window.confirm('Forget the key and the other connection settings from this browser? Your articles stay.')) onForget() }}>Forget these</button>}

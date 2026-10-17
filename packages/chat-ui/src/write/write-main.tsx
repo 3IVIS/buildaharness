@@ -38,13 +38,13 @@ function Root(): React.JSX.Element {
   )
 }
 
-/** First visit: just the key. Everything else is in Settings, when it is wanted. */
+/** First visit: just how to reach a model. Everything else is in Settings, when it is wanted. */
 function FirstRun({ onSave }: { onSave: (c: WriteConnection) => void }): React.JSX.Element {
   const [draft] = useState<WriteConnection>({ provider: 'anthropic', apiKey: '' })
   return (
     <div style={{ maxWidth: 480, margin: '10vh auto', padding: 16, font: '16px system-ui' }}>
       <h1>Aielia Write</h1>
-      <ConnectionSettings value={draft} onSave={onSave} />
+      <ConnectionSettings value={draft} onSave={onSave} showWeb={false} />
     </div>
   )
 }
