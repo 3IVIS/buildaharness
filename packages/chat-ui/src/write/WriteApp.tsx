@@ -369,23 +369,31 @@ export function WriteApp({ services, connection }: { services: WriteServices; co
    * attached; with nothing typed, the repositories already attached are used. Then the claims are checked against them, and only them.
    */
   const verifyInRepo = (address: string): void => {
-    if (!activeId) return
+    const say = (text: string): void => setChat((c) => [...c, { id: ++lineId, from: 'aielia', text }])
+    if (!activeId) { say('Open or create an article first, then choose the repository.'); return }
     const id = activeId
     const typed = address.trim()
-    if (!typed && service.attachedRepos(id).length === 0) { setNotice('Type a GitHub address like github.com/owner/repo, or choose a folder.'); return }
+    if (!typed && service.attachedRepos(id).length === 0) { say('Type a GitHub address like github.com/owner/repo, or choose a folder.'); return }
     const spec = typed ? parseGithubRepoAddress(typed) : undefined
-    if (typed && !spec) { setNotice('Type a GitHub address like github.com/owner/repo.'); return }
+    if (typed && !spec) { say(`"${typed}" is not a GitHub address I can read. Use something like github.com/owner/repo.`); return }
     void (async () => {
       if (spec) {
+        setChat((c) => [...c, { id: ++lineId, from: 'you', text: `Use ${typed} as the repository` }])
+        let listed = false
+        setBusy('Listing the repository')
+        setNotice(null)
         try {
-          await run('Listing the repository', async () => {
-            const reader = githubRepoReader(spec, { token: services.githubToken })
-            await reader.files()
-            service.attachRepo(id, reader)
-            setRepoTick((n) => n + 1)
-          })
-        } catch { return }
-        if (service.attachedRepos(id).length === 0) return
+          const reader = githubRepoReader(spec, { token: services.githubToken })
+          await reader.files()
+          service.attachRepo(id, reader)
+          setRepoTick((n) => n + 1)
+          listed = true
+        } catch (e) {
+          say(`I could not list ${typed}: ${e instanceof Error ? e.message : String(e)}`)
+        } finally {
+          setBusy(null)
+        }
+        if (!listed) return
       }
       verifyFromChat(true)
     })()
