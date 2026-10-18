@@ -64,8 +64,8 @@ export default [
     rules: { 'react-hooks/rules-of-hooks': 'off' },
   },
   {
-    // The proxy is a server and the harness scripts are CLIs: console output there is the product, not leftover debugging.
-    files: ['packages/proxy/**/*.ts', 'packages/*/scripts/**/*.ts'],
+    // The proxy and the local bridge are servers and the harness scripts are CLIs: console output there is the product, not leftover debugging.
+    files: ['packages/proxy/**/*.ts', 'packages/local-claude-bridge/**/*.ts', 'packages/*/scripts/**/*.ts'],
     rules: { 'no-console': 'off' },
   },
 ]
