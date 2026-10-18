@@ -370,6 +370,7 @@ export function WriteApp({ services, connection }: { services: WriteServices; co
    */
   const verifyInRepo = (address: string): void => {
     const say = (text: string): void => setChat((c) => [...c, { id: ++lineId, from: 'aielia', text }])
+    setChat((c) => [...c, { id: ++lineId, from: 'you', text: address.trim() ? `Verify the claims against ${address.trim()}` : 'Verify the claims against the attached repositories' }])
     if (!activeId) { say('Open or create an article first, then choose the repository.'); return }
     const id = activeId
     const typed = address.trim()
@@ -378,7 +379,6 @@ export function WriteApp({ services, connection }: { services: WriteServices; co
     if (typed && !spec) { say(`"${typed}" is not a GitHub address I can read. Use something like github.com/owner/repo.`); return }
     void (async () => {
       if (spec) {
-        setChat((c) => [...c, { id: ++lineId, from: 'you', text: `Use ${typed} as the repository` }])
         let listed = false
         setBusy('Listing the repository')
         setNotice(null)
@@ -395,12 +395,13 @@ export function WriteApp({ services, connection }: { services: WriteServices; co
         }
         if (!listed) return
       }
-      verifyFromChat(true)
+      verifyFromChat(true, null)
     })()
   }
   /** Chooses a repository folder on this computer, attaches it and checks the claims against it. */
   const pickRepoFolderAndVerify = (): void => {
     if (!activeId) return
+    setChat((c) => [...c, { id: ++lineId, from: 'you', text: 'Verify the claims against a folder on this computer' }])
     const id = activeId
     void (async () => {
       try {
@@ -411,12 +412,12 @@ export function WriteApp({ services, connection }: { services: WriteServices; co
         service.attachRepo(id, reader)
         setRepoTick((n) => n + 1)
       } catch (e) {
-        setNotice(e instanceof Error ? e.message : String(e))
+        setChat((c) => [...c, { id: ++lineId, from: 'aielia', text: `I could not use that folder: ${e instanceof Error ? e.message : String(e)}` }])
         return
       } finally {
         setBusy(null)
       }
-      verifyFromChat(true)
+      verifyFromChat(true, null)
     })()
   }
   const removeRepo = (name: string): void => {
@@ -515,15 +516,19 @@ export function WriteApp({ services, connection }: { services: WriteServices; co
     const lines = r.entries.filter((e) => e.outcome === 'no_source_found' || e.outcome === 'contradicted').map((e) => `• ${e.outcome === 'contradicted' ? 'Contradicted' : 'No source found'}: ${e.quote.slice(0, 100)}`)
     return [summarizeVerify(r), ...lines, r.entries.some((e) => e.found.length > 0) ? 'Pages that were found are kept as suggested sources under the text: confirm the ones that are right.' : ''].filter(Boolean).join('\n')
   }
-  const verifyFromChat = (repoOnly = false): void => {
+  const verifyFromChat = (repoOnly = false, said?: string | null): void => {
     if (!activeId) return
     const used = services.models.chat()
-    setChat((c) => [...c, { id: ++lineId, from: 'you', text: repoOnly ? 'Verify the claims against the repository' : 'Verify the claims and look for sources' }])
+    if (said !== null) setChat((c) => [...c, { id: ++lineId, from: 'you', text: said ?? (repoOnly ? 'Verify the claims against the repository' : 'Verify the claims and look for sources') }])
     void run(`Verifying with ${used}`, async () => {
-      await flushDraft()
-      const r = await service.verifyClaims(activeId, { model: used, repoOnly })
-      setBundle(await service.get(activeId))
-      setChat((c) => [...c, { id: ++lineId, from: 'aielia', text: verifyText(r), model: used }])
+      try {
+        await flushDraft()
+        const r = await service.verifyClaims(activeId, { model: used, repoOnly })
+        setBundle(await service.get(activeId))
+        setChat((c) => [...c, { id: ++lineId, from: 'aielia', text: verifyText(r), model: used }])
+      } catch (e) {
+        setChat((c) => [...c, { id: ++lineId, from: 'aielia', text: `The check could not finish: ${e instanceof Error ? e.message : String(e)}` }])
+      }
     })
   }
   /** A check started from the chat, with the model chosen there. The result is said in the chat, with the model's name. */
