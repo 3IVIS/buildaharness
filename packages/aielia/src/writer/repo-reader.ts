@@ -25,7 +25,8 @@ export interface GithubRepoSpec {
 
 /** The repository named by a GitHub address (github.com/o/r, with an optional /tree/<ref>), or `o/r`. Anything else is undefined. */
 export function parseGithubRepoAddress(input: string): GithubRepoSpec | undefined {
-  const text = input.trim().replace(/\.git$/i, '').replace(/\/+$/, '')
+  let text = input.trim().replace(/\.git$/i, '').replace(/\/+$/, '')
+  if (text.toLowerCase().startsWith('github.com/') || text.toLowerCase().startsWith('www.github.com/')) text = `https://${text}`
   const short = /^([A-Za-z0-9_.-]+)\/([A-Za-z0-9_.-]+)$/.exec(text)
   if (short && !text.includes('://')) return { owner: short[1], repo: short[2] }
   let u: URL
@@ -34,7 +35,7 @@ export function parseGithubRepoAddress(input: string): GithubRepoSpec | undefine
   } catch {
     return undefined
   }
-  if (u.protocol !== 'https:' || u.hostname !== 'github.com') return undefined
+  if (u.protocol !== 'https:' || u.hostname !== 'github.com' && u.hostname !== 'www.github.com') return undefined
   const parts = u.pathname.split('/').filter(Boolean)
   if (parts.length < 2) return undefined
   const [owner, repo, kind, ref, ...rest] = parts

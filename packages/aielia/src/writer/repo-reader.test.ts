@@ -8,6 +8,8 @@ describe('parseGithubRepoAddress', () => {
     expect(parseGithubRepoAddress('https://github.com/o/r/tree/feature-x/src')).toEqual({ owner: 'o', repo: 'r', ref: 'feature-x', path: 'src' })
     expect(parseGithubRepoAddress('https://github.com/o/r/tree/main/packages/x')).toEqual({ owner: 'o', repo: 'r', ref: 'main', path: 'packages/x' })
     expect(parseGithubRepoAddress('o/r')).toEqual({ owner: 'o', repo: 'r' })
+    expect(parseGithubRepoAddress('github.com/3IVIS/buildaharness')).toEqual({ owner: '3IVIS', repo: 'buildaharness' })
+    expect(parseGithubRepoAddress('www.github.com/o/r/tree/main/src')).toEqual({ owner: 'o', repo: 'r', ref: 'main', path: 'src' })
     expect(parseGithubRepoAddress('https://example.com/o/r')).toBeUndefined()
     expect(parseGithubRepoAddress('http://github.com/o/r')).toBeUndefined()
     expect(parseGithubRepoAddress('github')).toBeUndefined()
