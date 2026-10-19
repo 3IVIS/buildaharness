@@ -18,7 +18,7 @@ describe('formatHelp', () => {
     expect(CLI_COMMANDS_HELP.map((c) => c.command)).toEqual([
       '/help', '/exit (/quit, exit, quit)', '/clear (/new)', '/status', '/export [file]', '/undo', '/undo-action [id]', '/memory',
       '/memory export [file]', '/memory confirm <n|category>', '/memory reject <n|category>', '/memory forget <n> [erase]', '/memory forget digest [id]',
-      '/memory history', '/memory undo <seq>', '/memory status', '/memory archive [restore <n> | forget <n>]', '/memory consolidate [accept|dismiss <n>]', '/memory off | on', '/search <query>',
+      '/memory history [events [fact]]', '/memory undo <seq>', '/memory status', '/memory archive [restore <n> | forget <n>]', '/memory consolidate [accept|dismiss <n>]', '/memory off | on', '/search <query>',
       '/model [name]', '/project [name]', '/cost', '/doctor', '/why', '/layers',
       '/sources', '/steps', '/plan', '/plan graph [thread-id]', '/plan sketch <request>', '/goals', '/config ...', '/layers settings', '/checkpoint [clear]',
     ])

@@ -46,6 +46,7 @@ import { NodeConfigStore } from './node-config-store.js'
 import { applyLayerSettings, formatLayerListing, sanitizeLayerChoices, withLayerChoice, LayerSettingError } from './layer-settings.js'
 import { isConfigKey, findInvalidNumericSettings, envOverridesFromProcessEnv, parseConfigValue, ConfigValueParseError, formatConfigListing, ENV_VAR_FOR_CONFIG_KEY, CONFIG_KEYS } from './cli-config.js'
 import { stripTerminalControls, formatHelp, isQuitCommand, formatStatus, formatTranscriptMarkdown, defaultExportFilename, formatMemorySummary, formatMemoryExport, defaultMemoryExportFilename, formatSearchResults, formatGoalGraphState, formatNextSteps, formatCostSummary, formatDoctorReport, formatUndoLogListing, formatMemoryPendingOutcome, formatMemoryHistory, formatMemoryArchive, formatMemoryStatus } from './cli-session.js'
+import { formatMemoryEvents } from './memory-events.js'
 import { formatSpendCapStatus } from './spend-cap.js'
 import { checkProxyHealth, checkClaudeCli, checkWorkspaceRoot, checkDataDirWritable, checkMemoryHealth } from './doctor-checks.js'
 import { resolveNonInteractiveApprovalMode, type NonInteractiveApprovalMode } from './non-interactive-mode.js'
@@ -953,6 +954,10 @@ export async function runCli(options: RunCliOptions = {}): Promise<CliInstance> 
     }
     if (args[0] === 'forget') {
       await handleMemoryForget(args.slice(1))
+      return
+    }
+    if (args[0] === 'history' && args[1] === 'events') {
+      printSafe(`\n${formatMemoryEvents(await assistant.memoryEvents(50, args[2] ? { fact: args[2] } : {}))}\n`)
       return
     }
     if (args[0] === 'history') {

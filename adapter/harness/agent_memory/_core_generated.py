@@ -2163,3 +2163,53 @@ INV16: dict[str, Any] = {
         "commitment",
     ],
 }
+
+MEMORY_EVENT_STORE_KEY: str = "memory:events"
+
+MEMORY_EVENT_KEEP: int = 500
+
+MEMORY_EVENT_KINDS: list[str] = [
+    "promote",
+    "decline",
+    "correct",
+    "contradict",
+    "supersede",
+    "retire",
+    "forget",
+    "expire",
+    "restore",
+    "recall",
+]
+
+MEMORY_REASON_CODES: list[str] = [
+    "user_stated",
+    "user_corrected",
+    "user_confirmed",
+    "user_rejected",
+    "inferred_high_conf",
+    "inferred_pending_confirmation",
+    "inferred_low_conf_session_only",
+    "conflicts_with_fact",
+    "superseded_by_newer",
+    "explicit_forget",
+    "retention_expired",
+    "gate_blocked_secret",
+    "gate_blocked_instruction",
+    "duplicate",
+]
+
+MEMORY_SOURCE_TYPES: list[str] = [
+    "user_message",
+    "assistant_message",
+    "tool_result",
+    "prior_fact",
+    "user_command",
+]
+
+MEMORY_DECIDED_BY: list[str] = [
+    "user",
+    "classifier",
+    "reviewer",
+    "consolidation",
+    "rule",
+]

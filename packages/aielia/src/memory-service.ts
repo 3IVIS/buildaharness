@@ -6,6 +6,7 @@ import { checkForContradictions, semanticContradictionEnabled, type BeliefCandid
 import { DigestStore, writeDigest, endConversation, type SessionDigest } from './episodic-digest.js'
 import { SUMMARY_HEADER } from './transcript-compaction.js'
 import type { StatedFact, FactCategory, FactConfidence } from './turn-intent-classifier.js'
+import { eventFromAudit, factKey, scrubForgotten, trimEvents, filterEvents, MEMORY_EVENTS_KEY, type EventSink, type EventFilter, type MemoryEvent, type MemoryEventDraft, type ReasonCode } from './memory-events.js'
 import { DEFAULT_MEMORY_WRITE_MODE, resolveWriteRoute, type MemoryWriteMode, type CrossTurnWriter } from './memory-governance.js'
 import {
   memoryConsolidationEnabled, memoryRetentionDays, proposeConsolidationOps, findArchiveCandidates,
@@ -269,6 +270,12 @@ export function memoryWriteGateEnabled(env?: Record<string, string | undefined>)
 export function memoryAuditLogEnabled(env?: Record<string, string | undefined>): boolean {
   const source = env ?? (typeof process !== 'undefined' ? process.env : {})
   return ['1', 'true', 'on', 'yes', 'enabled'].includes(String(source.AUDIT_MEMORY_AUDIT_LOG ?? '').trim().toLowerCase())
+}
+
+/** `AUDIT_MEMORY_EVENTS`: metadata-only transition events (kind, reason code, source refs, ids; no fact text unless the audit log is on). Default ON; `=0`/`off` restores no events. */
+export function memoryEventsEnabled(env?: Record<string, string | undefined>): boolean {
+  const source = env ?? (typeof process !== 'undefined' ? process.env : {})
+  return !['0', 'false', 'off', 'no', 'disabled'].includes(String(source.AUDIT_MEMORY_EVENTS ?? '').trim().toLowerCase())
 }
 
 /** Outcome of `admitCandidate()` for one candidate. `session` = kept session-scoped only, never durable or pending. */
@@ -557,6 +564,7 @@ export class MemoryService {
     } else {
       const session = (((await this.memory.get(`facts:${sessionId}`)) as UserFact[] | undefined) ?? []).map(migrateFact)
       await this.memory.set(`facts:${sessionId}`, [...session, { ...fact, durable: false }])
+      await this.emitEvents([{ ...this.decisionEvent('decline', 'inferred_low_conf_session_only', fact, sessionId), decidedBy: writer === 'digest' ? 'classifier' : writer }])
     }
     return { route, fact }
   }
@@ -698,9 +706,55 @@ export class MemoryService {
     return run
   }
 
-  private appendAudit(drafts: AuditDraft[]): Promise<void> {
-    if (drafts.length === 0 || !memoryAuditLogEnabled()) return Promise.resolve()
+  private async appendAudit(drafts: AuditDraft[]): Promise<void> {
+    if (drafts.length === 0) return
+    // Every writer reaches here (commitDurable included), so every change to memory also emits its event.
+    await this.emitEvents(drafts.map((d) => eventFromAudit(d, memoryAuditLogEnabled())))
+    if (!memoryAuditLogEnabled()) return
     return this.serialized('auditChain', () => this.appendAuditNow(drafts))
+  }
+
+  /** Extra destinations for events (the eval collector); each receives every event, whether or not the stored log is on. */
+  private eventSinks: EventSink[] = []
+  private eventSeqLocal = 0
+  addEventSink(sink: EventSink): void {
+    this.eventSinks.push(sink)
+  }
+
+  /** Stamps seq/at, appends to the stored event log (when `AUDIT_MEMORY_EVENTS` is on) and fans out to the extra sinks. A sink that throws never blocks the memory write. */
+  private async emitEvents(drafts: MemoryEventDraft[]): Promise<void> {
+    const stored = memoryEventsEnabled()
+    if (drafts.length === 0 || (!stored && this.eventSinks.length === 0)) return
+    const at = this.clock()
+    const stamped = await this.serialized('auditChain', async () => {
+      const log = stored ? ((await this.memory.get(MEMORY_EVENTS_KEY)) as MemoryEvent[] | undefined) ?? [] : []
+      let seq = Math.max(log.length > 0 ? log[log.length - 1].seq : 0, this.eventSeqLocal)
+      const events = drafts.map((d) => ({ ...d, seq: ++seq, at }))
+      this.eventSeqLocal = seq
+      if (stored) {
+        const forgotten = new Set(events.filter((e) => e.kind === 'forget').map((e) => e.factId))
+        await this.memory.set(MEMORY_EVENTS_KEY, trimEvents(scrubForgotten([...log, ...events], forgotten)))
+      }
+      return events
+    })
+    for (const sink of this.eventSinks) {
+      try { await sink.emit(stamped) } catch { /* observability must not break a memory write */ }
+    }
+  }
+
+  /** `/memory history events [fact]`: the newest transition events, optionally for one fact id or attribute key. */
+  async getEvents(limit = 50, filter: EventFilter = {}): Promise<MemoryEvent[]> {
+    const log = ((await this.memory.get(MEMORY_EVENTS_KEY)) as MemoryEvent[] | undefined) ?? []
+    return filterEvents(log, filter).slice(-limit)
+  }
+
+  /** A decision that wrote nothing (a promotion declined, a duplicate, a contradiction found) still leaves an event. */
+  private decisionEvent(kind: MemoryEventDraft['kind'], reason: ReasonCode, fact: UserFact, turn: string, extra: Partial<MemoryEventDraft> = {}): MemoryEventDraft {
+    return {
+      session: turn, turn, kind, factId: factKey(fact), ...(fact.key ? { attributeKey: fact.key } : {}), store: 'session', reason,
+      sources: [{ type: 'user_message', ref: fact.sourceTurn }], decidedBy: fact.source === 'user_asserted' ? 'rule' : 'classifier',
+      ...(fact.confidence ? { confidence: fact.confidence } : {}), ...extra,
+    }
   }
 
   private async appendAuditNow(drafts: AuditDraft[]): Promise<void> {
@@ -962,6 +1016,7 @@ export class MemoryService {
     let rejectedChanged = false
     const audits: AuditDraft[] = []
     const auditPending: AuditDraft[] = []
+    const declines: MemoryEventDraft[] = []
     const turn = sessionId
 
     const uncertainPool = sessionFacts
@@ -988,6 +1043,14 @@ export class MemoryService {
 
     const uncertainIdIndex = new Map(uncertainBeliefs.map((b, i) => [b.id, i]))
     const rejectedIdIndex = new Map(rejectedBeliefs.map((b, i) => [b.id, i]))
+
+    // A contradiction is an event whether or not anything is retracted: the new statement and the stored one it conflicts with.
+    for (const c of contradictions) {
+      const subject = c.beliefIds.map((id) => (id.startsWith('new-') ? newFacts[Number(id.slice(4))] : undefined)).find((f) => f !== undefined)
+      if (!subject) continue
+      const priors = c.beliefIds.flatMap((id) => (id.startsWith('existing-') && knowledgePool[Number(id.slice(9))] ? [knowledgePool[Number(id.slice(9))]] : []))
+      declines.push(this.decisionEvent('contradict', 'conflicts_with_fact', subject, turn, { sources: [{ type: 'user_message', ref: subject.sourceTurn }, ...priors.map((p) => ({ type: 'prior_fact' as const, ref: factKey(p) }))] }))
+    }
 
     // Retraction: a contradiction naming an uncertain-pool id retracts that fact — same output
     // shape as any other contradiction, distinguished only by which pool the matched id came
@@ -1067,7 +1130,7 @@ export class MemoryService {
         const sameKey = (f: UserFact): boolean => f.key === key && (f.project ?? '') === (fact.project ?? '')
         const priorLive = [...durableFacts, ...sessionFacts].filter(sameKey)
         // Restating the same value is a no-op, not a new entry.
-        if (priorLive.some((f) => f.text === fact.text)) continue
+        if (priorLive.some((f) => f.text === fact.text)) { declines.push(this.decisionEvent('decline', 'duplicate', fact, turn)); continue }
         // Only a candidate that is itself headed for the durable store may replace anything: a session-only
         // (non-durable or low-confidence) guess must never destroy a durable entry with the same key.
         if (priorLive.length > 0 && route === 'durable') {
@@ -1090,6 +1153,7 @@ export class MemoryService {
       }
       // A high-confidence candidate held back by user_only is shown to the model as unconfirmed, like any other pending guess.
       sessionFacts = [...sessionFacts, route === 'pending' && fact.confidence === 'high' ? { ...fact, confidence: 'medium' } : fact]
+      if (route === 'session' && fact.source === 'model_inferred') declines.push(this.decisionEvent('decline', 'inferred_low_conf_session_only', fact, turn))
       if (route === 'durable') {
         durableFacts = [...durableFacts, fact]
         durableChanged = true
@@ -1121,6 +1185,7 @@ export class MemoryService {
     if (pendingChanged) await this.memory.set(PENDING_CONFIRMATION_KEY, pendingFacts)
     if (rejectedChanged) await this.memory.set(REJECTED_FACTS_KEY, rejectedFacts)
     await this.appendAudit(auditPending)
+    await this.emitEvents(declines)
     this.writeCount++
 
     return { contradictions, corroborations }

@@ -3,6 +3,8 @@ export type { AssistantTurnResult, ProposerKind, PersonalAssistantOptions, Assis
 export type { MemoryStatus, MemoryInjection, AuditEntry, ConsolidationOutcome } from './memory-service.js'
 export type { ConsolidationProposal } from './memory-consolidation.js'
 export type { SessionDigest } from './episodic-digest.js'
+export type { MemoryEvent, MemoryEventKind, ReasonCode, SourceRef, EventSink, EventFilter } from './memory-events.js'
+export { InMemoryEventSink, MemoryEventSchema, factKey, foldDurable, filterEvents, formatMemoryEvents } from './memory-events.js'
 export type { MemoryWriteMode } from './memory-governance.js'
 export { MEMORY_WRITE_MODES, DEFAULT_MEMORY_WRITE_MODE, resolveMemoryWriteMode } from './memory-governance.js'
 export type { GoalGraphState, GoalThreadView, GoalThreadVisibility, GoalTaskSummary } from './goal-graph-service.js'

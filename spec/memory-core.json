@@ -2245,5 +2245,56 @@
       "procedural",
       "commitment"
     ]
+  },
+  "events": {
+    "_README": "Memory event model (observability plan, E1). One record per memory transition: what changed, WHY (closed reason code) and which sources justified it. Metadata only by default; before/after images ride only when the audit log is on. The TS source of truth is packages/aielia/src/memory-events.ts; the Python twin has the contract constants only.",
+    "store_key": {
+      "key": "memory:events",
+      "scope": "global",
+      "port": "yes"
+    },
+    "keep": 500,
+    "kinds": [
+      "promote",
+      "decline",
+      "correct",
+      "contradict",
+      "supersede",
+      "retire",
+      "forget",
+      "expire",
+      "restore",
+      "recall"
+    ],
+    "reason_codes": [
+      "user_stated",
+      "user_corrected",
+      "user_confirmed",
+      "user_rejected",
+      "inferred_high_conf",
+      "inferred_pending_confirmation",
+      "inferred_low_conf_session_only",
+      "conflicts_with_fact",
+      "superseded_by_newer",
+      "explicit_forget",
+      "retention_expired",
+      "gate_blocked_secret",
+      "gate_blocked_instruction",
+      "duplicate"
+    ],
+    "source_types": [
+      "user_message",
+      "assistant_message",
+      "tool_result",
+      "prior_fact",
+      "user_command"
+    ],
+    "decided_by": [
+      "user",
+      "classifier",
+      "reviewer",
+      "consolidation",
+      "rule"
+    ]
   }
 }

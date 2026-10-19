@@ -39,7 +39,7 @@ function stripReadme(value) {
 }
 
 const core = stripReadme(JSON.parse(readFileSync(SOURCE, 'utf8')))
-const { enums, store_keys: sk, budget, tier_rules: tr, audit, gate, inv16 } = core
+const { enums, store_keys: sk, budget, tier_rules: tr, audit, gate, inv16, events } = core
 
 const storeKeys = Object.fromEntries(Object.entries(sk).map(([k, v]) => [k, v.key]))
 const undoMessages = Object.fromEntries(audit.undo_rules.map((r) => [r.id, r.message]))
@@ -85,6 +85,12 @@ const EXPORTS = [
   ['UNDO_MESSAGES', null, 'dict[str, str]', undoMessages],
   ['UNDO_MESSAGES_PYTHON_ONLY', null, 'list[str]', undoPythonOnly],
   ['INV16', null, 'dict[str, Any]', inv16],
+  ['MEMORY_EVENT_STORE_KEY', null, 'str', events.store_key.key],
+  ['MEMORY_EVENT_KEEP', null, 'int', events.keep],
+  ['MEMORY_EVENT_KINDS', null, 'list[str]', events.kinds],
+  ['MEMORY_REASON_CODES', null, 'list[str]', events.reason_codes],
+  ['MEMORY_SOURCE_TYPES', null, 'list[str]', events.source_types],
+  ['MEMORY_DECIDED_BY', null, 'list[str]', events.decided_by],
 ]
 
 const HEADER = [

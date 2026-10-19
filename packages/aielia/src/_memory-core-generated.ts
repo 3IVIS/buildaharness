@@ -2159,3 +2159,53 @@ export const INV16 = {
     "commitment"
   ]
 } as const
+
+export const MEMORY_EVENT_STORE_KEY = "memory:events" as const
+
+export const MEMORY_EVENT_KEEP = 500 as const
+
+export const MEMORY_EVENT_KINDS = [
+  "promote",
+  "decline",
+  "correct",
+  "contradict",
+  "supersede",
+  "retire",
+  "forget",
+  "expire",
+  "restore",
+  "recall"
+] as const
+
+export const MEMORY_REASON_CODES = [
+  "user_stated",
+  "user_corrected",
+  "user_confirmed",
+  "user_rejected",
+  "inferred_high_conf",
+  "inferred_pending_confirmation",
+  "inferred_low_conf_session_only",
+  "conflicts_with_fact",
+  "superseded_by_newer",
+  "explicit_forget",
+  "retention_expired",
+  "gate_blocked_secret",
+  "gate_blocked_instruction",
+  "duplicate"
+] as const
+
+export const MEMORY_SOURCE_TYPES = [
+  "user_message",
+  "assistant_message",
+  "tool_result",
+  "prior_fact",
+  "user_command"
+] as const
+
+export const MEMORY_DECIDED_BY = [
+  "user",
+  "classifier",
+  "reviewer",
+  "consolidation",
+  "rule"
+] as const

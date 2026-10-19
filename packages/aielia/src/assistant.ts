@@ -41,6 +41,7 @@ import type { AssistantToolStep } from './tool-step.js'
 
 import type { LayerPolicyMode } from '@buildaharness/harness'
 import { MemoryService, DEFAULT_MEMORY_BUDGET_CHARS, buildTurnFacts, type MemorySummary, type MemoryExport, type AuditEntry, type MemoryStatus, type MemoryInjection, type ConsolidationOutcome } from './memory-service.js'
+import type { EventFilter, MemoryEvent } from './memory-events.js'
 import { resolveMemoryWriteMode, type MemoryWriteMode } from './memory-governance.js'
 import { memoryConsolidationEnabled, type ConsolidationProposal } from './memory-consolidation.js'
 import type { UserFact } from './fact-extraction.js'
@@ -1174,6 +1175,11 @@ export class PersonalAssistant {
   /** `/memory history` — the newest audit-log entries (M2). Empty unless `AUDIT_MEMORY_AUDIT_LOG` is on. */
   async memoryHistory(limit = 20): Promise<AuditEntry[]> {
     return this.memoryService.getAuditLog(limit)
+  }
+
+  /** `/memory history events [fact]` — transition events with reason and sources (`AUDIT_MEMORY_EVENTS`, default on). */
+  async memoryEvents(limit = 50, filter: EventFilter = {}): Promise<MemoryEvent[]> {
+    return this.memoryService.getEvents(limit, filter)
   }
 
   /** `/memory undo <seq>` — restores the pre-image of one audit entry (M2). */
