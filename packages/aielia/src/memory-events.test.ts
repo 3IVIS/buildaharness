@@ -110,7 +110,7 @@ describe('memory events (E1)', () => {
 
   it('structural: the durable key is written only in commitDurable, which reaches the event funnel', () => {
     const src = readFileSync(resolve(dirname(fileURLToPath(import.meta.url)), 'memory-service.ts'), 'utf8')
-    expect(src.match(/memory\.set\(DURABLE_FACTS_KEY/g)?.length).toBe(1)
+    expect(src.match(/repo\.put\(DURABLE_FACTS_KEY/g)?.length).toBe(1)
     const body = src.slice(src.indexOf('private async commitDurable'), src.indexOf('private async commitDurable') + 400)
     expect(body).toContain('this.appendAudit(drafts)')
     const funnel = src.slice(src.indexOf('private async appendAudit'), src.indexOf('private async appendAudit') + 400)

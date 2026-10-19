@@ -7,6 +7,7 @@ import { DigestStore, writeDigest, endConversation, type SessionDigest } from '.
 import { SUMMARY_HEADER } from './transcript-compaction.js'
 import type { StatedFact, FactCategory, FactConfidence } from './turn-intent-classifier.js'
 import { eventFromAudit, factKey, scrubForgotten, trimEvents, filterEvents, MEMORY_EVENTS_KEY, type EventSink, type EventFilter, type MemoryEvent, type MemoryEventDraft, type ReasonCode } from './memory-events.js'
+import { KeyValueFactRepository, type FactRepository } from './fact-repository.js'
 import { DEFAULT_MEMORY_WRITE_MODE, resolveWriteRoute, type MemoryWriteMode, type CrossTurnWriter } from './memory-governance.js'
 import {
   memoryConsolidationEnabled, memoryRetentionDays, proposeConsolidationOps, findArchiveCandidates,
@@ -488,6 +489,9 @@ function factLine(f: UserFact): string {
  * rather than building a second mechanism.
  */
 export class MemoryService {
+  /** Every fact list goes through this seam (see fact-repository.ts); the key-value implementation keeps today's keys. */
+  private readonly repo: FactRepository
+
   constructor(
     private readonly memory: MemoryAdapter,
     private readonly reminderStore: ReminderStore,
@@ -502,7 +506,9 @@ export class MemoryService {
     private readonly writeMode: () => MemoryWriteMode = () => DEFAULT_MEMORY_WRITE_MODE,
     /** Time source for every timestamp this service writes (extractedAt of stated facts, audit `at`, retiredAt, usage flush). Injectable so the cross-runtime conformance fixtures are byte-reproducible; default is wall-clock, i.e. no behaviour change. */
     private readonly clock: () => string = () => new Date().toISOString(),
-  ) {}
+  ) {
+    this.repo = new KeyValueFactRepository(memory)
+  }
 
   private consolidator?: MemoryConsolidator
   private lastInjection?: MemoryInjection
@@ -542,14 +548,14 @@ export class MemoryService {
     const fact = decision.fact
     const route = decision.action === 'flag' ? 'pending' : decision.action === 'session' ? 'session' : resolveWriteRoute(this.writeMode(), writer, fact)
     if (route === 'durable') {
-      const durable = (((await this.memory.get(DURABLE_FACTS_KEY)) as UserFact[] | undefined) ?? []).map(migrateFact)
+      const durable = (await this.repo.list<UserFact>(DURABLE_FACTS_KEY)).map(migrateFact)
       // A keyed candidate replaces the live entry with the same key (M1 supersession), exactly as the in-turn and confirm paths do.
       const priors = fact.key && memoryBudgetedRenderEnabled() ? durable.filter((f) => f.key === fact.key && (f.project ?? '') === (fact.project ?? '')) : []
       if (priors.length > 0) {
         if (priors.some((p) => p.text === fact.text)) return { route, fact }
         const retiredAt = this.clock()
-        const retired = ((await this.memory.get(RETIRED_FACTS_KEY)) as UserFact[] | undefined) ?? []
-        await this.memory.set(RETIRED_FACTS_KEY, [...retired, ...priors.map((p) => ({ ...p, retiredAt }))])
+        const retired = (await this.repo.list<UserFact>(RETIRED_FACTS_KEY))
+        await this.repo.put(RETIRED_FACTS_KEY, [...retired, ...priors.map((p) => ({ ...p, retiredAt }))])
         const replacement: UserFact = { ...fact, supersedes: priors[priors.length - 1].text }
         const drafts: AuditDraft[] = priors.map((p, i) => ({ op: i === priors.length - 1 ? 'replace' as const : 'retire' as const, factId: factId(p), before: p, ...(i === priors.length - 1 ? { after: replacement } : {}), index: durable.indexOf(p), store: 'durable' as const, writer, turn: sessionId }))
         await this.commitDurable([...durable.filter((f) => !priors.includes(f)), replacement], drafts)
@@ -557,13 +563,13 @@ export class MemoryService {
       }
       await this.commitDurable([...durable, fact], [{ op: 'add', factId: factId(fact), after: fact, store: 'durable', writer, turn: sessionId }])
     } else if (route === 'pending') {
-      const pending = ((await this.memory.get(PENDING_CONFIRMATION_KEY)) as PendingFact[] | undefined) ?? []
+      const pending = (await this.repo.list<PendingFact>(PENDING_CONFIRMATION_KEY))
       const queued: PendingFact = { ...fact, category: fact.category ?? 'other', ...opts.pendingExtras }
-      await this.memory.set(PENDING_CONFIRMATION_KEY, [...pending, queued])
+      await this.repo.put(PENDING_CONFIRMATION_KEY, [...pending, queued])
       await this.appendAudit([{ op: 'add', factId: factId(fact), after: queued, store: 'pending', writer, turn: sessionId }])
     } else {
-      const session = (((await this.memory.get(`facts:${sessionId}`)) as UserFact[] | undefined) ?? []).map(migrateFact)
-      await this.memory.set(`facts:${sessionId}`, [...session, { ...fact, durable: false }])
+      const session = (await this.repo.list<UserFact>(`facts:${sessionId}`)).map(migrateFact)
+      await this.repo.put(`facts:${sessionId}`, [...session, { ...fact, durable: false }])
       await this.emitEvents([{ ...this.decisionEvent('decline', 'inferred_low_conf_session_only', fact, sessionId), decidedBy: writer === 'digest' ? 'classifier' : writer }])
     }
     return { route, fact }
@@ -594,7 +600,7 @@ export class MemoryService {
 
   /** Durable facts in stored order — the list a reviewer `retire` op's `targetId` indexes into. */
   async getDurableFacts(): Promise<UserFact[]> {
-    return (((await this.memory.get(DURABLE_FACTS_KEY)) as UserFact[] | undefined) ?? []).map(migrateFact)
+    return (await this.repo.list<UserFact>(DURABLE_FACTS_KEY)).map(migrateFact)
   }
 
   /**
@@ -651,14 +657,14 @@ export class MemoryService {
     if (signal?.aborted) return { ...result, aborted: true }
 
     if (toStage.length > 0) {
-      const pending = ((await this.memory.get(PENDING_CONFIRMATION_KEY)) as PendingFact[] | undefined) ?? []
+      const pending = (await this.repo.list<PendingFact>(PENDING_CONFIRMATION_KEY))
       const durable = durableSnapshot
       const fresh = toStage.filter((f) => !pending.some((p) => p.text === f.text && p.proposedOp === f.proposedOp) && (f.proposedOp === 'retire' || !durable.some((d) => d.text === f.text)))
       result.refused += toStage.length - fresh.length
       // A retire proposal is never an add: it is always queued for the user (nothing is auto-deleted), whatever the write mode.
       const retires = fresh.filter((f) => f.proposedOp === 'retire')
       if (retires.length > 0 && !signal?.aborted) {
-        await this.memory.set(PENDING_CONFIRMATION_KEY, [...pending, ...retires])
+        await this.repo.put(PENDING_CONFIRMATION_KEY, [...pending, ...retires])
         await this.appendAudit(retires.map((f) => ({ op: 'add' as const, factId: factId(f), after: f, store: 'pending' as const, writer: 'reviewer', turn })))
         result.staged += retires.length
       }
@@ -691,7 +697,7 @@ export class MemoryService {
    * (memory-write-gate.test.ts) asserts this is the only call in the file that writes the durable key.
    */
   private async commitDurable(next: UserFact[], drafts: AuditDraft[] = []): Promise<void> {
-    await this.memory.set(DURABLE_FACTS_KEY, next)
+    await this.repo.put(DURABLE_FACTS_KEY, next)
     await this.appendAudit(drafts)
   }
 
@@ -727,13 +733,13 @@ export class MemoryService {
     if (drafts.length === 0 || (!stored && this.eventSinks.length === 0)) return
     const at = this.clock()
     const stamped = await this.serialized('auditChain', async () => {
-      const log = stored ? ((await this.memory.get(MEMORY_EVENTS_KEY)) as MemoryEvent[] | undefined) ?? [] : []
+      const log = stored ? (await this.repo.list<MemoryEvent>(MEMORY_EVENTS_KEY)) : []
       let seq = Math.max(log.length > 0 ? log[log.length - 1].seq : 0, this.eventSeqLocal)
       const events = drafts.map((d) => ({ ...d, seq: ++seq, at }))
       this.eventSeqLocal = seq
       if (stored) {
         const forgotten = new Set(events.filter((e) => e.kind === 'forget').map((e) => e.factId))
-        await this.memory.set(MEMORY_EVENTS_KEY, trimEvents(scrubForgotten([...log, ...events], forgotten)))
+        await this.repo.put(MEMORY_EVENTS_KEY, trimEvents(scrubForgotten([...log, ...events], forgotten)))
       }
       return events
     })
@@ -744,7 +750,7 @@ export class MemoryService {
 
   /** `/memory history events [fact]`: the newest transition events, optionally for one fact id or attribute key. */
   async getEvents(limit = 50, filter: EventFilter = {}): Promise<MemoryEvent[]> {
-    const log = ((await this.memory.get(MEMORY_EVENTS_KEY)) as MemoryEvent[] | undefined) ?? []
+    const log = (await this.repo.list<MemoryEvent>(MEMORY_EVENTS_KEY))
     return filterEvents(log, filter).slice(-limit)
   }
 
@@ -758,7 +764,7 @@ export class MemoryService {
   }
 
   private async appendAuditNow(drafts: AuditDraft[]): Promise<void> {
-    const log = ((await this.memory.get(AUDIT_LOG_KEY)) as AuditEntry[] | undefined) ?? []
+    const log = (await this.repo.list<AuditEntry>(AUDIT_LOG_KEY))
     let seq = log.length > 0 ? log[log.length - 1].seq : 0
     const at = this.clock()
     let next = [...log, ...drafts.map((d) => ({ ...d, seq: ++seq, at }))]
@@ -767,12 +773,12 @@ export class MemoryService {
       const cutoff = next.length - AUDIT_LOG_KEEP
       next = next.filter((e, i) => i >= cutoff || e.seq > watermark)
     }
-    await this.memory.set(AUDIT_LOG_KEY, next)
+    await this.repo.put(AUDIT_LOG_KEY, next)
   }
 
   /** `/memory history` — newest last; the last `limit` entries. */
   async getAuditLog(limit = 20): Promise<AuditEntry[]> {
-    const log = ((await this.memory.get(AUDIT_LOG_KEY)) as AuditEntry[] | undefined) ?? []
+    const log = (await this.repo.list<AuditEntry>(AUDIT_LOG_KEY))
     return log.slice(-limit)
   }
 
@@ -782,7 +788,7 @@ export class MemoryService {
    * the caller, or undefined when the seq is unknown.
    */
   async undoAudit(seq: number, sessionId = 'undo'): Promise<{ ok: boolean; message: string }> {
-    const log = ((await this.memory.get(AUDIT_LOG_KEY)) as AuditEntry[] | undefined) ?? []
+    const log = (await this.repo.list<AuditEntry>(AUDIT_LOG_KEY))
     const entry = log.find((e) => e.seq === seq)
     if (!entry) return { ok: false, message: `No audit entry #${seq}.` }
     if (entry.op === 'undo') return { ok: false, message: `Entry #${seq} is itself an undo.` }
@@ -800,8 +806,8 @@ export class MemoryService {
 
   /** Undo of the change that created a side store must leave it absent again, not an empty array (exact restoration). */
   private async setOrClear(key: string, list: UserFact[]): Promise<void> {
-    if (list.length === 0) await this.memory.delete(key)
-    else await this.memory.set(key, list)
+    if (list.length === 0) await this.repo.remove(key)
+    else await this.repo.put(key, list)
   }
 
   private async undoEntry(entry: AuditEntry, sessionId: string): Promise<void> {
@@ -811,33 +817,33 @@ export class MemoryService {
       if (index === undefined || index < 0 || index > list.length) return [...list, f]
       return [...list.slice(0, index), f, ...list.slice(index)]
     }
-    const durable = (((await this.memory.get(DURABLE_FACTS_KEY)) as UserFact[] | undefined) ?? []).map(migrateFact)
-    const pending = ((await this.memory.get(PENDING_CONFIRMATION_KEY)) as PendingFact[] | undefined) ?? []
+    const durable = (await this.repo.list<UserFact>(DURABLE_FACTS_KEY)).map(migrateFact)
+    const pending = (await this.repo.list<PendingFact>(PENDING_CONFIRMATION_KEY))
     let nextDurable = durable
     if (entry.store === 'durable') {
       nextDurable = withoutFact(durable, entry.after)
       if (entry.op === 'restore') {
         // Undoing a restore puts the entry back in the archive.
-        const archive = ((await this.memory.get(ARCHIVED_FACTS_KEY)) as UserFact[] | undefined) ?? []
-        if (entry.before) await this.memory.set(ARCHIVED_FACTS_KEY, [...withoutFact(archive, entry.before), entry.before])
+        const archive = (await this.repo.list<UserFact>(ARCHIVED_FACTS_KEY))
+        if (entry.before) await this.repo.put(ARCHIVED_FACTS_KEY, [...withoutFact(archive, entry.before), entry.before])
       } else if (entry.before && entry.op !== 'confirm') {
         nextDurable = insertAt(withoutFact(nextDurable, entry.before), strip(entry.before), entry.index)
       }
       if (entry.op === 'replace' || entry.op === 'retire') {
-        const retired = ((await this.memory.get(RETIRED_FACTS_KEY)) as UserFact[] | undefined) ?? []
+        const retired = (await this.repo.list<UserFact>(RETIRED_FACTS_KEY))
         await this.setOrClear(RETIRED_FACTS_KEY, withoutFact(retired, entry.before))
       }
       if (entry.op === 'archive') {
-        const archive = ((await this.memory.get(ARCHIVED_FACTS_KEY)) as UserFact[] | undefined) ?? []
+        const archive = (await this.repo.list<UserFact>(ARCHIVED_FACTS_KEY))
         await this.setOrClear(ARCHIVED_FACTS_KEY, withoutFact(archive, entry.before))
       }
-      if (entry.op === 'confirm' && entry.before) await this.memory.set(PENDING_CONFIRMATION_KEY, [...withoutFact(pending, entry.before), entry.before])
+      if (entry.op === 'confirm' && entry.before) await this.repo.put(PENDING_CONFIRMATION_KEY, [...withoutFact(pending, entry.before), entry.before])
     } else if (entry.store === 'pending') {
       const restored = entry.before ? [...withoutFact(pending, entry.before), entry.before as PendingFact] : withoutFact(pending, entry.after)
-      await this.memory.set(PENDING_CONFIRMATION_KEY, restored)
+      await this.repo.put(PENDING_CONFIRMATION_KEY, restored)
       if (entry.op === 'reject' && entry.before) {
-        const rejected = ((await this.memory.get(REJECTED_FACTS_KEY)) as RejectedFact[] | undefined) ?? []
-        await this.memory.set(REJECTED_FACTS_KEY, rejected.filter((r) => r.text !== entry.before!.text))
+        const rejected = (await this.repo.list<RejectedFact>(REJECTED_FACTS_KEY))
+        await this.repo.put(REJECTED_FACTS_KEY, rejected.filter((r) => r.text !== entry.before!.text))
       }
     }
     const draft: AuditDraft = { op: 'undo', factId: entry.factId, before: entry.after, after: entry.before, store: entry.store, writer: 'undo', turn: sessionId, undoes: entry.seq }
@@ -856,8 +862,8 @@ export class MemoryService {
   async loadFacts(sessionId: string, opts: { record?: boolean } = {}): Promise<{ facts: UserFact[]; factsBlock: string; knownFactKeys: { key: string; text: string }[] }> {
     // `record: false` (M6) is for read-only views (/memory, status): looking at memory must not count as the model having seen it, nor replace what the last turn injected.
     const record = opts.record !== false
-    const sessionFacts = (((await this.memory.get(`facts:${sessionId}`)) as UserFact[] | undefined) ?? []).map(migrateFact)
-    const durableFacts = (((await this.memory.get(DURABLE_FACTS_KEY)) as UserFact[] | undefined) ?? []).map(migrateFact)
+    const sessionFacts = (await this.repo.list<UserFact>(`facts:${sessionId}`)).map(migrateFact)
+    const durableFacts = (await this.repo.list<UserFact>(DURABLE_FACTS_KEY)).map(migrateFact)
     const facts = mergeFacts(durableFacts, sessionFacts)
     // Computed here, from the read above, so the turn needs no extra await for the classifier's key context.
     const knownFactKeys = knownKeysOf(durableFacts)
@@ -897,8 +903,8 @@ export class MemoryService {
    * `/memory` view is stale — nothing to forget).
    */
   async forgetFact(index: number, sessionId: string, erase = false): Promise<UserFact | undefined> {
-    const sessionFacts = (((await this.memory.get(`facts:${sessionId}`)) as UserFact[] | undefined) ?? []).map(migrateFact)
-    const durableFacts = (((await this.memory.get(DURABLE_FACTS_KEY)) as UserFact[] | undefined) ?? []).map(migrateFact)
+    const sessionFacts = (await this.repo.list<UserFact>(`facts:${sessionId}`)).map(migrateFact)
+    const durableFacts = (await this.repo.list<UserFact>(DURABLE_FACTS_KEY)).map(migrateFact)
     const merged = mergeFacts(durableFacts, sessionFacts)
     if (index < 0 || index >= merged.length) return undefined
     const fact = merged[index]
@@ -907,7 +913,7 @@ export class MemoryService {
     if (remainingDurable.length !== durableFacts.length) {
       await this.commitDurable(remainingDurable, [{ op: 'remove', factId: factId(fact), before: fact, index: durableFacts.findIndex((f) => sameFact(f, fact)), store: 'durable', writer: 'forget', turn: sessionId }])
     }
-    if (remainingSession.length !== sessionFacts.length) await this.memory.set(`facts:${sessionId}`, remainingSession)
+    if (remainingSession.length !== sessionFacts.length) await this.repo.put(`facts:${sessionId}`, remainingSession)
     // `erase`: also drop the fact's text from the audit log, so `/memory history` and `/memory undo` can no longer bring it back.
     if (erase) await this.eraseFromAuditLog(fact)
     return fact
@@ -1001,12 +1007,12 @@ export class MemoryService {
     // The pools the contradiction check compares against come from this first read; the stores that get
     // written are re-read after the (slow) model call below, so a write another path (the post-turn reviewer,
     // /memory confirm) made in the meantime is not overwritten by this call's stale copy.
-    const readSession = async (): Promise<UserFact[]> => (((await this.memory.get(`facts:${sessionId}`)) as UserFact[] | undefined) ?? []).map(migrateFact)
-    const readDurable = async (): Promise<UserFact[]> => (((await this.memory.get(DURABLE_FACTS_KEY)) as UserFact[] | undefined) ?? []).map(migrateFact)
+    const readSession = async (): Promise<UserFact[]> => (await this.repo.list<UserFact>(`facts:${sessionId}`)).map(migrateFact)
+    const readDurable = async (): Promise<UserFact[]> => (await this.repo.list<UserFact>(DURABLE_FACTS_KEY)).map(migrateFact)
     let sessionFacts = await readSession()
     let durableFacts = await readDurable()
-    let pendingFacts = ((await this.memory.get(PENDING_CONFIRMATION_KEY)) as PendingFact[] | undefined) ?? []
-    let rejectedFacts = ((await this.memory.get(REJECTED_FACTS_KEY)) as RejectedFact[] | undefined) ?? []
+    let pendingFacts = (await this.repo.list<PendingFact>(PENDING_CONFIRMATION_KEY))
+    let rejectedFacts = (await this.repo.list<RejectedFact>(REJECTED_FACTS_KEY))
     // newFacts.length > 0 (guaranteed above) always changes sessionFacts; the other three stores
     // only get an actual write when something below touches them — an untouched store must stay
     // untouched (not overwritten with an equivalent-but-freshly-serialized empty/unchanged array),
@@ -1038,8 +1044,8 @@ export class MemoryService {
 
     sessionFacts = await readSession()
     durableFacts = await readDurable()
-    pendingFacts = ((await this.memory.get(PENDING_CONFIRMATION_KEY)) as PendingFact[] | undefined) ?? []
-    rejectedFacts = ((await this.memory.get(REJECTED_FACTS_KEY)) as RejectedFact[] | undefined) ?? []
+    pendingFacts = (await this.repo.list<PendingFact>(PENDING_CONFIRMATION_KEY))
+    rejectedFacts = (await this.repo.list<RejectedFact>(REJECTED_FACTS_KEY))
 
     const uncertainIdIndex = new Map(uncertainBeliefs.map((b, i) => [b.id, i]))
     const rejectedIdIndex = new Map(rejectedBeliefs.map((b, i) => [b.id, i]))
@@ -1177,13 +1183,13 @@ export class MemoryService {
     }
 
     if (retiredNow.length > 0) {
-      const retired = ((await this.memory.get(RETIRED_FACTS_KEY)) as UserFact[] | undefined) ?? []
-      await this.memory.set(RETIRED_FACTS_KEY, [...retired, ...retiredNow])
+      const retired = (await this.repo.list<UserFact>(RETIRED_FACTS_KEY))
+      await this.repo.put(RETIRED_FACTS_KEY, [...retired, ...retiredNow])
     }
-    await this.memory.set(`facts:${sessionId}`, sessionFacts)
+    await this.repo.put(`facts:${sessionId}`, sessionFacts)
     if (durableChanged) await this.commitDurable(durableFacts, audits)
-    if (pendingChanged) await this.memory.set(PENDING_CONFIRMATION_KEY, pendingFacts)
-    if (rejectedChanged) await this.memory.set(REJECTED_FACTS_KEY, rejectedFacts)
+    if (pendingChanged) await this.repo.put(PENDING_CONFIRMATION_KEY, pendingFacts)
+    if (rejectedChanged) await this.repo.put(REJECTED_FACTS_KEY, rejectedFacts)
     await this.appendAudit(auditPending)
     await this.emitEvents(declines)
     this.writeCount++
@@ -1215,14 +1221,14 @@ export class MemoryService {
     if (this.consolidating) return { status: 'busy', proposed: 0, modelCalls: 0 }
     this.consolidating = true
     try {
-      const durable = (((await this.memory.get(DURABLE_FACTS_KEY)) as UserFact[] | undefined) ?? []).map(migrateFact).filter((f) => !f.retiredAt)
+      const durable = (await this.repo.list<UserFact>(DURABLE_FACTS_KEY)).map(migrateFact).filter((f) => !f.retiredAt)
       const state = ((await this.memory.get(CONSOLIDATION_STATE_KEY)) as ConsolidationState | undefined) ?? { lastSeq: 0 }
-      const log = ((await this.memory.get(AUDIT_LOG_KEY)) as AuditEntry[] | undefined) ?? []
+      const log = (await this.repo.list<AuditEntry>(AUDIT_LOG_KEY))
       // Changes made by consolidation itself (and their undos) are not new information to consolidate.
       const diff = log.filter((e) => e.seq > state.lastSeq && e.op !== 'undo' && !e.writer.startsWith('consolidation'))
       const budget = this.memoryBudgetChars()
       const usedChars = renderFactsBlock(durable, Number.MAX_SAFE_INTEGER).block.length
-      const existing = ((await this.memory.get(CONSOLIDATION_PROPOSALS_KEY)) as ConsolidationProposal[] | undefined) ?? []
+      const existing = (await this.repo.list<ConsolidationProposal>(CONSOLIDATION_PROPOSALS_KEY))
       const dismissed = new Set(state.dismissed ?? [])
       let nextNo = state.nextProposalNo ?? 1
       const now = this.clock()
@@ -1271,7 +1277,7 @@ export class MemoryService {
         }
       }
       if (failed) return { status: 'failed', proposed: 0, modelCalls }
-      if (staged.length > 0) await this.memory.set(CONSOLIDATION_PROPOSALS_KEY, [...existing, ...staged])
+      if (staged.length > 0) await this.repo.put(CONSOLIDATION_PROPOSALS_KEY, [...existing, ...staged])
       if (gateOpen || staged.length > 0) await this.memory.set(CONSOLIDATION_STATE_KEY, { ...state, lastSeq: newWatermark, at: now, nextProposalNo: nextNo })
       const savedChars = (p: ConsolidationProposal): number => {
         const src = p.factIds.reduce((n, id) => n + (byId.get(id) ? factLine(byId.get(id)!).length + 1 : 0), 0)
@@ -1285,12 +1291,12 @@ export class MemoryService {
   }
 
   async getConsolidationProposals(): Promise<ConsolidationProposal[]> {
-    return ((await this.memory.get(CONSOLIDATION_PROPOSALS_KEY)) as ConsolidationProposal[] | undefined) ?? []
+    return (await this.repo.list<ConsolidationProposal>(CONSOLIDATION_PROPOSALS_KEY))
   }
 
   /** `/memory archive` — what staged forgetting has set aside. Nothing in it is deleted. */
   async getArchivedFacts(): Promise<UserFact[]> {
-    return ((await this.memory.get(ARCHIVED_FACTS_KEY)) as UserFact[] | undefined) ?? []
+    return (await this.repo.list<UserFact>(ARCHIVED_FACTS_KEY))
   }
 
   /** `/memory consolidate dismiss <n>`: drops the proposal and remembers its signature so it is not raised again. */
@@ -1298,7 +1304,7 @@ export class MemoryService {
     const proposals = await this.getConsolidationProposals()
     if (index < 0 || index >= proposals.length) return undefined
     const p = proposals[index]
-    await this.memory.set(CONSOLIDATION_PROPOSALS_KEY, proposals.filter((_, i) => i !== index))
+    await this.repo.put(CONSOLIDATION_PROPOSALS_KEY, proposals.filter((_, i) => i !== index))
     const state = ((await this.memory.get(CONSOLIDATION_STATE_KEY)) as ConsolidationState | undefined) ?? { lastSeq: 0 }
     await this.memory.set(CONSOLIDATION_STATE_KEY, { ...state, dismissed: [...(state.dismissed ?? []), proposalSignature(p.kind, p.factIds, p.text)] })
     return p
@@ -1319,10 +1325,10 @@ export class MemoryService {
     if (index < 0 || index >= proposals.length) return { ok: false, message: `No proposal #${index + 1}.` }
     const p = proposals[index]
     const rest = proposals.filter((_, i) => i !== index)
-    const durable = (((await this.memory.get(DURABLE_FACTS_KEY)) as UserFact[] | undefined) ?? []).map(migrateFact)
+    const durable = (await this.repo.list<UserFact>(DURABLE_FACTS_KEY)).map(migrateFact)
     const sources = p.factIds.map((id) => durable.find((f) => factId(f) === id))
     if (sources.some((s) => !s)) {
-      await this.memory.set(CONSOLIDATION_PROPOSALS_KEY, rest)
+      await this.repo.put(CONSOLIDATION_PROPOSALS_KEY, rest)
       return { ok: false, message: `Proposal #${index + 1} is stale (a fact it touches has changed); dropped.` }
     }
     const facts = sources as UserFact[]
@@ -1371,10 +1377,10 @@ export class MemoryService {
       drafts.push({ op: isLast && replacement ? 'replace' : 'retire', factId: id, before: f, ...(isLast && replacement ? { after: replacement } : {}), index: idx, store: 'durable', writer: `consolidation:${p.kind}`, turn: sessionId, group })
     })
     if (replacement) next = [...next, replacement]
-    if (retiredNow.length > 0) await this.memory.set(RETIRED_FACTS_KEY, [...(((await this.memory.get(RETIRED_FACTS_KEY)) as UserFact[] | undefined) ?? []), ...retiredNow])
-    if (archivedNow.length > 0) await this.memory.set(ARCHIVED_FACTS_KEY, [...(await this.getArchivedFacts()), ...archivedNow])
+    if (retiredNow.length > 0) await this.repo.put(RETIRED_FACTS_KEY, [...(await this.repo.list<UserFact>(RETIRED_FACTS_KEY)), ...retiredNow])
+    if (archivedNow.length > 0) await this.repo.put(ARCHIVED_FACTS_KEY, [...(await this.getArchivedFacts()), ...archivedNow])
     await this.commitDurable(next, drafts)
-    await this.memory.set(CONSOLIDATION_PROPOSALS_KEY, rest)
+    await this.repo.put(CONSOLIDATION_PROPOSALS_KEY, rest)
     return { ok: true, message: `Applied ${p.kind} proposal (${p.factIds.length} fact${p.factIds.length === 1 ? '' : 's'}) as ${group}; /memory history shows its entries and /memory undo <seq> reverts them all.` }
   }
 
@@ -1386,8 +1392,8 @@ export class MemoryService {
     if (index < 0 || index >= archive.length) return undefined
     const archived = archive[index]
     const { retiredAt: _r, ...live } = archived
-    const durable = (((await this.memory.get(DURABLE_FACTS_KEY)) as UserFact[] | undefined) ?? []).map(migrateFact)
-    await this.memory.set(ARCHIVED_FACTS_KEY, archive.filter((_, i) => i !== index))
+    const durable = (await this.repo.list<UserFact>(DURABLE_FACTS_KEY)).map(migrateFact)
+    await this.repo.put(ARCHIVED_FACTS_KEY, archive.filter((_, i) => i !== index))
     await this.commitDurable([...durable, live], [{ op: 'restore', factId: factId(archived), before: archived, after: live, store: 'durable', writer: 'archive:restore', turn: sessionId }])
     return live
   }
@@ -1413,9 +1419,9 @@ export class MemoryService {
       })
       return { facts: out, changed }
     }
-    const session = apply((((await this.memory.get(`facts:${sessionId}`)) as UserFact[] | undefined) ?? []).map(migrateFact))
-    if (session.changed) await this.memory.set(`facts:${sessionId}`, session.facts)
-    const durable = apply((((await this.memory.get(DURABLE_FACTS_KEY)) as UserFact[] | undefined) ?? []).map(migrateFact))
+    const session = apply((await this.repo.list<UserFact>(`facts:${sessionId}`)).map(migrateFact))
+    if (session.changed) await this.repo.put(`facts:${sessionId}`, session.facts)
+    const durable = apply((await this.repo.list<UserFact>(DURABLE_FACTS_KEY)).map(migrateFact))
     if (durable.changed) await this.commitDurable(durable.facts)
   }
 
@@ -1430,28 +1436,28 @@ export class MemoryService {
    * index (the caller's `/memory` view is stale — nothing to confirm).
    */
   async confirmPendingFact(index: number, onUsage?: (usage: TokenUsage) => void): Promise<PendingConfirmationOutcome | undefined> {
-    const pending = ((await this.memory.get(PENDING_CONFIRMATION_KEY)) as PendingFact[] | undefined) ?? []
+    const pending = (await this.repo.list<PendingFact>(PENDING_CONFIRMATION_KEY))
     if (index < 0 || index >= pending.length) return undefined
     const fact = pending[index]
-    await this.memory.set(PENDING_CONFIRMATION_KEY, pending.filter((_, i) => i !== index))
+    await this.repo.put(PENDING_CONFIRMATION_KEY, pending.filter((_, i) => i !== index))
     return this.promoteConfirmedFact(fact, onUsage)
   }
 
   /** `/memory reject <n>` — removes the nth pending entry and records it into REJECTED_FACTS_KEY with `rejectionSource: 'user_explicit'`. Returns undefined for an out-of-range index. */
   async rejectPendingFact(index: number): Promise<PendingFact | undefined> {
-    const pending = ((await this.memory.get(PENDING_CONFIRMATION_KEY)) as PendingFact[] | undefined) ?? []
+    const pending = (await this.repo.list<PendingFact>(PENDING_CONFIRMATION_KEY))
     if (index < 0 || index >= pending.length) return undefined
     const fact = pending[index]
-    await this.memory.set(PENDING_CONFIRMATION_KEY, pending.filter((_, i) => i !== index))
+    await this.repo.put(PENDING_CONFIRMATION_KEY, pending.filter((_, i) => i !== index))
     await this.rejectFacts([fact], 'user_explicit')
     return fact
   }
 
   /** `/memory confirm <category>` — bulk-confirms every pending entry in one category, useful once a topic accumulates several related guesses the user would naturally want to resolve together. Runs the promotion-time check per fact (still one call per fact — matches confirmPendingFact's own guarantee, not batched across facts since each is an independent store-write with its own conflict outcome). */
   async confirmPendingCategory(category: FactCategory, onUsage?: (usage: TokenUsage) => void): Promise<PendingConfirmationOutcome[]> {
-    const pending = ((await this.memory.get(PENDING_CONFIRMATION_KEY)) as PendingFact[] | undefined) ?? []
+    const pending = (await this.repo.list<PendingFact>(PENDING_CONFIRMATION_KEY))
     const toConfirm = pending.filter((f) => f.category === category)
-    await this.memory.set(PENDING_CONFIRMATION_KEY, pending.filter((f) => f.category !== category))
+    await this.repo.put(PENDING_CONFIRMATION_KEY, pending.filter((f) => f.category !== category))
     const outcomes: PendingConfirmationOutcome[] = []
     for (const fact of toConfirm) {
       outcomes.push(await this.promoteConfirmedFact(fact, onUsage))
@@ -1461,23 +1467,23 @@ export class MemoryService {
 
   /** `/memory reject <category>` — bulk-rejects every pending entry in one category. */
   async rejectPendingCategory(category: FactCategory): Promise<PendingFact[]> {
-    const pending = ((await this.memory.get(PENDING_CONFIRMATION_KEY)) as PendingFact[] | undefined) ?? []
+    const pending = (await this.repo.list<PendingFact>(PENDING_CONFIRMATION_KEY))
     const toReject = pending.filter((f) => f.category === category)
-    await this.memory.set(PENDING_CONFIRMATION_KEY, pending.filter((f) => f.category !== category))
+    await this.repo.put(PENDING_CONFIRMATION_KEY, pending.filter((f) => f.category !== category))
     await this.rejectFacts(toReject, 'user_explicit')
     return toReject
   }
 
   private async rejectFacts(facts: PendingFact[], rejectionSource: RejectedFact['rejectionSource']): Promise<void> {
     if (facts.length === 0) return
-    const rejected = ((await this.memory.get(REJECTED_FACTS_KEY)) as RejectedFact[] | undefined) ?? []
+    const rejected = (await this.repo.list<RejectedFact>(REJECTED_FACTS_KEY))
     const rejectedAt = this.clock()
-    await this.memory.set(REJECTED_FACTS_KEY, [...rejected, ...facts.map((f) => ({ text: f.text, rejectedAt, rejectionSource }))])
+    await this.repo.put(REJECTED_FACTS_KEY, [...rejected, ...facts.map((f) => ({ text: f.text, rejectedAt, rejectionSource }))])
     await this.appendAudit(facts.map((f) => ({ op: 'reject' as const, factId: factId(f), before: f, store: 'pending' as const, writer: `reject:${rejectionSource}`, turn: 'memory' })))
   }
 
   private async promoteConfirmedFact(fact: PendingFact, onUsage?: (usage: TokenUsage) => void): Promise<PendingConfirmationOutcome> {
-    const durableFacts = (((await this.memory.get(DURABLE_FACTS_KEY)) as UserFact[] | undefined) ?? []).map(migrateFact)
+    const durableFacts = (await this.repo.list<UserFact>(DURABLE_FACTS_KEY)).map(migrateFact)
     const knowledgePool = durableFacts.filter((f) => isKnowledgeTier(tierForFact(f))).slice(-FACT_CAP)
     const { contradictions } = semanticContradictionEnabled()
       ? await checkForContradictions(
@@ -1501,8 +1507,8 @@ export class MemoryService {
       // A confirmed retire proposal removes the target (into the retired store) and adds nothing.
       const target = durableFacts.find((f) => factId(f) === retireTargetId)
       if (target) {
-        const retired = ((await this.memory.get(RETIRED_FACTS_KEY)) as UserFact[] | undefined) ?? []
-        await this.memory.set(RETIRED_FACTS_KEY, [...retired, { ...target, retiredAt: this.clock() }])
+        const retired = (await this.repo.list<UserFact>(RETIRED_FACTS_KEY))
+        await this.repo.put(RETIRED_FACTS_KEY, [...retired, { ...target, retiredAt: this.clock() }])
         await this.commitDurable(durableFacts.filter((f) => f !== target), [{ op: 'retire', factId: factId(target), before: target, index: durableFacts.indexOf(target), store: 'durable', writer: 'confirm:reviewer-retire', turn: 'memory' }])
       }
       // The target is gone (already retired or removed since the proposal was staged): nothing happened, so say so rather than report a clean confirm.
@@ -1518,8 +1524,8 @@ export class MemoryService {
       const priors = durableFacts.filter(sameKey)
       if (priors.length > 0) {
         const retiredAt = this.clock()
-        const retired = ((await this.memory.get(RETIRED_FACTS_KEY)) as UserFact[] | undefined) ?? []
-        await this.memory.set(RETIRED_FACTS_KEY, [...retired, ...priors.map((p) => ({ ...p, retiredAt }))])
+        const retired = (await this.repo.list<UserFact>(RETIRED_FACTS_KEY))
+        await this.repo.put(RETIRED_FACTS_KEY, [...retired, ...priors.map((p) => ({ ...p, retiredAt }))])
         nextDurable = durableFacts.filter((f) => !sameKey(f))
         for (const p of priors) extraAudits.push({ op: 'retire', factId: factId(p), before: p, index: durableFacts.indexOf(p), store: 'durable', writer: 'confirm:supersede', turn: 'memory' })
         confirmed.supersedes = priors[priors.length - 1].text
@@ -1540,7 +1546,7 @@ export class MemoryService {
   async getMemorySummary(sessionId: string): Promise<MemorySummary> {
     const { facts } = await this.loadFacts(sessionId, { record: false })
     const reminders = await this.reminderStore.list()
-    const pending = ((await this.memory.get(PENDING_CONFIRMATION_KEY)) as PendingFact[] | undefined) ?? []
+    const pending = (await this.repo.list<PendingFact>(PENDING_CONFIRMATION_KEY))
     const experienceData = this.experienceStore.toJSON()
     return {
       facts,
@@ -1583,7 +1589,7 @@ export class MemoryService {
 
   /** `/memory archive`: entries a keyed update replaced, newest first. M5 EXTENSION POINT: its archive store joins here (and in `exportMemory`) when it exists. */
   async listArchive(): Promise<UserFact[]> {
-    const retired = ((await this.memory.get(RETIRED_FACTS_KEY)) as UserFact[] | undefined) ?? []
+    const retired = (await this.repo.list<UserFact>(RETIRED_FACTS_KEY))
     // M5's set-aside store (restorable) comes first, then M6's replaced entries newest first; `restore`/`forget` index this one list.
     return [...(await this.getArchivedFacts()), ...[...retired].reverse()]
   }
@@ -1597,13 +1603,13 @@ export class MemoryService {
     const archive = await this.listArchive()
     if (index < 0 || index >= archive.length) return undefined
     const fact = archive[index]
-    const retired = ((await this.memory.get(RETIRED_FACTS_KEY)) as UserFact[] | undefined) ?? []
+    const retired = (await this.repo.list<UserFact>(RETIRED_FACTS_KEY))
     // `supersedes` on a newer fact quotes the old text; erasing means that reference goes too (durable store, remaining archive, audit images).
     const unlink = <T extends UserFact>(f: T): T => (f.supersedes === fact.text ? { ...f, supersedes: undefined } : f)
-    await this.memory.set(RETIRED_FACTS_KEY, retired.filter((f) => !sameFact(f, fact)).map(unlink))
+    await this.repo.put(RETIRED_FACTS_KEY, retired.filter((f) => !sameFact(f, fact)).map(unlink))
     const setAside = await this.getArchivedFacts()
-    if (setAside.some((f) => sameFact(f, fact))) await this.memory.set(ARCHIVED_FACTS_KEY, setAside.filter((f) => !sameFact(f, fact)))
-    const durable = ((await this.memory.get(DURABLE_FACTS_KEY)) as UserFact[] | undefined) ?? []
+    if (setAside.some((f) => sameFact(f, fact))) await this.repo.put(ARCHIVED_FACTS_KEY, setAside.filter((f) => !sameFact(f, fact)))
+    const durable = (await this.repo.list<UserFact>(DURABLE_FACTS_KEY))
     if (durable.some((f) => f.supersedes === fact.text)) await this.commitDurable(durable.map(unlink))
     await this.eraseFromAuditLog(fact)
     return fact
@@ -1618,11 +1624,11 @@ export class MemoryService {
 
   private async eraseFromAuditLogNow(fact: UserFact): Promise<void> {
     const unlink = <T extends UserFact>(f: T): T => (f.supersedes === fact.text ? { ...f, supersedes: undefined } : f)
-    const log = ((await this.memory.get(AUDIT_LOG_KEY)) as AuditEntry[] | undefined) ?? []
+    const log = (await this.repo.list<AuditEntry>(AUDIT_LOG_KEY))
     const touches = (e: AuditEntry): boolean => e.factId === factId(fact) || (e.before !== undefined && sameFact(e.before, fact)) || (e.after !== undefined && sameFact(e.after, fact))
     if (log.some((e) => touches(e) || e.before?.supersedes === fact.text || e.after?.supersedes === fact.text)) {
       // Only this fact's own images go; the other side of a replace (the new value) is a different fact and stays.
-      await this.memory.set(AUDIT_LOG_KEY, log.map((e) => {
+      await this.repo.put(AUDIT_LOG_KEY, log.map((e) => {
         if (!touches(e)) return { ...e, ...(e.before ? { before: unlink(e.before) } : {}), ...(e.after ? { after: unlink(e.after) } : {}) }
         const { before, after, ...rest } = e
         return {
@@ -1641,8 +1647,8 @@ export class MemoryService {
     const { facts } = await this.loadFacts(sessionId, { record: false })
     const project = this.currentProject()
     const live = facts.filter((f) => !f.retiredAt && (f.project === undefined || f.project === project))
-    const pending = ((await this.memory.get(PENDING_CONFIRMATION_KEY)) as PendingFact[] | undefined) ?? []
-    const audit = ((await this.memory.get(AUDIT_LOG_KEY)) as AuditEntry[] | undefined) ?? []
+    const pending = (await this.repo.list<PendingFact>(PENDING_CONFIRMATION_KEY))
+    const audit = (await this.repo.list<AuditEntry>(AUDIT_LOG_KEY))
     const consolidation = (await this.memory.get(CONSOLIDATION_STATE_KEY)) as { lastSeq?: number; at?: string } | undefined
     return {
       mode: this.writeMode(),
@@ -1653,7 +1659,7 @@ export class MemoryService {
       liveFacts: live.length,
       pending: pending.length,
       flaggedPending: pending.filter((f) => f.flagged).length,
-      retired: ((await this.memory.get(RETIRED_FACTS_KEY)) as UserFact[] | undefined)?.length ?? 0,
+      retired: (await this.repo.list<UserFact>(RETIRED_FACTS_KEY)).length,
       auditEnabled: memoryAuditLogEnabled(),
       auditEntries: audit.length,
       lastConsolidatedSeq: consolidation?.lastSeq,
@@ -1728,9 +1734,9 @@ export class MemoryService {
   /** Judges flush candidates (gate forced on: a missing judgement drops the candidate) and appends the survivors to the pending queue. Exact-text duplicates of anything pending, durable or rejected are skipped. */
   private async queueFlushCandidates(sessionId: string, candidates: UserFact[]): Promise<number> {
     if (candidates.length === 0) return 0
-    const pending = ((await this.memory.get(PENDING_CONFIRMATION_KEY)) as PendingFact[] | undefined) ?? []
-    const durable = (((await this.memory.get(DURABLE_FACTS_KEY)) as UserFact[] | undefined) ?? []).map(migrateFact)
-    const rejected = ((await this.memory.get(REJECTED_FACTS_KEY)) as RejectedFact[] | undefined) ?? []
+    const pending = (await this.repo.list<PendingFact>(PENDING_CONFIRMATION_KEY))
+    const durable = (await this.repo.list<UserFact>(DURABLE_FACTS_KEY)).map(migrateFact)
+    const rejected = (await this.repo.list<RejectedFact>(REJECTED_FACTS_KEY))
     const seen = new Set([...pending.map((f) => f.text), ...durable.map((f) => f.text), ...rejected.map((f) => f.text)].map((t) => t.trim().toLowerCase()))
     let queued = 0
     for (const candidate of candidates) {

@@ -434,6 +434,6 @@ describe('M5 structure', () => {
   })
   it('durable store is still written in exactly one place', () => {
     const src = readFileSync(resolve(dir, 'memory-service.ts'), 'utf8')
-    expect(src.match(/\.set\(DURABLE_FACTS_KEY/g)).toHaveLength(1)
+    expect(src.match(/\.put\(DURABLE_FACTS_KEY/g)).toHaveLength(1)
   })
 })

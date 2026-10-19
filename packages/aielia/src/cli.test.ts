@@ -447,6 +447,9 @@ describe('mid-task steering — LiveSteeringChannel routing (Phase 3, hierarchic
 
     llm.release()
     await firstTurn
+    // let the queued follow-up turn finish here, so its reply cannot land in the next test's captured output
+    await cli.dispatchLine('/status')
+    await flushAsync()
   })
 
   it('goalGraphMode enabled: a plain message sent while a turn is running is absorbed into the steering channel, classified by the in-flight turn, and — when deferred — answered as its own follow-up turn, never dropped (R4)', async () => {

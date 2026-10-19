@@ -99,7 +99,7 @@ describe('M2 write gate', () => {
 
   it('every durable write goes through the single commit point', () => {
     const src = readFileSync(resolve(dirname(fileURLToPath(import.meta.url)), 'memory-service.ts'), 'utf8')
-    const writes = src.split('\n').filter((l) => /memory\.set\(DURABLE_FACTS_KEY/.test(l) && !l.trim().startsWith('*'))
+    const writes = src.split('\n').filter((l) => /repo\.put\(DURABLE_FACTS_KEY/.test(l) && !l.trim().startsWith('*'))
     expect(writes.length).toBe(1)
   })
 
@@ -193,5 +193,13 @@ describe('audit log and render robustness', () => {
   it('a hand-edited fact without extractedAt does not crash the render', () => {
     const facts = [{ text: 'a', durable: true, source: 'user_asserted' }, { text: 'b', durable: true, source: 'user_asserted', extractedAt: 'z' }] as unknown as UserFact[]
     expect(renderFactsBlock(facts, 1000).shown).toHaveLength(2)
+  })
+})
+
+describe('S1 storage seam', () => {
+  it('memory-service reads and writes fact lists only through the repository (the two object keys excepted)', () => {
+    const src = readFileSync(resolve(dirname(fileURLToPath(import.meta.url)), 'memory-service.ts'), 'utf8')
+    const direct = src.split('\n').filter((l) => /this\.memory\.(get|set|delete)\(/.test(l) && !l.trim().startsWith('*'))
+    expect(direct.every((l) => /CONSOLIDATION_STATE_KEY|MEMORY_OFF_KEY/.test(l))).toBe(true)
   })
 })
