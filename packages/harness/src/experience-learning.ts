@@ -1,5 +1,12 @@
 import type { ExperienceStore } from './state/experience-store.js'
 import type { JournalEntry } from './state/memory-state.js'
+import {
+  decidePromotion,
+  recordAttempt,
+  MIN_ATTEMPTS,
+  type StrategyEvent,
+  type StrategyEvidence,
+} from './strategy-evidence.js'
 import { DEFAULT_STRATEGY_ORDER, type StrategyType } from './state/strategy-state.js'
 
 /**
@@ -72,22 +79,42 @@ export function recoveryAttempts(journal: JournalEntry[]): RecoveryAttempt[] {
   return attempts
 }
 
+export interface LearnOptions {
+  /**
+   * `single` (default, the legacy rule): one success moves the weight. `sample`: attempts are recorded as evidence and the weight
+   * is written only once the strategy has `minAttempts` and a Wilson lower bound above its alternatives' baseline; otherwise it
+   * is "recorded, not used". A strategy that falls below the bar (or hits a failure streak) is demoted back to unused (weight 0).
+   */
+  rule?: 'single' | 'sample'
+  minAttempts?: number
+  runId?: string
+  /** Context fingerprint (tool set, model, task family). Evidence from another context starts over. */
+  context?: string
+  now?: number
+  /** Receives a `strategy_promoted` / `strategy_demoted` event with the numbers that justified it. */
+  onEvent?: (event: StrategyEvent) => void
+}
+
 /** Updates the store from one finished run's journal. A no-op on an unavailable store or an empty journal. */
-export function learnFromJournal(journal: JournalEntry[], store: ExperienceStore): void {
+export function learnFromJournal(journal: JournalEntry[], store: ExperienceStore, options: LearnOptions = {}): void {
   if (!store.available || journal.length === 0) return
 
   const weights = store.getStrategyWeights()
-  for (const a of recoveryAttempts(journal)) {
-    const key = (s: string) => `${s}:${a.failureClass}`
-    if (DEFAULT_STRATEGY_ORDER.every((s) => weights[key(s)] === undefined)) {
-      for (const s of DEFAULT_STRATEGY_ORDER) {
-        weights[key(s)] = PRIOR
-        store.setStrategyWeight(key(s), PRIOR)
+  if (options.rule === 'sample') {
+    learnWithSampleRule(journal, store, weights, options)
+  } else {
+    for (const a of recoveryAttempts(journal)) {
+      const key = (s: string) => `${s}:${a.failureClass}`
+      if (DEFAULT_STRATEGY_ORDER.every((s) => weights[key(s)] === undefined)) {
+        for (const s of DEFAULT_STRATEGY_ORDER) {
+          weights[key(s)] = PRIOR
+          store.setStrategyWeight(key(s), PRIOR)
+        }
       }
+      const next = round((weights[key(a.strategy)] ?? PRIOR) * (1 - LEARNING_RATE) + (a.success ? 1 : 0) * LEARNING_RATE)
+      weights[key(a.strategy)] = next
+      store.setStrategyWeight(key(a.strategy), next)
     }
-    const next = round((weights[key(a.strategy)] ?? PRIOR) * (1 - LEARNING_RATE) + (a.success ? 1 : 0) * LEARNING_RATE)
-    weights[key(a.strategy)] = next
-    store.setStrategyWeight(key(a.strategy), next)
   }
 
   const seen = new Set<string>()
@@ -98,5 +125,51 @@ export function learnFromJournal(journal: JournalEntry[], store: ExperienceStore
   const priors = store.getClassPriors()
   for (const c of new Set([...Object.keys(priors), ...seen])) {
     store.setClassPrior(c, round((priors[c] ?? 0) * (1 - LEARNING_RATE) + (seen.has(c) ? 1 : 0) * LEARNING_RATE))
+  }
+}
+
+function learnWithSampleRule(
+  journal: JournalEntry[],
+  store: ExperienceStore,
+  weights: Record<string, number>,
+  options: LearnOptions,
+): void {
+  const evidence: Record<string, StrategyEvidence> = store.getStrategyEvidence()
+  const touched = new Set<string>()
+  const now = options.now ?? Date.now()
+  for (const a of recoveryAttempts(journal)) {
+    const key = `${a.strategy}:${a.failureClass}`
+    evidence[key] = recordAttempt(evidence[key], { success: a.success, runId: options.runId, now, context: options.context ?? '' })
+    touched.add(key)
+  }
+  for (const key of touched) {
+    const cls = key.slice(key.indexOf(':') + 1)
+    const others = DEFAULT_STRATEGY_ORDER.filter((s) => `${s}:${cls}` !== key)
+      .map((s) => evidence[`${s}:${cls}`])
+      .filter((e): e is StrategyEvidence => e !== undefined)
+    const entry = evidence[key]
+    const decision = decidePromotion(entry, others, options.minAttempts ?? MIN_ATTEMPTS)
+    const wasPromoted = entry.promoted
+    entry.promoted = decision.promoted
+    store.setStrategyEvidence(key, entry)
+    if (decision.promoted) {
+      const weight = round(entry.weightedSuccesses / entry.weightedAttempts)
+      weights[key] = weight
+      store.setStrategyWeight(key, weight)
+    } else if (wasPromoted) {
+      weights[key] = 0
+      store.setStrategyWeight(key, 0)
+    }
+    if (decision.promoted !== wasPromoted) {
+      options.onEvent?.({
+        type: decision.promoted ? 'strategy_promoted' : 'strategy_demoted',
+        key,
+        attempts: entry.attempts,
+        successes: entry.successes,
+        lowerBound: decision.lowerBound,
+        baseline: decision.baseline,
+        ...(options.runId ? { runId: options.runId } : {}),
+      })
+    }
   }
 }

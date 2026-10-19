@@ -265,6 +265,10 @@ export interface HarnessRunOptions extends HarnessInitOptions {
    * Absent/false ⇒ the journal is never written and the store is never updated, exactly as before.
    */
   experienceLearning?: boolean
+  /** `sample` records strategy evidence and promotes only past a minimum sample and a Wilson bound (strategy-evidence.ts); default `single` is the legacy one-success rule. */
+  experienceLearningRule?: 'single' | 'sample'
+  /** Receives strategy_promoted / strategy_demoted events from the sample rule. */
+  onStrategyEvent?: (event: import('./strategy-evidence.js').StrategyEvent) => void
   /**
    * Opt-in: after the recovery ladder switches strategy for a failed task, re-queue every failed leaf so the new strategy
    * actually gets an attempt. Without it a LOCAL replan re-queues only the failed task's dependents (and the failed leaf itself
@@ -541,6 +545,8 @@ interface LoopContext {
   skipReviewerPass?: boolean
   skipControlState?: boolean
   experienceLearning?: boolean
+  experienceLearningRule?: 'single' | 'sample'
+  onStrategyEvent?: (event: import('./strategy-evidence.js').StrategyEvent) => void
   retryFailedTask?: boolean
   /**
    * Like `retryFailedTask`, but only for a task whose failure was a SYSTEM error — the executor threw, or reported a failure
@@ -683,6 +689,8 @@ function buildInitialContext(
     skipReviewerPass: options.skipReviewerPass,
     skipControlState: options.skipControlState,
     experienceLearning: options.experienceLearning,
+    experienceLearningRule: options.experienceLearningRule,
+    onStrategyEvent: options.onStrategyEvent,
     retryFailedTask: options.retryFailedTask,
     retryFailedSystemErrors: options.retryFailedSystemErrors,
     reviewerRevision: options.reviewerRevision,
@@ -777,6 +785,8 @@ function buildResumedContext(rawCheckpoint: HarnessCheckpoint, options: HarnessR
     skipReviewerPass: options.skipReviewerPass,
     skipControlState: options.skipControlState,
     experienceLearning: options.experienceLearning,
+    experienceLearningRule: options.experienceLearningRule,
+    onStrategyEvent: options.onStrategyEvent,
     retryFailedTask: options.retryFailedTask,
     retryFailedSystemErrors: options.retryFailedSystemErrors,
     reviewerRevision: options.reviewerRevision,
@@ -2216,7 +2226,11 @@ async function drive(ctx: LoopContext, options: HarnessRunOptions): Promise<Harn
 function learnFromRun(ctx: LoopContext): void {
   if (!ctx.experienceLearning || !ctx.experienceStore.available) return
   try {
-    learnFromJournal(ctx.memoryState.journal, ctx.experienceStore)
+    learnFromJournal(ctx.memoryState.journal, ctx.experienceStore, {
+      rule: ctx.experienceLearningRule,
+      runId: ctx.runId,
+      onEvent: ctx.onStrategyEvent,
+    })
   } catch {
     /* a failing store must not turn a finished run into a failed one */
   }

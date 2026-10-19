@@ -1,3 +1,5 @@
+import type { StrategyEvidence } from '../strategy-evidence.js'
+
 export type StrategyWeightKey = string  // `${strategyType}:${failureClass}`
 
 export interface DecompositionEntry { task_type: string; decomposition: string[]; success_rate: number }
@@ -15,6 +17,8 @@ export interface ExperienceStoreData {
   tool_workflows: ToolWorkflowEntry[]
   verification_plans: VerificationPlanEntry[]
   recovery_sequences: RecoverySequenceEntry[]
+  /** Evidence behind each strategy weight (optional field: no schema bump). */
+  strategy_evidence?: Record<string, StrategyEvidence>
   schemaVersion?: number
 }
 
@@ -22,6 +26,8 @@ export interface ExperienceStore {
   readonly available: boolean
   getStrategyWeights(): Record<StrategyWeightKey, number>
   setStrategyWeight(key: StrategyWeightKey, weight: number): void
+  getStrategyEvidence(): Record<StrategyWeightKey, StrategyEvidence>
+  setStrategyEvidence(key: StrategyWeightKey, evidence: StrategyEvidence): void
   getClassPriors(): Record<string, number>
   setClassPrior(failureClass: string, prior: number): void
   getDecompositions(): DecompositionEntry[]
@@ -38,6 +44,7 @@ export interface ExperienceStore {
 
 export class InMemoryExperienceStore implements ExperienceStore {
   private _strategyWeights: Record<StrategyWeightKey, number> = {}
+  private _strategyEvidence: Record<StrategyWeightKey, StrategyEvidence> = {}
   private _classPriors: Record<string, number> = {}
   private _decompositions: DecompositionEntry[] = []
   private _toolWorkflows: ToolWorkflowEntry[] = []
@@ -49,6 +56,8 @@ export class InMemoryExperienceStore implements ExperienceStore {
 
   getStrategyWeights() { return { ...this._strategyWeights } }
   setStrategyWeight(key: StrategyWeightKey, weight: number) { this._strategyWeights[key] = weight }
+  getStrategyEvidence() { return { ...this._strategyEvidence } }
+  setStrategyEvidence(key: StrategyWeightKey, evidence: StrategyEvidence) { this._strategyEvidence[key] = evidence }
   getClassPriors() { return { ...this._classPriors } }
   setClassPrior(failureClass: string, prior: number) { this._classPriors[failureClass] = prior }
   getDecompositions() { return [...this._decompositions] }
@@ -68,6 +77,7 @@ export class InMemoryExperienceStore implements ExperienceStore {
     return {
       strategy_weights: { ...this._strategyWeights },
       class_priors: { ...this._classPriors },
+      strategy_evidence: { ...this._strategyEvidence },
       decompositions: [...this._decompositions],
       tool_workflows: [...this._toolWorkflows],
       verification_plans: [...this._verificationPlans],
@@ -94,6 +104,7 @@ export class InMemoryExperienceStore implements ExperienceStore {
       return store
     }
     store._strategyWeights = json.strategy_weights ? { ...json.strategy_weights } : {}
+    store._strategyEvidence = json.strategy_evidence && typeof json.strategy_evidence === 'object' ? { ...json.strategy_evidence } : {}
     store._classPriors = json.class_priors ? { ...json.class_priors } : {}
     store._decompositions = Array.isArray(json.decompositions) ? [...json.decompositions] : []
     store._toolWorkflows = Array.isArray(json.tool_workflows) ? [...json.tool_workflows] : []
@@ -107,6 +118,8 @@ export class UnavailableExperienceStore implements ExperienceStore {
   get available(): boolean { return false }
   getStrategyWeights() { return {} }
   setStrategyWeight() {}
+  getStrategyEvidence() { return {} }
+  setStrategyEvidence() {}
   getClassPriors() { return {} }
   setClassPrior() {}
   getDecompositions() { return [] }
@@ -122,6 +135,7 @@ export class UnavailableExperienceStore implements ExperienceStore {
     return {
       strategy_weights: {},
       class_priors: {},
+      strategy_evidence: {},
       decompositions: [],
       tool_workflows: [],
       verification_plans: [],

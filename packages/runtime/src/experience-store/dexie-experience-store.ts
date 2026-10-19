@@ -4,6 +4,7 @@ import {
   type ExperienceStore,
   type ExperienceStoreData,
   type StrategyWeightKey,
+  type StrategyEvidence,
   type DecompositionEntry,
   type ToolWorkflowEntry,
   type VerificationPlanEntry,
@@ -90,6 +91,15 @@ export class DexieExperienceStore implements ExperienceStore {
 
   getClassPriors(): Record<string, number> {
     return this.inner.getClassPriors()
+  }
+
+  getStrategyEvidence(): Record<StrategyWeightKey, StrategyEvidence> {
+    return this.inner.getStrategyEvidence()
+  }
+
+  setStrategyEvidence(key: StrategyWeightKey, evidence: StrategyEvidence): void {
+    this.inner.setStrategyEvidence(key, evidence)
+    this.persist()
   }
 
   setClassPrior(failureClass: string, prior: number): void {
