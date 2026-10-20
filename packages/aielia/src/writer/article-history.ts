@@ -99,11 +99,20 @@ export function summarizeChange(from: VersionSide | undefined, to: VersionSide):
 
 export const MAX_CHECKPOINTS = 20
 
-/** Adds a snapshot, keeping every published one and at most MAX_CHECKPOINTS of the newest checkpoints. */
+/** The label of a version the page saved by itself, and how many of those are kept (the oldest go first). They do not count towards MAX_CHECKPOINTS. */
+export const AUTOSAVE_LABEL = 'Autosaved'
+export const MAX_AUTOSAVES = 30
+
+const isAutosave = (s: Snapshot): boolean => s.kind === 'checkpoint' && s.label === AUTOSAVE_LABEL
+
+/** Adds a snapshot, keeping every published one, at most MAX_CHECKPOINTS of the newest checkpoints the writer or an action made, and at most MAX_AUTOSAVES of the newest autosaved ones. */
 export function addSnapshot(snapshots: readonly Snapshot[], snapshot: Snapshot, maxCheckpoints: number = MAX_CHECKPOINTS): Snapshot[] {
   const all = [...snapshots, snapshot]
-  const checkpointIdx = all.map((s, i) => (s.kind === 'checkpoint' ? i : -1)).filter((i) => i >= 0)
-  const drop = new Set(checkpointIdx.slice(0, Math.max(0, checkpointIdx.length - maxCheckpoints)))
+  const dropOldest = (pick: (s: Snapshot) => boolean, keep: number): number[] => {
+    const idx = all.map((s, i) => (pick(s) ? i : -1)).filter((i) => i >= 0)
+    return idx.slice(0, Math.max(0, idx.length - keep))
+  }
+  const drop = new Set([...dropOldest((s) => s.kind === 'checkpoint' && !isAutosave(s), maxCheckpoints), ...dropOldest(isAutosave, MAX_AUTOSAVES)])
   return all.filter((_, i) => !drop.has(i))
 }
 

@@ -6,16 +6,13 @@ interface Props {
   meta: ArticleMeta
   /** The section the selected text is in; undefined when nothing is selected or the section has not been read yet. */
   sectionId?: string
-  busy: boolean
-  model: string
-  onFind(): void
   onConfirm(linkId: string): void
   onRemove(linkId: string, origin: string): void
   onAdd(from: string, to: string, kind: DependencyKind): void
 }
 
 /** Where the section holding the selected text depends on another section, and which sections depend on it. "Rests on" builds on the other section; "repeats" restates it. Change the other one and this one is flagged for review. */
-export function LinksPanel({ meta, sectionId, busy, model, onFind, onConfirm, onRemove, onAdd }: Props): React.JSX.Element {
+export function LinksPanel({ meta, sectionId, onConfirm, onRemove, onAdd }: Props): React.JSX.Element {
   const [to, setTo] = useState('')
   const [kind, setKind] = useState<DependencyKind>('rests_on')
   const name = (id: string): string => meta.sections.find((s) => s.id === id)?.heading || '(opening)'
@@ -60,7 +57,6 @@ export function LinksPanel({ meta, sectionId, busy, model, onFind, onConfirm, on
           </details>
         </>
       )}
-      <button type="button" className="write__link" onClick={onFind} disabled={busy || meta.sections.length < 2} title={`Find them with ${model}`}>Look for links between sections</button>
     </>
   )
 }

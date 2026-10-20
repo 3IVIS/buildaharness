@@ -28,6 +28,8 @@ interface Props {
   onRemoveLink(id: string): void
   onEditCorrection(id: string, text: string): void
   onJump(start: number): void
+  /** The text the box under the text is about, when the issues are for that text alone: its title already says it, so rows do not repeat it. */
+  scope?: string
 }
 
 /** What each category's one button does. The ones that ask Aielia for text say the model, and only ever produce suggested changes. */
@@ -60,9 +62,10 @@ export function IssuesPanel(p: Props): React.JSX.Element {
   const toggle = (c: Open): void => setOpen((o) => (o.includes(c) ? o.filter((x) => x !== c) : [...o, c]))
   const claimStart = (id: string): number => meta.claims.find((c) => c.id === id)?.position ?? 0
 
+  const isScope = (quote: string | undefined): boolean => Boolean(p.scope && quote && quote.trim() === p.scope.trim())
   const claimItem = (i: { id: string; label: string; detail?: string }): React.JSX.Element => (
     <li key={i.id}>
-      <div className="write__rowmain"><button type="button" className="write__link" onClick={() => p.onJump(claimStart(i.id))}>{i.label}</button></div>
+      <div className="write__rowmain"><button type="button" className="write__link" onClick={() => p.onJump(claimStart(i.id))}>{isScope(meta.claims.find((c) => c.id === i.id)?.quote) ? 'This text' : i.label}</button></div>
     </li>
   )
 
@@ -116,7 +119,7 @@ export function IssuesPanel(p: Props): React.JSX.Element {
                   <div className="write__rowmain">
                     {c.label ? <strong>{c.label}{c.reviewer ? ` (${c.reviewer})` : ''}: </strong> : null}
                     <EditableText label={`Comment ${c.label ?? c.id}`} value={c.text} multiline onSave={(v) => p.onEditComment(c.id, v)} />
-                    {c.span && <div className="write__reason">on “{c.span.quote.length > 80 ? `${c.span.quote.slice(0, 80)}…` : c.span.quote}”</div>}
+                    {c.span && !isScope(c.span.quote) && <div className="write__reason">on “{c.span.quote.length > 80 ? `${c.span.quote.slice(0, 80)}…` : c.span.quote}”</div>}
                     {c.decision && <div className="write__reason">You decided: {c.decision}</div>}
                   </div>
                   <span className="write__rowacts"><IconButton label="Mark as dealt with" icon="check" onClick={() => p.onCommentState(c.id, 'addressed')} /><IconButton label="Dismiss the comment" icon="close" onClick={() => p.onCommentState(c.id, 'dismissed')} /></span>

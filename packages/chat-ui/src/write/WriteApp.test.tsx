@@ -83,7 +83,7 @@ describe('header and article menu', () => {
     const box = await waitForText()
     expect(box.value).toContain('# My post')
     await userEvent.click(screen.getByRole('button', { name: 'Outline view' }))
-    expect(within(screen.getByRole('list', { name: 'Outline' })).getByText('My post')).toBeInTheDocument()
+    expect((screen.getByRole('textbox', { name: 'Outline' }) as HTMLTextAreaElement).value).toContain('My post')
   })
 
   it('shows a short name, cut off when long, separate from the title in the text, and lets the writer rename it', async () => {
@@ -201,49 +201,56 @@ describe('rail and panels', () => {
   })
 })
 
-describe('outline: a view of the text, edited together with it', () => {
-  const outline = (): HTMLElement => screen.getByRole('list', { name: 'Outline' })
+describe('outline: a view of the text, edited as text together with it', () => {
+  const outline = (): HTMLTextAreaElement => screen.getByRole('textbox', { name: 'Outline' }) as HTMLTextAreaElement
   const showOutline = (): Promise<void> => userEvent.click(screen.getByRole('button', { name: 'Outline view' }))
 
-  it('is a toggle above the text, numbers the headings, and has no side panel of its own', async () => {
+  it('is a toggle above the text and shows the headings as plain text, one per line', async () => {
     const md = '# Post\n\n## One\n\ntext\n\n### One point one\n\ntext\n\n## Two\n\ntext\n'
     const s = await services({}, md)
     render(<WriteApp services={s} />)
     await waitForText()
     expect(screen.queryByRole('button', { name: 'Outline' })).toBeNull() // not in the rail
     await showOutline()
-    const li = (name: string) => within(outline()).getByRole('button', { name: `Heading: ${name}` }).closest('li') as HTMLElement
-    expect(within(li('One')).getByText('1')).toBeInTheDocument()
-    expect(within(li('One point one')).getByText('1.1')).toBeInTheDocument()
-    expect(within(li('Two')).getByText('2')).toBeInTheDocument()
-    expect(within(li('One')).queryByText(/What is this section for/)).toBeNull()
+    expect(outline().value).toBe('# Post\n## One\n### One point one\n## Two')
   })
 
-  it('opens the text at a section when it is clicked, and the outline gives way to the text', async () => {
+  it('opens the text at the section the cursor is on, and the outline gives way to the text', async () => {
     const md = '# Post\n\n## One\n\ntext\n\n## Two\n\ntext\n'
     const s = await services({}, md)
     render(<WriteApp services={s} />)
     const box = await waitForText()
     await showOutline()
     expect(screen.getByRole('button', { name: 'Outline view' })).toHaveAttribute('aria-pressed', 'true')
-    await userEvent.click(within(outline()).getByRole('button', { name: 'Heading: Two' }))
-    expect(screen.queryByRole('list', { name: 'Outline' })).toBeNull()
+    outline().setSelectionRange(outline().value.length, outline().value.length) // on the last line, "## Two"
+    await userEvent.click(screen.getByRole('button', { name: 'Open this section' }))
+    expect(screen.queryByRole('textbox', { name: 'Outline' })).toBeNull()
     expect(screen.getByRole('button', { name: 'Article view' })).toHaveAttribute('aria-pressed', 'true')
     await waitFor(() => expect(box.selectionStart).toBe(md.indexOf('## Two')))
   })
 
-  it('renames a heading with the pencil: the heading in the text changes and nothing else does', async () => {
+  it('rewording a line rewords the heading in the text and nothing else changes', async () => {
     const s = await services({}, MD2)
     render(<WriteApp services={s} />)
     const box = await waitForText()
     await showOutline()
-    await userEvent.click(within(outline()).getByRole('button', { name: 'Rename Latency' }))
-    const input = screen.getByLabelText('Heading: Latency')
-    await userEvent.clear(input)
-    await userEvent.type(input, 'Response time{Enter}')
+    fireEvent.change(outline(), { target: { value: outline().value.replace('Latency', 'Response time') } })
+    fireEvent.blur(outline())
     await waitFor(() => expect(box.value).toContain('## Response time\n'))
     expect(box.value).toContain('The p99 was 18 ms. It is quick.')
-    expect(within(outline()).getByRole('button', { name: 'Heading: Response time' })).toBeInTheDocument()
+  })
+
+  it('a new line is a new section and more hashes make a subsection', async () => {
+    const md = '# Post\n\n## One\n\ntext\n'
+    const s = await services({}, md)
+    render(<WriteApp services={s} />)
+    const box = await waitForText()
+    await showOutline()
+    fireEvent.change(outline(), { target: { value: '# Post\n## One\n### Detail\n## Two' } })
+    fireEvent.blur(outline())
+    await waitFor(() => expect(box.value).toContain('### Detail'))
+    expect(box.value).toContain('## Two')
+    expect(box.value).toContain('text')
   })
 
   it('follows what is typed in the text', async () => {
@@ -252,7 +259,32 @@ describe('outline: a view of the text, edited together with it', () => {
     const box = await waitForText()
     fireEvent.change(box, { target: { value: `${MD}\n## Added\n\nmore\n` } })
     await showOutline()
-    expect(within(outline()).getByRole('button', { name: 'Heading: Added' })).toBeInTheDocument()
+    expect(outline().value).toContain('## Added')
+  })
+})
+
+describe('autosave and the box under the text', () => {
+  it('saves a version by itself when a sentence is finished, and shows it in History', async () => {
+    const s = await services({}, MD)
+    const id = (await s.service.list())[0].id
+    render(<WriteApp services={s} />)
+    const box = await waitForText()
+    fireEvent.change(box, { target: { value: `${MD}\nA new thought` } })
+    expect((await s.service.history(id)).filter((h) => h.label === 'Autosaved')).toHaveLength(0)
+    fireEvent.change(box, { target: { value: `${MD}\nA new thought.` } })
+    await waitFor(async () => expect((await s.service.history(id)).filter((h) => h.label === 'Autosaved')).toHaveLength(1))
+    await waitFor(async () => expect((await s.service.get(id)).markdown).toContain('A new thought.'))
+  })
+
+  it('the box under the text can be hidden and shown again', async () => {
+    const s = await services({}, MD)
+    render(<WriteApp services={s} />)
+    await waitForText()
+    expect(screen.getByLabelText('Comments and sources for this text')).toBeInTheDocument()
+    await userEvent.click(screen.getByRole('button', { name: 'Hide the box under the text' }))
+    expect(screen.queryByLabelText('Comments and sources for this text')).toBeNull()
+    await userEvent.click(screen.getByRole('button', { name: 'Show the box under the text' }))
+    expect(screen.getByLabelText('Comments and sources for this text')).toBeInTheDocument()
   })
 })
 
@@ -287,6 +319,17 @@ describe('chat: model, check and adjust', () => {
     expect(screen.getAllByTitle('The model that wrote this').at(-1)).toHaveTextContent(s.models.chat())
   })
 
+  it('"Draw the style sheet and the links" is said in the chat, with its result, and not in the top bar', async () => {
+    const s = await services({}, MD)
+    render(<WriteApp services={s} />)
+    await waitForText()
+    await userEvent.click(rail('Chat'))
+    await userEvent.selectOptions(screen.getByLabelText('Adjust', { selector: 'select' }), 'action:prepare')
+    expect(await screen.findByText('Draw the style sheet and the links from the text')).toBeInTheDocument()
+    expect(await screen.findByText(/Edit anything that is off/)).toBeInTheDocument()
+    expect(screen.queryByRole('status')?.textContent ?? '').not.toMatch(/Edit anything that is off/)
+  })
+
   it('tints the sentences of the claims it found, says what the colours mean, and the marks can be switched off', async () => {
     const s = await services({ capture: { articleId: null, ops: [] }, claims: { claims: [{ quote: 'The p99 was 18 ms.', kind: 'factual', matchesId: null, sure: true }] }, resolve: { affected: [] } }, MD)
     const { container } = render(<WriteApp services={s} />)
@@ -300,7 +343,7 @@ describe('chat: model, check and adjust', () => {
     expect(screen.getByText('not looked at yet')).toBeInTheDocument()
     expect(container.querySelector('.write__backdrop')).toHaveAttribute('aria-hidden', 'true')
     putCursor('18 ms')
-    expect(await screen.findByText(/Here: needs a source/)).toBeInTheDocument()
+    expect(screen.queryByText(/Here:/)).toBeNull() // the box under the text says it
     await userEvent.click(screen.getByRole('checkbox', { name: 'Show marks in the text' }))
     expect(container.querySelector('mark')).toBeNull()
     expect(screen.queryByText(/Here:/)).toBeNull()
@@ -483,30 +526,30 @@ describe('comments and sources under the text', () => {
     render(<WriteApp services={s} />)
     await waitForText()
     expect(screen.getByText(/Click in the text, or highlight some/)).toBeInTheDocument()
-    expect(screen.getByLabelText('Add to this text', { selector: 'input' })).toBeDisabled()
+    expect(screen.getByLabelText('Comments on this text')).toBeDisabled()
     putCursor('18 ms')
-    expect(screen.getByLabelText('Add to this text', { selector: 'input' })).toBeEnabled()
+    expect(screen.getByLabelText('Comments on this text')).toBeEnabled()
     expect(within(screen.getByLabelText('Comments and sources for this text')).getByText(/The p99 was 18 ms\./)).toBeInTheDocument()
   })
 
-  it('adds a comment on the sentence with Enter, edits it where it stands, marks it dealt with and deletes it', async () => {
+  it('the comments are free text: write one, reword it in place, add another after a blank line, and clear it to delete', async () => {
     const s = await services({}, MD)
     const id = (await s.service.list())[0].id
     render(<WriteApp services={s} />)
     await waitForText()
     putCursor('18 ms')
-    const dock = screen.getByLabelText('Comments and sources for this text')
-    await userEvent.type(within(dock).getByLabelText('Add to this text', { selector: 'input' }), 'Is this the median?{Enter}')
-    expect(await within(dock).findByText('Is this the median?')).toBeInTheDocument()
+    const box = screen.getByLabelText('Comments on this text') as HTMLTextAreaElement
+    await userEvent.type(box, 'Is this the median?')
+    fireEvent.blur(box)
+    await waitFor(async () => expect((await s.service.get(id)).meta.comments[0]?.text).toBe('Is this the median?'))
     expect((await s.service.get(id)).meta.comments[0].span?.quote).toBe('The p99 was 18 ms.')
-    await userEvent.click(within(dock).getByText('Is this the median?'))
-    const input = within(dock).getByLabelText('Comment', { selector: 'textarea' })
-    await userEvent.clear(input)
-    await userEvent.type(input, 'Is this p99 or the median?{Enter}')
-    await waitFor(async () => expect((await s.service.get(id)).meta.comments[0].text).toBe('Is this p99 or the median?'))
-    await userEvent.click(within(dock).getByRole('button', { name: 'Mark as dealt with' }))
-    await waitFor(async () => expect((await s.service.get(id)).meta.comments[0].state).toBe('addressed'))
-    await userEvent.click(within(dock).getByRole('button', { name: 'Delete the comment' }))
+    await waitFor(() => expect((screen.getByLabelText('Comments on this text') as HTMLTextAreaElement).value).toBe('Is this the median?'))
+    fireEvent.change(screen.getByLabelText('Comments on this text'), { target: { value: 'Is this p99 or the median?\n\nAdd the date.' } })
+    fireEvent.blur(screen.getByLabelText('Comments on this text'))
+    await waitFor(async () => expect((await s.service.get(id)).meta.comments.map((c) => c.text)).toEqual(['Is this p99 or the median?', 'Add the date.']))
+    await waitFor(() => expect((screen.getByLabelText('Comments on this text') as HTMLTextAreaElement).value).toBe('Is this p99 or the median?\n\nAdd the date.'))
+    fireEvent.change(screen.getByLabelText('Comments on this text'), { target: { value: '' } })
+    fireEvent.blur(screen.getByLabelText('Comments on this text'))
     await waitFor(async () => expect((await s.service.get(id)).meta.comments).toEqual([]))
   })
 
@@ -519,7 +562,9 @@ describe('comments and sources under the text', () => {
     const end = MD2.indexOf('It is quick.') + 'It is quick.'.length
     box.setSelectionRange(start, end)
     fireEvent.select(box)
-    await userEvent.type(screen.getByLabelText('Add to this text', { selector: 'input' }), 'Tighten this paragraph{Enter}')
+    const comments = screen.getByLabelText('Comments on this text')
+    await userEvent.type(comments, 'Tighten this paragraph')
+    fireEvent.blur(comments)
     await waitFor(async () => expect((await s.service.get(id)).meta.comments[0].span?.quote).toBe(MD2.slice(start, end)))
   })
 
@@ -761,8 +806,13 @@ describe('selecting by sentence, paragraph and section', () => {
     await userEvent.click(more)
     expect(selected()).toBe('The p99 was 18 ms.')
     expect(await screen.findByText('Selected: sentence')).toBeInTheDocument()
+    const dock = (): HTMLElement => screen.getByLabelText('Comments and sources for this text')
+    expect(within(dock()).getByText('Sentence')).toBeInTheDocument()
+    await dockTab('Links')
+    expect(within(dock()).getByText('Sentence')).toBeInTheDocument() // the title names the selection, not the tab
     await userEvent.click(more)
     expect(selected()).toBe('First one. The p99 was 18 ms. Last one.')
+    expect(within(dock()).getByText('Paragraph')).toBeInTheDocument()
     await userEvent.click(more)
     expect(selected()).toBe(TEXT.trim())
     expect(await screen.findByText('Selected: section')).toBeInTheDocument()
@@ -881,7 +931,7 @@ describe('style', () => {
 })
 
 describe('links, history', () => {
-  it('Links: shown in the box under the text for the section the selection is in; find, confirm, and adding one by hand is tucked away', async () => {
+  it('Links: shown in the box under the text for the section the selection is in; confirm, and adding one by hand is tucked away', async () => {
     const reply = { links: [{ from: 's3', to: 's2', kind: 'repeats', reason: 'repeats the bound', confidence: 0.8 }] }
     const s = await services({ links: reply }, MD2)
     render(<WriteApp services={s} />)
@@ -890,7 +940,11 @@ describe('links, history', () => {
     await dockTab('Links')
     const links = panel('Links')
     expect(within(links).getByText(/Click in the text/)).toBeInTheDocument()
-    await userEvent.click(within(links).getByRole('button', { name: /Look for links between sections/ }))
+    expect(within(links).queryByRole('button', { name: /Look for links between sections/ })).toBeNull() // found from the chat menu, not here
+    await userEvent.click(rail('Chat'))
+    await userEvent.selectOptions(screen.getByLabelText('Adjust', { selector: 'select' }), 'action:prepare')
+    await screen.findByText(/Edit anything that is off/)
+    await userEvent.click(rail('Text'))
     await dockTab('Comments')
     putCursor('So p99 stays')
     await dockTab('Links')
@@ -938,6 +992,11 @@ describe('links, history', () => {
     expect(await within(history).findByText('Memory added')).toBeInTheDocument()
     await userEvent.click(within(history).getAllByRole('button', { name: 'Compare with now' })[0])
     expect(await screen.findByLabelText('Version detail')).toBeInTheDocument()
+    expect(within(history).queryByLabelText('Version detail')).toBeNull() // shown in the main text window, not in the side panel
+    await userEvent.click(within(screen.getByRole('group', { name: 'Which text' })).getByRole('button', { name: 'Current' }))
+    expect(screen.queryByLabelText('Version detail')).toBeNull()
+    await userEvent.click(within(screen.getByRole('group', { name: 'Which text' })).getByRole('button', { name: 'History' }))
+    expect(screen.getByLabelText('Version detail')).toBeInTheDocument()
     const restore = within(history).getAllByRole('button', { name: 'Restore' }).at(-1)!
     await userEvent.click(restore)
     await answerDialog()

@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { outlineOf, renameHeadingInText } from './article-outline.js'
+import { outlineOf, renameHeadingInText, outlineToText, applyOutlineText } from './article-outline.js'
 
 const TEXT = '# Title\n\nIntro.\n\n## One\n\nText.\n\n### One A\n\nMore.\n\n### One B\n\n## Two\n\nEnd.\n'
 
@@ -29,5 +29,42 @@ describe('renameHeadingInText', () => {
   })
   it('keeps the text when the new wording is empty', () => {
     expect(renameHeadingInText(TEXT, outlineOf(TEXT)[1].start, '  ')).toBe(TEXT)
+  })
+})
+
+describe('outline as text', () => {
+  const T = '# Title\n\nIntro.\n\n## One\n\nText one.\n\n### One A\n\nMore.\n\n## Two\n\nEnd.\n'
+  it('is the headings, one per line, as written in the article', () => {
+    expect(outlineToText(T)).toBe('# Title\n## One\n### One A\n## Two')
+  })
+  it('leaves the article untouched when the outline is unchanged', () => {
+    expect(applyOutlineText(T, outlineToText(T))).toBe(T)
+  })
+  it('rewording a line rewords the heading and keeps its text', () => {
+    expect(applyOutlineText(T, '# Title\n## First\n### One A\n## Two')).toBe(T.replace('## One', '## First'))
+  })
+  it('a new line is a new empty section, a line without hashes joins the level above', () => {
+    expect(applyOutlineText(T, '# Title\n## One\n### One A\n### One B\nOne C\n## Two')).toBe(T.replace('## Two', '### One B\n\n### One C\n\n## Two'))
+  })
+  it('a new subsection is typed with more hashes', () => {
+    expect(applyOutlineText(T, '# Title\n## One\n### One A\n#### Deeper\n## Two')).toBe(T.replace('## Two', '#### Deeper\n\n## Two'))
+  })
+  it('changing the hashes changes the level and keeps the text', () => {
+    expect(applyOutlineText(T, '# Title\n## One\n## One A\n## Two')).toBe(T.replace('### One A', '## One A'))
+  })
+  it('deleting a line removes the heading only; its text stays with the section above', () => {
+    const out = applyOutlineText(T, '# Title\n## One\n## Two')
+    expect(out).not.toContain('One A')
+    expect(out).toContain('More.')
+    expect(out.indexOf('More.')).toBeLessThan(out.indexOf('## Two'))
+  })
+  it('moving a line moves its section', () => {
+    const out = applyOutlineText(T, '# Title\n## Two\n## One\n### One A')
+    expect(out.indexOf('## Two')).toBeLessThan(out.indexOf('## One'))
+    expect(out.indexOf('End.')).toBeLessThan(out.indexOf('Text one.'))
+    expect(out.indexOf('Text one.')).toBeLessThan(out.indexOf('More.'))
+  })
+  it('waits while a line is only hashes', () => {
+    expect(applyOutlineText(T, '# Title\n## One\n##\n## Two')).toBe(T)
   })
 })

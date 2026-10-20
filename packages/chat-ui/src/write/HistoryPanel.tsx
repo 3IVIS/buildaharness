@@ -1,4 +1,4 @@
-import type { ChangeSummary, VersionComparison } from '@buildaharness/aielia'
+import type { ChangeSummary } from '@buildaharness/aielia'
 import { EditableText } from './EditableText'
 import { Hint } from './Hint'
 import { ICON_PATHS, Icon, IconButton } from './icons'
@@ -11,24 +11,15 @@ export interface VersionRow {
   change: ChangeSummary
 }
 
-export interface Viewing {
-  mode: 'view' | 'compare'
-  markdown: string
-  diff?: VersionComparison
-}
-
 interface Props {
   versions: VersionRow[]
   working: ChangeSummary | undefined
-  viewing: Viewing | null
   busy: boolean
-  statusLabel: Record<string, string>
   onSave(): void
   onView(index: number): void
   onCompare(index: number): void
   onRestore(index: number): void
   onRename(index: number, label: string): void
-  onClose(): void
 }
 
 /** One line saying what a version changed: lines, then the sections, claims and sources it touched. */
@@ -42,7 +33,7 @@ export function describeChange(c: ChangeSummary | undefined): string {
   return parts.join(' · ')
 }
 
-export function HistoryPanel({ versions, working, viewing, busy, statusLabel, onSave, onView, onCompare, onRestore, onRename, onClose }: Props): React.JSX.Element {
+export function HistoryPanel({ versions, working, busy, onSave, onView, onCompare, onRestore, onRename }: Props): React.JSX.Element {
   return (
     <>
       <h2 className="write__panehead">History</h2>
@@ -78,22 +69,6 @@ export function HistoryPanel({ versions, working, viewing, busy, statusLabel, on
         ))}
       </ul>
       {versions.length === 0 && <p className="write__muted">No saved versions yet.<Hint text="A version is saved before a large change or a suggestion you accept, and when you press Save version." /></p>}
-      {viewing && (
-        <div className="write__version" aria-label="Version detail">
-          <h3>{viewing.mode === 'view' ? 'Text of this version' : 'Changes since this version'}</h3>
-          {viewing.mode === 'view' ? (
-            <pre className="write__pre">{viewing.markdown}</pre>
-          ) : (
-            <>
-              <p className="write__muted">{viewing.diff && viewing.diff.changedLines === 0 ? 'The text is the same as now.' : `${viewing.diff?.changedLines ?? 0} changed lines. Red was in that version, green is in the article now.`}</p>
-              <pre className="write__pre write__diff">{(viewing.diff?.text ?? []).filter((l) => l.type !== 'same').map((l, i) => <span key={i} className={`write__diff--${l.type}`}>{l.type === 'add' ? '+ ' : '- '}{l.text}{'\n'}</span>)}</pre>
-              {(viewing.diff?.claims.length ?? 0) > 0 && <ul className="write__rows">{viewing.diff?.claims.map((c) => <li key={c.quote}><div className="write__rowmain">{c.quote}<div className="write__reason">{statusLabel[c.from] ?? 'not in the article'} → {statusLabel[c.to] ?? 'not in the article'}</div></div></li>)}</ul>}
-              {(viewing.diff?.sources.length ?? 0) > 0 && <ul className="write__rows">{viewing.diff?.sources.map((x) => <li key={x.id}><div className="write__rowmain">Source {x.address ?? x.id}: {x.change}</div></li>)}</ul>}
-            </>
-          )}
-          <button type="button" className="write__link" onClick={onClose}>Close</button>
-        </div>
-      )}
     </>
   )
 }

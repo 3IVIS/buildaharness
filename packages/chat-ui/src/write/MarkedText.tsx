@@ -1,13 +1,11 @@
 import { useRef, useState, type RefObject } from 'react'
-import { describeAt, type TextPiece } from '@buildaharness/aielia'
+import type { TextPiece } from '@buildaharness/aielia'
 import { IconButton } from './icons'
 
 interface Props {
   textRef: RefObject<HTMLTextAreaElement>
   value: string
   pieces: TextPiece[]
-  /** Where the cursor is, to say what applies there. */
-  caret: number
   onChange(value: string): void
   onSelection(range: { start: number; end: number }): void
   /** Selects the next larger unit (sentence, paragraph, section, article) around the selection. */
@@ -34,7 +32,7 @@ function loadTint(): boolean {
  * text area, laid out the same way and scrolled with it, so the writer types in a plain text area and the marks follow the words. Nothing changes
  * the layout of the text. The copy is hidden from screen readers; the line under the text and the box under that say the same in words.
  */
-export function MarkedText({ textRef, value, pieces, caret, onChange, onSelection, onGrow, onShrink, unit }: Props): React.JSX.Element {
+export function MarkedText({ textRef, value, pieces, onChange, onSelection, onGrow, onShrink, unit }: Props): React.JSX.Element {
   const back = useRef<HTMLDivElement | null>(null)
   const [tint, setTint] = useState(loadTint)
   const shown = tint ? pieces : []
@@ -47,7 +45,6 @@ export function MarkedText({ textRef, value, pieces, caret, onChange, onSelectio
     at = p.end
   }
   parts.push(value.slice(at))
-  const here = tint ? describeAt(pieces, caret) : undefined
   const has = (f: (p: TextPiece) => boolean): boolean => pieces.some(f)
 
   return (
@@ -87,7 +84,6 @@ export function MarkedText({ textRef, value, pieces, caret, onChange, onSelectio
               {has((p) => p.reviewSectionId !== undefined) && <span className="write__tone write__tone--review">needs review</span>}
             </>
           )}
-          {here && <span className="write__here" aria-live="polite">Here: {here}</span>}
         </p>
       )}
     </div>

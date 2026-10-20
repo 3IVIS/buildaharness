@@ -10,7 +10,7 @@ import type { Brief, StyleProfile } from './article-model.js'
 import { addIdea, editIdea, removeIdea, setIdeaState, suggestIdeas, type IdeaSuggestion } from './article-ideas.js'
 import { attachSourceToText, proposeSourceLinks, textUnitAt, type SourceLinkProposal, type TextRange } from './article-source-links.js'
 import { addDrawnLink, proposeDependencies, type DependencyKind, type DependencyProposal } from './article-dependencies.js'
-import { addSnapshot, compareVersions, isLargeChange, summarizeChange, type ChangeSummary, type VersionComparison } from './article-history.js'
+import { addSnapshot, AUTOSAVE_LABEL, compareVersions, isLargeChange, summarizeChange, type ChangeSummary, type VersionComparison } from './article-history.js'
 import { checkIntegrity, computeReadiness, confirmLink, createSnapshot, removeLink, restoreSnapshot, setSectionReview, type Problem, type Readiness, type Snapshot } from './article-rules.js'
 import { suggestEdits, type EditSuggestResult } from './article-edit-suggest.js'
 import { reconcileSections } from './article-sections.js'
@@ -760,6 +760,17 @@ export class ArticleService {
   async saveVersion(id: string, label?: string): Promise<void> {
     const b = await this.get(id)
     await this.store.save(id, { ...b, snapshots: addSnapshot(b.snapshots, createSnapshot('checkpoint', b.markdown, b.meta, this.now(), label?.trim() || 'Saved by you')) })
+  }
+
+  /**
+   * A version the page saves by itself (a sentence finished, a section started, the writer moved on to another sentence). The working text is set to
+   * `markdown` first so the version's text and its sections agree; nothing is saved when it is the same text as the latest version.
+   */
+  async autosave(id: string, markdown: string): Promise<boolean> {
+    const b = (await this.updateText(id, markdown, { analyze: false })).bundle
+    if (b.snapshots.at(-1)?.markdown === b.markdown) return false
+    await this.store.save(id, { ...b, snapshots: addSnapshot(b.snapshots, createSnapshot('checkpoint', b.markdown, b.meta, this.now(), AUTOSAVE_LABEL)) })
+    return true
   }
 
   /** Every version, newest first, each with what changed since the version before it (the oldest has nothing to compare with). */

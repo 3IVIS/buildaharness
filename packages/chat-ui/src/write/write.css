@@ -56,7 +56,6 @@
 .write__selbar { display: flex; gap: 6px; align-items: center; margin-top: 4px; font-size: 0.82rem; }
 .write__marklegend { margin: 4px 0 0; font-size: 0.82rem; color: var(--muted); display: flex; flex-wrap: wrap; gap: 4px 10px; align-items: center; }
 .write__tintswitch { display: inline-flex; gap: 4px; align-items: center; }
-.write__here { color: var(--fg, inherit); font-weight: 600; }
 .write__tone { margin-left: 0; padding: 0 5px; border-radius: 3px; }
 .write__tone--ok { background: rgba(46, 158, 91, 0.16); }
 .write__tone--tried { background: rgba(120, 130, 150, 0.2); box-shadow: inset 0 -2px 0 rgba(120, 130, 150, 0.55); }
@@ -102,7 +101,7 @@
 .write__form { display: grid; grid-template-columns: minmax(0, 1fr); gap: 8px; margin-bottom: 16px; }
 .write__form > *, .write__adjust > * { min-width: 0; max-width: 100%; box-sizing: border-box; }
 .write__form textarea, .write__form input, .write__form select, .write__form button { width: 100%; box-sizing: border-box; }
-.write__version { border: 1px solid var(--border); border-radius: 8px; padding: 10px 12px; margin: 12px 0; background: var(--surface); }
+
 .write__pre { white-space: pre-wrap; overflow-wrap: anywhere; margin: 8px 0; padding: 8px; max-height: 320px; overflow: auto; font: 0.85rem/1.5 ui-monospace, Menlo, monospace; background: var(--tint-1); border-radius: 6px; }
 .write__diff--add { color: var(--green); }
 .write__diff--del { color: var(--red); }
@@ -304,3 +303,18 @@
 .write .write__docktabs button.is-on { border-bottom-color: var(--accent); font-weight: 600; }
 .write__dockadd > .write__seg { max-width: 100%; }
 .write__dockscroll, .write__dockbody { min-width: 0; }
+
+/* The outline as text: a plain box, one heading per line. */
+.write__outlineedit { display: flex; flex-direction: column; gap: 6px; height: 100%; }
+.write .write__outlinetext { flex: 1 1 auto; min-height: 160px; width: 100%; resize: none; font-family: inherit; line-height: 1.7; }
+.write__outlinebar { display: flex; gap: 12px; align-items: baseline; justify-content: space-between; font-size: 0.85rem; }
+
+/* The comments on the selected text: one box of free text. */
+.write .write__commenttext { width: 100%; min-height: 96px; resize: vertical; font-family: inherit; line-height: 1.6; }
+
+/* An earlier version shown in the main text window. */
+.write__versionview { flex: 1 1 auto; min-height: 120px; overflow: auto; padding: 4px 2px; }
+.write__versionview .write__pre { max-height: none; }
+
+/* Shows or hides the box under the text. */
+.write__dockswitch { align-self: flex-end; font-size: 0.85rem; }
