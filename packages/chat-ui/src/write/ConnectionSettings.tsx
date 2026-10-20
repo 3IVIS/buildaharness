@@ -1,4 +1,5 @@
 import { useState } from 'react'
+import { useDialogs } from './dialogs'
 import { Hint } from './Hint'
 import type { WriteConnection } from './write-config'
 
@@ -13,6 +14,7 @@ interface Props {
 
 /** The few things this page needs to reach a model and the web. Stored in this browser only, apart from the /try page's settings. */
 export function ConnectionSettings({ value, onSave, onForget, showWeb = true }: Props): React.JSX.Element {
+  const dialogs = useDialogs()
   const [draft, setDraft] = useState<WriteConnection>(value)
   const set = (patch: Partial<WriteConnection>): void => setDraft((d) => ({ ...d, ...patch }))
   const dirty = JSON.stringify(draft) !== JSON.stringify(value)
@@ -58,7 +60,7 @@ export function ConnectionSettings({ value, onSave, onForget, showWeb = true }: 
       </details>}
       <div className="write__rowacts">
         <button type="button" className="write__primary" disabled={!dirty || (draft.provider === 'proxy' ? !draft.modelUrl?.trim() : !draft.apiKey.trim())} onClick={() => onSave(draft)}>Save connection</button>
-        {onForget && <button type="button" className="write__link" onClick={() => { if (window.confirm('Forget the key and the other connection settings from this browser? Your articles stay.')) onForget() }}>Forget these</button>}
+        {onForget && <button type="button" className="write__link" onClick={() => { void dialogs.confirm('Forget the key and the other connection settings from this browser? Your articles stay.', { yes: 'Forget' }).then((ok) => { if (ok) onForget() }) }}>Forget these</button>}
       </div>
     </fieldset>
   )

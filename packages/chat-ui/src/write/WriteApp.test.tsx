@@ -4,6 +4,7 @@ import userEvent from '@testing-library/user-event'
 import { ArticleService, createMemoryArticleStore, type PersonalAssistant } from '@buildaharness/aielia'
 import type { ILLMClient } from '@buildaharness/runtime'
 import { WriteApp } from './WriteApp'
+import { answerDialog } from './dialog-test-utils'
 import { assembleWriteServices } from './write-services'
 
 const MARK = {
@@ -70,11 +71,11 @@ describe('header and article menu', () => {
   })
 
   it('starts empty, creates an article from the menu, and shows its sections in the outline', async () => {
-    vi.spyOn(window, 'prompt').mockReturnValue('My post')
     render(<WriteApp services={await services({})} />)
     expect(screen.getByText(/Create an article, or import one/)).toBeInTheDocument()
     await openMenu()
     await userEvent.click(screen.getByRole('button', { name: /New article/ }))
+    await answerDialog('My post')
     const box = await waitForText()
     expect(box.value).toContain('# My post')
     await userEvent.click(rail('Outline'))
@@ -91,10 +92,22 @@ describe('header and article menu', () => {
     fireEvent.change(screen.getByLabelText('Article text'), { target: { value: MD.replace('# Post', '# A much longer heading that is the title of the text') } })
     await new Promise((r) => setTimeout(r, 1000))
     expect(screen.getByRole('button', { name: 'Article' })).toHaveTextContent('Post')
-    vi.spyOn(window, 'prompt').mockReturnValue('Q3 write-up')
     await openMenu()
     await userEvent.click(screen.getByRole('button', { name: /Rename this article/ }))
+    await answerDialog('Q3 write-up')
     await waitFor(() => expect(screen.getByRole('button', { name: 'Article' })).toHaveTextContent('Q3 write-up'))
+  })
+
+  it('exports through the host\'s own save action when it has one, instead of a download link', async () => {
+    const saved: { name: string; text: string }[] = []
+    const base = await services({}, MD)
+    render(<WriteApp services={{ ...base, saveFile: async (name, text) => { saved.push({ name, text }) } }} />)
+    await waitForText()
+    await openMenu()
+    await userEvent.click(screen.getByRole('button', { name: /Export this article/ }))
+    await waitFor(() => expect(saved).toHaveLength(1))
+    expect(saved[0].name).toMatch(/\.aielia-article\.json$/)
+    expect(JSON.parse(saved[0].text)).toBeTypeOf('object')
   })
 
   it('switches between articles from the menu', async () => {
@@ -113,10 +126,10 @@ describe('header and article menu', () => {
     const id = await svc.create('Post', MD)
     const b = await svc.get(id)
     await store.save(id, { ...b, meta: { ...b.meta, comments: [{ id: 'wc1', articleId: id, text: 't', state: 'open', conflictsWith: [], origin: 'reviewer', capturedAt: 'now' }] } })
-    vi.spyOn(window, 'prompt').mockReturnValue('v1')
     render(<WriteApp services={await servicesOn(store, {})} />)
     await waitForText()
     await userEvent.click(screen.getByRole('button', { name: 'Publish' }))
+    await answerDialog('v1')
     expect(await screen.findByText(/1 item was still open/)).toBeInTheDocument()
     expect((await svc.get(id)).snapshots).toHaveLength(1)
   })
@@ -129,10 +142,10 @@ describe('header and article menu', () => {
     const src = await s.service.addSource(id, { kind: 'web', address: 'https://example.com/bench' })
     await s.service.readSource(id, src)
     page = 'p99 is now 30 ms.'
-    vi.spyOn(window, 'prompt').mockReturnValue('v1')
     render(<WriteApp services={s} />)
     await waitForText()
     await userEvent.click(screen.getByRole('button', { name: 'Publish' }))
+    await answerDialog('v1')
     expect(await screen.findByText(/1 web source has changed since you read it/)).toBeInTheDocument()
     expect((await s.service.get(id)).snapshots).toHaveLength(1)
     await userEvent.click(rail('Settings'))
@@ -145,6 +158,7 @@ describe('header and article menu', () => {
     render(<WriteApp services={{ ...s, service: Object.assign(s.service, { updateText: async () => { throw new Error('storage is full') } }) }} />)
     await waitForText()
     await userEvent.click(screen.getByRole('button', { name: 'Publish' }))
+    await answerDialog('v1')
     expect(await screen.findByText('storage is full')).toBeInTheDocument()
   })
 })
@@ -637,21 +651,20 @@ describe('code sources', () => {
     await waitFor(async () => expect((await s.service.get(id)).meta.sources[0]).toMatchObject({ kind: 'code', passage: 'two\nthree', lines: { from: 2, to: 3 } }))
     expect(fetched).toEqual(['https://raw.githubusercontent.com/o/r/main/a.ts'])
     expect(await within(dock).findByText(/lines 2–3/)).toBeInTheDocument()
-    const ask = vi.spyOn(window, 'prompt').mockReturnValue('1-4')
     await userEvent.click(within(dock).getByRole('button', { name: 'Change which lines are kept' }))
+    await answerDialog('1-4')
     await waitFor(async () => expect((await s.service.get(id)).meta.sources[0]).toMatchObject({ passage: 'one\ntwo\nthree\nfour', lines: { from: 1, to: 4 } }))
-    ask.mockRestore()
   })
 })
 
 describe('bringing a page or file in to edit', () => {
   it('reads a web page into a new article, says it is a copy, and offers it only where pages can be read', async () => {
     const base = await services({}, MD, async () => '<html><body><h1>Caching</h1><p>The cache holds 100 items.</p></body></html>')
-    vi.spyOn(window, 'prompt').mockReturnValue('https://example.com/post')
     render(<WriteApp services={base} />)
     await waitForText()
     await openMenu()
     await userEvent.click(screen.getByRole('button', { name: /Open a web page to edit/ }))
+    await answerDialog('https://example.com/post')
     expect(await screen.findByText(/This is a copy of the page/)).toBeInTheDocument()
     await waitFor(async () => expect((await base.service.list()).length).toBe(2))
     const made = (await base.service.list()).find((a) => a.name === 'Caching' || a.title === 'Caching')
@@ -825,7 +838,6 @@ describe('links, history', () => {
     await s.service.saveVersion(id, 'Added memory')
     render(<WriteApp services={s} />)
     const box = await waitForText()
-    vi.spyOn(window, 'confirm').mockReturnValue(true)
     await userEvent.click(rail('History'))
     const history = panel('History')
     const legend = within(history).getByLabelText('What the icons do')
@@ -841,6 +853,7 @@ describe('links, history', () => {
     expect(await screen.findByLabelText('Version detail')).toBeInTheDocument()
     const restore = within(history).getAllByRole('button', { name: 'Restore' }).at(-1)!
     await userEvent.click(restore)
+    await answerDialog()
     await waitFor(() => expect(box.value).toContain('18 ms'))
     expect(await within(history).findByText('Before restoring an earlier version')).toBeInTheDocument()
   })

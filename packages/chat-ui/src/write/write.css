@@ -264,3 +264,9 @@
 .write__form label:has(> input[type='checkbox']) { display: flex; align-items: center; gap: 8px; }
 .write__connection .write__primary { white-space: nowrap; }
 .write__form label:has(> input[type='checkbox']) > input[type='checkbox'] { width: auto; flex: none; margin: 0; }
+
+/* Questions put to the writer from inside the page (dialogs.tsx) */
+.write__dialog-backdrop { position: fixed; inset: 0; background: rgba(0, 0, 0, 0.35); display: flex; align-items: center; justify-content: center; z-index: 50; padding: 16px; }
+.write__dialog { background: var(--bg, #fff); color: inherit; border: 1px solid var(--border); border-radius: 10px; padding: 18px; width: min(440px, 100%); box-shadow: 0 8px 30px rgba(0, 0, 0, 0.25); }
+.write__dialog p { margin: 0 0 12px; }
+.write__dialog input { width: 100%; margin-bottom: 12px; }

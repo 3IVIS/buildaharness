@@ -54,6 +54,8 @@ export interface WriteServices {
   pickFolder?: () => Promise<FolderReader | undefined>
   /** The writer's GitHub token, for reading a private repository. */
   githubToken?: string
+  /** Saves a file the writer asked for (an export). Absent where a download link does the job (a browser tab). */
+  saveFile?: (name: string, text: string) => Promise<void>
   /** Dollars and calls so far for each kind of call, biggest first. */
   spendByType(): { id: string; usd: number; calls: number }[]
 }
@@ -75,6 +77,7 @@ export async function assembleWriteServices(parts: {
   searchWeb?: (query: string) => Promise<{ title: string; url: string; snippet: string }[]>
   pickFolder?: () => Promise<FolderReader | undefined>
   githubToken?: string
+  saveFile?: (name: string, text: string) => Promise<void>
 }): Promise<WriteServices> {
   const { store } = parts
   const backend = parts.backend ?? 'anthropic'
@@ -133,6 +136,7 @@ export async function assembleWriteServices(parts: {
     canReadPages: parts.fetchWeb !== undefined,
     pickFolder: parts.pickFolder,
     githubToken: parts.githubToken,
+    saveFile: parts.saveFile,
     spentUsd: () => meter.spentUsd(),
     spendByType: () => Object.entries(meter.byType()).map(([id, v]) => ({ id, ...v })).sort((a, b) => b.usd - a.usd),
   }
@@ -168,6 +172,8 @@ export interface WritePlatform {
   pickFolder?: () => Promise<FolderReader | undefined>
   /** The writer's GitHub token, for a private repository. */
   githubToken?: string
+  /** Saves a file the writer asked for. Absent where a download link does the job. */
+  saveFile?: (name: string, text: string) => Promise<void>
 }
 
 /** Write on any host: the connection (model and key) and what the host can do. */
