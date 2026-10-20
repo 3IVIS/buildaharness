@@ -110,4 +110,27 @@ describe('verifying claims by letting the model search the repository', () => {
     expect(requests.filter((r) => r.includes('/git/trees/'))).toHaveLength(1)
     expect(options.some((o) => (o as { cachePrompt?: boolean } | undefined)?.cachePrompt === true)).toBe(true)
   })
+
+  it('refuses a repository it could only read in part, instead of reporting no source for the missing files', async () => {
+    const paths = Array.from({ length: 40 }, (_, i) => `src/f${i}.ts`)
+    const fetchImpl = (async (url: string) => {
+      if (url.includes('/git/trees/')) return new Response(JSON.stringify({ tree: paths.map((path) => ({ path, type: 'blob', size: 20 })) }))
+      return new Response('', { status: 429 })
+    }) as unknown as typeof fetch
+    const svc = new ArticleService({ store: createMemoryArticleStore(), llm: llm([]), now: () => NOW })
+    const id = await svc.create('Post', MD)
+    await svc.analyze(id)
+    svc.attachRepo(id, githubRepoReader({ owner: 'o', repo: 'r' }, { fetchImpl }))
+    await expect(svc.verifyClaims(id)).rejects.toThrow(/40 of the repository's 40 files could not be read.*GitHub token/)
+  })
+  it('lists the repository again on the next try after a listing failure', async () => {
+    let listed = 0
+    const flaky: RepoReader = { name: 'repo', files: async () => { if (listed++ === 0) throw new Error('listing failed'); return Object.keys(FILES) }, read: async (p) => FILES[p], addressOf: (p) => `https://example.test/${p}` }
+    const svc = new ArticleService({ store: createMemoryArticleStore(), llm: llm([LOOKUP, { content: JSON.stringify(rows) }]), now: () => NOW })
+    const id = await svc.create('Post', MD)
+    await svc.analyze(id)
+    svc.attachRepo(id, flaky)
+    await expect(svc.verifyClaims(id, { repoOnly: true })).rejects.toThrow('listing failed')
+    expect((await svc.verifyClaims(id, { repoOnly: true })).entries[0].outcome).toBe('supported')
+  })
 })

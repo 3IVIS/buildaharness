@@ -26,6 +26,9 @@ export interface RepoIndex {
   text(path: string): string | undefined
   /** Whether the file exists in the index. */
   has(path: string): boolean
+  /** How many files the reader listed, and how many of them could not be read at all (a failed or rate-limited fetch, not an empty or oversized file). */
+  readonly listed: number
+  readonly unreadable: number
 }
 
 function globTest(glob: string | undefined): (path: string) => boolean {
@@ -47,10 +50,12 @@ function compile(pattern: string): RegExp {
   }
 }
 
-export function createRepoIndex(files: ReadonlyMap<string, string>): RepoIndex {
+export function createRepoIndex(files: ReadonlyMap<string, string>, stats: { listed?: number; unreadable?: number } = {}): RepoIndex {
   const paths = [...files.keys()].sort()
   return {
     fileCount: paths.length,
+    listed: stats.listed ?? paths.length,
+    unreadable: stats.unreadable ?? 0,
     has: (path) => files.has(path),
     text: (path) => files.get(path),
     search(pattern, glob) {
@@ -110,14 +115,16 @@ export async function buildRepoIndex(reader: FolderReader): Promise<RepoIndex> {
   const paths = await reader.files()
   const files = new Map<string, string>()
   let next = 0
+  let unreadable = 0
   const worker = async (): Promise<void> => {
     while (next < paths.length) {
       const path = paths[next++]
       let text: string | undefined
       try { text = await reader.read(path) } catch { text = undefined }
+      if (text === undefined) unreadable++
       if (text && text.trim() && text.length <= MAX_INDEXED_FILE_CHARS) files.set(path, text)
     }
   }
   await Promise.all(Array.from({ length: READ_CONCURRENCY }, worker))
-  return createRepoIndex(files)
+  return createRepoIndex(files, { listed: paths.length, unreadable })
 }

@@ -576,7 +576,13 @@ export class ArticleService {
     const reader = attached.length === 1 ? attached[0] : combineRepos(attached)
     let index = this.repoIndexes.get(reader)
     if (!index) { index = buildRepoIndex(reader); this.repoIndexes.set(reader, index) }
-    const idx = await index
+    let idx: RepoIndex
+    try { idx = await index } catch (e) { this.repoIndexes.delete(reader); throw e }
+    // A repository read only in part would turn claims about the missing files into "no source found", so it is refused rather than searched.
+    if (idx.unreadable > Math.max(5, idx.listed * 0.05)) {
+      this.repoIndexes.delete(reader)
+      throw new Error(`${idx.unreadable} of the repository's ${idx.listed} files could not be read, so it was not searched (for GitHub, this usually means requests are being limited: add a GitHub token in Settings and try again).`)
+    }
     const model = opts.model ?? this.checker()
     const entries: VerifyEntry[] = []
     const size = Math.max(1, opts.batchSize ?? 25)

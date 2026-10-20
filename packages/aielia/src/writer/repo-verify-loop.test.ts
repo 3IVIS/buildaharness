@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import type { ChatMessage, ILLMClient, LLMStructuredResponse } from '@buildaharness/runtime'
+import { LLMClient, type ChatMessage, type ILLMClient, type LLMStructuredResponse } from '@buildaharness/runtime'
 import { checkAnswers, locateExcerpt, verifyBatchWithTools } from './repo-verify-loop.js'
 import { createRepoIndex } from './repo-search.js'
 
@@ -119,5 +119,27 @@ describe('over the OpenAI-compatible client (OpenAI, OpenRouter)', () => {
     expect(r).toMatchObject({ id: 'k1', verdict: 'supported' })
     expect(bodies[0].tools).toHaveLength(3)
     expect(bodies[1].messages.some((m) => m.role === 'tool' && m.tool_call_id === 'call_1')).toBe(true)
+  })
+})
+
+describe('through the proxy client', () => {
+  it('runs a lookup and a final answer with the Anthropic tool shape, and sends the lookup result back as a tool_result block', async () => {
+    const bodies: { system?: string; tools?: { name: string }[]; messages: { role: string; content: unknown }[] }[] = []
+    const replies = [
+      { content: [{ type: 'tool_use', id: 'toolu_1', name: 'search', input: { pattern: 'DELAY_MS' } }], usage: { input_tokens: 100, output_tokens: 10 } },
+      { content: [{ type: 'text', text: JSON.stringify([{ id: 'k1', verdict: 'supported', reason: 'r', evidence: [{ file: 'src/a.ts', excerpt: 'export const DELAY_MS = 800' }] }]) }], usage: { input_tokens: 200, output_tokens: 20 } },
+    ]
+    const fetchImpl = (async (_url: string, init: { body: string }) => { bodies.push(JSON.parse(init.body)); return new Response(JSON.stringify(replies.shift())) }) as unknown as typeof fetch
+    const usage: number[] = []
+    const client = new LLMClient({ proxyUrl: 'https://proxy.test', authToken: 't', fetchImpl })
+    const [r] = await verifyBatchWithTools({ claims: [{ id: 'k1', quote: 'The delay is 800 ms.' }], articleText: 'a' }, idx, client, { model: 'claude-sonnet-5-5', onUsage: (u) => { usage.push(u.inputTokens) } })
+    expect(r).toMatchObject({ id: 'k1', verdict: 'supported' })
+    expect(bodies[0].tools?.map((t) => t.name)).toEqual(['search', 'read', 'list'])
+    expect(bodies[0].system).toContain('You check claims')
+    const sent = bodies[1].messages.at(-1)
+    expect(sent?.role).toBe('user')
+    expect(JSON.stringify(sent?.content)).toContain('"tool_use_id":"toolu_1"')
+    expect(JSON.stringify(sent?.content)).toContain('DELAY_MS = 800')
+    expect(usage).toEqual([100, 200])
   })
 })
