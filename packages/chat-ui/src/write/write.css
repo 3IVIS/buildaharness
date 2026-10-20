@@ -101,7 +101,7 @@
 .write__form { display: grid; grid-template-columns: minmax(0, 1fr); gap: 8px; margin-bottom: 16px; }
 .write__form > *, .write__adjust > * { min-width: 0; max-width: 100%; box-sizing: border-box; }
 .write__form textarea, .write__form input, .write__form select, .write__form button { width: 100%; box-sizing: border-box; }
-.write__version { border: 1px solid var(--border); border-radius: 8px; padding: 10px 12px; margin: 12px 0; background: var(--surface); }
+
 .write__pre { white-space: pre-wrap; overflow-wrap: anywhere; margin: 8px 0; padding: 8px; max-height: 320px; overflow: auto; font: 0.85rem/1.5 ui-monospace, Menlo, monospace; background: var(--tint-1); border-radius: 6px; }
 .write__diff--add { color: var(--green); }
 .write__diff--del { color: var(--red); }
@@ -311,3 +311,10 @@
 
 /* The comments on the selected text: one box of free text. */
 .write .write__commenttext { width: 100%; min-height: 96px; resize: vertical; font-family: inherit; line-height: 1.6; }
+
+/* An earlier version shown in the main text window. */
+.write__versionview { flex: 1 1 auto; min-height: 120px; overflow: auto; padding: 4px 2px; }
+.write__versionview .write__pre { max-height: none; }
+
+/* Shows or hides the box under the text. */
+.write__dockswitch { align-self: flex-end; font-size: 0.85rem; }

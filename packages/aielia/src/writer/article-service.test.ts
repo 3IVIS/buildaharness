@@ -205,6 +205,26 @@ describe('version history', () => {
     let t = 0
     return { store, s: new ArticleService({ store, llm: routed({}), now: () => `2026-10-16T10:00:0${t++}.000Z`, newId: () => 'a1' }) }
   }
+  it('autosaves the text it is given as a version, once per different text, and keeps the writer\'s own versions', async () => {
+    const { s } = build()
+    const id = await s.create('Post', MD)
+    await s.saveVersion(id, 'Mine')
+    expect(await s.autosave(id, MD)).toBe(false) // same as the latest version
+    expect(await s.autosave(id, MD.replace('18 ms', '19 ms'))).toBe(true)
+    expect(await s.autosave(id, MD.replace('18 ms', '19 ms'))).toBe(false)
+    expect((await s.get(id)).markdown).toContain('19 ms')
+    const h = await s.history(id)
+    expect(h.map((x) => x.label)).toEqual(['Autosaved', 'Mine'])
+  })
+  it('keeps only the newest autosaved versions and does not let them push out the writer\'s own', async () => {
+    const { s } = build()
+    const id = await s.create('Post', MD)
+    await s.saveVersion(id, 'Mine')
+    for (let n = 0; n < 40; n++) await s.autosave(id, `${MD}\nLine ${n}.\n`)
+    const h = await s.history(id)
+    expect(h.filter((x) => x.label === 'Autosaved')).toHaveLength(30)
+    expect(h.some((x) => x.label === 'Mine')).toBe(true)
+  })
   it('lists saved versions newest first and compares one with the article now', async () => {
     const { s } = build()
     const id = await s.create('Post', MD)

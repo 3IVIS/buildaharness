@@ -1,9 +1,10 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
-import { githubRepoReader, parseGithubRepoAddress, type FolderReader, expandSelection, summarizeVerify, type VerifyReport, textPieces, collectIssues, parseLineRange, sourceKindForFile, computeReadiness, effectiveSourceStatus, issueCount, outlineOf, issuesInRange, unitOfSelection, shouldDeriveStyle, type ArticleBundle, type ChangeSummary, type DependencyKind, type IssueCategory, type Section, type WritePermissions } from '@buildaharness/aielia'
+import { githubRepoReader, parseGithubRepoAddress, type FolderReader, expandSelection, summarizeVerify, type VerifyReport, textPieces, collectIssues, parseLineRange, sourceKindForFile, computeReadiness, effectiveSourceStatus, issueCount, textUnitAt, autosaveStep, outlineOf, issuesInRange, unitOfSelection, shouldDeriveStyle, type ArticleBundle, type ChangeSummary, type DependencyKind, type IssueCategory, type Section, type WritePermissions } from '@buildaharness/aielia'
 import type { ChatAction } from './AdjustBar'
 import { ArticleSwitcher, type ArticleItem } from './ArticleSwitcher'
 import { ChatPane, type ChatLine } from './ChatPane'
-import { HistoryPanel, type VersionRow, type Viewing } from './HistoryPanel'
+import { HistoryPanel, type VersionRow } from './HistoryPanel'
+import { VersionView, type Viewing } from './VersionView'
 import { TextHistory } from './TextHistory'
 import { IdeasPanel } from './IdeasPanel'
 import { StylePanel } from './StylePanel'
@@ -91,6 +92,18 @@ function WriteAppBody({ services, connection }: WriteAppProps): React.JSX.Elemen
   const [versions, setVersions] = useState<VersionRow[]>([])
   const [working, setWorking] = useState<ChangeSummary | undefined>(undefined)
   const [viewing, setViewing] = useState<Viewing | null>(null)
+  /** Which text the main window shows when a version is open: the article now, or that version. */
+  const [showHistory, setShowHistory] = useState(false)
+  // Saving the text and saving a version both read and write the stored article, so they run one after the other.
+  const queue = useRef<Promise<unknown>>(Promise.resolve())
+  const enqueue = (work: () => Promise<unknown>): void => { queue.current = queue.current.then(work, work).catch((err) => setNotice(String(err))) }
+  const draftRef = useRef('')
+  /** Where the sentence being edited starts, for deciding when the writer has moved on to another one. */
+  const sentenceRef = useRef<number | null>(null)
+  const [versionsTick, setVersionsTick] = useState(0)
+  /** The box under the text (comments, sources, issues, links, history of the selected text) can be hidden to give the text the whole page. */
+  const [dockOn, setDockOn] = useState<boolean>(() => { try { return localStorage.getItem('aielia-write.dock') !== 'off' } catch { return true } })
+  const toggleDock = (): void => { const next = !dockOn; setDockOn(next); try { localStorage.setItem('aielia-write.dock', next ? 'on' : 'off') } catch { /* the choice just is not remembered */ } }
   const [notice, setNotice] = useState<string | null>(null)
   const [busy, setBusy] = useState<string | null>(null)
   const [chat, setChat] = useState<ChatLine[]>([])
@@ -112,6 +125,8 @@ function WriteAppBody({ services, connection }: WriteAppProps): React.JSX.Elemen
       const b = await service.get(id)
       setBundle(b)
       setDraft(b.markdown)
+      draftRef.current = b.markdown
+      sentenceRef.current = null
     },
     [service],
   )
@@ -135,7 +150,7 @@ function WriteAppBody({ services, connection }: WriteAppProps): React.JSX.Elemen
     void service.history(activeId).then((v) => setVersions(v as VersionRow[]), () => undefined)
     void service.changeSinceLastVersion(activeId).then(setWorking, () => undefined)
     setViewing(null)
-  }, [service, activeId, bundle])
+  }, [service, activeId, bundle, versionsTick])
 
   async function run(label: string, work: () => Promise<void>): Promise<void> {
     setBusy(label)
@@ -221,12 +236,22 @@ function WriteAppBody({ services, connection }: WriteAppProps): React.JSX.Elemen
   }
 
   function onType(value: string): void {
+    const prev = draftRef.current
+    draftRef.current = value
     setDraft(value)
+    // A version is saved by itself when a sentence is finished, a section started, or the writer moves on to change another sentence.
+    const step = autosaveStep(prev, value, sentenceRef.current)
+    sentenceRef.current = step.sentenceStart
+    if (activeId && step.moment) {
+      const id = activeId
+      const text = step.moment === 'before' ? prev : value
+      enqueue(async () => { if (await service.autosave(id, text)) setVersionsTick((t) => t + 1) })
+    }
     if (saveTimer.current) clearTimeout(saveTimer.current)
     saveTimer.current = setTimeout(() => {
       if (!activeId) return
       // Structure only (no model call) unless the writer allowed automatic checks: sections re-anchor, suggestions refresh.
-      void service.updateText(activeId, value, { analyze: permsRef.current?.autoCheck === true }).then((o) => { setBundle(o.bundle); void refreshList() }, (err) => setNotice(String(err)))
+      enqueue(() => service.updateText(activeId, value, { analyze: permsRef.current?.autoCheck === true }).then((o) => { setBundle(o.bundle); void refreshList() }))
     }, 800)
   }
 
@@ -328,7 +353,9 @@ function WriteAppBody({ services, connection }: WriteAppProps): React.JSX.Elemen
     void run('Opening the version', async () => {
       if (mode === 'compare') await flushDraft()
       const snap = await service.getVersion(activeId, index)
-      setViewing(mode === 'view' ? { mode, markdown: snap.markdown } : { mode, markdown: snap.markdown, diff: await service.compareWithCurrent(activeId, index) })
+      setViewing(mode === 'view' ? { mode, index, markdown: snap.markdown } : { mode, index, markdown: snap.markdown, diff: await service.compareWithCurrent(activeId, index) })
+      setShowHistory(true)
+      setTab('text')
     })
   }
   const restoreVersion = async (index: number): Promise<void> => {
@@ -633,7 +660,8 @@ function WriteAppBody({ services, connection }: WriteAppProps): React.JSX.Elemen
   const unitMeta = meta && unit ? issuesInRange(meta, unit.range) : meta
   const unitIssues = unitMeta && unit ? issueCount(collectIssues(unitMeta)) : 0
 
-  const issuesNode = (m: typeof meta & object): React.JSX.Element => <IssuesPanel
+  const issuesNode = (m: typeof meta & object, scope?: string): React.JSX.Element => <IssuesPanel
+                scope={scope}
                 meta={m}
                 busy={busy !== null}
                 model={chatModel}
@@ -693,7 +721,7 @@ function WriteAppBody({ services, connection }: WriteAppProps): React.JSX.Elemen
                 {issuesNode(meta)}
               </section>
               <section className={`write__pane write__panel-pane ${tab === 'history' ? 'is-shown' : ''}`} aria-label="History">
-                <HistoryPanel versions={versions} working={working} viewing={viewing} busy={busy !== null} statusLabel={STATUS_LABEL} onSave={saveVersion} onView={(i) => openVersion(i, 'view')} onCompare={(i) => openVersion(i, 'compare')} onRestore={restoreVersion} onRename={(i, l) => change('Saving', async (id) => { await service.renameVersion(id, i, l) })} onClose={() => setViewing(null)} />
+                <HistoryPanel versions={versions} working={working} busy={busy !== null} onSave={saveVersion} onView={(i) => openVersion(i, 'view')} onCompare={(i) => openVersion(i, 'compare')} onRestore={restoreVersion} onRename={(i, l) => change('Saving', async (id) => { await service.renameVersion(id, i, l) })} />
               </section>
             </>
           ) : (
@@ -705,20 +733,28 @@ function WriteAppBody({ services, connection }: WriteAppProps): React.JSX.Elemen
         </aside>
         {ready && meta ? (
           <section className={`write__pane write__pane--text ${tab === 'text' || tab === 'chat' ? 'is-shown' : ''}`} aria-label="Text">
-            <div className="write__seg write__viewtoggle" role="group" aria-label="Show">
+            {viewing && (
+              <div className="write__seg write__viewtoggle" role="group" aria-label="Which text">
+                <button type="button" aria-pressed={!showHistory} className={!showHistory ? 'is-on' : ''} onClick={() => setShowHistory(false)}>Current</button>
+                <button type="button" aria-pressed={showHistory} className={showHistory ? 'is-on' : ''} onClick={() => setShowHistory(true)}>History</button>
+              </div>
+            )}
+            {viewing && showHistory && <VersionView viewing={viewing} statusLabel={STATUS_LABEL} onRestore={(i) => void restoreVersion(i)} />}
+            <button type="button" className="write__dockswitch" aria-pressed={dockOn} aria-label={dockOn ? 'Hide the box under the text' : 'Show the box under the text'} title={dockOn ? 'Hide the box under the text' : 'Show the box under the text'} onClick={toggleDock}>{dockOn ? 'Hide details' : 'Show details'}</button>
+            <div className="write__seg write__viewtoggle" role="group" aria-label="Show" hidden={Boolean(viewing && showHistory)}>
               <button type="button" aria-label="Article view" aria-pressed={view === 'text'} className={view === 'text' ? 'is-on' : ''} onClick={() => setView('text')}>Article</button>
               <button type="button" aria-label="Outline view" aria-pressed={view === 'outline'} className={view === 'outline' ? 'is-on' : ''} onClick={() => setView('outline')}>Outline</button>
             </div>
-            {view === 'outline' && (
+            {view === 'outline' && !(viewing && showHistory) && (
               <div className="write__outlineview">
                 <OutlinePanel markdown={draft} onOpen={jumpTo} onChange={onType} />
               </div>
             )}
-            <div className={`write__textview ${view === 'outline' ? 'is-hidden' : ''}`}>
+            <div className={`write__textview ${view === 'outline' || (viewing && showHistory) ? 'is-hidden' : ''}`}>
             <MarkedText textRef={textRef} value={draft} pieces={textPieces(meta, draft)} onChange={onType} onSelection={(r) => { setSelection(r); const g = grownTo.current; if (!g || g.start !== r.start || g.end !== r.end) { growth.current = []; grownTo.current = undefined; setGrownUnit(undefined) } }} onGrow={growSelection} onShrink={shrinkSelection} unit={grownUnit} />
             </div>
-            <TextNotes
-              issues={unit && unitMeta ? issuesNode(unitMeta) : <p className="write__muted">Click in the text, or highlight some, to see the issues in it. The Issues button at the side lists the whole article.</p>}
+            {dockOn && <TextNotes
+              issues={unit && unitMeta ? issuesNode(unitMeta, selection ? textUnitAt(draft, selection.start, selection.end)?.quote : undefined) : <p className="write__muted">Click in the text, or highlight some, to see the issues in it. The Issues button at the side lists the whole article.</p>}
               issuesCount={unitIssues}
               links={<LinksPanel meta={meta} sectionId={sectionAt(meta.sections, draft, selection)?.id} onConfirm={(lid) => change('Saving', async (id) => { await service.confirmDependency(id, lid) })} onRemove={removeLink} onAdd={(f, t, k: DependencyKind) => change('Adding the link', async (id) => { const r = await service.addDependency(id, f, t, k); if (!r.ok) setNotice(r.reason) })} />}
               history={<TextHistory markdown={draft} selection={selection} versions={bundle.snapshots.map((x, index) => ({ index, kind: x.kind, label: x.label, at: x.at, markdown: x.markdown }))} />}
@@ -768,7 +804,7 @@ function WriteAppBody({ services, connection }: WriteAppProps): React.JSX.Elemen
               onAcceptNew={(sourceId) => change('Saving', async (id) => { const r = await service.acceptSourceChange(id, sourceId); if (!r.ok && r.reason) setNotice(r.reason) })}
               onVerify={(claimId) => change(`Looking for a source with ${chatModel}`, async (id) => { const r = await service.verifyClaims(id, { claimIds: [claimId], model: chatModel }); setNotice(verifyText(r)) })}
               onCheck={(claimId) => change(`Checking with ${chatModel}`, async (id) => { const r = await service.checkClaim(id, claimId, chatModel); setNotice(r.status === 'checked' ? `Checked with ${chatModel}: ${r.verdict.replace('_', ' ')}. ${r.reason}` : r.status === 'no_sources' ? 'There is no stored passage to check against.' : r.reason) })}
-            />
+            />}
           </section>
         ) : (
           <p className="write__empty">Create an article, or import one, to begin.</p>

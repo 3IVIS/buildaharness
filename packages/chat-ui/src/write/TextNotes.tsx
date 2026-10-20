@@ -183,7 +183,7 @@ export function TextNotes({ issues, issuesCount, links, history, meta, markdown,
                   <li key={c.id} className="write__claimrow">
                     <span className="write__rowicon" title="Claim"><Icon d={ICON_PATHS.source} size={16} /></span>
                     <div className="write__rowmain">
-                      <span>{clip(c.quote, 120)}</span> <span className={`write__badge write__badge--${status}`}>{STATUS_LABEL[status] ?? status}</span>
+                      {c.quote.trim() !== unit?.quote.trim() && <><span>{clip(c.quote, 120)}</span>{' '}</>}<span className={`write__badge write__badge--${status}`}>{STATUS_LABEL[status] ?? status}</span>
                       {srcs.length === 0 && <div className="write__reason">{lookupNote(c, false) ?? 'No source yet.'}</div>}
                       {candidates[c.id] && (
                         <div className="write__found" role="group" aria-label="Pages that may back this claim">

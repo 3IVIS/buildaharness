@@ -263,6 +263,31 @@ describe('outline: a view of the text, edited as text together with it', () => {
   })
 })
 
+describe('autosave and the box under the text', () => {
+  it('saves a version by itself when a sentence is finished, and shows it in History', async () => {
+    const s = await services({}, MD)
+    const id = (await s.service.list())[0].id
+    render(<WriteApp services={s} />)
+    const box = await waitForText()
+    fireEvent.change(box, { target: { value: `${MD}\nA new thought` } })
+    expect((await s.service.history(id)).filter((h) => h.label === 'Autosaved')).toHaveLength(0)
+    fireEvent.change(box, { target: { value: `${MD}\nA new thought.` } })
+    await waitFor(async () => expect((await s.service.history(id)).filter((h) => h.label === 'Autosaved')).toHaveLength(1))
+    await waitFor(async () => expect((await s.service.get(id)).markdown).toContain('A new thought.'))
+  })
+
+  it('the box under the text can be hidden and shown again', async () => {
+    const s = await services({}, MD)
+    render(<WriteApp services={s} />)
+    await waitForText()
+    expect(screen.getByLabelText('Comments and sources for this text')).toBeInTheDocument()
+    await userEvent.click(screen.getByRole('button', { name: 'Hide the box under the text' }))
+    expect(screen.queryByLabelText('Comments and sources for this text')).toBeNull()
+    await userEvent.click(screen.getByRole('button', { name: 'Show the box under the text' }))
+    expect(screen.getByLabelText('Comments and sources for this text')).toBeInTheDocument()
+  })
+})
+
 describe('chat: model, check and adjust', () => {
   it('the model picker has a dropdown on its right and takes free text; the model shows on every answer', async () => {
     const s = await services({ capture: { articleId: null, ops: [] } }, MD)
@@ -967,6 +992,11 @@ describe('links, history', () => {
     expect(await within(history).findByText('Memory added')).toBeInTheDocument()
     await userEvent.click(within(history).getAllByRole('button', { name: 'Compare with now' })[0])
     expect(await screen.findByLabelText('Version detail')).toBeInTheDocument()
+    expect(within(history).queryByLabelText('Version detail')).toBeNull() // shown in the main text window, not in the side panel
+    await userEvent.click(within(screen.getByRole('group', { name: 'Which text' })).getByRole('button', { name: 'Current' }))
+    expect(screen.queryByLabelText('Version detail')).toBeNull()
+    await userEvent.click(within(screen.getByRole('group', { name: 'Which text' })).getByRole('button', { name: 'History' }))
+    expect(screen.getByLabelText('Version detail')).toBeInTheDocument()
     const restore = within(history).getAllByRole('button', { name: 'Restore' }).at(-1)!
     await userEvent.click(restore)
     await answerDialog()
