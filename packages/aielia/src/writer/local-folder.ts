@@ -64,6 +64,26 @@ export async function walkFolder(list: (dir: string) => Promise<{ name: string; 
 }
 
 /**
+ * A reader over a file system that can list a directory with each entry marked as a file or a folder (the desktop app's `workspace_list_dir`),
+ * so subfolders are walked into without guessing which names are folders. `root` is the folder's absolute path.
+ */
+export function folderFromListing(fs: { readTextFile(path: string): Promise<string | undefined>; listDir(path: string): Promise<{ name: string; directory: boolean }[]> }, root: string, name: string): FolderReader {
+  const base = root.replace(/[\\/]+$/, '')
+  const abs = (p: string): string => (p ? `${base}/${p}` : base)
+  return {
+    name,
+    files: () => walkFolder((dir) => fs.listDir(abs(dir))),
+    read: async (path) => {
+      try {
+        return await fs.readTextFile(abs(path))
+      } catch {
+        return undefined
+      }
+    },
+  }
+}
+
+/**
  * A reader over a file-system backend that has only readTextFile and readDir (the desktop app's). It cannot tell a folder from a file by name, so a
  * path that cannot be listed as a directory is taken to be a file.
  */

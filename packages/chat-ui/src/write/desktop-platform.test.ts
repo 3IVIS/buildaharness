@@ -14,17 +14,16 @@ describe('picking a folder in the desktop app', () => {
   it('reads only inside the chosen folder, named after it, listing text and code files and skipping dependency folders', async () => {
     invoke.mockResolvedValueOnce('/Users/me/code/my-repo/')
     const roots: string[] = []
-    const tree: Record<string, string[] | string> = {
-      '/Users/me/code/my-repo': ['README.md', 'src', 'node_modules'],
-      '/Users/me/code/my-repo/src': ['a.ts'],
-      '/Users/me/code/my-repo/README.md': '# hi',
-      '/Users/me/code/my-repo/src/a.ts': 'export const x = 1\n',
+    const tree: Record<string, { name: string; directory: boolean }[]> = {
+      '/Users/me/code/my-repo': [{ name: 'README.md', directory: false }, { name: 'src', directory: true }, { name: 'node_modules', directory: true }],
+      '/Users/me/code/my-repo/src': [{ name: 'a.ts', directory: false }],
     }
+    const text: Record<string, string> = { '/Users/me/code/my-repo/src/a.ts': 'export const x = 1\n' }
     const reader = await pickDesktopFolder((root) => {
       roots.push(root)
       return {
-        readDir: async (p) => { const v = tree[p]; if (!Array.isArray(v)) throw new Error('not a folder'); return v },
-        readTextFile: async (p) => { const v = tree[p]; return typeof v === 'string' ? v : undefined },
+        listDir: async (p) => tree[p] ?? [],
+        readTextFile: async (p) => text[p],
       }
     })
     expect(roots).toEqual(['/Users/me/code/my-repo'])

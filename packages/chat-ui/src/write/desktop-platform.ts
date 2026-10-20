@@ -5,7 +5,7 @@ import {
   createLlmClient,
   createMemoryAdapterArticleStore,
   executeWebTool,
-  folderFromFsBackend,
+  folderFromListing,
   type AssistantConfig,
   type FolderReader,
 } from '@buildaharness/aielia'
@@ -46,10 +46,10 @@ export async function desktopWritePlatform(config: AssistantConfig): Promise<Wri
 }
 
 /** Asks for a folder with the system dialog. Cancelling gives undefined. The folder is the root of everything read from it. */
-export async function pickDesktopFolder(backendFor: (root: string) => { readTextFile(path: string): Promise<string | undefined>; readDir(path: string): Promise<string[]> }): Promise<FolderReader | undefined> {
+export async function pickDesktopFolder(backendFor: (root: string) => { readTextFile(path: string): Promise<string | undefined>; listDir(path: string): Promise<{ name: string; directory: boolean }[]> }): Promise<FolderReader | undefined> {
   const picked = await invoke<string | null>('pick_workspace_directory')
   if (!picked) return undefined
   const root = picked.replace(/[\\/]+$/, '') || picked
   const name = root.split(/[\\/]/).pop() || root
-  return folderFromFsBackend(backendFor(root), root, name)
+  return folderFromListing(backendFor(root), root, name)
 }
