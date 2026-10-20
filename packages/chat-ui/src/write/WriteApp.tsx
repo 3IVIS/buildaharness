@@ -355,7 +355,7 @@ function WriteAppBody({ services, connection }: WriteAppProps): React.JSX.Elemen
       const snap = await service.getVersion(activeId, index)
       setViewing(mode === 'view' ? { mode, index, markdown: snap.markdown } : { mode, index, markdown: snap.markdown, diff: await service.compareWithCurrent(activeId, index) })
       setShowHistory(true)
-      setTab('text')
+      if (!isWide()) setTab('text')
     })
   }
   const restoreVersion = async (index: number): Promise<void> => {
@@ -735,12 +735,11 @@ function WriteAppBody({ services, connection }: WriteAppProps): React.JSX.Elemen
           <section className={`write__pane write__pane--text ${tab === 'text' || tab === 'chat' ? 'is-shown' : ''}`} aria-label="Text">
             {viewing && (
               <div className="write__seg write__viewtoggle" role="group" aria-label="Which text">
-                <button type="button" aria-pressed={!showHistory} className={!showHistory ? 'is-on' : ''} onClick={() => setShowHistory(false)}>Current</button>
+                <button type="button" aria-pressed={!showHistory} className={!showHistory ? 'is-on' : ''} onClick={() => { setShowHistory(false); setViewing(null) }}>Current</button>
                 <button type="button" aria-pressed={showHistory} className={showHistory ? 'is-on' : ''} onClick={() => setShowHistory(true)}>History</button>
               </div>
             )}
             {viewing && showHistory && <VersionView viewing={viewing} statusLabel={STATUS_LABEL} onRestore={(i) => void restoreVersion(i)} />}
-            <button type="button" className="write__dockswitch" aria-pressed={dockOn} aria-label={dockOn ? 'Hide the box under the text' : 'Show the box under the text'} title={dockOn ? 'Hide the box under the text' : 'Show the box under the text'} onClick={toggleDock}>{dockOn ? 'Hide details' : 'Show details'}</button>
             <div className="write__seg write__viewtoggle" role="group" aria-label="Show" hidden={Boolean(viewing && showHistory)}>
               <button type="button" aria-label="Article view" aria-pressed={view === 'text'} className={view === 'text' ? 'is-on' : ''} onClick={() => setView('text')}>Article</button>
               <button type="button" aria-label="Outline view" aria-pressed={view === 'outline'} className={view === 'outline' ? 'is-on' : ''} onClick={() => setView('outline')}>Outline</button>
@@ -753,6 +752,7 @@ function WriteAppBody({ services, connection }: WriteAppProps): React.JSX.Elemen
             <div className={`write__textview ${view === 'outline' || (viewing && showHistory) ? 'is-hidden' : ''}`}>
             <MarkedText textRef={textRef} value={draft} pieces={textPieces(meta, draft)} onChange={onType} onSelection={(r) => { setSelection(r); const g = grownTo.current; if (!g || g.start !== r.start || g.end !== r.end) { growth.current = []; grownTo.current = undefined; setGrownUnit(undefined) } }} onGrow={growSelection} onShrink={shrinkSelection} unit={grownUnit} />
             </div>
+            <button type="button" className="write__dockchev" aria-pressed={dockOn} aria-label={dockOn ? 'Hide the box under the text' : 'Show the box under the text'} title={dockOn ? 'Hide the box under the text' : 'Show the box under the text'} onClick={toggleDock}>{dockOn ? '⌄' : '⌃'}</button>
             {dockOn && <TextNotes
               issues={unit && unitMeta ? issuesNode(unitMeta, selection ? textUnitAt(draft, selection.start, selection.end)?.quote : undefined) : <p className="write__muted">Click in the text, or highlight some, to see the issues in it. The Issues button at the side lists the whole article.</p>}
               issuesCount={unitIssues}

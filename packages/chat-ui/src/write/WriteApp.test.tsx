@@ -995,8 +995,7 @@ describe('links, history', () => {
     expect(within(history).queryByLabelText('Version detail')).toBeNull() // shown in the main text window, not in the side panel
     await userEvent.click(within(screen.getByRole('group', { name: 'Which text' })).getByRole('button', { name: 'Current' }))
     expect(screen.queryByLabelText('Version detail')).toBeNull()
-    await userEvent.click(within(screen.getByRole('group', { name: 'Which text' })).getByRole('button', { name: 'History' }))
-    expect(screen.getByLabelText('Version detail')).toBeInTheDocument()
+    expect(screen.queryByRole('group', { name: 'Which text' })).toBeNull() // back to the article, nothing left to toggle
     const restore = within(history).getAllByRole('button', { name: 'Restore' }).at(-1)!
     await userEvent.click(restore)
     await answerDialog()

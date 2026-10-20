@@ -317,4 +317,5 @@
 .write__versionview .write__pre { max-height: none; }
 
 /* Shows or hides the box under the text. */
-.write__dockswitch { align-self: flex-end; font-size: 0.85rem; }
+.write .write__dockchev { align-self: center; border: none; background: transparent; padding: 0 14px; line-height: 1; font-size: 1.1rem; color: var(--muted); cursor: pointer; }
+.write .write__dockchev:hover { color: var(--accent); }
