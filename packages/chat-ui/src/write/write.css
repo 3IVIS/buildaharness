@@ -56,7 +56,6 @@
 .write__selbar { display: flex; gap: 6px; align-items: center; margin-top: 4px; font-size: 0.82rem; }
 .write__marklegend { margin: 4px 0 0; font-size: 0.82rem; color: var(--muted); display: flex; flex-wrap: wrap; gap: 4px 10px; align-items: center; }
 .write__tintswitch { display: inline-flex; gap: 4px; align-items: center; }
-.write__here { color: var(--fg, inherit); font-weight: 600; }
 .write__tone { margin-left: 0; padding: 0 5px; border-radius: 3px; }
 .write__tone--ok { background: rgba(46, 158, 91, 0.16); }
 .write__tone--tried { background: rgba(120, 130, 150, 0.2); box-shadow: inset 0 -2px 0 rgba(120, 130, 150, 0.55); }

@@ -318,7 +318,7 @@ describe('chat: model, check and adjust', () => {
     expect(screen.getByText('not looked at yet')).toBeInTheDocument()
     expect(container.querySelector('.write__backdrop')).toHaveAttribute('aria-hidden', 'true')
     putCursor('18 ms')
-    expect(await screen.findByText(/Here: needs a source/)).toBeInTheDocument()
+    expect(screen.queryByText(/Here:/)).toBeNull() // the box under the text says it
     await userEvent.click(screen.getByRole('checkbox', { name: 'Show marks in the text' }))
     expect(container.querySelector('mark')).toBeNull()
     expect(screen.queryByText(/Here:/)).toBeNull()
