@@ -309,3 +309,6 @@
 .write__outlineedit { display: flex; flex-direction: column; gap: 6px; height: 100%; }
 .write .write__outlinetext { flex: 1 1 auto; min-height: 160px; width: 100%; resize: none; font-family: inherit; line-height: 1.7; }
 .write__outlinebar { display: flex; gap: 12px; align-items: baseline; justify-content: space-between; font-size: 0.85rem; }
+
+/* The comments on the selected text: one box of free text. */
+.write .write__commenttext { width: 100%; min-height: 96px; resize: vertical; font-family: inherit; line-height: 1.6; }

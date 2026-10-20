@@ -1,6 +1,5 @@
-import { useRef, useState, type ReactNode } from 'react'
+import { useEffect, useRef, useState, type ReactNode } from 'react'
 import { lookupNote, claimsInRange, commentsInRange, effectiveSourceStatus, matchFolderFiles, sourcesForClaim, textUnitAt, type ArticleMeta } from '@buildaharness/aielia'
-import { EditableText } from './EditableText'
 import { ICON_PATHS, Icon, IconButton } from './icons'
 
 const STATUS_LABEL: Record<string, string> = {
@@ -15,6 +14,23 @@ const STATUS_LABEL: Record<string, string> = {
 }
 
 export type NoteKind = 'comment' | 'source'
+
+export interface CommentChanges {
+  edit: { id: string; text: string }[]
+  add: string[]
+  remove: string[]
+}
+
+/** The comments as free text: one per paragraph, separated by a blank line. */
+export const commentsToText = (texts: string[]): string => texts.join('\n\n')
+
+/** What changed between the open comments and the text the writer left: paragraphs pair up with the comments in order. */
+export function commentChanges(open: { id: string; text: string }[], value: string): CommentChanges {
+  const paragraphs = value.split(/\n[ \t]*\n/).map((t) => t.trim()).filter(Boolean)
+  const edit: CommentChanges['edit'] = []
+  for (let i = 0; i < Math.min(open.length, paragraphs.length); i++) if (open[i].text.trim() !== paragraphs[i]) edit.push({ id: open[i].id, text: paragraphs[i] })
+  return { edit, add: paragraphs.slice(open.length), remove: open.slice(paragraphs.length).map((c) => c.id) }
+}
 
 export type DockPane = 'comments' | 'sources' | 'issues' | 'links' | 'history'
 
@@ -32,9 +48,8 @@ interface Props {
   /** Add what the writer typed, as a comment on the text or a source for it. A source that is a link is stored as a link; anything else as a passage. */
   onAdd(kind: NoteKind, text: string): void
   onFiles(files: File[]): void
-  onEditComment(id: string, text: string): void
-  onResolveComment(id: string): void
-  onDeleteComment(id: string): void
+  /** The comments on the selected text after the writer edited them as free text: the ones reworded, the new ones, the ones taken out. */
+  onSaveComments(changes: CommentChanges): void
   onDetach(claimId: string, sourceId: string): void
   onConfirm(claimId: string, sourceId: string): void
   onRead(sourceId: string): void
@@ -79,7 +94,7 @@ const PANES: { id: DockPane; label: string }[] = [
  * paragraph or a section: its comments and sources show here. One line adds to it: type a comment, paste a link or passage, or state your own
  * word; drop a file anywhere in this box, or use the paperclip.
  */
-export function TextNotes({ issues, issuesCount, links, history, meta, markdown, selection, busy, model, onAdd, onFiles, onEditComment, onResolveComment, onDeleteComment, onDetach, onConfirm, onRead, onAcceptNew, onLines, onVerify, folder, onPickFolder, onUseFolderFile, onCloseFolder, onCheck, canSearch, candidates, onFindSources, onUseCandidate, onDismissCandidates }: Props): React.JSX.Element {
+export function TextNotes({ issues, issuesCount, links, history, meta, markdown, selection, busy, model, onAdd, onFiles, onSaveComments, onDetach, onConfirm, onRead, onAcceptNew, onLines, onVerify, folder, onPickFolder, onUseFolderFile, onCloseFolder, onCheck, canSearch, candidates, onFindSources, onUseCandidate, onDismissCandidates }: Props): React.JSX.Element {
   const [collapsed, setCollapsed] = useState(false)
   const [pane, setPane] = useState<DockPane>('comments')
   const [text, setText] = useState('')
@@ -90,6 +105,14 @@ export function TextNotes({ issues, issuesCount, links, history, meta, markdown,
   const unit = selection ? textUnitAt(markdown, selection.start, selection.end) : undefined
   const claims = unit ? claimsInRange(meta, unit) : []
   const comments = unit ? commentsInRange(meta, unit) : []
+  const open = comments.filter((c) => c.state === 'open')
+  const [commentText, setCommentText] = useState('')
+  const shownKey = `${unit?.start ?? -1}:${open.map((c) => `${c.id}=${c.text}`).join('|')}`
+  useEffect(() => { setCommentText(commentsToText(open.map((c) => c.text))) }, [shownKey]) // eslint-disable-line react-hooks/exhaustive-deps
+  function saveComments(): void {
+    const changes = commentChanges(open, commentText)
+    if (changes.edit.length > 0 || changes.add.length > 0 || changes.remove.length > 0) onSaveComments(changes)
+  }
 
   function submit(): void {
     const t = text.trim()
@@ -123,18 +146,32 @@ export function TextNotes({ issues, issuesCount, links, history, meta, markdown,
       {!collapsed && (pane === 'comments' || pane === 'sources') && (
         <div className="write__dockbody">
           <div className="write__dockscroll">
-            {unit && (pane === 'comments' ? comments.length === 0 : claims.length === 0) && <p className="write__muted">Nothing here yet.</p>}
+            {pane === 'comments' && (
+              <>
+                <textarea
+                  aria-label="Comments on this text"
+                  className="write__commenttext"
+                  value={commentText}
+                  disabled={!unit}
+                  placeholder={unit ? 'Write comments on this text. Leave a blank line between one comment and the next.' : 'Click in the text first'}
+                  onChange={(e) => setCommentText(e.target.value)}
+                  onBlur={saveComments}
+                />
+                {comments.filter((c) => c.state !== 'open').length > 0 && (
+                  <ul className="write__rows" aria-label="Comments dealt with">
+                    {comments.filter((c) => c.state !== 'open').map((c) => (
+                      <li key={c.id}>
+                        <span className="write__rowicon" title="Comment"><Icon d={ICON_PATHS.comment} size={16} /></span>
+                        <div className="write__rowmain">{c.text} <span className="write__badge">{c.state}</span></div>
+                        <span className="write__rowacts"><IconButton label="Delete the comment" icon="close" onClick={() => onSaveComments({ edit: [], add: [], remove: [c.id] })} /></span>
+                      </li>
+                    ))}
+                  </ul>
+                )}
+              </>
+            )}
+            {pane === 'sources' && unit && claims.length === 0 && <p className="write__muted">Nothing here yet.</p>}
             <ul className="write__rows">
-              {pane === 'comments' && comments.map((c) => (
-                <li key={c.id}>
-                  <span className="write__rowicon" title="Comment"><Icon d={ICON_PATHS.comment} size={16} /></span>
-                  <div className="write__rowmain"><EditableText label="Comment" value={c.text} multiline onSave={(v) => onEditComment(c.id, v)} /></div>
-                  <span className="write__rowacts">
-                    {c.state === 'open' ? <IconButton label="Mark as dealt with" icon="check" onClick={() => onResolveComment(c.id)} /> : <span className="write__badge">{c.state}</span>}
-                    <IconButton label="Delete the comment" icon="close" onClick={() => onDeleteComment(c.id)} />
-                  </span>
-                </li>
-              ))}
               {pane === 'sources' && claims.map((c) => {
                 const srcs = sourcesForClaim(meta, c.id)
                 const status = effectiveSourceStatus(c, meta.sources)
@@ -194,7 +231,7 @@ export function TextNotes({ issues, issuesCount, links, history, meta, markdown,
               ))}
             </div>
           )}
-          <div className="write__dockadd" role="group" aria-label="Add to this text">
+          {pane === 'sources' && <div className="write__dockadd" role="group" aria-label="Add to this text">
             <input
               aria-label="Add to this text"
               value={text}
@@ -203,10 +240,10 @@ export function TextNotes({ issues, issuesCount, links, history, meta, markdown,
               onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); submit() } }}
               placeholder={unit ? PLACEHOLDER[kind] : 'Click in the text first'}
             />
-            {pane === 'sources' && <button type="button" className="write__iconbtn" aria-label="Add a file as a source" title="Add a file as a source" onClick={() => picker.current?.click()}><Icon d={ICON_PATHS.attach} /></button>}
-            {pane === 'sources' && onPickFolder && <button type="button" className="write__iconbtn" aria-label="Use files from a folder on this computer" title="Use files from a folder on this computer" onClick={onPickFolder}><Icon d={ICON_PATHS.folder} /></button>}
+            <button type="button" className="write__iconbtn" aria-label="Add a file as a source" title="Add a file as a source" onClick={() => picker.current?.click()}><Icon d={ICON_PATHS.attach} /></button>
+            {onPickFolder && <button type="button" className="write__iconbtn" aria-label="Use files from a folder on this computer" title="Use files from a folder on this computer" onClick={onPickFolder}><Icon d={ICON_PATHS.folder} /></button>}
             <input ref={picker} type="file" multiple hidden aria-label="Choose files" onChange={(e) => { const files = Array.from(e.target.files ?? []); if (files.length > 0) onFiles(files); e.target.value = '' }} />
-          </div>
+          </div>}
         </div>
       )}
     </section>

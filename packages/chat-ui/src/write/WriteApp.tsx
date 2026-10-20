@@ -729,9 +729,11 @@ function WriteAppBody({ services, connection }: WriteAppProps): React.JSX.Elemen
               model={chatModel}
               onAdd={addNote}
               onFiles={(files) => dropFiles(files, selection !== null)}
-              onEditComment={(cid, t) => change('Saving', async (id) => { await service.editComment(id, cid, { text: t }) })}
-              onResolveComment={(cid) => change('Saving', async (id) => { await service.setCommentState(id, cid, 'addressed') })}
-              onDeleteComment={(cid) => change('Saving', async (id) => { await service.deleteComment(id, cid) })}
+              onSaveComments={(c) => change('Saving', async (id) => {
+                for (const e of c.edit) await service.editComment(id, e.id, { text: e.text })
+                for (const t of c.add) { if (!selection) break; const r = await service.addComment(id, selection, t); if (!r.ok) setNotice(r.reason) }
+                for (const rid of c.remove) await service.deleteComment(id, rid)
+              })}
               onDetach={(claimId, sourceId) => change('Saving', async (id) => { await service.detachSource(id, claimId, sourceId) })}
               onConfirm={(claimId, sourceId) => change('Saving', async (id) => { const link = meta.links.find((l) => l.kind === 'supported_by' && l.from.id === claimId && l.to.id === sourceId); if (link) await service.confirmDependency(id, link.id) })}
               onRead={(sourceId) => change('Reading the page', async (id) => {
