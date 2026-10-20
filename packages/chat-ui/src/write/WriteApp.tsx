@@ -385,11 +385,14 @@ function WriteAppBody({ services, connection }: WriteAppProps): React.JSX.Elemen
   // ---- style sheet and links drawn from the text
   /** A first style sheet and the links between sections, drawn from the article's own text with the model for automatic checks; says in one sentence what it found. */
   async function prepareFromText(id: string, model: string = services.models.auto()): Promise<string> {
+    const before = await service.get(id)
     const style = await service.deriveStyleFromText(id, model)
     const links = await service.findDependencies(id, model)
     setBundle(await service.get(id))
-    const s = style.filled.length > 0 ? `drafted the style sheet (${style.filled.join(', ')})` : style.reason ? `could not read a style from the text (${style.reason})` : 'found nothing to add to the style sheet'
-    const l = links.status === 'failed' ? `the search for links could not run${links.reason ? ` (${links.reason})` : ''}` : links.added.length > 0 ? `found ${links.added.length} possible link${links.added.length === 1 ? '' : 's'} between sections to confirm` : 'found no links between sections'
+    const hadBrief = Object.values(before.meta.brief ?? {}).some((v) => typeof v === 'string' && v.trim())
+    const hadLinks = before.meta.links.filter((x) => x.kind === 'rests_on' || x.kind === 'repeats').length
+    const s = style.filled.length > 0 ? `drafted the style sheet (${style.filled.join(', ')})` : style.reason ? `could not read a style from the text (${style.reason})` : hadBrief ? 'left the style sheet as it is, since it is already filled in' : 'found nothing to add to the style sheet'
+    const l = links.status === 'failed' ? `the search for links could not run${links.reason ? ` (${links.reason})` : ''}` : links.added.length > 0 ? `found ${links.added.length} possible link${links.added.length === 1 ? '' : 's'} between sections to confirm` : hadLinks > 0 ? `found no new links between sections (${hadLinks} already ${hadLinks === 1 ? 'is' : 'are'} listed in the Links tab)` : 'found no links between sections'
     const failed = Boolean(style.reason) || links.status === 'failed'
     return `I ${s} and ${l}. ${failed ? 'Check your key and the model in Settings, or pick another model next to the chat, then try again.' : 'Edit anything that is off.'}`
   }
@@ -666,9 +669,16 @@ function WriteAppBody({ services, connection }: WriteAppProps): React.JSX.Elemen
         // Record what the writer said (comments, corrections) the same way a chat turn does, then turn the request into suggestions.
         const { reply, model: said } = await services.chat(text, activeId)
         const r = await service.suggest(activeId, text, said)
-        setBundle(await service.get(activeId))
-        const summary = r.status === 'failed' ? 'I could not turn that into edits.' : r.added.length === 0 ? 'I found nothing to change in the text for that.' : `I added ${r.added.length} suggested change${r.added.length === 1 ? '' : 's'}. Open Issues to accept or reject them.`
-        setChat((c) => [...c, { id: ++lineId, from: 'aielia', text: `${reply}\n\n${summary}`, model: said }])
+        const now = await service.get(activeId)
+        setBundle(now)
+        const added = now.meta.suggestions.filter((x) => r.added.includes(x.id))
+        const short = (t: string): string => (t.length > 140 ? `${t.slice(0, 140)}…` : t)
+        // The reply is a separate model answer and can word an edit differently from the suggestion that was stored, so when suggestions were
+        // made the chat states what was stored, and not the reply.
+        const body = r.status === 'failed' ? `${reply}\n\nI could not turn that into edits.`
+          : added.length === 0 ? `${reply}\n\nI found nothing to change in the text for that.`
+          : `I added ${added.length} suggested change${added.length === 1 ? '' : 's'}. Open Issues to accept or reject ${added.length === 1 ? 'it' : 'them'}:\n${added.slice(0, 4).map((x) => `• “${short(x.span.quote)}” → “${short(x.replacement)}”`).join('\n')}${added.length > 4 ? `\n…and ${added.length - 4} more.` : ''}`
+        setChat((c) => [...c, { id: ++lineId, from: 'aielia', text: body, model: said }])
       } else {
         const { reply, model: said } = await services.chat(text, activeId)
         if (activeId) setBundle(await service.get(activeId))

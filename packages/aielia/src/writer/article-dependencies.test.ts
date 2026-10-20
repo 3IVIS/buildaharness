@@ -105,3 +105,18 @@ describe('proposeDependencies', () => {
     expect((await proposeDependencies({ meta: one, markdown: MD, now: NOW }, client(new Error('should not be called')))).status).toBe('proposed')
   })
 })
+
+describe('drawing a link that was only suggested', () => {
+  it('confirms the suggestion instead of refusing it as a duplicate', () => {
+    const base = meta()
+    const a = addDrawnLink(base, 's2', 's1', 'rests_on', NOW)
+    if (!a.ok) throw new Error('setup')
+    const suggested = { ...a.link, origin: 'proposed' as const }
+    const m = { ...a.meta, links: [suggested] }
+    const r = addDrawnLink(m, 's2', 's1', 'rests_on', NOW)
+    expect(r.ok).toBe(true)
+    if (r.ok) { expect(r.meta.links).toHaveLength(1); expect(r.meta.links[0].origin).toBe('confirmed') }
+    const again = addDrawnLink(r.ok ? r.meta : m, 's2', 's1', 'rests_on', NOW)
+    expect(again.ok).toBe(false) // a confirmed one is a real duplicate
+  })
+})

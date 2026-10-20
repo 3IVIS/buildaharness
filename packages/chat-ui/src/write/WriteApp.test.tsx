@@ -385,6 +385,7 @@ describe('chat: model, check and adjust', () => {
     await userEvent.type(screen.getByLabelText('How'), 'Conversational{Enter}')
     expect(await screen.findByText(/tone of voice is: Conversational/)).toBeInTheDocument()
     expect(await screen.findByText(/added 1 suggested change/)).toBeInTheDocument()
+    expect(await screen.findByText(/“It is quick\.” → “It is, well, quick\.”/)).toBeInTheDocument() // the chat states the suggestion that was stored
   })
 
   it('lets the writer adjust something that is not listed', async () => {
