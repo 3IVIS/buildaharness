@@ -28,3 +28,22 @@ describe('Write on a host other than the browser tab', () => {
     expect((await store.list()).map((a) => a.id)).toContain(id)
   })
 })
+
+describe('a host where Write keeps the GitHub token itself', () => {
+  it('saves the token with the article settings, trims it, and uses it when read again', async () => {
+    const store = createMemoryArticleStore()
+    const first = await createWriteServicesFor(config, { store, llm, keepGithubToken: true })
+    expect(first.githubToken).toBeUndefined()
+    await first.setGithubToken?.('  ghp_new  ')
+    expect(first.githubToken).toBe('ghp_new')
+    const again = await createWriteServicesFor(config, { store, llm, keepGithubToken: true })
+    expect(again.githubToken).toBe('ghp_new')
+    await again.setGithubToken?.(undefined)
+    expect(again.githubToken).toBeUndefined()
+  })
+  it('offers no way to set it where the host brings its own', async () => {
+    const services = await createWriteServicesFor(config, { store: createMemoryArticleStore(), llm, githubToken: 'ghp_host' })
+    expect(services.githubToken).toBe('ghp_host')
+    expect(services.setGithubToken).toBeUndefined()
+  })
+})

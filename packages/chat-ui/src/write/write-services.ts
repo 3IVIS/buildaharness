@@ -52,8 +52,12 @@ export interface WriteServices {
   canReadPages: boolean
   /** Asks the writer for a folder on their computer to take source files from. Absent where the browser cannot (Safari, Firefox). Resolves to undefined when cancelled. */
   pickFolder?: () => Promise<FolderReader | undefined>
-  /** The writer's GitHub token, for reading a private repository. */
-  githubToken?: string
+  /** The writer's GitHub token, for reading a private repository. Read when a repository is added, so a change in Settings applies at once. */
+  readonly githubToken?: string
+  /** What the host is called in Settings text: 'browser' (default) or 'app'. */
+  hostName?: 'browser' | 'app'
+  /** Saves the GitHub token. Present only where Write keeps the token itself (a host with no connection screen of its own for it). */
+  setGithubToken?: (token: string | undefined) => Promise<void>
   /** Saves a file the writer asked for (an export). Absent where a download link does the job (a browser tab). */
   saveFile?: (name: string, text: string) => Promise<void>
   /** Dollars and calls so far for each kind of call, biggest first. */
@@ -63,6 +67,7 @@ export interface WriteServices {
 const SESSION_ID = 'write'
 const CHAT_MODEL_KEY = 'writer:model-chat'
 const AUTO_MODEL_KEY = 'writer:model-auto'
+const GITHUB_TOKEN_KEY = 'writer:github-token'
 
 export async function assembleWriteServices(parts: {
   store: ArticleStore
@@ -77,6 +82,9 @@ export async function assembleWriteServices(parts: {
   searchWeb?: (query: string) => Promise<{ title: string; url: string; snippet: string }[]>
   pickFolder?: () => Promise<FolderReader | undefined>
   githubToken?: string
+  /** Write keeps the GitHub token in its own settings (the host has no place for it), and Settings shows a field for it. */
+  keepGithubToken?: boolean
+  hostName?: 'browser' | 'app'
   saveFile?: (name: string, text: string) => Promise<void>
 }): Promise<WriteServices> {
   const { store } = parts
@@ -88,6 +96,12 @@ export async function assembleWriteServices(parts: {
   }
   let chatModel = await saved(CHAT_MODEL_KEY, defaults.chat)
   let autoModel = await saved(AUTO_MODEL_KEY, defaults.auto)
+
+  let githubToken = parts.githubToken
+  if (parts.keepGithubToken) {
+    const kept = await store.getSetting(GITHUB_TOKEN_KEY)
+    if (typeof kept === 'string' && kept.trim()) githubToken = kept.trim()
+  }
 
   const meter = await createSpendMeter(store, { backend, model: chatModel })
   let cap = (await loadPermissions(store)).spendCapUsd
@@ -135,7 +149,14 @@ export async function assembleWriteServices(parts: {
     canSearch: parts.searchWeb !== undefined,
     canReadPages: parts.fetchWeb !== undefined,
     pickFolder: parts.pickFolder,
-    githubToken: parts.githubToken,
+    hostName: parts.hostName,
+    get githubToken() { return githubToken },
+    setGithubToken: parts.keepGithubToken
+      ? async (token) => {
+          githubToken = token?.trim() || undefined
+          await store.setSetting(GITHUB_TOKEN_KEY, githubToken ?? '')
+        }
+      : undefined,
     saveFile: parts.saveFile,
     spentUsd: () => meter.spentUsd(),
     spendByType: () => Object.entries(meter.byType()).map(([id, v]) => ({ id, ...v })).sort((a, b) => b.usd - a.usd),
@@ -172,6 +193,10 @@ export interface WritePlatform {
   pickFolder?: () => Promise<FolderReader | undefined>
   /** The writer's GitHub token, for a private repository. */
   githubToken?: string
+  /** Write keeps the GitHub token in its own settings and shows a field for it in Settings (the host has no connection screen for it). */
+  keepGithubToken?: boolean
+  /** What the host is called in Settings text. Default 'browser'. */
+  hostName?: 'browser' | 'app'
   /** Saves a file the writer asked for. Absent where a download link does the job. */
   saveFile?: (name: string, text: string) => Promise<void>
 }
