@@ -64,6 +64,9 @@ function topOfPosition(ta: HTMLTextAreaElement, at: number): number {
   return top
 }
 
+/** What the chat says when a model call fails: the reason, and what to try. Never an empty answer. */
+export const failureText = (what: string, err: unknown): string => `${what}: ${err instanceof Error ? err.message : String(err)}. Check your key and the model in Settings, or pick another model next to the chat, then try again.`
+
 const isWide = (): boolean => typeof window !== 'undefined' && window.matchMedia?.('(min-width: 640px)').matches === true
 
 const STATUS_LABEL: Record<string, string> = {
@@ -388,7 +391,8 @@ function WriteAppBody({ services, connection }: WriteAppProps): React.JSX.Elemen
     setBundle(await service.get(id))
     const s = style.filled.length > 0 ? `drafted the style sheet (${style.filled.join(', ')})` : style.reason ? `could not read a style from the text (${style.reason})` : 'found nothing to add to the style sheet'
     const l = links.status === 'failed' ? `the search for links could not run${links.reason ? ` (${links.reason})` : ''}` : links.added.length > 0 ? `found ${links.added.length} possible link${links.added.length === 1 ? '' : 's'} between sections to confirm` : 'found no links between sections'
-    return `I ${s} and ${l}. Edit anything that is off.`
+    const failed = Boolean(style.reason) || links.status === 'failed'
+    return `I ${s} and ${l}. ${failed ? 'Check your key and the model in Settings, or pick another model next to the chat, then try again.' : 'Edit anything that is off.'}`
   }
   const prepareFromChat = (): void => {
     if (!activeId) return
@@ -401,7 +405,7 @@ function WriteAppBody({ services, connection }: WriteAppProps): React.JSX.Elemen
         const text = await prepareFromText(id)
         setChat((c) => [...c, { id: ++lineId, from: 'aielia', text, model: used }])
       } catch (e) {
-        setChat((c) => [...c, { id: ++lineId, from: 'aielia', text: `I could not do that: ${e instanceof Error ? e.message : String(e)}` }])
+        setChat((c) => [...c, { id: ++lineId, from: 'aielia', text: failureText('I could not do that', e) }])
       }
     })
   }
@@ -609,7 +613,7 @@ function WriteAppBody({ services, connection }: WriteAppProps): React.JSX.Elemen
         setBundle(await service.get(activeId))
         setChat((c) => [...c, { id: ++lineId, from: 'aielia', text: verifyText(r), model: used }])
       } catch (e) {
-        setChat((c) => [...c, { id: ++lineId, from: 'aielia', text: `The check could not finish: ${e instanceof Error ? e.message : String(e)}` }])
+        setChat((c) => [...c, { id: ++lineId, from: 'aielia', text: failureText('The check could not finish', e) }])
       }
     })
   }
@@ -638,7 +642,7 @@ function WriteAppBody({ services, connection }: WriteAppProps): React.JSX.Elemen
       }
       setChat((c) => [...c, { id: ++lineId, from: 'aielia', text, model: used }])
       } catch (e) {
-        setChat((c) => [...c, { id: ++lineId, from: 'aielia', text: `The check could not finish: ${e instanceof Error ? e.message : String(e)}` }])
+        setChat((c) => [...c, { id: ++lineId, from: 'aielia', text: failureText('The check could not finish', e) }])
       }
     })
   }
@@ -651,6 +655,7 @@ function WriteAppBody({ services, connection }: WriteAppProps): React.JSX.Elemen
     if (override === undefined) setChatInput('')
     setChat((c) => [...c, { id: ++lineId, from: 'you', text }])
     await run(wantEdits ? 'Asking for edits' : 'Thinking', async () => {
+     try {
       if (activeId) await service.updateText(activeId, draft, { analyze: false })
       if (wantEdits && activeId) {
         // Record what the writer said (comments, corrections) the same way a chat turn does, then turn the request into suggestions.
@@ -664,6 +669,9 @@ function WriteAppBody({ services, connection }: WriteAppProps): React.JSX.Elemen
         if (activeId) setBundle(await service.get(activeId))
         setChat((c) => [...c, { id: ++lineId, from: 'aielia', text: reply, model: said }])
       }
+     } catch (e) {
+      setChat((c) => [...c, { id: ++lineId, from: 'aielia', text: failureText('The model call failed', e) }])
+     }
     })
   }
 
@@ -845,7 +853,6 @@ function WriteAppBody({ services, connection }: WriteAppProps): React.JSX.Elemen
           onRepoVerify={verifyInRepo}
           onPickRepoFolder={services.pickFolder ? pickRepoFolderAndVerify : undefined}
           onRemoveRepo={removeRepo}
-          onSaveIdea={(l) => change('Saving', async (id) => { await service.appendToScratchpad(id, l.text) })}
           onDropFiles={(files) => dropFiles(files, false, true)}
         />
       </main>

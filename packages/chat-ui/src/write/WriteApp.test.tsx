@@ -275,6 +275,19 @@ describe('outline: a view of the text, edited as text together with it', () => {
   })
 })
 
+describe('a failing model call is said in the chat', () => {
+  it('says why in the chat, with what to try, and not in an empty message or only in the top bar', async () => {
+    const s = await services({}, MD)
+    s.chat = async () => { throw new Error('401 invalid x-api-key') }
+    render(<WriteApp services={s} />)
+    await waitForText()
+    await userEvent.click(rail('Chat'))
+    await userEvent.type(screen.getByLabelText('Message'), 'Tighten the intro')
+    await userEvent.click(screen.getByRole('button', { name: 'Send' }))
+    expect(await screen.findByText(/The model call failed: 401 invalid x-api-key\. Check your key and the model in Settings/)).toBeInTheDocument()
+  })
+})
+
 describe('autosave and the box under the text', () => {
   it('saves a version by itself when a sentence is finished, and shows it in History', async () => {
     const s = await services({}, MD)
@@ -338,8 +351,8 @@ describe('chat: model, check and adjust', () => {
     await userEvent.click(rail('Chat'))
     await userEvent.selectOptions(screen.getByLabelText('Adjust', { selector: 'select' }), 'action:prepare')
     expect(await screen.findByText('Draw the style sheet and the links from the text')).toBeInTheDocument()
-    expect(await screen.findByText(/Edit anything that is off/)).toBeInTheDocument()
-    expect(screen.queryByRole('status')?.textContent ?? '').not.toMatch(/Edit anything that is off/)
+    expect(await screen.findByText(/Check your key and the model in Settings/)).toBeInTheDocument() // nothing is set up to answer in this test, so it says why
+    expect(screen.queryByRole('status')?.textContent ?? '').not.toMatch(/Check your key/)
   })
 
   it('tints the sentences of the claims it found, says what the colours mean, and the marks can be switched off', async () => {
@@ -955,7 +968,7 @@ describe('links, history', () => {
     expect(within(links).queryByRole('button', { name: /Look for links between sections/ })).toBeNull() // found from the chat menu, not here
     await userEvent.click(rail('Chat'))
     await userEvent.selectOptions(screen.getByLabelText('Adjust', { selector: 'select' }), 'action:prepare')
-    await screen.findByText(/Edit anything that is off/)
+    await screen.findByText(/found 1 possible link/)
     await userEvent.click(rail('Text'))
     await dockTab('Comments')
     putCursor('So p99 stays')

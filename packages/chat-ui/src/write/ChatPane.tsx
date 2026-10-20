@@ -24,7 +24,6 @@ interface Props {
   onSend: () => void
   onAdjust: (message: string) => void
   onAction: (action: ChatAction) => void
-  onSaveIdea: (line: ChatLine) => void
   /** Repositories handed to the open article, and what the chat menu does with them: run the check against a typed address or the attached ones. */
   repos: string[]
   onRepoVerify: (address: string) => void
@@ -56,7 +55,6 @@ export function ChatPane(p: Props): React.JSX.Element {
             {l.from === 'aielia' && l.model && (
               <div className="write__linemeta">
                 <span className="write__linemodel" title="The model that wrote this">{l.model}</span>
-                {p.canAct && <button type="button" className="write__link" onClick={() => p.onSaveIdea(l)}>Save to ideas</button>}
               </div>
             )}
           </li>
