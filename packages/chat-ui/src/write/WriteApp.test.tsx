@@ -781,8 +781,13 @@ describe('selecting by sentence, paragraph and section', () => {
     await userEvent.click(more)
     expect(selected()).toBe('The p99 was 18 ms.')
     expect(await screen.findByText('Selected: sentence')).toBeInTheDocument()
+    const dock = (): HTMLElement => screen.getByLabelText('Comments and sources for this text')
+    expect(within(dock()).getByText('Sentence')).toBeInTheDocument()
+    await dockTab('Links')
+    expect(within(dock()).getByText('Sentence')).toBeInTheDocument() // the title names the selection, not the tab
     await userEvent.click(more)
     expect(selected()).toBe('First one. The p99 was 18 ms. Last one.')
+    expect(within(dock()).getByText('Paragraph')).toBeInTheDocument()
     await userEvent.click(more)
     expect(selected()).toBe(TEXT.trim())
     expect(await screen.findByText('Selected: section')).toBeInTheDocument()

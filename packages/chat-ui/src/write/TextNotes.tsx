@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState, type ReactNode } from 'react'
-import { lookupNote, claimsInRange, commentsInRange, effectiveSourceStatus, matchFolderFiles, sourcesForClaim, textUnitAt, type ArticleMeta } from '@buildaharness/aielia'
+import { lookupNote, claimsInRange, commentsInRange, effectiveSourceStatus, matchFolderFiles, sourcesForClaim, textUnitAt, unitOfSelection, type ArticleMeta } from '@buildaharness/aielia'
 import { ICON_PATHS, Icon, IconButton } from './icons'
 
 const STATUS_LABEL: Record<string, string> = {
@@ -104,6 +104,9 @@ export function TextNotes({ issues, issuesCount, links, history, meta, markdown,
   const kind: NoteKind = pane === 'sources' ? 'source' : 'comment'
   const unit = selection ? textUnitAt(markdown, selection.start, selection.end) : undefined
   const claims = unit ? claimsInRange(meta, unit) : []
+  /** What the box is about, whichever tab is open: the sentence, paragraph, section or whole article selected, or a phrase picked out by hand. */
+  const found = selection ? unitOfSelection(markdown, selection) : undefined
+  const unitLabel = unit && found && found.range.start === unit.start && found.range.end === unit.end ? found.unit[0].toUpperCase() + found.unit.slice(1) : selection && selection.start === selection.end ? 'Sentence' : 'Selected text'
   const comments = unit ? commentsInRange(meta, unit) : []
   const open = comments.filter((c) => c.state === 'open')
   const [commentText, setCommentText] = useState('')
@@ -130,8 +133,8 @@ export function TextNotes({ issues, issuesCount, links, history, meta, markdown,
       onDrop={(e) => { e.preventDefault(); setOver(false); const files = Array.from(e.dataTransfer.files); if (files.length > 0) onFiles(files) }}
     >
       <button type="button" className="write__dockhead" onClick={() => setCollapsed((c) => !c)} aria-expanded={!collapsed} title={collapsed ? 'Show' : 'Hide'}>
-        <strong>{PANES.find((x) => x.id === pane)?.label}</strong>
-        <span className="write__dockfor">{unit ? <>for “{clip(unit.quote, 70)}”</> : 'Click in the text, or highlight some, to comment or add a source'}</span>
+        <strong>{unit ? unitLabel : 'This text'}</strong>
+        <span className="write__dockfor">{unit ? <>“{clip(unit.quote, 90)}”</> : 'Click in the text, or highlight some, to comment or add a source'}</span>
       </button>
       <div className="write__docktabs" role="tablist" aria-label="What to show about this text">
         {PANES.map((x) => (
