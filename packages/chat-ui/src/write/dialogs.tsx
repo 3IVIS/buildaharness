@@ -51,7 +51,7 @@ function DialogBox({ open, onClose }: { open: Open; onClose: () => void }): Reac
     onClose()
   }
   return (
-    <div className="write__dialog-backdrop" onMouseDown={(e) => { if (e.target === e.currentTarget) finish(false) }}>
+    <div className="write write__dialog-backdrop" onMouseDown={(e) => { if (e.target === e.currentTarget) finish(false) }}>
       <div className="write__dialog" role="dialog" aria-modal="true" aria-label={open.message} onKeyDown={(e) => { if (e.key === 'Escape') finish(false) }}>
         <form onSubmit={(e) => { e.preventDefault(); finish(true) }}>
           <p>{open.message}</p>

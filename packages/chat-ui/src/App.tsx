@@ -1,4 +1,4 @@
-import { Fragment, useEffect, useMemo, useRef, useState } from 'react'
+import { Fragment, useEffect, useMemo, useRef, useState, lazy, Suspense } from 'react'
 import { downloadBlob } from './download-blob'
 import { rememberUserUrls } from './user-urls'
 import { createProxyWebTools } from './web-context'
@@ -69,6 +69,8 @@ import { EscalationBanner } from './components/EscalationBanner'
 import { SettingsScreen } from './components/SettingsScreen'
 import { SetupWizard } from './components/SetupWizard'
 import { KeyNotice } from './components/KeyNotice'
+// Loaded when Write is opened, so the chat does not carry it.
+const WriteHost = lazy(() => import('./write/WriteHost'))
 import { isKeyMissing, requiresOwnKey } from './key-gate'
 import { SearchPanel } from './components/SearchPanel'
 import { GoalsPanel } from './components/GoalsPanel'
@@ -340,7 +342,7 @@ export function App(): React.JSX.Element {
   const [progress, setProgress] = useState<AssistantProgress | null>(null)
   const [streamingText, setStreamingText] = useState<string | null>(null)
   const [liveToolSteps, setLiveToolSteps] = useState<AssistantToolStep[]>([])
-  const [view, setView] = useState<'chat' | 'settings' | 'search' | 'goals' | 'memory'>('chat')
+  const [view, setView] = useState<'chat' | 'settings' | 'search' | 'goals' | 'memory' | 'write'>('chat')
   // First-launch setup wizard: true once the config load finds nothing configured (no persisted
   // backend/key and nothing pinned by a build-time var, so hosted/self-hosted builds skip it).
   const [needsSetup, setNeedsSetup] = useState(false)
@@ -1169,6 +1171,10 @@ export function App(): React.JSX.Element {
     return <GoalsPanel state={goalGraphState} onCancel={() => setView('chat')} />
   }
 
+  if (view === 'write') {
+    return <Suspense fallback={<p>Opening Write…</p>}><WriteHost config={config} onClose={() => setView('chat')} /></Suspense>
+  }
+
   if (view === 'memory') {
     return <MemoryPanel data={memoryPanelData} message={memoryPanelMessage} busy={memoryPanelBusy} onClose={() => setView('chat')} {...memoryPanelHandlers} />
   }
@@ -1217,6 +1223,7 @@ export function App(): React.JSX.Element {
           <button type="button" aria-label="New chat" title="New chat" disabled={busy} onClick={() => void handleClearConversation()}>New chat</button>
           <button type="button" aria-label="Search" title="Search past messages" onClick={() => setView('search')}>Search</button>
           <button type="button" aria-label="Memory" title="Review, confirm, undo or switch off what Aielia remembers" onClick={() => void handleOpenMemory()}>Memory</button>
+          {isTauri() && <button type="button" aria-label="Write" title="Write and check an article with Aielia" disabled={busy} onClick={() => setView('write')}>Write</button>}
           <div className="app__header-more" ref={headerMoreRef}>
             <button
               type="button"
