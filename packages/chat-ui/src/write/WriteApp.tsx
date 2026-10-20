@@ -47,6 +47,23 @@ const RAIL_ICONS: Record<Tab, string> = {
 
 /** The desktop layout starts at 960 px (see write.css). jsdom has no matchMedia, which reads as a phone. */
 /** The side rail layout (tablet and desktop) starts at 640 px; below that the rail is a bottom bar and the chat is a sheet. See write.css. */
+/** How far down the box the line holding `at` starts, counting wrapped lines: the text before it is laid out in a hidden copy of the box. */
+function topOfPosition(ta: HTMLTextAreaElement, at: number): number {
+  const cs = getComputedStyle(ta)
+  const mirror = document.createElement('div')
+  for (const prop of ['font', 'letterSpacing', 'lineHeight', 'paddingLeft', 'paddingRight', 'borderLeftWidth', 'borderRightWidth', 'boxSizing', 'tabSize'] as const) mirror.style[prop] = cs[prop]
+  mirror.style.width = `${ta.clientWidth + (parseFloat(cs.borderLeftWidth) || 0) + (parseFloat(cs.borderRightWidth) || 0)}px`
+  mirror.style.cssText += ';position:absolute;visibility:hidden;white-space:pre-wrap;overflow-wrap:break-word;top:0;left:-9999px;'
+  mirror.textContent = ta.value.slice(0, at)
+  const mark = document.createElement('span')
+  mark.textContent = '\u200b'
+  mirror.appendChild(mark)
+  document.body.appendChild(mirror)
+  const top = mark.offsetTop
+  document.body.removeChild(mirror)
+  return top
+}
+
 const isWide = (): boolean => typeof window !== 'undefined' && window.matchMedia?.('(min-width: 640px)').matches === true
 
 const STATUS_LABEL: Record<string, string> = {
@@ -264,8 +281,7 @@ function WriteAppBody({ services, connection }: WriteAppProps): React.JSX.Elemen
     ta.focus()
     ta.setSelectionRange(at, at)
     setSelection({ start: at, end: at })
-    const lineHeight = parseFloat(getComputedStyle(ta).lineHeight) || 24
-    ta.scrollTop = Math.max(0, (ta.value.slice(0, at).split('\n').length - 1) * lineHeight - lineHeight * 2)
+    ta.scrollTop = Math.max(0, topOfPosition(ta, at))
     if (!isWide()) setTab('text')
   }
 
