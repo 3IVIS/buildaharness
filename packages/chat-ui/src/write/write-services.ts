@@ -20,6 +20,7 @@ import {
   type WriterChatPort,
 } from '@buildaharness/aielia'
 import { IndexedDBAdapter, type ILLMClient } from '@buildaharness/runtime'
+import { getAssistantTestHooks } from '../assistant-test-hooks'
 import { createProxyWebTools, pageReader } from '../web-context'
 import { browserFolderPicker } from './folder-access'
 
@@ -226,7 +227,8 @@ export function webWritePlatform(config: AssistantConfig, webProxy?: WebProxy, g
   const web = webProxy ? proxyWeb(config, webProxy) : undefined
   return {
     store: indexedDbArticleStore(),
-    llm: createLlmClient(config, { claudeCli: () => undefined }),
+    // A test build (VITE_E2E=1) can hand the page its own model client; a production bundle cannot reach this.
+    llm: getAssistantTestHooks()?.makeLlmClient?.(config) ?? createLlmClient(config, { claudeCli: () => undefined }),
     fetchWeb: web?.fetchWeb,
     searchWeb: web?.searchWeb,
     pickFolder: browserFolderPicker(),

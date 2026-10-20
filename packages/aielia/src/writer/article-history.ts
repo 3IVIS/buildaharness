@@ -131,10 +131,17 @@ export interface InlinePart {
 /** One line of a change as shown to the writer: a line only in one version, or a line changed in place with its words marked. */
 export type DisplayLine = { type: 'add' | 'del'; text: string } | { type: 'change'; parts: InlinePart[] }
 
-const tokens = (t: string): string[] => t.split(/(\s+)/).filter((x) => x !== '')
+/** Words (a number like 5,000 or a word like don't is one), runs of spaces, and each punctuation mark on its own, so a full stop is not part of the word before it. */
+const tokens = (t: string): string[] => t.match(/\p{N}+(?:[.,]\p{N}+)*|[\p{L}\p{N}_]+(?:['’][\p{L}]+)*|\s+|[^\s\p{L}\p{N}]/gu) ?? []
+const isWord = (t: string): boolean => /[\p{L}\p{N}]/u.test(t)
 
 /** The words of a line changed into the words of another, as one run of parts; undefined when the two lines have too little in common to read as an edit of each other. */
 export function inlineDiff(before: string, after: string): InlinePart[] | undefined {
+  return inlineDiffScored(before, after)?.parts
+}
+
+/** Like `inlineDiff`, with how much of the longer line the two share (0 to 1). */
+function inlineDiffScored(before: string, after: string): { parts: InlinePart[]; similarity: number } | undefined {
   const a = tokens(before)
   const b = tokens(after)
   const m = a.length
@@ -149,14 +156,38 @@ export function inlineDiff(before: string, after: string): InlinePart[] | undefi
   }
   let kept = 0
   for (let i = 0, j = 0; i < m || j < n; ) {
-    if (i < m && j < n && a[i] === b[j]) { push('same', a[i]); if (a[i].trim()) kept++; i++; j++ } else if (i < m && (j >= n || lcs[i + 1][j] >= lcs[i][j + 1])) push('del', a[i++])
+    if (i < m && j < n && a[i] === b[j]) { push('same', a[i]); if (isWord(a[i])) kept++; i++; j++ } else if (i < m && (j >= n || lcs[i + 1][j] >= lcs[i][j + 1])) push('del', a[i++])
     else push('add', b[j++])
   }
-  const words = Math.max(a.filter((t) => t.trim()).length, b.filter((t) => t.trim()).length)
-  return words > 0 && kept / words >= 0.3 ? parts : undefined
+  const words = Math.max(a.filter(isWord).length, b.filter(isWord).length)
+  return words > 0 && kept / words >= 0.3 ? { parts, similarity: kept / words } : undefined
 }
 
-/** The changed lines of a comparison, without the unchanged ones; a removed line followed by an added line that is an edit of it becomes one line with the changed words marked. */
+/**
+ * A run of removed lines followed by a run of added lines, with each added line matched to the removed line it is an edit of (in order,
+ * best overall similarity), so a line that gained a new neighbour is still compared with its own old self, not with the neighbour.
+ */
+function alignBlock(dels: string[], adds: string[]): DisplayLine[] {
+  const n = dels.length
+  const m = adds.length
+  const sim = dels.map((d) => adds.map((a) => inlineDiffScored(d, a)))
+  const best: number[][] = Array.from({ length: n + 1 }, () => new Array<number>(m + 1).fill(0))
+  for (let i = n - 1; i >= 0; i--) for (let j = m - 1; j >= 0; j--) best[i][j] = Math.max(best[i + 1][j], best[i][j + 1], sim[i][j] ? sim[i][j]!.similarity + best[i + 1][j + 1] : 0)
+  const out: DisplayLine[] = []
+  let i = 0
+  let j = 0
+  while (i < n && j < m) {
+    const s = sim[i][j]
+    if (s && best[i][j] === s.similarity + best[i + 1][j + 1]) { out.push({ type: 'change', parts: s.parts }); i++; j++ }
+    else if (best[i][j] === best[i + 1][j]) out.push({ type: 'del', text: dels[i++] })
+    else out.push({ type: 'add', text: adds[j++] })
+  }
+  while (i < n) out.push({ type: 'del', text: dels[i++] })
+  while (j < m) out.push({ type: 'add', text: adds[j++] })
+  return out
+}
+
+/** The changed lines of a comparison, without the unchanged ones; a removed line and an added line that is an edit of it become one line with the changed words marked. */
 export function diffForDisplay(lines: readonly DiffLine[]): DisplayLine[] {
   const out: DisplayLine[] = []
   for (let i = 0; i < lines.length; ) {
@@ -165,13 +196,7 @@ export function diffForDisplay(lines: readonly DiffLine[]): DisplayLine[] {
     const adds: string[] = []
     while (i < lines.length && lines[i].type === 'del') dels.push(lines[i++].text)
     while (i < lines.length && lines[i].type === 'add') adds.push(lines[i++].text)
-    const edits = Array.from({ length: Math.min(dels.length, adds.length) }, (_, k) => inlineDiff(dels[k], adds[k]))
-    for (let k = 0; k < dels.length; k++) {
-      const e = edits[k]
-      if (e) out.push({ type: 'change', parts: e })
-      else out.push({ type: 'del', text: dels[k] })
-    }
-    for (let k = 0; k < adds.length; k++) if (!edits[k]) out.push({ type: 'add', text: adds[k] })
+    out.push(...alignBlock(dels, adds))
   }
   return out
 }

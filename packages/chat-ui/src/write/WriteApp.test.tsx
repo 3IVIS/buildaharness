@@ -969,6 +969,8 @@ describe('links, history', () => {
     await userEvent.click(rail('Chat'))
     await userEvent.selectOptions(screen.getByLabelText('Adjust', { selector: 'select' }), 'action:prepare')
     await screen.findByText(/found 1 possible link/)
+    expect(s.models.chat()).not.toBe(s.models.auto())
+    expect(screen.getAllByTitle('The model that wrote this').at(-1)).toHaveTextContent(s.models.chat()) // started from the chat, so it ran on the chat's model, not the small automatic one
     await userEvent.click(rail('Text'))
     await dockTab('Comments')
     putCursor('So p99 stays')

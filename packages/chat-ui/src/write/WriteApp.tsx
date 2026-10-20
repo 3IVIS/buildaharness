@@ -384,8 +384,7 @@ function WriteAppBody({ services, connection }: WriteAppProps): React.JSX.Elemen
 
   // ---- style sheet and links drawn from the text
   /** A first style sheet and the links between sections, drawn from the article's own text with the model for automatic checks; says in one sentence what it found. */
-  async function prepareFromText(id: string): Promise<string> {
-    const model = services.models.auto()
+  async function prepareFromText(id: string, model: string = services.models.auto()): Promise<string> {
     const style = await service.deriveStyleFromText(id, model)
     const links = await service.findDependencies(id, model)
     setBundle(await service.get(id))
@@ -397,12 +396,12 @@ function WriteAppBody({ services, connection }: WriteAppProps): React.JSX.Elemen
   const prepareFromChat = (): void => {
     if (!activeId) return
     const id = activeId
-    const used = services.models.auto()
+    const used = services.models.chat() // started from the chat, so it runs on the model chosen there
     setChat((c) => [...c, { id: ++lineId, from: 'you', text: 'Draw the style sheet and the links from the text' }])
     void run('Drawing the style sheet and the links from the text', async () => {
       try {
         await flushDraft()
-        const text = await prepareFromText(id)
+        const text = await prepareFromText(id, used)
         setChat((c) => [...c, { id: ++lineId, from: 'aielia', text, model: used }])
       } catch (e) {
         setChat((c) => [...c, { id: ++lineId, from: 'aielia', text: failureText('I could not do that', e) }])
