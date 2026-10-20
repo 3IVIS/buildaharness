@@ -17,6 +17,11 @@ export interface ChatOptions {
   maxTokens?: number
   structuredOutput?: { schema: Record<string, unknown> }
   /**
+   * Ask the provider to cache the prompt prefix (system text, tool definitions and the conversation so far) so the next call of a growing
+   * conversation re-reads it at a fraction of the price. Honoured by AnthropicLLMClient; other backends ignore it (OpenAI-compatible APIs cache on their own).
+   */
+  cachePrompt?: boolean
+  /**
    * Longest this one call may wait on the endpoint (response headers, a whole non-streamed body, or the gap between
    * streamed chunks) before it fails with a timeout error. Absent: the client's own bound, which for a structuredOutput call
    * (the small JSON side calls: classifier, audit, next steps, ...) is shorter than for a main chat call. Honoured by
@@ -108,6 +113,8 @@ export interface TokenUsage {
    * usage.prompt_tokens_details.cached_tokens. Absent when the backend doesn't report it at all
    * (not necessarily 0 — see OpenAICompatibleLLMClient's doc comment on where this is parsed). */
   cachedInputTokens?: number
+  /** How many of inputTokens were written to the provider's prompt cache on this call (Anthropic bills a write above the plain input rate). Absent when not reported. */
+  cacheWriteTokens?: number
 }
 
 export interface ToolDefinition {
@@ -117,6 +124,8 @@ export interface ToolDefinition {
 }
 
 export interface ILLMClient {
+  /** False for a backend that runs its own tool loop and cannot return tool calls to the caller (the local `claude -p` client). Absent or true: callChatStructured takes tool definitions and returns tool calls. */
+  readonly nativeToolCalls?: boolean
   callChat(messages: ChatMessage[], options?: ChatOptions): AsyncIterable<string>
   callChatSync(messages: ChatMessage[], options?: ChatOptions): Promise<string>
   callChatStructured(messages: ChatMessage[], tools?: ToolDefinition[], options?: ChatOptions): Promise<LLMStructuredResponse>

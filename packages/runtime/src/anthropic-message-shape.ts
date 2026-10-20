@@ -1,9 +1,9 @@
 import type { ChatMessage, ToolCallResult } from './llm-client'
 
 export type AnthropicContentBlock =
-  | { type: 'text'; text: string }
-  | { type: 'tool_use'; id: string; name: string; input: Record<string, unknown> }
-  | { type: 'tool_result'; tool_use_id: string; content: string }
+  | { type: 'text'; text: string; cache_control?: { type: 'ephemeral' } }
+  | { type: 'tool_use'; id: string; name: string; input: Record<string, unknown>; cache_control?: { type: 'ephemeral' } }
+  | { type: 'tool_result'; tool_use_id: string; content: string; cache_control?: { type: 'ephemeral' } }
 
 export interface AnthropicMessage {
   role: 'user' | 'assistant'

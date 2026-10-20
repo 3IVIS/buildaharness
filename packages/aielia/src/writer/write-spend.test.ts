@@ -40,7 +40,7 @@ describe('call types', () => {
     const id2 = await svc.create('Other', MD.replace('18 ms', '19 ms')) // a claim with no source, so a repository is looked in
     await svc.analyze(id2)
     svc.attachRepo(id2, { name: 'o/r', files: async () => Array.from({ length: 1600 }, (_, i) => `d${i % 5}/f${i}.ts`), read: async () => 'x' })
-    await svc.verifyClaims(id2) // repo files
+    await svc.verifyClaims(id2) // repo search
     await svc.deriveStyleFromText(id) // style sheet
     await svc.suggest(id, 'tighten it') // edits
     await svc.suggestIdeas(id) // ideas

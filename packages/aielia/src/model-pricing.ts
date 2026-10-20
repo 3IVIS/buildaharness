@@ -10,12 +10,14 @@ export interface ModelPriceUsd {
   outputPerMTok: number
   /** Rate for input tokens served from the provider's prompt cache; absent = same as inputPerMTok. */
   cachedInputPerMTok?: number
+  /** Rate for input tokens written to the prompt cache; absent = same as inputPerMTok. */
+  cacheWritePerMTok?: number
 }
 
 const PRICING_BY_TIER = {
-  opus: { inputPerMTok: 15, outputPerMTok: 75 },
-  sonnet: { inputPerMTok: 3, outputPerMTok: 15 },
-  haiku: { inputPerMTok: 1, outputPerMTok: 5 },
+  opus: { inputPerMTok: 15, outputPerMTok: 75, cachedInputPerMTok: 1.5, cacheWritePerMTok: 18.75 },
+  sonnet: { inputPerMTok: 3, outputPerMTok: 15, cachedInputPerMTok: 0.3, cacheWritePerMTok: 3.75 },
+  haiku: { inputPerMTok: 1, outputPerMTok: 5, cachedInputPerMTok: 0.1, cacheWritePerMTok: 1.25 },
 } as const satisfies Record<string, ModelPriceUsd>
 
 /**
@@ -43,11 +45,12 @@ function priceForModel(model: string): ModelPriceUsd | undefined {
  * Returns undefined (rather than a misleading number) when the model is unset or not a recognized one — callers must not silently treat "no estimate" as "free".
  * `cachedInputTokens` follows OpenAI's convention (a subset of inputTokens, billed at the cached rate); it is ignored for models with no cached rate.
  */
-export function estimateCostUsd(model: string | undefined, usage: { inputTokens: number; outputTokens: number; cachedInputTokens?: number }): number | undefined {
+export function estimateCostUsd(model: string | undefined, usage: { inputTokens: number; outputTokens: number; cachedInputTokens?: number; cacheWriteTokens?: number }): number | undefined {
   if (!model) return undefined
   const price = priceForModel(model)
   if (!price) return undefined
   const cached = price.cachedInputPerMTok !== undefined ? Math.min(usage.cachedInputTokens ?? 0, usage.inputTokens) : 0
-  const uncached = usage.inputTokens - cached
-  return (uncached / 1_000_000) * price.inputPerMTok + (cached / 1_000_000) * (price.cachedInputPerMTok ?? 0) + (usage.outputTokens / 1_000_000) * price.outputPerMTok
+  const written = price.cacheWritePerMTok !== undefined ? Math.min(usage.cacheWriteTokens ?? 0, usage.inputTokens - cached) : 0
+  const uncached = usage.inputTokens - cached - written
+  return (uncached / 1_000_000) * price.inputPerMTok + (written / 1_000_000) * (price.cacheWritePerMTok ?? 0) + (cached / 1_000_000) * (price.cachedInputPerMTok ?? 0) + (usage.outputTokens / 1_000_000) * price.outputPerMTok
 }

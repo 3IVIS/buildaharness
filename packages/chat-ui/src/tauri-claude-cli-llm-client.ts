@@ -52,6 +52,8 @@ export interface TauriClaudeCliLLMClientOptions {
  * two implementations.
  */
 export class TauriClaudeCliLLMClient implements ILLMClient {
+  /** Runs its own tool loop inside `claude -p`; it cannot return tool calls to a caller's loop, so those callers use text tool calls (see writer/text-tool-calls.ts). */
+  readonly nativeToolCalls = false
   private readonly fileTools?: { workspaceRoot: string }
   private readonly shellTools: boolean
 

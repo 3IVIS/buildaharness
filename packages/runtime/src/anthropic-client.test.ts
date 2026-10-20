@@ -228,3 +228,27 @@ describe('request timeout (a stalled request must not freeze a turn)', () => {
     await expect(make((async () => new Response(JSON.stringify(body), { status: 200 })) as unknown as typeof fetch).callChatStructured(user)).resolves.toMatchObject({ content: 'ok' })
   })
 })
+
+describe('prompt caching', () => {
+  const reply = { content: [{ type: 'text', text: 'ok' }], usage: { input_tokens: 10, output_tokens: 5, cache_read_input_tokens: 900, cache_creation_input_tokens: 90 } }
+  const msgs = [{ role: 'system' as const, content: 'sys' }, { role: 'user' as const, content: 'q' }, { role: 'assistant' as const, content: '', toolCalls: [{ id: 't1', name: 'search', input: {} }] }, { role: 'tool' as const, content: 'r', toolCallId: 't1' }]
+
+  it('marks the system text and the last block when cachePrompt is set, and reports cached and written tokens inside inputTokens', async () => {
+    const f = mockFetchJson(reply)
+    const onUsage = vi.fn()
+    await new AnthropicLLMClient({ apiKey: API_KEY }).callChatStructured(msgs, [{ name: 'search', input_schema: {} }], { cachePrompt: true, onUsage })
+    const body = JSON.parse(f.mock.calls[0][1].body as string)
+    expect(body.system).toEqual([{ type: 'text', text: 'sys', cache_control: { type: 'ephemeral' } }])
+    const last = body.messages[body.messages.length - 1].content
+    expect(last[last.length - 1].cache_control).toEqual({ type: 'ephemeral' })
+    expect(onUsage).toHaveBeenCalledWith({ inputTokens: 1000, outputTokens: 5, cachedInputTokens: 900, cacheWriteTokens: 90 })
+  })
+
+  it('sends no cache markers by default', async () => {
+    const f = mockFetchJson({ content: [{ type: 'text', text: 'ok' }], usage: { input_tokens: 10, output_tokens: 5 } })
+    const onUsage = vi.fn()
+    await new AnthropicLLMClient({ apiKey: API_KEY }).callChatStructured(msgs, undefined, { onUsage })
+    expect(JSON.stringify(JSON.parse(f.mock.calls[0][1].body as string))).not.toContain('cache_control')
+    expect(onUsage).toHaveBeenCalledWith({ inputTokens: 10, outputTokens: 5 })
+  })
+})
