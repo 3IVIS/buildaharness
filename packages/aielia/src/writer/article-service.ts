@@ -839,11 +839,11 @@ export class ArticleService {
    * A first style sheet from the article's own text (brief fields and a writing profile), filling only what the writer has not set. One model call.
    * Returns the names of what was filled in; an empty list means there was nothing to add or the call failed.
    */
-  async deriveStyleFromText(id: string, modelOverride?: string): Promise<{ status: 'derived' | 'not_derived'; filled: string[] }> {
+  async deriveStyleFromText(id: string, modelOverride?: string): Promise<{ status: 'derived' | 'not_derived'; filled: string[]; reason?: string }> {
     const b = await this.get(id)
     const r = await deriveStyle({ meta: b.meta, markdown: b.markdown }, this.opts.llm, modelOverride ?? this.checker(), this.opts.onUsage)
     if (r.status === 'derived' && r.filled.length > 0) await this.store.save(id, { ...b, meta: r.meta })
-    return { status: r.status, filled: r.filled }
+    return { status: r.status, filled: r.filled, reason: r.reason }
   }
 
   /** The writer draws a link by hand. */

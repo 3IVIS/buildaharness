@@ -29,6 +29,7 @@ describe('deriveStyle', () => {
   it('leaves the article as it was on a model failure, a bad answer, an empty text, or nothing to say', async () => {
     const meta = createArticleMeta('a', 'T')
     expect((await deriveStyle({ meta, markdown: 'Text.' }, client(new Error('503')))).meta).toBe(meta)
+    expect((await deriveStyle({ meta, markdown: 'Text.' }, client(new Error('503 overloaded')))).reason).toBe('503 overloaded') // so the page can say why
     expect((await deriveStyle({ meta, markdown: 'Text.' }, client('junk'))).status).toBe('not_derived')
     expect((await deriveStyle({ meta, markdown: '  ' }, client(REPLY))).status).toBe('not_derived')
     const empty = await deriveStyle({ meta, markdown: 'Text.' }, client({ audience: '', purpose: '', tone: '', length: '', notes: '', voice: '', terms: [] }))
