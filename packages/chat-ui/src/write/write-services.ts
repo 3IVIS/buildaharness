@@ -70,6 +70,19 @@ const CHAT_MODEL_KEY = 'writer:model-chat'
 const AUTO_MODEL_KEY = 'writer:model-auto'
 const GITHUB_TOKEN_KEY = 'writer:github-token'
 
+/** The model client, remembering the message of the last error it raised: a failed chat turn is told to the person with that message. */
+function rememberErrors(inner: ILLMClient, remember: (message: string) => void): ILLMClient {
+  const note = (e: unknown): never => { remember(e instanceof Error ? e.message : String(e)); throw e }
+  return {
+    ...(inner.nativeToolCalls === false ? { nativeToolCalls: false as const } : {}),
+    async *callChat(messages, options) {
+      try { yield* inner.callChat(messages, options) } catch (e) { note(e) }
+    },
+    callChatSync: (messages, options) => inner.callChatSync(messages, options).catch(note),
+    callChatStructured: (messages, tools, options) => inner.callChatStructured(messages, tools, options).catch(note),
+  }
+}
+
 export async function assembleWriteServices(parts: {
   store: ArticleStore
   llm: ILLMClient
@@ -108,7 +121,8 @@ export async function assembleWriteServices(parts: {
   const meter = await createSpendMeter(store, { backend, model: chatModel })
   let cap = (await loadPermissions(store)).spendCapUsd
   // Every model call, the article steps and the chat alike, goes through the cap.
-  const llm = withSpendCap(parts.llm, meter, () => cap)
+  let lastModelError: string | undefined
+  const llm = rememberErrors(withSpendCap(parts.llm, meter, () => cap), (m) => { lastModelError = m })
   const port = createArticleChatPort(store)
   const service = serializeByArticle(new ArticleService({ store, llm, fetchWeb: parts.fetchWeb, searchWeb: parts.searchWeb, modelFor: (role) => (role === 'writer' ? chatModel : autoModel) }))
   const assistant = await parts.buildAssistant(port, llm, chatModel)
@@ -120,10 +134,13 @@ export async function assembleWriteServices(parts: {
     async chat(message, activeArticleId) {
       if (activeArticleId) await port.setActive(activeArticleId)
       const used = chatModel
+      lastModelError = undefined
       const result = await assistant.turn(message, { sessionId: SESSION_ID })
-      // A turn that did not finish has no reply but says why; the page shows that instead of an empty answer.
-      const why = result.status === 'cancelled' ? 'The turn was stopped.' : result.reason
-      return { reply: result.reply ?? (why ? `I could not answer: ${why}. Check your key and the model in Settings, or pick another model next to the chat, then try again.` : 'I could not answer, and the model gave no reason. Check your key and the model in Settings, or pick another model next to the chat, then try again.'), model: used }
+      // A turn that did not finish has no reply. The page says why instead of showing an empty answer: the model's own error when a call failed
+      // (the harness wraps it in text about risk checks), otherwise the reason the turn gives.
+      const why = result.status === 'cancelled' ? 'The turn was stopped.' : lastModelError ?? result.reason
+      const hint = 'Check your key and the model in Settings, or pick another model next to the chat, then try again.'
+      return { reply: result.reply ?? (why ? `I could not answer: ${why.replace(/[.\s]+$/, '')}. ${hint}` : `I could not answer, and the model gave no reason. ${hint}`), model: used }
     },
     models: {
       chat: () => chatModel,

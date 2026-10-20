@@ -344,13 +344,13 @@ describe('chat: model, check and adjust', () => {
     expect(screen.getAllByTitle('The model that wrote this').at(-1)).toHaveTextContent(s.models.chat())
   })
 
-  it('"Draw the style sheet and the links" is said in the chat, with its result, and not in the top bar', async () => {
+  it('"Fill in the style and links" is said in the chat, with its result, and not in the top bar', async () => {
     const s = await services({}, MD)
     render(<WriteApp services={s} />)
     await waitForText()
     await userEvent.click(rail('Chat'))
     await userEvent.selectOptions(screen.getByLabelText('Adjust', { selector: 'select' }), 'action:prepare')
-    expect(await screen.findByText('Draw the style sheet and the links from the text')).toBeInTheDocument()
+    await waitFor(() => expect(document.querySelector('.write__line--you')?.textContent).toBe('Fill in the style and links from the article'))
     expect(await screen.findByText(/Check your key and the model in Settings/)).toBeInTheDocument() // nothing is set up to answer in this test, so it says why
     expect(screen.queryByRole('status')?.textContent ?? '').not.toMatch(/Check your key/)
   })
@@ -943,6 +943,16 @@ describe('style', () => {
     await userEvent.click(rail('Style'))
     expect(await within(panel('Style')).findByText('Operators')).toBeInTheDocument()
     expect((await s.service.get(id)).meta.brief).toMatchObject({ audience: 'Operators', tone: 'plain' })
+  })
+
+  it('says so in the Style panel when the text could not be read, instead of reading for ever', async () => {
+    const page = `# Guide\n\n${Array.from({ length: 320 }, (_, i) => `word${i}`).join(' ')}\n`
+    const s = await services({ style: 'this is not json' }, page)
+    render(<WriteApp services={s} />)
+    await waitForText()
+    await userEvent.click(rail('Style'))
+    expect(await within(panel('Style')).findByText(/Could not read the text to fill this in/)).toBeInTheDocument()
+    expect(within(panel('Style')).queryByText(/Reading the text to fill this in…/)).toBeNull()
   })
 
   it('waits when there is less than a page of text', async () => {

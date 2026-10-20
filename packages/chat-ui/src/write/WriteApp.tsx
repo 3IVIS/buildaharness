@@ -397,8 +397,8 @@ function WriteAppBody({ services, connection }: WriteAppProps): React.JSX.Elemen
     if (!activeId) return
     const id = activeId
     const used = services.models.chat() // started from the chat, so it runs on the model chosen there
-    setChat((c) => [...c, { id: ++lineId, from: 'you', text: 'Draw the style sheet and the links from the text' }])
-    void run('Drawing the style sheet and the links from the text', async () => {
+    setChat((c) => [...c, { id: ++lineId, from: 'you', text: 'Fill in the style and links from the article' }])
+    void run('Filling in the style and links', async () => {
       try {
         await flushDraft()
         const text = await prepareFromText(id, used)
@@ -416,17 +416,23 @@ function WriteAppBody({ services, connection }: WriteAppProps): React.JSX.Elemen
     void run('Reading the style from the text', async () => {
       await flushDraft()
       const r = await service.deriveStyleFromText(id, services.models.auto())
+      setStyleReading({ id, state: r.reason ? 'failed' : 'idle', error: r.reason })
       setBundle(await service.get(id))
       setNotice(r.filled.length > 0 ? `Filled in: ${r.filled.join(', ')}. Edit anything that is off.` : 'I found nothing to add to the style.')
     })
   }
   // The style fills in by itself once there is about a page of text (typed, pasted or imported), once for each article.
   const styleTried = useRef<Set<string>>(new Set())
+  const [styleReading, setStyleReading] = useState<{ id: string; state: 'reading' | 'failed' | 'idle'; error?: string } | null>(null)
   useEffect(() => {
     if (!activeId || !bundle || styleTried.current.has(activeId) || !shouldDeriveStyle(bundle.meta, bundle.markdown)) return
     styleTried.current.add(activeId)
     const id = activeId
-    void service.deriveStyleFromText(id, services.models.auto()).then(async () => { if (id === activeIdRef.current) setBundle(await service.get(id)) }, () => undefined)
+    setStyleReading({ id, state: 'reading' })
+    void service.deriveStyleFromText(id, services.models.auto()).then(async (r) => {
+      setStyleReading({ id, state: r.reason ? 'failed' : 'idle', error: r.reason })
+      if (id === activeIdRef.current) setBundle(await service.get(id))
+    }, (e) => setStyleReading({ id, state: 'failed', error: e instanceof Error ? e.message : String(e) }))
   }, [service, services.models, activeId, bundle])
   const activeIdRef = useRef(activeId)
   activeIdRef.current = activeId
@@ -734,7 +740,7 @@ function WriteAppBody({ services, connection }: WriteAppProps): React.JSX.Elemen
           {ready && meta ? (
             <>
               <section className={`write__pane write__panel-pane ${tab === 'style' ? 'is-shown' : ''}`} aria-label="Style">
-                <StylePanel meta={meta} hasText={bundle.markdown.trim().length > 0} busy={busy !== null} onBrief={(b) => change('Saving the brief', async (id) => { await service.setBrief(id, b) })} onDerive={deriveStyle} />
+                <StylePanel meta={meta} hasText={bundle.markdown.trim().length > 0} reading={styleReading && styleReading.id === activeId ? styleReading : undefined} busy={busy !== null} onBrief={(b) => change('Saving the brief', async (id) => { await service.setBrief(id, b) })} onDerive={deriveStyle} />
               </section>
               <section className={`write__pane write__panel-pane ${tab === 'ideas' ? 'is-shown' : ''}`} aria-label="Ideas">
                 <IdeasPanel meta={meta} onSave={saveScratchpad} />
