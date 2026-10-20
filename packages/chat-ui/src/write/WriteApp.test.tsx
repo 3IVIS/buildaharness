@@ -899,7 +899,7 @@ describe('style', () => {
 })
 
 describe('links, history', () => {
-  it('Links: shown in the box under the text for the section the selection is in; find, confirm, and adding one by hand is tucked away', async () => {
+  it('Links: shown in the box under the text for the section the selection is in; confirm, and adding one by hand is tucked away', async () => {
     const reply = { links: [{ from: 's3', to: 's2', kind: 'repeats', reason: 'repeats the bound', confidence: 0.8 }] }
     const s = await services({ links: reply }, MD2)
     render(<WriteApp services={s} />)
@@ -908,7 +908,11 @@ describe('links, history', () => {
     await dockTab('Links')
     const links = panel('Links')
     expect(within(links).getByText(/Click in the text/)).toBeInTheDocument()
-    await userEvent.click(within(links).getByRole('button', { name: /Look for links between sections/ }))
+    expect(within(links).queryByRole('button', { name: /Look for links between sections/ })).toBeNull() // found from the chat menu, not here
+    await userEvent.click(rail('Chat'))
+    await userEvent.selectOptions(screen.getByLabelText('Adjust', { selector: 'select' }), 'action:prepare')
+    await screen.findByText(/Edit anything that is off/)
+    await userEvent.click(rail('Text'))
     await dockTab('Comments')
     putCursor('So p99 stays')
     await dockTab('Links')

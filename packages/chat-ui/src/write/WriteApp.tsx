@@ -393,10 +393,6 @@ function WriteAppBody({ services, connection }: WriteAppProps): React.JSX.Elemen
   }
 
   // ---- links
-  const findLinks = (): void => change('Looking for links between sections', async (id) => {
-    const r = await service.findDependencies(id, chatModel)
-    setNotice(r.status === 'failed' ? 'The search for links could not run. Nothing was changed.' : r.added.length === 0 ? 'No new links found.' : `Found ${r.added.length} possible link${r.added.length === 1 ? '' : 's'} (${chatModel}). Confirm the ones that are right.`)
-  })
   const removeLink = async (linkId: string, origin: string): Promise<void> => {
     if (origin !== 'proposed' && !(await dialogs.confirm('Remove this link? You confirmed or drew it yourself.', { yes: 'Remove' }))) return
     change('Removing the link', async (id) => { await service.removeDependency(id, linkId) })
@@ -724,7 +720,7 @@ function WriteAppBody({ services, connection }: WriteAppProps): React.JSX.Elemen
             <TextNotes
               issues={unit && unitMeta ? issuesNode(unitMeta) : <p className="write__muted">Click in the text, or highlight some, to see the issues in it. The Issues button at the side lists the whole article.</p>}
               issuesCount={unitIssues}
-              links={<LinksPanel meta={meta} sectionId={sectionAt(meta.sections, draft, selection)?.id} busy={busy !== null} model={chatModel} onFind={findLinks} onConfirm={(lid) => change('Saving', async (id) => { await service.confirmDependency(id, lid) })} onRemove={removeLink} onAdd={(f, t, k: DependencyKind) => change('Adding the link', async (id) => { const r = await service.addDependency(id, f, t, k); if (!r.ok) setNotice(r.reason) })} />}
+              links={<LinksPanel meta={meta} sectionId={sectionAt(meta.sections, draft, selection)?.id} onConfirm={(lid) => change('Saving', async (id) => { await service.confirmDependency(id, lid) })} onRemove={removeLink} onAdd={(f, t, k: DependencyKind) => change('Adding the link', async (id) => { const r = await service.addDependency(id, f, t, k); if (!r.ok) setNotice(r.reason) })} />}
               history={<TextHistory markdown={draft} selection={selection} versions={bundle.snapshots.map((x, index) => ({ index, kind: x.kind, label: x.label, at: x.at, markdown: x.markdown }))} />}
               meta={meta}
               markdown={draft}
