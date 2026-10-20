@@ -153,23 +153,50 @@ function proxyWeb(config: AssistantConfig, proxy: WebProxy): { fetchWeb: (url: s
   }
 }
 
-/** The real thing: IndexedDB storage, the visitor's own key, a plain browser (no file or shell tools). */
-export function createWriteServices(config: AssistantConfig, webProxy?: WebProxy, githubToken?: string): Promise<WriteServices> {
-  const memory = new IndexedDBAdapter({ namespace: 'aielia-write' })
-  const store = createMemoryAdapterArticleStore(memory)
-  const llm = createLlmClient(config, { claudeCli: () => undefined })
-  // A plain browser tab cannot fetch arbitrary pages (CORS, and no DNS to check the address). Pages are read through the proxy
-  // when the visitor set one up; otherwise the writer pastes the passage.
-  const web = webProxy ? proxyWeb(config, webProxy) : undefined
+/**
+ * What the host (a browser tab, the desktop app) supplies to Write: where articles are kept, how model calls are made, and what it can reach.
+ * Everything else about Write is the same on every host, so a host is only this.
+ */
+export interface WritePlatform {
+  store: ArticleStore
+  llm: ILLMClient
+  /** Reads a web page as text. Absent where pages cannot be read. */
+  fetchWeb?: (url: string) => Promise<string>
+  /** Searches the web for pages that might back a claim. Absent when no search is set up. */
+  searchWeb?: (query: string) => Promise<{ title: string; url: string; snippet: string }[]>
+  /** Asks the writer for a folder to take source files or a repository from. Absent where the host has no folder access. */
+  pickFolder?: () => Promise<FolderReader | undefined>
+  /** The writer's GitHub token, for a private repository. */
+  githubToken?: string
+}
+
+/** Write on any host: the connection (model and key) and what the host can do. */
+export function createWriteServicesFor(config: AssistantConfig, platform: WritePlatform): Promise<WriteServices> {
   return assembleWriteServices({
-    fetchWeb: web?.fetchWeb,
-    pickFolder: browserFolderPicker(),
-    githubToken,
-    searchWeb: web?.searchWeb,
-    store,
-    llm,
+    ...platform,
     backend: config.llmBackend,
     configuredModel: config.model,
     buildAssistant: (port, capped, model) => PersonalAssistant.create({ ...buildAssistantOptions({ ...config, model }, { llmClient: capped, features: WEB_FEATURES }), writerChat: port }),
   })
+}
+
+/** A plain browser tab: IndexedDB storage, the visitor's own key, no file or shell tools. */
+export function webWritePlatform(config: AssistantConfig, webProxy?: WebProxy, githubToken?: string): WritePlatform {
+  const memory = new IndexedDBAdapter({ namespace: 'aielia-write' })
+  // A plain browser tab cannot fetch arbitrary pages (CORS, and no DNS to check the address). Pages are read through the proxy
+  // when the visitor set one up; otherwise the writer pastes the passage.
+  const web = webProxy ? proxyWeb(config, webProxy) : undefined
+  return {
+    store: createMemoryAdapterArticleStore(memory),
+    llm: createLlmClient(config, { claudeCli: () => undefined }),
+    fetchWeb: web?.fetchWeb,
+    searchWeb: web?.searchWeb,
+    pickFolder: browserFolderPicker(),
+    githubToken,
+  }
+}
+
+/** The real thing in a browser tab. */
+export function createWriteServices(config: AssistantConfig, webProxy?: WebProxy, githubToken?: string): Promise<WriteServices> {
+  return createWriteServicesFor(config, webWritePlatform(config, webProxy, githubToken))
 }
