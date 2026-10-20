@@ -215,15 +215,14 @@ describe('outline: a view of the text, edited as text together with it', () => {
     expect(outline().value).toBe('# Post\n## One\n### One point one\n## Two')
   })
 
-  it('opens the text at the section the cursor is on, and the outline gives way to the text', async () => {
+  it('the mark at the end of a heading line opens the text at that section, and the outline gives way to the text', async () => {
     const md = '# Post\n\n## One\n\ntext\n\n## Two\n\ntext\n'
     const s = await services({}, md)
     render(<WriteApp services={s} />)
     const box = await waitForText()
     await showOutline()
     expect(screen.getByRole('button', { name: 'Outline view' })).toHaveAttribute('aria-pressed', 'true')
-    outline().setSelectionRange(outline().value.length, outline().value.length) // on the last line, "## Two"
-    await userEvent.click(screen.getByRole('button', { name: 'Open this section' }))
+        await userEvent.click(screen.getByRole('button', { name: 'Go to the section: Two' }))
     expect(screen.queryByRole('textbox', { name: 'Outline' })).toBeNull()
     expect(screen.getByRole('button', { name: 'Article view' })).toHaveAttribute('aria-pressed', 'true')
     await waitFor(() => expect(box.selectionStart).toBe(md.indexOf('## Two')))
@@ -251,6 +250,19 @@ describe('outline: a view of the text, edited as text together with it', () => {
     await waitFor(() => expect(box.value).toContain('### Detail'))
     expect(box.value).toContain('## Two')
     expect(box.value).toContain('text')
+  })
+
+  it('clicking a heading line selects it, so the box under the text shows it as if it were clicked in the article', async () => {
+    const md = '# Post\n\n## One\n\ntext\n\n## Two\n\ntext\n'
+    const s = await services({}, md)
+    render(<WriteApp services={s} />)
+    await waitForText()
+    await showOutline()
+    outline().setSelectionRange(outline().value.indexOf('## Two') + 3, outline().value.indexOf('## Two') + 3)
+    await userEvent.click(outline())
+    const dock = screen.getByLabelText('Comments and sources for this text')
+    expect(await within(dock).findByText(/## Two/)).toBeInTheDocument()
+    expect(screen.getByLabelText('Comments on this text')).toBeEnabled()
   })
 
   it('follows what is typed in the text', async () => {
@@ -995,8 +1007,7 @@ describe('links, history', () => {
     expect(within(history).queryByLabelText('Version detail')).toBeNull() // shown in the main text window, not in the side panel
     await userEvent.click(within(screen.getByRole('group', { name: 'Which text' })).getByRole('button', { name: 'Current' }))
     expect(screen.queryByLabelText('Version detail')).toBeNull()
-    await userEvent.click(within(screen.getByRole('group', { name: 'Which text' })).getByRole('button', { name: 'History' }))
-    expect(screen.getByLabelText('Version detail')).toBeInTheDocument()
+    expect(screen.queryByRole('group', { name: 'Which text' })).toBeNull() // back to the article, nothing left to toggle
     const restore = within(history).getAllByRole('button', { name: 'Restore' }).at(-1)!
     await userEvent.click(restore)
     await answerDialog()

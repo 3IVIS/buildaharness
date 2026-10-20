@@ -47,6 +47,23 @@ const RAIL_ICONS: Record<Tab, string> = {
 
 /** The desktop layout starts at 960 px (see write.css). jsdom has no matchMedia, which reads as a phone. */
 /** The side rail layout (tablet and desktop) starts at 640 px; below that the rail is a bottom bar and the chat is a sheet. See write.css. */
+/** How far down the box the line holding `at` starts, counting wrapped lines: the text before it is laid out in a hidden copy of the box. */
+function topOfPosition(ta: HTMLTextAreaElement, at: number): number {
+  const cs = getComputedStyle(ta)
+  const mirror = document.createElement('div')
+  for (const prop of ['font', 'letterSpacing', 'lineHeight', 'paddingLeft', 'paddingRight', 'borderLeftWidth', 'borderRightWidth', 'boxSizing', 'tabSize'] as const) mirror.style[prop] = cs[prop]
+  mirror.style.width = `${ta.clientWidth + (parseFloat(cs.borderLeftWidth) || 0) + (parseFloat(cs.borderRightWidth) || 0)}px`
+  mirror.style.cssText += ';position:absolute;visibility:hidden;white-space:pre-wrap;overflow-wrap:break-word;top:0;left:-9999px;'
+  mirror.textContent = ta.value.slice(0, at)
+  const mark = document.createElement('span')
+  mark.textContent = '\u200b'
+  mirror.appendChild(mark)
+  document.body.appendChild(mirror)
+  const top = mark.offsetTop
+  document.body.removeChild(mirror)
+  return top
+}
+
 const isWide = (): boolean => typeof window !== 'undefined' && window.matchMedia?.('(min-width: 640px)').matches === true
 
 const STATUS_LABEL: Record<string, string> = {
@@ -264,8 +281,7 @@ function WriteAppBody({ services, connection }: WriteAppProps): React.JSX.Elemen
     ta.focus()
     ta.setSelectionRange(at, at)
     setSelection({ start: at, end: at })
-    const lineHeight = parseFloat(getComputedStyle(ta).lineHeight) || 24
-    ta.scrollTop = Math.max(0, (ta.value.slice(0, at).split('\n').length - 1) * lineHeight - lineHeight * 2)
+    ta.scrollTop = Math.max(0, topOfPosition(ta, at))
     if (!isWide()) setTab('text')
   }
 
@@ -355,7 +371,7 @@ function WriteAppBody({ services, connection }: WriteAppProps): React.JSX.Elemen
       const snap = await service.getVersion(activeId, index)
       setViewing(mode === 'view' ? { mode, index, markdown: snap.markdown } : { mode, index, markdown: snap.markdown, diff: await service.compareWithCurrent(activeId, index) })
       setShowHistory(true)
-      setTab('text')
+      if (!isWide()) setTab('text')
     })
   }
   const restoreVersion = async (index: number): Promise<void> => {
@@ -735,24 +751,24 @@ function WriteAppBody({ services, connection }: WriteAppProps): React.JSX.Elemen
           <section className={`write__pane write__pane--text ${tab === 'text' || tab === 'chat' ? 'is-shown' : ''}`} aria-label="Text">
             {viewing && (
               <div className="write__seg write__viewtoggle" role="group" aria-label="Which text">
-                <button type="button" aria-pressed={!showHistory} className={!showHistory ? 'is-on' : ''} onClick={() => setShowHistory(false)}>Current</button>
+                <button type="button" aria-pressed={!showHistory} className={!showHistory ? 'is-on' : ''} onClick={() => { setShowHistory(false); setViewing(null) }}>Current</button>
                 <button type="button" aria-pressed={showHistory} className={showHistory ? 'is-on' : ''} onClick={() => setShowHistory(true)}>History</button>
               </div>
             )}
             {viewing && showHistory && <VersionView viewing={viewing} statusLabel={STATUS_LABEL} onRestore={(i) => void restoreVersion(i)} />}
-            <button type="button" className="write__dockswitch" aria-pressed={dockOn} aria-label={dockOn ? 'Hide the box under the text' : 'Show the box under the text'} title={dockOn ? 'Hide the box under the text' : 'Show the box under the text'} onClick={toggleDock}>{dockOn ? 'Hide details' : 'Show details'}</button>
             <div className="write__seg write__viewtoggle" role="group" aria-label="Show" hidden={Boolean(viewing && showHistory)}>
               <button type="button" aria-label="Article view" aria-pressed={view === 'text'} className={view === 'text' ? 'is-on' : ''} onClick={() => setView('text')}>Article</button>
               <button type="button" aria-label="Outline view" aria-pressed={view === 'outline'} className={view === 'outline' ? 'is-on' : ''} onClick={() => setView('outline')}>Outline</button>
             </div>
             {view === 'outline' && !(viewing && showHistory) && (
               <div className="write__outlineview">
-                <OutlinePanel markdown={draft} onOpen={jumpTo} onChange={onType} />
+                <OutlinePanel markdown={draft} onOpen={jumpTo} onChange={onType} onSelect={(start) => { setSelection({ start, end: start }); growth.current = []; grownTo.current = undefined; setGrownUnit(undefined) }} />
               </div>
             )}
             <div className={`write__textview ${view === 'outline' || (viewing && showHistory) ? 'is-hidden' : ''}`}>
             <MarkedText textRef={textRef} value={draft} pieces={textPieces(meta, draft)} onChange={onType} onSelection={(r) => { setSelection(r); const g = grownTo.current; if (!g || g.start !== r.start || g.end !== r.end) { growth.current = []; grownTo.current = undefined; setGrownUnit(undefined) } }} onGrow={growSelection} onShrink={shrinkSelection} unit={grownUnit} />
             </div>
+            <button type="button" className="write__dockchev" aria-pressed={dockOn} aria-label={dockOn ? 'Hide the box under the text' : 'Show the box under the text'} title={dockOn ? 'Hide the box under the text' : 'Show the box under the text'} onClick={toggleDock}>{dockOn ? '⌄' : '⌃'}</button>
             {dockOn && <TextNotes
               issues={unit && unitMeta ? issuesNode(unitMeta, selection ? textUnitAt(draft, selection.start, selection.end)?.quote : undefined) : <p className="write__muted">Click in the text, or highlight some, to see the issues in it. The Issues button at the side lists the whole article.</p>}
               issuesCount={unitIssues}
