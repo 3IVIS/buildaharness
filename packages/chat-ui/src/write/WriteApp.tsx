@@ -746,7 +746,7 @@ function WriteAppBody({ services, connection }: WriteAppProps): React.JSX.Elemen
             </div>
             {view === 'outline' && !(viewing && showHistory) && (
               <div className="write__outlineview">
-                <OutlinePanel markdown={draft} onOpen={jumpTo} onChange={onType} />
+                <OutlinePanel markdown={draft} onOpen={jumpTo} onChange={onType} onSelect={(start) => { setSelection({ start, end: start }); growth.current = []; grownTo.current = undefined; setGrownUnit(undefined) }} />
               </div>
             )}
             <div className={`write__textview ${view === 'outline' || (viewing && showHistory) ? 'is-hidden' : ''}`}>

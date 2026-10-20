@@ -253,6 +253,19 @@ describe('outline: a view of the text, edited as text together with it', () => {
     expect(box.value).toContain('text')
   })
 
+  it('clicking a heading line selects it, so the box under the text shows it as if it were clicked in the article', async () => {
+    const md = '# Post\n\n## One\n\ntext\n\n## Two\n\ntext\n'
+    const s = await services({}, md)
+    render(<WriteApp services={s} />)
+    await waitForText()
+    await showOutline()
+    outline().setSelectionRange(outline().value.indexOf('## Two') + 3, outline().value.indexOf('## Two') + 3)
+    await userEvent.click(outline())
+    const dock = screen.getByLabelText('Comments and sources for this text')
+    expect(await within(dock).findByText(/## Two/)).toBeInTheDocument()
+    expect(screen.getByLabelText('Comments on this text')).toBeEnabled()
+  })
+
   it('follows what is typed in the text', async () => {
     const s = await services({}, MD)
     render(<WriteApp services={s} />)

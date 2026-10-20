@@ -8,17 +8,19 @@ interface Props {
   onChange(markdown: string): void
   /** Opens the text at that section. */
   onOpen(start: number): void
+  /** The writer put the cursor on a heading: the box under the text shows that heading, as if it were clicked in the article. */
+  onSelect(start: number): void
 }
 
 /** How long to wait after typing before the article follows: a line being retyped should not look like a deleted section. */
 const SETTLE_MS = 700
 
 /**
- * The outline as plain text, one heading per line, written the way it is in the article (`## Name`). Edit it like text: reword a line, press
+ * The outline as plain text, one heading per line, written the way it is in the article (`## Name`). Click or move to a line and the box under the text shows that heading. Edit it like text: reword a line, press
  * Enter for a new section, type more hashes for a subsection, cut a line to move its section. The article follows. "Open this section" shows
  * the text of the line the cursor is on.
  */
-export function OutlinePanel({ markdown, onChange, onOpen }: Props): React.JSX.Element {
+export function OutlinePanel({ markdown, onChange, onOpen, onSelect }: Props): React.JSX.Element {
   const [text, setText] = useState(() => outlineToText(markdown))
   const box = useRef<HTMLTextAreaElement | null>(null)
   const timer = useRef<ReturnType<typeof setTimeout> | null>(null)
@@ -40,13 +42,18 @@ export function OutlinePanel({ markdown, onChange, onOpen }: Props): React.JSX.E
   }
   useEffect(() => () => { if (timer.current) { clearTimeout(timer.current); apply(latest.current.text) } }, [])
 
-  function openAtCursor(): void {
+  /** The heading the cursor is on, once what was typed has reached the article. */
+  function headingAtCursor(): number | undefined {
     const value = box.current?.value ?? text
     const cursorLine = value.slice(0, box.current?.selectionStart ?? 0).split('\n').length - 1
     const index = Math.max(0, value.split('\n').slice(0, cursorLine + 1).filter((l) => l.trim()).length - 1)
-    const next = apply(value)
-    const entry = outlineOf(next)[Math.min(index, outlineOf(next).length - 1)]
-    if (entry) onOpen(entry.start)
+    const entries = outlineOf(apply(value))
+    return entries[Math.min(index, entries.length - 1)]?.start
+  }
+  const selectHeading = (): void => { const at = headingAtCursor(); if (at !== undefined) onSelect(at) }
+  function openAtCursor(): void {
+    const at = headingAtCursor()
+    if (at !== undefined) onOpen(at)
   }
 
   return (
@@ -65,6 +72,8 @@ export function OutlinePanel({ markdown, onChange, onOpen }: Props): React.JSX.E
           timer.current = setTimeout(() => apply(value), SETTLE_MS)
         }}
         onBlur={(e) => apply(e.target.value)}
+        onClick={selectHeading}
+        onKeyUp={(e) => { if (e.key.startsWith('Arrow') || e.key === 'Home' || e.key === 'End' || e.key === 'PageUp' || e.key === 'PageDown') selectHeading() }}
       />
       <div className="write__outlinebar">
         <span className="write__muted">One heading per line. More # makes a subsection; a line without # joins the level above.</span>
