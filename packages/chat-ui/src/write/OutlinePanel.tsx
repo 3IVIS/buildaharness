@@ -17,8 +17,8 @@ const SETTLE_MS = 700
 
 /**
  * The outline as plain text, one heading per line, written the way it is in the article (`## Name`). Click or move to a line and the box under the text shows that heading. Edit it like text: reword a line, press
- * Enter for a new section, type more hashes for a subsection, cut a line to move its section. The article follows. "Open this section" shows
- * the text of the line the cursor is on.
+ * Enter for a new section, type more hashes for a subsection, cut a line to move its section. The article follows. The ↗ at the end of a line
+ * goes to that section in the text.
  */
 export function OutlinePanel({ markdown, onChange, onOpen, onSelect }: Props): React.JSX.Element {
   const [text, setText] = useState(() => outlineToText(markdown))
@@ -42,42 +42,64 @@ export function OutlinePanel({ markdown, onChange, onOpen, onSelect }: Props): R
   }
   useEffect(() => () => { if (timer.current) { clearTimeout(timer.current); apply(latest.current.text) } }, [])
 
-  /** The heading the cursor is on, once what was typed has reached the article. */
-  function headingAtCursor(): number | undefined {
-    const value = box.current?.value ?? text
-    const cursorLine = value.slice(0, box.current?.selectionStart ?? 0).split('\n').length - 1
-    const index = Math.max(0, value.split('\n').slice(0, cursorLine + 1).filter((l) => l.trim()).length - 1)
-    const entries = outlineOf(apply(value))
+  /** The heading at the nth heading line, once what was typed has reached the article. */
+  function headingAt(index: number): number | undefined {
+    const entries = outlineOf(apply(box.current?.value ?? text))
     return entries[Math.min(index, entries.length - 1)]?.start
   }
-  const selectHeading = (): void => { const at = headingAtCursor(); if (at !== undefined) onSelect(at) }
-  function openAtCursor(): void {
-    const at = headingAtCursor()
-    if (at !== undefined) onOpen(at)
+  const lineAtCursor = (): number => {
+    const value = box.current?.value ?? text
+    const cursorLine = value.slice(0, box.current?.selectionStart ?? 0).split('\n').length - 1
+    return Math.max(0, value.split('\n').slice(0, cursorLine + 1).filter((l) => l.trim()).length - 1)
   }
+  const selectHeading = (): void => { const at = headingAt(lineAtCursor()); if (at !== undefined) onSelect(at) }
+
+  // The "go to the text" marks sit right after each line: a copy of the lines, invisible, with a mark at the end of each, laid over the box and scrolled with it.
+  const [scroll, setScroll] = useState({ top: 0, left: 0 })
+  const lines = text.split('\n')
+  let headingNo = -1
 
   return (
     <div className="write__outlineedit">
-      <textarea
-        ref={box}
-        aria-label="Outline"
-        className="write__outlinetext"
-        value={text}
-        spellCheck
-        placeholder={'# Title\n## A section\n### A subsection\n\nStart a line with # to make a heading.'}
-        onChange={(e) => {
-          setText(e.target.value)
-          if (timer.current) clearTimeout(timer.current)
-          const value = e.target.value
-          timer.current = setTimeout(() => apply(value), SETTLE_MS)
-        }}
-        onBlur={(e) => apply(e.target.value)}
-        onClick={selectHeading}
-        onKeyUp={(e) => { if (e.key.startsWith('Arrow') || e.key === 'Home' || e.key === 'End' || e.key === 'PageUp' || e.key === 'PageDown') selectHeading() }}
-      />
+      <div className="write__outlinebox">
+        <textarea
+          ref={box}
+          aria-label="Outline"
+          className="write__outlinetext"
+          value={text}
+          wrap="off"
+          spellCheck
+          placeholder={'# Title\n## A section\n### A subsection\n\nStart a line with # to make a heading.'}
+          onChange={(e) => {
+            setText(e.target.value)
+            if (timer.current) clearTimeout(timer.current)
+            const value = e.target.value
+            timer.current = setTimeout(() => apply(value), SETTLE_MS)
+          }}
+          onScroll={(e) => setScroll({ top: e.currentTarget.scrollTop, left: e.currentTarget.scrollLeft })}
+          onBlur={(e) => apply(e.target.value)}
+          onClick={selectHeading}
+          onKeyUp={(e) => { if (e.key.startsWith('Arrow') || e.key === 'Home' || e.key === 'End' || e.key === 'PageUp' || e.key === 'PageDown') selectHeading() }}
+        />
+        <div className="write__outlinemarks">
+          <div style={{ transform: `translate(${-scroll.left}px, ${-scroll.top}px)` }}>
+            {lines.map((line, i) => {
+              const isHeading = line.trim() !== ''
+              if (isHeading) headingNo++
+              const n = headingNo
+              const name = line.replace(/^\s*#*\s*/, '').trim()
+              return (
+                <div key={i} className="write__outlinemarkline">
+                  <span className="write__outlineghost">{line || ' '}</span>
+                  {isHeading && <button type="button" className="write__outlinego" aria-label={`Go to the section: ${name || line.trim()}`} title="Go to this section in the text" onClick={() => { const at = headingAt(n); if (at !== undefined) onOpen(at) }}>↗</button>}
+                </div>
+              )
+            })}
+          </div>
+        </div>
+      </div>
       <div className="write__outlinebar">
-        <span className="write__muted">One heading per line. More # makes a subsection; a line without # joins the level above.</span>
-        <button type="button" className="write__link" onClick={openAtCursor}>Open this section</button>
+        <span className="write__muted">One heading per line. More # makes a subsection; a line without # joins the level above. ↗ goes to that section in the text.</span>
       </div>
     </div>
   )

@@ -215,15 +215,14 @@ describe('outline: a view of the text, edited as text together with it', () => {
     expect(outline().value).toBe('# Post\n## One\n### One point one\n## Two')
   })
 
-  it('opens the text at the section the cursor is on, and the outline gives way to the text', async () => {
+  it('the mark at the end of a heading line opens the text at that section, and the outline gives way to the text', async () => {
     const md = '# Post\n\n## One\n\ntext\n\n## Two\n\ntext\n'
     const s = await services({}, md)
     render(<WriteApp services={s} />)
     const box = await waitForText()
     await showOutline()
     expect(screen.getByRole('button', { name: 'Outline view' })).toHaveAttribute('aria-pressed', 'true')
-    outline().setSelectionRange(outline().value.length, outline().value.length) // on the last line, "## Two"
-    await userEvent.click(screen.getByRole('button', { name: 'Open this section' }))
+        await userEvent.click(screen.getByRole('button', { name: 'Go to the section: Two' }))
     expect(screen.queryByRole('textbox', { name: 'Outline' })).toBeNull()
     expect(screen.getByRole('button', { name: 'Article view' })).toHaveAttribute('aria-pressed', 'true')
     await waitFor(() => expect(box.selectionStart).toBe(md.indexOf('## Two')))
