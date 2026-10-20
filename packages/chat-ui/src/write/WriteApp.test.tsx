@@ -294,6 +294,17 @@ describe('chat: model, check and adjust', () => {
     expect(screen.getAllByTitle('The model that wrote this').at(-1)).toHaveTextContent(s.models.chat())
   })
 
+  it('"Draw the style sheet and the links" is said in the chat, with its result, and not in the top bar', async () => {
+    const s = await services({}, MD)
+    render(<WriteApp services={s} />)
+    await waitForText()
+    await userEvent.click(rail('Chat'))
+    await userEvent.selectOptions(screen.getByLabelText('Adjust', { selector: 'select' }), 'action:prepare')
+    expect(await screen.findByText('Draw the style sheet and the links from the text')).toBeInTheDocument()
+    expect(await screen.findByText(/Edit anything that is off/)).toBeInTheDocument()
+    expect(screen.queryByRole('status')?.textContent ?? '').not.toMatch(/Edit anything that is off/)
+  })
+
   it('tints the sentences of the claims it found, says what the colours mean, and the marks can be switched off', async () => {
     const s = await services({ capture: { articleId: null, ops: [] }, claims: { claims: [{ quote: 'The p99 was 18 ms.', kind: 'factual', matchesId: null, sure: true }] }, resolve: { affected: [] } }, MD)
     const { container } = render(<WriteApp services={s} />)

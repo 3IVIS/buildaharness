@@ -350,9 +350,16 @@ function WriteAppBody({ services, connection }: WriteAppProps): React.JSX.Elemen
   const prepareFromChat = (): void => {
     if (!activeId) return
     const id = activeId
+    const used = services.models.auto()
+    setChat((c) => [...c, { id: ++lineId, from: 'you', text: 'Draw the style sheet and the links from the text' }])
     void run('Drawing the style sheet and the links from the text', async () => {
-      await flushDraft()
-      setNotice(await prepareFromText(id))
+      try {
+        await flushDraft()
+        const text = await prepareFromText(id)
+        setChat((c) => [...c, { id: ++lineId, from: 'aielia', text, model: used }])
+      } catch (e) {
+        setChat((c) => [...c, { id: ++lineId, from: 'aielia', text: `I could not do that: ${e instanceof Error ? e.message : String(e)}` }])
+      }
     })
   }
 
@@ -573,6 +580,7 @@ function WriteAppBody({ services, connection }: WriteAppProps): React.JSX.Elemen
     const used = services.models.chat()
     setChat((c) => [...c, { id: ++lineId, from: 'you', text: 'Check the article' }])
     void run(`Checking with ${used}`, async () => {
+      try {
       if (saveTimer.current) clearTimeout(saveTimer.current)
       const o = await service.updateText(activeId, draft, { model: used })
       const full = o.changedSectionIds.length === 0 ? await service.analyze(activeId, used) : o
@@ -590,6 +598,9 @@ function WriteAppBody({ services, connection }: WriteAppProps): React.JSX.Elemen
         text = `I found ${factual.length} factual claim${factual.length === 1 ? '' : 's'}: ${supported} supported, ${unsourced} without a checked source, ${statuses.length - supported - unsourced} to look at.${flagged > 0 ? ` ${flagged} other section${flagged === 1 ? '' : 's'} may need a look because of what changed.` : ''} Details are in Issues.`
       }
       setChat((c) => [...c, { id: ++lineId, from: 'aielia', text, model: used }])
+      } catch (e) {
+        setChat((c) => [...c, { id: ++lineId, from: 'aielia', text: `The check could not finish: ${e instanceof Error ? e.message : String(e)}` }])
+      }
     })
   }
 
