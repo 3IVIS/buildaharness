@@ -1,7 +1,7 @@
 import { describe, it, expect } from 'vitest'
 import type { ILLMClient } from '@buildaharness/runtime'
 import { ArticleService, createMemoryArticleStore } from './article-service.js'
-import { folderFromFsBackend, matchFolderFiles, walkFolder, type FolderReader } from './local-folder.js'
+import { folderFromFsBackend, folderFromListing, matchFolderFiles, walkFolder, type FolderReader } from './local-folder.js'
 
 const NOW = '2026-10-17T10:00:00.000Z'
 const MD = '# Post\n\nThe cache holds 100 items.\n'
@@ -53,5 +53,27 @@ describe('using files from a folder', () => {
     delete r.files_['src/cache.ts']
     expect((await svc.recheckFolder(id, r)).missing).toEqual(['repo/src/cache.ts'])
     expect(await svc.recheckFolder(id, reader({}, 'other'))).toEqual({ unchanged: 0, changed: [], missing: [] })
+  })
+})
+
+describe('folderFromListing', () => {
+  const tree: Record<string, { name: string; directory: boolean }[]> = {
+    '/w/repo': [{ name: 'README.md', directory: false }, { name: 'src', directory: true }, { name: 'node_modules', directory: true }, { name: 'logo.png', directory: false }],
+    '/w/repo/src': [{ name: 'a.ts', directory: false }, { name: 'deep', directory: true }],
+    '/w/repo/src/deep': [{ name: 'b.ts', directory: false }],
+    '/w/repo/node_modules': [{ name: 'x.js', directory: false }],
+  }
+  const files: Record<string, string> = { '/w/repo/README.md': '# r', '/w/repo/src/a.ts': 'a', '/w/repo/src/deep/b.ts': 'b' }
+  const fs = { listDir: async (p: string) => { const t = tree[p]; if (!t) throw new Error('no such folder'); return t }, readTextFile: async (p: string) => files[p] }
+
+  it('walks down into subfolders using the listing, leaving out dependency folders and files that are not text or code', async () => {
+    const r = folderFromListing(fs, '/w/repo/', 'repo')
+    expect(r.name).toBe('repo')
+    expect(await r.files()).toEqual(['README.md', 'src/a.ts', 'src/deep/b.ts'])
+  })
+  it('reads a file by its path under the folder, and gives undefined for one that cannot be read', async () => {
+    const r = folderFromListing({ ...fs, readTextFile: async (p: string) => { if (p.endsWith('gone.ts')) throw new Error('missing'); return files[p] } }, '/w/repo', 'repo')
+    expect(await r.read('src/deep/b.ts')).toBe('b')
+    expect(await r.read('src/gone.ts')).toBeUndefined()
   })
 })

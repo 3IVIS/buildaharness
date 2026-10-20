@@ -97,6 +97,8 @@ export function withSpendCap(inner: ILLMClient, meter: SpendMeter, getCap: () =>
     return { ...o, onUsage: (u) => { void meter.record(u, type, o?.model); o?.onUsage?.(u) } }
   }
   return {
+    // A client that cannot take tool definitions (the claude CLI) must still say so through the cap, or the repository search would call it with tools.
+    ...(inner.nativeToolCalls === false ? { nativeToolCalls: false as const } : {}),
     async *callChat(messages: ChatMessage[], options?: ChatOptions) {
       meter.assertWithinCap(getCap())
       yield* inner.callChat(messages, counted(messages, options))

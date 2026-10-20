@@ -1,12 +1,14 @@
 import { describe, expect, it, vi } from 'vitest'
-import { render, screen } from '@testing-library/react'
+import { render, screen, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { ConnectionSettings } from './ConnectionSettings'
+import { DialogProvider } from './dialogs'
+import { answerDialog, declineDialog } from './dialog-test-utils'
 
 describe('connection settings', () => {
   it('saves only when something changed and a key is present, and offers the optional page-reading fields', async () => {
     const onSave = vi.fn()
-    render(<ConnectionSettings value={{ provider: 'anthropic', apiKey: 'k1' }} onSave={onSave} />)
+    render(<DialogProvider><ConnectionSettings value={{ provider: 'anthropic', apiKey: 'k1' }} onSave={onSave} /></DialogProvider>)
     const save = screen.getByRole('button', { name: 'Save connection' })
     expect(save).toBeDisabled()
     await userEvent.selectOptions(screen.getByLabelText('Provider'), 'openai')
@@ -19,19 +21,19 @@ describe('connection settings', () => {
   })
   it('cannot save an empty key, and forgetting asks first', async () => {
     const onForget = vi.fn()
-    const confirm = vi.spyOn(window, 'confirm').mockReturnValueOnce(false).mockReturnValueOnce(true)
-    render(<ConnectionSettings value={{ provider: 'anthropic', apiKey: 'k1' }} onSave={vi.fn()} onForget={onForget} />)
+    render(<DialogProvider><ConnectionSettings value={{ provider: 'anthropic', apiKey: 'k1' }} onSave={vi.fn()} onForget={onForget} /></DialogProvider>)
     await userEvent.clear(screen.getByLabelText('API key'))
     expect(screen.getByRole('button', { name: 'Save connection' })).toBeDisabled()
     await userEvent.click(screen.getByRole('button', { name: 'Forget these' }))
+    await declineDialog()
     expect(onForget).not.toHaveBeenCalled()
     await userEvent.click(screen.getByRole('button', { name: 'Forget these' }))
-    expect(onForget).toHaveBeenCalledTimes(1)
-    confirm.mockRestore()
+    await answerDialog()
+    await waitFor(() => expect(onForget).toHaveBeenCalledTimes(1))
   })
   it('offers a self-hosted proxy: it needs an address, not a key', async () => {
     const onSave = vi.fn()
-    render(<ConnectionSettings value={{ provider: 'anthropic', apiKey: 'k1' }} onSave={onSave} />)
+    render(<DialogProvider><ConnectionSettings value={{ provider: 'anthropic', apiKey: 'k1' }} onSave={onSave} /></DialogProvider>)
     await userEvent.selectOptions(screen.getByLabelText('Provider'), 'proxy')
     const save = screen.getByRole('button', { name: 'Save connection' })
     expect(save).toBeDisabled()
@@ -41,7 +43,7 @@ describe('connection settings', () => {
     expect(onSave).toHaveBeenCalledWith({ provider: 'proxy', apiKey: 'k1', modelUrl: 'http://localhost:8787' })
   })
   it('leaves out the page-reading and search fields on the first visit', () => {
-    render(<ConnectionSettings value={{ provider: 'anthropic', apiKey: '' }} onSave={vi.fn()} showWeb={false} />)
+    render(<DialogProvider><ConnectionSettings value={{ provider: 'anthropic', apiKey: '' }} onSave={vi.fn()} showWeb={false} /></DialogProvider>)
     expect(screen.queryByText(/Web pages and sources/)).toBeNull()
     expect(screen.queryByLabelText('Proxy address')).toBeNull()
   })

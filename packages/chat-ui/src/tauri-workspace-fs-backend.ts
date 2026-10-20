@@ -18,8 +18,14 @@ import type { FsBackend } from '@buildaharness/runtime'
  * backend), but live the moment desktop could use the anthropic/openai/openrouter backends
  * too, which route file tools through PersonalAssistant's own generic JS-side dispatch.
  */
-export function createTauriWorkspaceFsBackend(workspaceRoot: string): FsBackend {
+/** The workspace backend plus a read-only listing that marks each entry as a file or a folder (Write's repository reader walks down with it). */
+export type TauriWorkspaceFsBackend = FsBackend & { listDir(path: string): Promise<{ name: string; directory: boolean }[]> }
+
+export function createTauriWorkspaceFsBackend(workspaceRoot: string): TauriWorkspaceFsBackend {
   return {
+    async listDir(path) {
+      return await invoke<{ name: string; directory: boolean }[]>('workspace_list_dir', { workspaceRoot, path })
+    },
     async readTextFile(path) {
       const contents = await invoke<string | null>('workspace_read_text_file', { workspaceRoot, path })
       return contents ?? undefined

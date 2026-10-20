@@ -21,6 +21,14 @@ describe('TauriClaudeCliLLMClient (U7 audit: what it shares with ClaudeCliLLMCli
     expect(invokeMock).toHaveBeenCalledWith('run_claude_prompt', { systemPrompt: 'be brief', prompt: 'hi', model: 'opus' })
   })
 
+  it('sends no model when it is empty or blank, so the CLI uses its own default (an empty --model is rejected as unrecognized)', async () => {
+    invokeMock.mockResolvedValue(reply('hello'))
+    const client = new TauriClaudeCliLLMClient()
+    await client.callChatSync(user, { model: '' })
+    await client.callChatSync(user, { model: '  ' })
+    expect(invokeMock.mock.calls.map((c) => (c[1] as { model: unknown }).model)).toEqual([null, null])
+  })
+
   it('reports usage, with the real cost, through onUsage (shared parseClaudeCliOutput)', async () => {
     invokeMock.mockResolvedValue(reply('x', { usage: { input_tokens: 3, output_tokens: 4 }, total_cost_usd: 0.01 }))
     const onUsage = vi.fn()

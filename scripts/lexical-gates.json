@@ -618,13 +618,23 @@
       "class": "A"
     },
     {
-      "id": "repo-noise-paths",
-      "file": "packages/aielia/src/writer/article-repo.ts",
-      "line": 26,
-      "decides": "leaves test, fixture and example files out of a very long list of repository paths before the list is cut to its size limit",
+      "id": "repo-search-patterns",
+      "file": "packages/aielia/src/writer/repo-search.ts",
+      "line": 31,
+      "decides": "matches the pattern or path glob a model asks for against repository file text and paths (compiling the pattern, escaping it when invalid)",
       "inputs": null,
       "batch": null,
-      "rationale": "Matches folder and file-name conventions in file paths (a structural filter on paths, not on the writer's words or any natural-language text); which files help a claim is left to the model",
+      "rationale": "Regular-expression and glob syntax for searching code, not a reading of anyone's words; what a match means is left to the model",
+      "class": "A"
+    },
+    {
+      "id": "text-tool-call-syntax",
+      "file": "packages/aielia/src/writer/text-tool-calls.ts",
+      "line": 40,
+      "decides": "reads a model's tool-call syntax (the <invoke>/<parameter> markup) out of its reply when it is not given as JSON",
+      "inputs": null,
+      "batch": null,
+      "rationale": "Markup syntax of a tool call, not natural language; nothing about the meaning of the text is decided",
       "class": "A"
     }
   ],
@@ -645,6 +655,7 @@
     "packages/harness/src/harness-runtime.ts": 1,
     "packages/runtime/src/openai-compatible-client.ts": 3,
     "packages/aielia/src/html-to-markdown.ts": 11,
-    "packages/aielia/src/writer/article-repo.ts": 1
+    "packages/aielia/src/writer/repo-search.ts": 3,
+    "packages/aielia/src/writer/text-tool-calls.ts": 2
   }
 }

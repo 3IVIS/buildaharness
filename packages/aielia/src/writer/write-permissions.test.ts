@@ -57,4 +57,11 @@ describe('spend cap', () => {
     cap = 100
     await expect(llm.callChatStructured([])).resolves.toBeTruthy()
   })
+
+  it('keeps saying that a client cannot take tool definitions, so the repository search talks to it in text', async () => {
+    const meter = await createSpendMeter(createMemoryArticleStore(), { backend: 'claude-cli', model: 'claude-sonnet-5-5' })
+    const cli = { ...client(0), nativeToolCalls: false } as unknown as ILLMClient
+    expect(withSpendCap(cli, meter, () => undefined).nativeToolCalls).toBe(false)
+    expect(withSpendCap(client(0), meter, () => undefined).nativeToolCalls).toBeUndefined()
+  })
 })

@@ -1,6 +1,6 @@
 import { FlowExecutionError } from './errors'
 import { DEFAULT_REQUEST_TIMEOUT_MS, DEFAULT_STRUCTURED_REQUEST_TIMEOUT_MS, withRequestTimeout } from './request-timeout'
-import { buildAnthropicMessages, parseAnthropicContentBlocks } from './anthropic-message-shape'
+import { buildAnthropicMessages, parseAnthropicContentBlocks, type AnthropicMessage } from './anthropic-message-shape'
 import { ANTHROPIC_DEFAULT_MODEL } from './model-defaults'
 import type { ChatMessage, ChatOptions, ILLMClient, LLMStructuredResponse, ToolDefinition } from './llm-client'
 
@@ -33,6 +33,17 @@ export interface AnthropicLLMClientOptions {
  * it's harmless from Node/Tauri too, keeping this one implementation instead of a
  * browser-only branch.
  */
+/** Puts a cache breakpoint on the last content block of the last message, so everything before it is cached for the next call. */
+function markLastBlockCacheable(messages: AnthropicMessage[]): void {
+  const last = messages[messages.length - 1]
+  if (!last) return
+  if (typeof last.content === 'string') {
+    last.content = [{ type: 'text', text: last.content, cache_control: { type: 'ephemeral' } }]
+  } else if (last.content.length > 0) {
+    last.content[last.content.length - 1] = { ...last.content[last.content.length - 1], cache_control: { type: 'ephemeral' } }
+  }
+}
+
 export class AnthropicLLMClient implements ILLMClient {
   private readonly apiKey: string
   private readonly fetchImpl: typeof fetch
@@ -140,17 +151,19 @@ export class AnthropicLLMClient implements ILLMClient {
 
   async callChatStructured(messages: ChatMessage[], tools?: ToolDefinition[], options: ChatOptions = {}): Promise<LLMStructuredResponse> {
     const { system, messages: anthropicMessages } = buildAnthropicMessages(messages)
+    const cache = options.cachePrompt === true
     const body: Record<string, unknown> = {
       model: options.model ?? ANTHROPIC_DEFAULT_MODEL,
       messages: anthropicMessages,
       stream: false,
       max_tokens: options.maxTokens ?? DEFAULT_MAX_TOKENS,
-      ...(system ? { system } : {}),
+      ...(system ? { system: cache ? [{ type: 'text', text: system, cache_control: { type: 'ephemeral' } }] : system } : {}),
       ...(options.temperature !== undefined ? { temperature: options.temperature } : {}),
     }
     if (tools && tools.length > 0) {
       body.tools = tools.map(t => ({ name: t.name, description: t.description, input_schema: t.input_schema }))
     }
+    if (cache) markLastBlockCacheable(anthropicMessages)
 
     // A structuredOutput call is one of the small JSON side calls: it gets the shorter bound unless the caller sets its own.
     const timeoutMs = options.timeoutMs ?? (options.structuredOutput ? this.structuredRequestTimeoutMs : this.requestTimeoutMs)
@@ -161,9 +174,13 @@ export class AnthropicLLMClient implements ILLMClient {
 
     const json = (await withRequestTimeout(response.json(), timeoutMs, 'anthropic-client', 'while reading the reply')) as Record<string, unknown>
     const { content, toolCalls } = parseAnthropicContentBlocks(json.content)
-    const usage = json.usage as { input_tokens?: number; output_tokens?: number } | undefined
+    const usage = json.usage as { input_tokens?: number; output_tokens?: number; cache_read_input_tokens?: number; cache_creation_input_tokens?: number } | undefined
     if (usage && typeof usage.input_tokens === 'number' && typeof usage.output_tokens === 'number') {
-      options.onUsage?.({ inputTokens: usage.input_tokens, outputTokens: usage.output_tokens })
+      // Anthropic's input_tokens excludes cached tokens; TokenUsage counts them inside inputTokens (cached/written are subsets).
+      const read = usage.cache_read_input_tokens
+      const written = usage.cache_creation_input_tokens
+      if (read === undefined && written === undefined) options.onUsage?.({ inputTokens: usage.input_tokens, outputTokens: usage.output_tokens })
+      else options.onUsage?.({ inputTokens: usage.input_tokens + (read ?? 0) + (written ?? 0), outputTokens: usage.output_tokens, cachedInputTokens: read ?? 0, cacheWriteTokens: written ?? 0 })
     }
     return { content, toolCalls }
   }

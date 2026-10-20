@@ -708,6 +708,43 @@ async fn workspace_read_dir(workspace_root: String, path: String) -> Result<Vec<
   .map_err(|e| format!("Internal error listing a workspace directory: {e}"))?
 }
 
+#[derive(serde::Serialize, Debug, PartialEq)]
+struct DirEntryInfo {
+  name: String,
+  directory: bool,
+}
+
+/// The files and folders directly inside a directory, sorted by name. A symbolic link is left out (it is neither a file nor a folder here), so
+/// a listing can never lead outside the folder it started in.
+fn list_dir_entries(target: &Path) -> Result<Vec<DirEntryInfo>, String> {
+  let entries = std::fs::read_dir(target).map_err(|e| format!("Couldn't list \"{}\": {e}", target.display()))?;
+  let mut out = Vec::new();
+  for entry in entries {
+    let entry = entry.map_err(|e| format!("Couldn't read a directory entry in \"{}\": {e}", target.display()))?;
+    let file_type = entry.file_type().map_err(|e| format!("Couldn't stat an entry in \"{}\": {e}", target.display()))?;
+    let Some(name) = entry.file_name().to_str().map(|n| n.to_string()) else { continue };
+    if file_type.is_dir() {
+      out.push(DirEntryInfo { name, directory: true });
+    } else if file_type.is_file() {
+      out.push(DirEntryInfo { name, directory: false });
+    }
+  }
+  out.sort_by(|a, b| a.name.cmp(&b.name));
+  Ok(out)
+}
+
+/// Like `workspace_read_dir`, but also lists folders and says which entry is which. Read-only. Backs Write's repository and source-folder
+/// reader, which has to walk down into subfolders (`workspace_read_dir` lists files only, which is what the file tools want).
+#[tauri::command]
+async fn workspace_list_dir(workspace_root: String, path: String) -> Result<Vec<DirEntryInfo>, String> {
+  tauri::async_runtime::spawn_blocking(move || {
+    let target = assert_within_workspace(&workspace_root, &path)?;
+    list_dir_entries(&target)
+  })
+  .await
+  .map_err(|e| format!("Internal error listing a workspace directory: {e}"))?
+}
+
 /// Resolves symlinks and returns the canonical path — matches FsBackend.realpath's
 /// contract (rejects if `path` doesn't exist). Wired as fileTools'/shellTools' backend's
 /// `realpath`, which is what makes assertRealPathInWorkspace's symlink-escape defense (in
@@ -1019,6 +1056,25 @@ mod workspace_fs_tests {
   }
 
   #[test]
+  fn lists_files_and_folders_and_leaves_out_links() {
+    use super::{list_dir_entries, DirEntryInfo};
+    let dir = std::env::temp_dir().join(format!("waw-list-{}", std::process::id()));
+    fs::remove_dir_all(&dir).ok();
+    fs::create_dir_all(dir.join("sub")).unwrap();
+    fs::write(dir.join("b.txt"), "x").unwrap();
+    fs::write(dir.join("a.txt"), "x").unwrap();
+    #[cfg(unix)]
+    std::os::unix::fs::symlink("/etc", dir.join("link")).unwrap();
+    let listed = list_dir_entries(&dir).unwrap();
+    assert_eq!(listed, vec![
+      DirEntryInfo { name: "a.txt".into(), directory: false },
+      DirEntryInfo { name: "b.txt".into(), directory: false },
+      DirEntryInfo { name: "sub".into(), directory: true },
+    ]);
+    fs::remove_dir_all(&dir).ok();
+  }
+
+  #[test]
   fn rejects_a_path_outside_the_workspace_via_traversal() {
     let dir = std::env::temp_dir().join(format!("waw-test-outside-{}", std::process::id()));
     fs::create_dir_all(&dir).unwrap();
@@ -1065,6 +1121,7 @@ pub fn run() {
       workspace_remove_file,
       workspace_mkdir,
       workspace_read_dir,
+      workspace_list_dir,
       workspace_realpath,
       dns_lookup,
       keychain_set_api_key,

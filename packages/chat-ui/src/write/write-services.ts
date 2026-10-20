@@ -9,7 +9,6 @@ import {
   createLlmClient,
   createMemoryAdapterArticleStore,
   createSpendMeter,
-  executeWebTool,
   defaultWriteModels,
   loadPermissions,
   savePermissions,
@@ -21,8 +20,7 @@ import {
   type WriterChatPort,
 } from '@buildaharness/aielia'
 import { IndexedDBAdapter, type ILLMClient } from '@buildaharness/runtime'
-import { rememberUserUrls } from '../user-urls'
-import { createProxyWebTools } from '../web-context'
+import { createProxyWebTools, pageReader } from '../web-context'
 import { browserFolderPicker } from './folder-access'
 
 /** The models the page uses. `chat` is for the chat, edit suggestions and checks started from the chat; `auto` is for checks that run by themselves. */
@@ -52,8 +50,16 @@ export interface WriteServices {
   canReadPages: boolean
   /** Asks the writer for a folder on their computer to take source files from. Absent where the browser cannot (Safari, Firefox). Resolves to undefined when cancelled. */
   pickFolder?: () => Promise<FolderReader | undefined>
-  /** The writer's GitHub token, for reading a private repository. */
-  githubToken?: string
+  /** The writer's GitHub token, for reading a private repository. Read when a repository is added, so a change in Settings applies at once. */
+  readonly githubToken?: string
+  /** What the host is called in Settings text: 'browser' (default) or 'app'. */
+  hostName?: 'browser' | 'app'
+  /** The host's own way to make a network call to GitHub, for a host whose page cannot call it directly (the desktop webview). Absent: the page's own fetch. */
+  readonly githubFetch?: typeof fetch
+  /** Saves the GitHub token. Present only where Write keeps the token itself (a host with no connection screen of its own for it). */
+  setGithubToken?: (token: string | undefined) => Promise<void>
+  /** Saves a file the writer asked for (an export). Absent where a download link does the job (a browser tab). */
+  saveFile?: (name: string, text: string) => Promise<void>
   /** Dollars and calls so far for each kind of call, biggest first. */
   spendByType(): { id: string; usd: number; calls: number }[]
 }
@@ -61,6 +67,7 @@ export interface WriteServices {
 const SESSION_ID = 'write'
 const CHAT_MODEL_KEY = 'writer:model-chat'
 const AUTO_MODEL_KEY = 'writer:model-auto'
+const GITHUB_TOKEN_KEY = 'writer:github-token'
 
 export async function assembleWriteServices(parts: {
   store: ArticleStore
@@ -75,6 +82,11 @@ export async function assembleWriteServices(parts: {
   searchWeb?: (query: string) => Promise<{ title: string; url: string; snippet: string }[]>
   pickFolder?: () => Promise<FolderReader | undefined>
   githubToken?: string
+  /** Write keeps the GitHub token in its own settings (the host has no place for it), and Settings shows a field for it. */
+  keepGithubToken?: boolean
+  hostName?: 'browser' | 'app'
+  githubFetch?: typeof fetch
+  saveFile?: (name: string, text: string) => Promise<void>
 }): Promise<WriteServices> {
   const { store } = parts
   const backend = parts.backend ?? 'anthropic'
@@ -85,6 +97,12 @@ export async function assembleWriteServices(parts: {
   }
   let chatModel = await saved(CHAT_MODEL_KEY, defaults.chat)
   let autoModel = await saved(AUTO_MODEL_KEY, defaults.auto)
+
+  let githubToken = parts.githubToken
+  if (parts.keepGithubToken) {
+    const kept = await store.getSetting(GITHUB_TOKEN_KEY)
+    if (typeof kept === 'string' && kept.trim()) githubToken = kept.trim()
+  }
 
   const meter = await createSpendMeter(store, { backend, model: chatModel })
   let cap = (await loadPermissions(store)).spendCapUsd
@@ -132,7 +150,16 @@ export async function assembleWriteServices(parts: {
     canSearch: parts.searchWeb !== undefined,
     canReadPages: parts.fetchWeb !== undefined,
     pickFolder: parts.pickFolder,
-    githubToken: parts.githubToken,
+    hostName: parts.hostName,
+    githubFetch: parts.githubFetch,
+    get githubToken() { return githubToken },
+    setGithubToken: parts.keepGithubToken
+      ? async (token) => {
+          githubToken = token?.trim() || undefined
+          await store.setSetting(GITHUB_TOKEN_KEY, githubToken ?? '')
+        }
+      : undefined,
+    saveFile: parts.saveFile,
     spentUsd: () => meter.spentUsd(),
     spendByType: () => Object.entries(meter.byType()).map(([id, v]) => ({ id, ...v })).sort((a, b) => b.usd - a.usd),
   }
@@ -145,31 +172,67 @@ export interface WebProxy { url: string; token: string }
 function proxyWeb(config: AssistantConfig, proxy: WebProxy): { fetchWeb: (url: string) => Promise<string>; searchWeb?: (query: string) => Promise<{ title: string; url: string; snippet: string }[]> } {
   const ctx = createProxyWebTools({ ...config, proxyUrl: proxy.url, authToken: proxy.token })
   return {
-    fetchWeb: async (url) => {
-      rememberUserUrls(url)
-      return (await executeWebTool({ search: ctx.search, fetchImpl: ctx.fetchImpl, dns: ctx.dns }, 'fetch_url', { url })).text
-    },
+    fetchWeb: pageReader(ctx),
     searchWeb: config.braveApiKey ? ctx.search : undefined,
   }
 }
 
-/** The real thing: IndexedDB storage, the visitor's own key, a plain browser (no file or shell tools). */
-export function createWriteServices(config: AssistantConfig, webProxy?: WebProxy, githubToken?: string): Promise<WriteServices> {
-  const memory = new IndexedDBAdapter({ namespace: 'aielia-write' })
-  const store = createMemoryAdapterArticleStore(memory)
-  const llm = createLlmClient(config, { claudeCli: () => undefined })
-  // A plain browser tab cannot fetch arbitrary pages (CORS, and no DNS to check the address). Pages are read through the proxy
-  // when the visitor set one up; otherwise the writer pastes the passage.
-  const web = webProxy ? proxyWeb(config, webProxy) : undefined
+/**
+ * What the host (a browser tab, the desktop app) supplies to Write: where articles are kept, how model calls are made, and what it can reach.
+ * Everything else about Write is the same on every host, so a host is only this.
+ */
+export interface WritePlatform {
+  store: ArticleStore
+  llm: ILLMClient
+  /** Reads a web page as text. Absent where pages cannot be read. */
+  fetchWeb?: (url: string) => Promise<string>
+  /** Searches the web for pages that might back a claim. Absent when no search is set up. */
+  searchWeb?: (query: string) => Promise<{ title: string; url: string; snippet: string }[]>
+  /** Asks the writer for a folder to take source files or a repository from. Absent where the host has no folder access. */
+  pickFolder?: () => Promise<FolderReader | undefined>
+  /** The writer's GitHub token, for a private repository. */
+  githubToken?: string
+  /** Write keeps the GitHub token in its own settings and shows a field for it in Settings (the host has no connection screen for it). */
+  keepGithubToken?: boolean
+  /** What the host is called in Settings text. Default 'browser'. */
+  hostName?: 'browser' | 'app'
+  /** The host's own way to make a network call to GitHub. Absent: the page's own fetch. */
+  githubFetch?: typeof fetch
+  /** Saves a file the writer asked for. Absent where a download link does the job. */
+  saveFile?: (name: string, text: string) => Promise<void>
+}
+
+/** Write on any host: the connection (model and key) and what the host can do. */
+export function createWriteServicesFor(config: AssistantConfig, platform: WritePlatform): Promise<WriteServices> {
   return assembleWriteServices({
-    fetchWeb: web?.fetchWeb,
-    pickFolder: browserFolderPicker(),
-    githubToken,
-    searchWeb: web?.searchWeb,
-    store,
-    llm,
+    ...platform,
     backend: config.llmBackend,
     configuredModel: config.model,
     buildAssistant: (port, capped, model) => PersonalAssistant.create({ ...buildAssistantOptions({ ...config, model }, { llmClient: capped, features: WEB_FEATURES }), writerChat: port }),
   })
+}
+
+/** Articles kept in the webview's or browser's IndexedDB. Both hosts start with this. */
+export function indexedDbArticleStore(): ArticleStore {
+  return createMemoryAdapterArticleStore(new IndexedDBAdapter({ namespace: 'aielia-write' }))
+}
+
+/** A plain browser tab: IndexedDB storage, the visitor's own key, no file or shell tools. */
+export function webWritePlatform(config: AssistantConfig, webProxy?: WebProxy, githubToken?: string): WritePlatform {
+  // A plain browser tab cannot fetch arbitrary pages (CORS, and no DNS to check the address). Pages are read through the proxy
+  // when the visitor set one up; otherwise the writer pastes the passage.
+  const web = webProxy ? proxyWeb(config, webProxy) : undefined
+  return {
+    store: indexedDbArticleStore(),
+    llm: createLlmClient(config, { claudeCli: () => undefined }),
+    fetchWeb: web?.fetchWeb,
+    searchWeb: web?.searchWeb,
+    pickFolder: browserFolderPicker(),
+    githubToken,
+  }
+}
+
+/** The real thing in a browser tab. */
+export function createWriteServices(config: AssistantConfig, webProxy?: WebProxy, githubToken?: string): Promise<WriteServices> {
+  return createWriteServicesFor(config, webWritePlatform(config, webProxy, githubToken))
 }

@@ -16,10 +16,15 @@ interface Props {
   onSave: (p: WritePermissions) => Promise<void>
   /** The connection to the model and the web, when this page owns it. */
   connection?: { value: WriteConnection; onSave: (c: WriteConnection) => void; onForget: () => void }
+  /** A GitHub token field, for a host where Write keeps the token itself (there is no connection screen to hold it). */
+  /** Where the spending is counted: 'browser' (default) or 'app'. */
+  hostName?: 'browser' | 'app'
+  github?: { token: string | undefined; onSave: (token: string | undefined) => Promise<void> }
 }
 
-export function SettingsPane({ perms, spent, spentByType, autoModel, chatModel, suggestions, onAutoModel, onSave, connection }: Props): React.JSX.Element {
+export function SettingsPane({ perms, spent, spentByType, autoModel, chatModel, suggestions, onAutoModel, onSave, connection, github, hostName = 'browser' }: Props): React.JSX.Element {
   const [cap, setCap] = useState<string>('')
+  const [ghToken, setGhToken] = useState<string>(github?.token ?? '')
   useEffect(() => setCap(perms?.spendCapUsd !== undefined ? String(perms.spendCapUsd) : ''), [perms])
   if (!perms) return <p className="write__muted">Loading…</p>
   const save = (next: Partial<WritePermissions>): Promise<void> => onSave({ ...perms, ...next })
@@ -27,6 +32,11 @@ export function SettingsPane({ perms, spent, spentByType, autoModel, chatModel, 
     <div className="write__form">
       <h2 className="write__panehead">Settings<Hint text="Aielia only changes your text through suggestions you accept. These are the other things it may do on its own." /></h2>
       {connection && <ConnectionSettings value={connection.value} onSave={connection.onSave} onForget={connection.onForget} />}
+      {github && (
+        <label>GitHub token<Hint text="Only needed to read a private repository, or to avoid GitHub's request limit. Sent only to GitHub." />
+          <input aria-label="GitHub token" type="password" autoComplete="off" value={ghToken} onChange={(e) => setGhToken(e.target.value)} onBlur={() => { if (ghToken.trim() !== (github.token ?? '')) void github.onSave(ghToken.trim() || undefined) }} />
+        </label>
+      )}
       <label><input type="checkbox" checked={perms.captureChat} onChange={(e) => void save({ captureChat: e.target.checked })} /> Remember what I say in chat<Hint text="Reviewer comments, decisions and corrections you mention are kept with the article." /></label>
       <label><input type="checkbox" checked={perms.recheckBeforePublish} onChange={(e) => void save({ recheckBeforePublish: e.target.checked })} /> Reread web sources before publishing<Hint text="Reads your web sources again before you publish and tells you which changed." /></label>
       <label><input type="checkbox" checked={perms.autoCheck} onChange={(e) => void save({ autoCheck: e.target.checked })} /> Check by itself when I stop typing<Hint text="Looks for claims and checks what an edit affects after each pause. Uses your key." /></label>
@@ -37,7 +47,7 @@ export function SettingsPane({ perms, spent, spentByType, autoModel, chatModel, 
       <label>Spending cap, US$<Hint text="Stops using your key after this much. Leave blank for no limit." />
         <input aria-label="Spending cap" inputMode="decimal" value={cap} onChange={(e) => setCap(e.target.value)} onBlur={() => { const n = Number(cap); void save({ spendCapUsd: cap.trim() !== '' && Number.isFinite(n) && n > 0 ? n : undefined }) }} />
       </label>
-      <p className="write__muted">Spent so far in this browser: ${spent.toFixed(2)}</p>
+      <p className="write__muted">Spent so far in this {hostName}: ${spent.toFixed(2)}</p>
       {spentByType.length > 0 && (
         <details className="write__allsrc">
           <summary>Where it went</summary>

@@ -89,3 +89,29 @@ export function githubRepoReader(spec: GithubRepoSpec, options: GithubReaderOpti
     },
   }
 }
+
+/** Several repositories read as one: each file is listed as `<repository name>/<path>`, and reads and addresses are routed back to the repository it came from. */
+export function combineRepos(readers: readonly RepoReader[]): RepoReader {
+  const owner = (path: string): { reader: RepoReader; rest: string } | undefined => {
+    const reader = readers.find((r) => path.startsWith(`${r.name}/`))
+    return reader ? { reader, rest: path.slice(reader.name.length + 1) } : undefined
+  }
+  return {
+    name: readers.map((r) => r.name).join(' + '),
+    async files() {
+      const out: string[] = []
+      for (const r of readers) {
+        try { for (const f of await r.files()) out.push(`${r.name}/${f}`) } catch { /* a repository that cannot be listed is left out; the others are still searched */ }
+      }
+      return out
+    },
+    async read(path) {
+      const o = owner(path)
+      return o ? o.reader.read(o.rest) : undefined
+    },
+    addressOf(path) {
+      const o = owner(path)
+      return o?.reader.addressOf ? o.reader.addressOf(o.rest) : path
+    },
+  }
+}

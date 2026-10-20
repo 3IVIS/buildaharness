@@ -52,6 +52,8 @@ export interface TauriClaudeCliLLMClientOptions {
  * two implementations.
  */
 export class TauriClaudeCliLLMClient implements ILLMClient {
+  /** Runs its own tool loop inside `claude -p`; it cannot return tool calls to a caller's loop, so those callers use text tool calls (see writer/text-tool-calls.ts). */
+  readonly nativeToolCalls = false
   private readonly fileTools?: { workspaceRoot: string }
   private readonly shellTools: boolean
 
@@ -66,7 +68,7 @@ export class TauriClaudeCliLLMClient implements ILLMClient {
 
   async callChatSync(messages: ChatMessage[], options: ChatOptions = {}): Promise<string> {
     const { systemPrompt, prompt } = buildClaudePrompt(messages)
-    const stdout = await invoke<string>('run_claude_prompt', { systemPrompt, prompt, model: options.model ?? null })
+    const stdout = await invoke<string>('run_claude_prompt', { systemPrompt, prompt, model: options.model?.trim() || null })
     const { reply, usage } = parseClaudeCliOutput(stdout)
     if (usage) options.onUsage?.(usage)
     return reply
@@ -95,7 +97,7 @@ export class TauriClaudeCliLLMClient implements ILLMClient {
       outcome = await invoke<{ stdout: string; staged_action?: string }>('run_claude_prompt_with_file_tools', {
         systemPrompt,
         prompt,
-        model: options.model ?? null,
+        model: options.model?.trim() || null,
         enableShellTools: this.shellTools,
         workspaceRoot: this.fileTools.workspaceRoot,
       })

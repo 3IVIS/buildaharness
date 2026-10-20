@@ -16,9 +16,9 @@ import { suggestEdits, type EditSuggestResult } from './article-edit-suggest.js'
 import { reconcileSections } from './article-sections.js'
 import { DEFAULT_VERIFY_LIMIT, DEFAULT_VERIFY_PAGES, verifyTargets, type VerifyEntry, type VerifyReport } from './article-verify.js'
 import { folderFileAddress, pathInFolder, type FolderReader } from './local-folder.js'
-import { MAX_PATHS_SENT, pathsUnder, pickRepoFiles, pickRepoFolders } from './article-repo.js'
-import type { RepoReader } from './repo-reader.js'
-import { MAX_FILES as REPO_LIST_LIMIT } from './local-folder.js'
+import { combineRepos, type RepoReader } from './repo-reader.js'
+import { buildRepoIndex, type RepoIndex } from './repo-search.js'
+import { verifyBatchWithTools, type LoopOptions, type LoopResult, type LoopStep } from './repo-verify-loop.js'
 import { deriveStyle } from './article-style-derive.js'
 import { checkConsistency, type ConsistencyResult } from './article-consistency.js'
 import { looksLikeHtml } from '../html-to-markdown.js'
@@ -536,7 +536,6 @@ export class ArticleService {
    */
   /** Repositories the writer handed over for this session, per article. Readers hold browser handles and tokens, so they are never stored in the article. */
   private readonly repos = new Map<string, RepoReader[]>()
-  private readonly repoFiles = new WeakMap<RepoReader, string[]>()
 
   /** Hands a repository to the article for verifying claims. The same repository (by name) replaces the earlier reader. */
   attachRepo(id: string, reader: RepoReader): void {
@@ -551,67 +550,82 @@ export class ArticleService {
     return (this.repos.get(id) ?? []).map((r) => r.name)
   }
 
-  /**
-   * For a claim with no source: asks the model which files of each attached repository would show whether it is true, reads them (at most three),
-   * keeps them as proposed sources and checks the claim. Files that do not back the claim are dropped again. Returns the entry when a repository
-   * answered (supported, contradicted and so on), else undefined and the web search is tried.
-   */
-  private async verifyInRepos(id: string, claimId: string, quote: string, model?: string): Promise<{ entry?: VerifyEntry; tried: string[]; cutOff: string[] }> {
-    const readers = this.repos.get(id) ?? []
-    const tried: string[] = []
-    /** Repositories whose listing hit the limit, so some files were never seen. */
-    const cutOff: string[] = []
-    for (const reader of readers) {
-      let paths = this.repoFiles.get(reader)
-      if (!paths) {
-        try {
-          paths = await reader.files()
-        } catch {
-          continue
-        }
-        this.repoFiles.set(reader, paths)
-      }
-      if (paths.length >= REPO_LIST_LIMIT) cutOff.push(reader.name)
-      // A large repository is narrowed by folder first, so the file list the model sees is the part that matters.
-      let candidates = paths
-      if (paths.length > MAX_PATHS_SENT) {
-        const folders = await pickRepoFolders({ claim: quote, paths }, this.opts.llm, model ?? this.checker(), this.opts.onUsage)
-        if (folders.folders.length === 0) continue
-        candidates = pathsUnder(paths, folders.folders)
-      }
-      const pick = await pickRepoFiles({ claim: quote, paths: candidates }, this.opts.llm, model ?? this.checker(), this.opts.onUsage)
-      const added: string[] = []
-      for (const path of pick.paths) {
-        const text = await reader.read(path)
-        if (text === undefined || !text.trim()) continue
-        const address = reader.addressOf?.(path) ?? `${reader.name}/${path}`
-        const sid = await this.addSource(id, { kind: 'code', address, passage: text.slice(0, MAX_SOURCE_CHARS), note: `Found in ${reader.name} for this claim.` })
-        await this.attachProposed(id, claimId, sid, path)
-        added.push(sid)
-        tried.push(address)
-      }
-      if (added.length === 0) continue
-      const check = await this.checkClaim(id, claimId, model)
-      if (check.status !== 'checked') {
-        await this.dropFoundSources(id, claimId, added)
-        continue
-      }
-      if (check.verdict === 'not_supported') {
-        await this.dropFoundSources(id, claimId, added)
-        continue
-      }
-      return { entry: { claimId, quote, outcome: check.verdict, found: tried, reason: check.reason }, tried, cutOff }
-    }
-    return { tried, cutOff }
-  }
-
-  async verifyClaims(id: string, opts: { claimIds?: string[]; limit?: number; pages?: number; model?: string; repoOnly?: boolean } = {}): Promise<VerifyReport> {
+  async verifyClaims(id: string, opts: { claimIds?: string[]; limit?: number; pages?: number; model?: string; repoOnly?: boolean; batchSize?: number; maxToolCalls?: number; onStep?: (step: LoopStep) => void } = {}): Promise<VerifyReport> {
     let b = await this.get(id)
     if (b.meta.claims.length === 0) b = (await this.analyze(id, opts.model)).bundle
     const { ids, leftOver } = verifyTargets(b.meta, opts.claimIds, opts.limit ?? DEFAULT_VERIFY_LIMIT)
     const entries: VerifyEntry[] = []
+    // With a repository attached, the model looks things up in it itself (search, read, list) a batch of claims at a time, and every quote it gives is checked against the file.
+    if ((this.repos.get(id) ?? []).length > 0) {
+      for (const e of await this.verifyBySearch(id, ids, opts)) {
+        // A claim the repository does not settle goes on to the web, unless the writer asked for the repository only.
+        entries.push(e.outcome === 'no_source_found' && !opts.repoOnly && this.opts.searchWeb && this.opts.fetchWeb ? await this.verifyOne(id, e.claimId, opts.pages ?? DEFAULT_VERIFY_PAGES, opts.model) : e)
+      }
+      return { entries, leftOver }
+    }
     for (const claimId of ids) entries.push(await this.verifyOne(id, claimId, opts.pages ?? DEFAULT_VERIFY_PAGES, opts.model, opts.repoOnly === true))
     return { entries, leftOver }
+  }
+
+  private readonly repoIndexes = new WeakMap<RepoReader, Promise<RepoIndex>>()
+
+  /** Claims in batches, each checked by a model that can search the first attached repository. Settled claims keep the lines they rest on as code sources and a recorded check. */
+  private async verifyBySearch(id: string, ids: readonly string[], opts: { model?: string; batchSize?: number; maxToolCalls?: number; onStep?: (step: LoopStep) => void }): Promise<VerifyEntry[]> {
+    const attached = this.repos.get(id) ?? []
+    // Several repositories are searched as one, each file under its repository's name.
+    const reader = attached.length === 1 ? attached[0] : combineRepos(attached)
+    let index = this.repoIndexes.get(reader)
+    if (!index) { index = buildRepoIndex(reader); this.repoIndexes.set(reader, index) }
+    let idx: RepoIndex
+    try { idx = await index } catch (e) { this.repoIndexes.delete(reader); throw e }
+    // A repository read only in part would turn claims about the missing files into "no source found", so it is refused rather than searched.
+    if (idx.unreadable > Math.max(5, idx.listed * 0.05)) {
+      this.repoIndexes.delete(reader)
+      throw new Error(`${idx.unreadable} of the repository's ${idx.listed} files could not be read, so it was not searched (for GitHub, this usually means requests are being limited: add a GitHub token in Settings and try again).`)
+    }
+    const model = opts.model ?? this.checker()
+    const entries: VerifyEntry[] = []
+    const size = Math.max(1, opts.batchSize ?? 25)
+    for (let i = 0; i < ids.length; i += size) {
+      const b = await this.get(id)
+      const claims = ids.slice(i, i + size).map((cid) => b.meta.claims.find((c) => c.id === cid)).filter((c): c is Claim => c !== undefined).map((c) => ({ id: c.id, quote: c.quote }))
+      const loop: LoopOptions = { model, onUsage: this.opts.onUsage, onStep: opts.onStep, maxToolCalls: opts.maxToolCalls }
+      let results: LoopResult[]
+      try {
+        results = await verifyBatchWithTools({ claims, articleText: b.markdown }, idx, this.opts.llm, loop)
+      } catch {
+        for (const c of claims) entries.push({ claimId: c.id, quote: c.quote, outcome: 'could_not_check', found: [], reason: 'The repository search could not run.' })
+        continue
+      }
+      for (const r of results) entries.push(await this.recordSearchResult(id, reader, idx, r, claims.find((c) => c.id === r.id)?.quote ?? '', model))
+    }
+    return entries
+  }
+
+  private async recordSearchResult(id: string, reader: RepoReader, idx: RepoIndex, r: LoopResult, quote: string, model?: string): Promise<VerifyEntry> {
+    const entry = (outcome: VerifyEntry['outcome'], found: string[] = [], reason?: string): VerifyEntry => ({ claimId: r.id, quote, outcome, found, reason })
+    if (r.problem) { await this.setLookup(id, r.id, 'no_results', r.searched); return entry('could_not_check', [], r.problem) }
+    if (r.verdict === 'not_supported' || r.verdict === 'not_about_code') {
+      await this.setLookup(id, r.id, 'no_results', r.searched)
+      return entry('no_source_found', [], r.verdict === 'not_about_code' ? `Not about this repository. ${r.reason}` : r.reason)
+    }
+    const found: string[] = []
+    const added: string[] = []
+    for (const e of r.evidence) {
+      const lines = (idx.text(e.file) ?? '').split('\n')
+      const passage = lines.slice(Math.max(0, e.from - 3), Math.min(lines.length, e.to + 2)).join('\n').slice(0, MAX_SOURCE_CHARS)
+      const address = reader.addressOf?.(e.file) ?? `${reader.name}/${e.file}`
+      const sid = await this.addSource(id, { kind: 'code', address, passage, note: `Found in ${reader.name} for this claim (lines ${e.from}-${e.to}).` })
+      await this.attachProposed(id, r.id, sid, e.file)
+      added.push(sid)
+      found.push(address)
+    }
+    const b = await this.get(id)
+    const fingerprints: Record<string, string> = {}
+    for (const s of b.meta.sources) if (added.includes(s.id) && s.fingerprint) fingerprints[s.id] = s.fingerprint
+    const claims = b.meta.claims.map((c): Claim => (c.id === r.id ? { ...c, sourceStatus: r.verdict as Claim['sourceStatus'], needsRecheck: undefined, check: { ranAt: this.now(), model: this.opts.modelName ?? model ?? 'model', reason: r.reason || 'No reason given.', claimText: c.quote, sourceFingerprints: fingerprints } } : c))
+    await this.store.save(id, { ...b, meta: { ...b.meta, claims } })
+    return entry(r.verdict as VerifyEntry['outcome'], found, r.reason)
   }
 
   private async verifyOne(id: string, claimId: string, pages: number, model?: string, repoOnly = false): Promise<VerifyEntry> {
@@ -622,17 +636,8 @@ export class ArticleService {
     const added: string[] = []
     const tried: string[] = []
     if (!hasPassage) {
-      const inRepos = await this.verifyInRepos(id, claimId, first.quote, model)
-      if (inRepos.entry) return inRepos.entry
-      tried.push(...inRepos.tried)
-      const cutNote = inRepos.cutOff.length > 0 ? `${inRepos.cutOff.join(', ')} has more than ${REPO_LIST_LIMIT} files, so only the shallowest were listed. Pick a folder inside it to search the rest.` : undefined
-      // Asked to look in the repository only: a claim it does not settle stays unsettled, and the web is not searched.
-      if (repoOnly || !this.opts.searchWeb || !this.opts.fetchWeb) {
-        if (repoOnly && (this.repos.get(id) ?? []).length === 0) return entry('cannot_search', [], 'No repository is attached to this article.')
-        if ((this.repos.get(id) ?? []).length > 0) {
-          await this.setLookup(id, claimId, 'no_results', tried)
-          return entry('no_source_found', [], cutNote)
-        }
+      if (repoOnly) return entry('cannot_search', [], 'No repository is attached to this article.')
+      if (!this.opts.searchWeb || !this.opts.fetchWeb) {
         await this.setLookup(id, claimId, 'unavailable', [])
         return entry('cannot_search')
       }

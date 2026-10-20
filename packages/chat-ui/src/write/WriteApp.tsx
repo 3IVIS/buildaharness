@@ -14,6 +14,7 @@ import { SettingsPane } from './SettingsPane'
 import type { WriteConnection } from './write-config'
 import { TextNotes, looksLikeLink, type NoteKind } from './TextNotes'
 import { Icon } from './icons'
+import { DialogProvider, useDialogs } from './dialogs'
 import type { WriteServices } from './write-services'
 import './write.css'
 
@@ -61,8 +62,15 @@ const STATUS_LABEL: Record<string, string> = {
 
 let lineId = 0
 
-export function WriteApp({ services, connection }: { services: WriteServices; connection?: { value: WriteConnection; onSave: (c: WriteConnection) => void; onForget: () => void } }): React.JSX.Element {
+type WriteAppProps = { services: WriteServices; connection?: { value: WriteConnection; onSave: (c: WriteConnection) => void; onForget: () => void } }
+
+export function WriteApp(props: WriteAppProps): React.JSX.Element {
+  return <DialogProvider><WriteAppBody {...props} /></DialogProvider>
+}
+
+function WriteAppBody({ services, connection }: WriteAppProps): React.JSX.Element {
   const { service, port } = services
+  const dialogs = useDialogs()
   const [articles, setArticles] = useState<ArticleItem[]>([])
   const [activeId, setActiveId] = useState<string | undefined>()
   const [bundle, setBundle] = useState<ArticleBundle | undefined>()
@@ -187,7 +195,7 @@ export function WriteApp({ services, connection }: { services: WriteServices; co
   }
 
   async function createArticle(): Promise<void> {
-    const title = window.prompt('Name of the new article?')?.trim()
+    const title = (await dialogs.ask('Name of the new article?'))?.trim()
     if (!title) return
     await run('Creating', async () => {
       const id = await service.create(title, `# ${title}\n\n`)
@@ -199,7 +207,7 @@ export function WriteApp({ services, connection }: { services: WriteServices; co
   async function renameArticle(): Promise<void> {
     if (!activeId) return
     const current = articles.find((a) => a.id === activeId)
-    const name = window.prompt('New name for this article?', current?.name ?? current?.title ?? '')?.trim()
+    const name = (await dialogs.ask('New name for this article?', { initial: current?.name ?? current?.title ?? '' }))?.trim()
     if (!name) return
     await run('Renaming', async () => { await service.rename(activeId, name); await refreshList() })
   }
@@ -236,7 +244,7 @@ export function WriteApp({ services, connection }: { services: WriteServices; co
   // ---- publish, export, import
   async function publish(): Promise<void> {
     if (!activeId) return
-    const label = window.prompt('Label for this published version (optional)?') ?? undefined
+    const label = await dialogs.ask('Label for this published version (optional)?')
     await run('Publishing', async () => {
       await flushDraft()
       const recheck = (permsRef.current ?? perms)?.recheckBeforePublish !== false ? await service.recheckSources(activeId, services.models.auto()) : undefined
@@ -254,10 +262,13 @@ export function WriteApp({ services, connection }: { services: WriteServices; co
   async function exportArticle(): Promise<void> {
     if (!activeId) return
     const folder = await service.exportArticle(activeId)
-    const blob = new Blob([JSON.stringify(folder, null, 2)], { type: 'application/json' })
+    const fileName = `${bundle?.meta.name ?? bundle?.meta.title ?? 'article'}.aielia-article.json`
+    const text = JSON.stringify(folder, null, 2)
+    // A host with its own way to save a file (a save dialog) is used; a browser tab gets a download link.
+    if (services.saveFile) { await run('Saving the file', async () => { await services.saveFile?.(fileName, text) }); return }
     const a = document.createElement('a')
-    a.href = URL.createObjectURL(blob)
-    a.download = `${bundle?.meta.name ?? bundle?.meta.title ?? 'article'}.aielia-article.json`
+    a.href = URL.createObjectURL(new Blob([text], { type: 'application/json' }))
+    a.download = fileName
     a.click()
     URL.revokeObjectURL(a.href)
   }
@@ -282,7 +293,7 @@ export function WriteApp({ services, connection }: { services: WriteServices; co
   }
 
   async function openPage(): Promise<void> {
-    const address = window.prompt('Address of the web page to bring in and edit (http:// or https://)?')
+    const address = await dialogs.ask('Address of the web page to bring in and edit (http:// or https://)?')
     if (!address?.trim()) return
     await run('Reading the page', async () => {
       const r = await service.importPage(address)
@@ -294,8 +305,8 @@ export function WriteApp({ services, connection }: { services: WriteServices; co
   }
 
   // ---- history
-  const saveVersion = (): void => {
-    const label = window.prompt('Name this version (optional)?') ?? undefined
+  const saveVersion = async (): Promise<void> => {
+    const label = await dialogs.ask('Name this version (optional)?')
     change('Saving the version', async (id) => { await service.saveVersion(id, label) })
   }
   const openVersion = (index: number, mode: 'view' | 'compare'): void => {
@@ -306,8 +317,8 @@ export function WriteApp({ services, connection }: { services: WriteServices; co
       setViewing(mode === 'view' ? { mode, markdown: snap.markdown } : { mode, markdown: snap.markdown, diff: await service.compareWithCurrent(activeId, index) })
     })
   }
-  const restoreVersion = (index: number): void => {
-    if (!window.confirm('Restore this version as your working article? The article as it is now is saved first, so nothing is lost.')) return
+  const restoreVersion = async (index: number): Promise<void> => {
+    if (!(await dialogs.confirm('Restore this version as your working article? The article as it is now is saved first, so nothing is lost.', { yes: 'Restore' }))) return
     change('Restoring', async (id) => { await service.restore(id, index); setNotice('Restored. The article as it was before is in History.') })
   }
 
@@ -336,8 +347,8 @@ export function WriteApp({ services, connection }: { services: WriteServices; co
     const r = await service.findDependencies(id, chatModel)
     setNotice(r.status === 'failed' ? 'The search for links could not run. Nothing was changed.' : r.added.length === 0 ? 'No new links found.' : `Found ${r.added.length} possible link${r.added.length === 1 ? '' : 's'} (${chatModel}). Confirm the ones that are right.`)
   })
-  const removeLink = (linkId: string, origin: string): void => {
-    if (origin !== 'proposed' && !window.confirm('Remove this link? You confirmed or drew it yourself.')) return
+  const removeLink = async (linkId: string, origin: string): Promise<void> => {
+    if (origin !== 'proposed' && !(await dialogs.confirm('Remove this link? You confirmed or drew it yourself.', { yes: 'Remove' }))) return
     change('Removing the link', async (id) => { await service.removeDependency(id, linkId) })
   }
 
@@ -383,7 +394,7 @@ export function WriteApp({ services, connection }: { services: WriteServices; co
         setBusy('Listing the repository')
         setNotice(null)
         try {
-          const reader = githubRepoReader(spec, { token: services.githubToken })
+          const reader = githubRepoReader(spec, { token: services.githubToken, fetchImpl: services.githubFetch })
           await reader.files()
           service.attachRepo(id, reader)
           setRepoTick((n) => n + 1)
@@ -657,7 +668,7 @@ export function WriteApp({ services, connection }: { services: WriteServices; co
             <p className="write__muted">Create or import an article to use the panels.</p>
           )}
           <section className={`write__pane write__panel-pane ${tab === 'settings' ? 'is-shown' : ''}`} aria-label="Settings">
-            <SettingsPane connection={connection} perms={perms} spent={services.spentUsd()} spentByType={services.spendByType()} autoModel={services.models.auto()} chatModel={chatModel} suggestions={services.models.suggestions} onAutoModel={(m) => void services.models.setAuto(m).then(() => setModelTick((t) => t + 1))} onSave={(p) => run('Saving', async () => { await services.permissions.set(p); permsRef.current = p; setPerms(p) })} />
+            <SettingsPane hostName={services.hostName} connection={connection} github={services.setGithubToken ? { token: services.githubToken, onSave: async (t) => { await services.setGithubToken?.(t); setModelTick((n) => n + 1) } } : undefined} perms={perms} spent={services.spentUsd()} spentByType={services.spendByType()} autoModel={services.models.auto()} chatModel={chatModel} suggestions={services.models.suggestions} onAutoModel={(m) => void services.models.setAuto(m).then(() => setModelTick((t) => t + 1))} onSave={(p) => run('Saving', async () => { await services.permissions.set(p); permsRef.current = p; setPerms(p) })} />
           </section>
         </aside>
         {ready && meta ? (
@@ -697,9 +708,9 @@ export function WriteApp({ services, connection }: { services: WriteServices; co
               onPickFolder={services.pickFolder ? pickFolder : undefined}
               onUseFolderFile={useFolderFile}
               onCloseFolder={() => setFolder(undefined)}
-              onLines={(sourceId) => {
-                const answer = window.prompt('Keep only these lines of the file (for example 40-60). Leave empty to keep all of it.')
-                if (answer === null) return
+              onLines={async (sourceId) => {
+                const answer = await dialogs.ask('Keep only these lines of the file (for example 40-60). Leave empty to keep all of it.')
+                if (answer === undefined) return
                 const range = answer.trim() ? parseLineRange(answer) : undefined
                 if (answer.trim() && !range) { setNotice('I could not read that as lines. Type a start and an end, like 40-60.'); return }
                 change('Keeping those lines', async (id) => { const r = await service.setSourceLines(id, sourceId, range); setNotice(r.ok ? (range ? `Keeping lines ${range.from}–${range.to}. Claims checked on the old text need checking again.` : 'Keeping all of it.') : (r.reason ?? 'That did not work.')) })

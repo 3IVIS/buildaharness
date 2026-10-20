@@ -1,7 +1,7 @@
-import { Fragment, useEffect, useMemo, useRef, useState } from 'react'
+import { Fragment, useEffect, useMemo, useRef, useState, lazy, Suspense } from 'react'
 import { downloadBlob } from './download-blob'
 import { rememberUserUrls } from './user-urls'
-import { createProxyWebTools } from './web-context'
+import { createWebTools } from './web-context'
 import { isTauri, invoke } from '@tauri-apps/api/core'
 import {
   PersonalAssistant,
@@ -26,7 +26,6 @@ import {
   planUndo,
   formatTranscriptMarkdown,
   defaultExportFilename,
-  braveSearch,
   LiveSteeringChannel,
   type AssistantProgress,
   type AssistantToolStep,
@@ -34,8 +33,6 @@ import {
   type ConfigStore,
   type MemorySummary,
   type DoctorCheck,
-  type WebSearchResult,
-  type DnsResolver,
   type AssistantTurnResult,
   type DebugLogEntry,
   type TranscriptSearchHit,
@@ -69,6 +66,8 @@ import { EscalationBanner } from './components/EscalationBanner'
 import { SettingsScreen } from './components/SettingsScreen'
 import { SetupWizard } from './components/SetupWizard'
 import { KeyNotice } from './components/KeyNotice'
+// Loaded when Write is opened, so the chat does not carry it.
+const WriteHost = lazy(() => import('./write/WriteHost'))
 import { isKeyMissing, requiresOwnKey } from './key-gate'
 import { SearchPanel } from './components/SearchPanel'
 import { GoalsPanel } from './components/GoalsPanel'
@@ -154,40 +153,6 @@ function newId(): string {
   return typeof crypto !== 'undefined' && crypto.randomUUID ? crypto.randomUUID() : `${Date.now()}-${Math.random()}`
 }
 
-/**
- * Builds the webTools context (search, fetchImpl, dns) for web_search/fetch_url.
- *
- * fetchImpl: Brave's Search API (and fetch_url's arbitrary target) aren't CORS-enabled for
- * arbitrary browser origins, so a plain `fetch()` from inside this app fails outright with
- * "Failed to fetch" (verified live). On desktop this is fixed by routing through
- * @tauri-apps/plugin-http's fetch — a real HTTP request made from Rust, no CORS involved.
- * Scoped via capabilities/default.json's `http:default` entry to any http(s) URL (originally
- * just api.search.brave.com, which left fetch_url's arbitrary targets CORS-blocked on desktop
- * — widened once fetch_url needed real page fetches too); the real gate against SSRF is the
- * DNS-checked `assertPublicHttpUrl` guard below, not this scope. A plain browser tab has no
- * equivalent escape hatch and is left on native fetch.
- *
- * A plain browser tab with `webBackend: 'proxy'` sidesteps the CORS problem entirely by never
- * fetching the search backend or the target URL directly — see createProxyWebTools above.
- * `webBackend` is otherwise ignored on desktop, which always keeps the Tauri path below.
- *
- * dns: fetch_url's SSRF guard (web-tools.ts's assertPublicHttpUrl) defaults to
- * `node:dns/promises`, which doesn't exist in any webview or browser tab — without an
- * override it throws on every fetch_url call, not just an occasional failure. Desktop gets
- * a real resolver (tauriDnsResolver, backed by the dns_lookup Tauri command); a plain
- * browser tab has no DNS API available at all and is left on the (always-failing) default,
- * same "capability absent, not a crash" degradation as everywhere else this app can't fully
- * support something — the failure is caught by assistant.ts's tool dispatch and reported to
- * the model as an error result, never a crashed turn.
- */
-async function createWebTools(config: AssistantConfig, isDesktop: boolean): Promise<{ search: (query: string) => Promise<WebSearchResult[]>; fetchImpl?: typeof fetch; dns?: DnsResolver }> {
-  if (!isDesktop && config.webBackend === 'proxy') return createProxyWebTools(config)
-  const fetchImpl = isDesktop ? (await import('@tauri-apps/plugin-http')).fetch : undefined
-  const dns = isDesktop ? (await import('./tauri-dns-resolver')).tauriDnsResolver : undefined
-  const search = (query: string) => braveSearch(query, config.braveApiKey ?? '', { fetchImpl })
-  return { search, fetchImpl, dns }
-}
-
 /** True when the user has never chosen how to reach a model — nothing persisted and nothing pinned by a build-time var. */
 function isFirstRun(persisted: Partial<AssistantConfig>, overriddenKeys: ReadonlySet<keyof AssistantConfig>): boolean {
   if (persisted.llmBackend !== undefined || persisted.apiKey !== undefined || persisted.authToken !== undefined) return false
@@ -249,7 +214,7 @@ function createLlmClient(config: AssistantConfig, { isDesktop, workspaceRoot, fe
  * doc comment) otherwise. shellTools follows the same enableShell gate the CLI uses
  * (cli.ts) — `run_shell_command` is only registered on the MCP server, and only wired into
  * PersonalAssistant, when the user has turned Shell on in Settings. Note: `config.enableWeb`
- * *is* wired here via `createWebTools()` above (see its doc comment for the fetchImpl/dns
+ * *is* wired here via `createWebTools()` (web-context.ts; see its doc comment for the fetchImpl/dns
  * caveats) — a plain browser tab genuinely reaches Brave over the network, it just fails there
  * with a CORS error today (caught by assistant.ts's tool dispatch and reported to the model as
  * a tool error, not a crash); desktop works end-to-end.
@@ -340,7 +305,7 @@ export function App(): React.JSX.Element {
   const [progress, setProgress] = useState<AssistantProgress | null>(null)
   const [streamingText, setStreamingText] = useState<string | null>(null)
   const [liveToolSteps, setLiveToolSteps] = useState<AssistantToolStep[]>([])
-  const [view, setView] = useState<'chat' | 'settings' | 'search' | 'goals' | 'memory'>('chat')
+  const [view, setView] = useState<'chat' | 'settings' | 'search' | 'goals' | 'memory' | 'write'>('chat')
   // First-launch setup wizard: true once the config load finds nothing configured (no persisted
   // backend/key and nothing pinned by a build-time var, so hosted/self-hosted builds skip it).
   const [needsSetup, setNeedsSetup] = useState(false)
@@ -1169,6 +1134,10 @@ export function App(): React.JSX.Element {
     return <GoalsPanel state={goalGraphState} onCancel={() => setView('chat')} />
   }
 
+  if (view === 'write') {
+    return <Suspense fallback={<p>Opening Write…</p>}><WriteHost config={config} onClose={() => setView('chat')} /></Suspense>
+  }
+
   if (view === 'memory') {
     return <MemoryPanel data={memoryPanelData} message={memoryPanelMessage} busy={memoryPanelBusy} onClose={() => setView('chat')} {...memoryPanelHandlers} />
   }
@@ -1217,6 +1186,7 @@ export function App(): React.JSX.Element {
           <button type="button" aria-label="New chat" title="New chat" disabled={busy} onClick={() => void handleClearConversation()}>New chat</button>
           <button type="button" aria-label="Search" title="Search past messages" onClick={() => setView('search')}>Search</button>
           <button type="button" aria-label="Memory" title="Review, confirm, undo or switch off what Aielia remembers" onClick={() => void handleOpenMemory()}>Memory</button>
+          {isTauri() && <button type="button" aria-label="Write" title="Write and check an article with Aielia" disabled={busy} onClick={() => setView('write')}>Write</button>}
           <div className="app__header-more" ref={headerMoreRef}>
             <button
               type="button"

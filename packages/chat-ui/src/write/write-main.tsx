@@ -2,6 +2,7 @@ import { StrictMode, useEffect, useState } from 'react'
 import { createRoot } from 'react-dom/client'
 import { envOverridesFromImportMetaEnv } from '../browser-config'
 import { ConnectionSettings } from './ConnectionSettings'
+import { DialogProvider } from './dialogs'
 import { WriteApp } from './WriteApp'
 import { clearConnection, loadConnection, saveConnection, toAssistantConfig, webProxyOf, type WriteConnection } from './write-config'
 import { createWriteServices, type WriteServices } from './write-services'
@@ -44,7 +45,7 @@ function FirstRun({ onSave }: { onSave: (c: WriteConnection) => void }): React.J
   return (
     <div style={{ maxWidth: 480, margin: '10vh auto', padding: 16, font: '16px system-ui' }}>
       <h1>Aielia Write</h1>
-      <ConnectionSettings value={draft} onSave={onSave} showWeb={false} />
+      <DialogProvider><ConnectionSettings value={draft} onSave={onSave} showWeb={false} /></DialogProvider>
     </div>
   )
 }
