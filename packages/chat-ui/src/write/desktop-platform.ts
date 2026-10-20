@@ -37,6 +37,8 @@ export async function desktopWritePlatform(config: AssistantConfig): Promise<Wri
       return (await executeWebTool({ search: search ?? (async () => []), fetchImpl: tauriFetch, dns: tauriDnsResolver }, 'fetch_url', { url })).text
     },
     searchWeb: search,
+    // The webview's content-security policy blocks its own fetch to GitHub; the request is made from Rust instead.
+    githubFetch: tauriFetch as typeof fetch,
     pickFolder: () => pickDesktopFolder((root) => createTauriWorkspaceFsBackend(root)),
     keepGithubToken: true,
     hostName: 'app',

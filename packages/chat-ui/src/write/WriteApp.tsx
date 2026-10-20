@@ -394,7 +394,7 @@ function WriteAppBody({ services, connection }: WriteAppProps): React.JSX.Elemen
         setBusy('Listing the repository')
         setNotice(null)
         try {
-          const reader = githubRepoReader(spec, { token: services.githubToken })
+          const reader = githubRepoReader(spec, { token: services.githubToken, fetchImpl: services.githubFetch })
           await reader.files()
           service.attachRepo(id, reader)
           setRepoTick((n) => n + 1)

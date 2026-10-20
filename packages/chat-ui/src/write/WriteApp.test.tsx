@@ -858,3 +858,24 @@ describe('links, history', () => {
     expect(await within(history).findByText('Before restoring an earlier version')).toBeInTheDocument()
   })
 })
+
+describe('repositories on a host with its own network call', () => {
+  it('lists a GitHub repository through the host\'s fetch, not the page\'s own', async () => {
+    const calls: string[] = []
+    const hostFetch = (async (url: string) => {
+      calls.push(url)
+      return new Response(JSON.stringify({ tree: [{ path: 'src/a.ts', type: 'blob', size: 10 }] }))
+    }) as unknown as typeof fetch
+    const pageFetch = vi.fn(async () => { throw new Error('the page must not call GitHub itself') })
+    vi.stubGlobal('fetch', pageFetch)
+    const base = await services({}, MD)
+    render(<WriteApp services={{ ...base, githubFetch: hostFetch }} />)
+    await waitForText()
+    await userEvent.click(rail('Chat'))
+    await userEvent.selectOptions(screen.getByLabelText('Adjust', { selector: 'select' }), 'action:verify_repo')
+    await userEvent.type(screen.getByLabelText('Repository address'), 'github.com/o/r{Enter}')
+    await waitFor(() => expect(calls.some((u) => u.includes('/git/trees/'))).toBe(true))
+    expect(pageFetch).not.toHaveBeenCalled()
+    vi.unstubAllGlobals()
+  })
+})

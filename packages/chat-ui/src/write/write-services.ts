@@ -56,6 +56,8 @@ export interface WriteServices {
   readonly githubToken?: string
   /** What the host is called in Settings text: 'browser' (default) or 'app'. */
   hostName?: 'browser' | 'app'
+  /** The host's own way to make a network call to GitHub, for a host whose page cannot call it directly (the desktop webview). Absent: the page's own fetch. */
+  readonly githubFetch?: typeof fetch
   /** Saves the GitHub token. Present only where Write keeps the token itself (a host with no connection screen of its own for it). */
   setGithubToken?: (token: string | undefined) => Promise<void>
   /** Saves a file the writer asked for (an export). Absent where a download link does the job (a browser tab). */
@@ -85,6 +87,7 @@ export async function assembleWriteServices(parts: {
   /** Write keeps the GitHub token in its own settings (the host has no place for it), and Settings shows a field for it. */
   keepGithubToken?: boolean
   hostName?: 'browser' | 'app'
+  githubFetch?: typeof fetch
   saveFile?: (name: string, text: string) => Promise<void>
 }): Promise<WriteServices> {
   const { store } = parts
@@ -150,6 +153,7 @@ export async function assembleWriteServices(parts: {
     canReadPages: parts.fetchWeb !== undefined,
     pickFolder: parts.pickFolder,
     hostName: parts.hostName,
+    githubFetch: parts.githubFetch,
     get githubToken() { return githubToken },
     setGithubToken: parts.keepGithubToken
       ? async (token) => {
@@ -197,6 +201,8 @@ export interface WritePlatform {
   keepGithubToken?: boolean
   /** What the host is called in Settings text. Default 'browser'. */
   hostName?: 'browser' | 'app'
+  /** The host's own way to make a network call to GitHub. Absent: the page's own fetch. */
+  githubFetch?: typeof fetch
   /** Saves a file the writer asked for. Absent where a download link does the job. */
   saveFile?: (name: string, text: string) => Promise<void>
 }
