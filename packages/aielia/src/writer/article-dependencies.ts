@@ -69,6 +69,8 @@ export interface DependencyProposal {
   added: Link[]
   /** Proposals dropped: unknown section, a duplicate, a section depending on itself, or a circle. */
   skipped: string[]
+  /** Why the search failed, when it did: the error the model call raised, or that its answer could not be read. */
+  reason?: string
 }
 
 const MAX_SECTION_CHARS = 1500
@@ -116,10 +118,10 @@ export async function proposeDependencies(
       { model, onUsage, structuredOutput: { schema: SCHEMA } },
     )
     list = (parseModelJson(response.content) as { links?: unknown })?.links
-  } catch {
-    return failed
+  } catch (e) {
+    return { ...failed, reason: e instanceof Error ? e.message : String(e) }
   }
-  if (!Array.isArray(list)) return failed
+  if (!Array.isArray(list)) return { ...failed, reason: 'The answer could not be read.' }
 
   let next = meta
   const added: Link[] = []

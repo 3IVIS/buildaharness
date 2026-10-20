@@ -100,6 +100,7 @@ describe('proposeDependencies', () => {
       expect(r.status).toBe('failed')
       expect(r.meta).toBe(m)
     }
+    expect((await proposeDependencies({ meta: m, markdown: MD, now: NOW }, client(new Error('503 overloaded')))).reason).toBe('503 overloaded') // so the page can say why
     const one = { ...m, sections: m.sections.slice(0, 1) }
     expect((await proposeDependencies({ meta: one, markdown: MD, now: NOW }, client(new Error('should not be called')))).status).toBe('proposed')
   })

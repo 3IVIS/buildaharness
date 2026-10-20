@@ -386,8 +386,8 @@ function WriteAppBody({ services, connection }: WriteAppProps): React.JSX.Elemen
     const style = await service.deriveStyleFromText(id, model)
     const links = await service.findDependencies(id, model)
     setBundle(await service.get(id))
-    const s = style.filled.length > 0 ? `drafted the style sheet (${style.filled.join(', ')})` : 'found nothing to add to the style sheet'
-    const l = links.status === 'failed' ? 'the search for links could not run' : links.added.length > 0 ? `found ${links.added.length} possible link${links.added.length === 1 ? '' : 's'} between sections to confirm` : 'found no links between sections'
+    const s = style.filled.length > 0 ? `drafted the style sheet (${style.filled.join(', ')})` : style.reason ? `could not read a style from the text (${style.reason})` : 'found nothing to add to the style sheet'
+    const l = links.status === 'failed' ? `the search for links could not run${links.reason ? ` (${links.reason})` : ''}` : links.added.length > 0 ? `found ${links.added.length} possible link${links.added.length === 1 ? '' : 's'} between sections to confirm` : 'found no links between sections'
     return `I ${s} and ${l}. Edit anything that is off.`
   }
   const prepareFromChat = (): void => {

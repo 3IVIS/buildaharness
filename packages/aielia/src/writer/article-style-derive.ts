@@ -33,6 +33,8 @@ export interface DerivedStyle {
   meta: ArticleMeta
   /** What was filled in, for a plain sentence to the writer: brief field names, and "writing profile". */
   filled: string[]
+  /** Why nothing was derived, when the model call failed or its answer could not be read. */
+  reason?: string
 }
 
 const FIELDS = ['audience', 'purpose', 'tone', 'length', 'notes'] as const
@@ -55,10 +57,10 @@ export async function deriveStyle(
       { model, onUsage, structuredOutput: { schema: SCHEMA } },
     )
     parsed = parseModelJson(response.content) as Record<string, unknown>
-  } catch {
-    return none
+  } catch (e) {
+    return { ...none, reason: e instanceof Error ? e.message : String(e) }
   }
-  if (!parsed || typeof parsed !== 'object') return none
+  if (!parsed || typeof parsed !== 'object') return { ...none, reason: 'The answer could not be read.' }
 
   const filled: string[] = []
   const brief: Brief = { ...(meta.brief ?? {}) }

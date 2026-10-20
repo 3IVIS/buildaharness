@@ -120,7 +120,9 @@ export async function assembleWriteServices(parts: {
       if (activeArticleId) await port.setActive(activeArticleId)
       const used = chatModel
       const result = await assistant.turn(message, { sessionId: SESSION_ID })
-      return { reply: result.reply ?? '', model: used }
+      // A turn that did not finish has no reply but says why; the page shows that instead of an empty answer.
+      const why = result.status === 'cancelled' ? 'The turn was stopped.' : result.reason
+      return { reply: result.reply ?? (why ? `I could not answer: ${why}` : 'I could not answer, and the model gave no reason.'), model: used }
     },
     models: {
       chat: () => chatModel,
