@@ -9,7 +9,6 @@ import {
   createLlmClient,
   createMemoryAdapterArticleStore,
   createSpendMeter,
-  executeWebTool,
   defaultWriteModels,
   loadPermissions,
   savePermissions,
@@ -21,8 +20,7 @@ import {
   type WriterChatPort,
 } from '@buildaharness/aielia'
 import { IndexedDBAdapter, type ILLMClient } from '@buildaharness/runtime'
-import { rememberUserUrls } from '../user-urls'
-import { createProxyWebTools } from '../web-context'
+import { createProxyWebTools, pageReader } from '../web-context'
 import { browserFolderPicker } from './folder-access'
 
 /** The models the page uses. `chat` is for the chat, edit suggestions and checks started from the chat; `auto` is for checks that run by themselves. */
@@ -174,10 +172,7 @@ export interface WebProxy { url: string; token: string }
 function proxyWeb(config: AssistantConfig, proxy: WebProxy): { fetchWeb: (url: string) => Promise<string>; searchWeb?: (query: string) => Promise<{ title: string; url: string; snippet: string }[]> } {
   const ctx = createProxyWebTools({ ...config, proxyUrl: proxy.url, authToken: proxy.token })
   return {
-    fetchWeb: async (url) => {
-      rememberUserUrls(url)
-      return (await executeWebTool({ search: ctx.search, fetchImpl: ctx.fetchImpl, dns: ctx.dns }, 'fetch_url', { url })).text
-    },
+    fetchWeb: pageReader(ctx),
     searchWeb: config.braveApiKey ? ctx.search : undefined,
   }
 }
@@ -217,14 +212,18 @@ export function createWriteServicesFor(config: AssistantConfig, platform: WriteP
   })
 }
 
+/** Articles kept in the webview's or browser's IndexedDB. Both hosts start with this. */
+export function indexedDbArticleStore(): ArticleStore {
+  return createMemoryAdapterArticleStore(new IndexedDBAdapter({ namespace: 'aielia-write' }))
+}
+
 /** A plain browser tab: IndexedDB storage, the visitor's own key, no file or shell tools. */
 export function webWritePlatform(config: AssistantConfig, webProxy?: WebProxy, githubToken?: string): WritePlatform {
-  const memory = new IndexedDBAdapter({ namespace: 'aielia-write' })
   // A plain browser tab cannot fetch arbitrary pages (CORS, and no DNS to check the address). Pages are read through the proxy
   // when the visitor set one up; otherwise the writer pastes the passage.
   const web = webProxy ? proxyWeb(config, webProxy) : undefined
   return {
-    store: createMemoryAdapterArticleStore(memory),
+    store: indexedDbArticleStore(),
     llm: createLlmClient(config, { claudeCli: () => undefined }),
     fetchWeb: web?.fetchWeb,
     searchWeb: web?.searchWeb,

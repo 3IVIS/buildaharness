@@ -1,16 +1,7 @@
-import { IndexedDBAdapter } from '@buildaharness/runtime'
 import { invoke } from '@tauri-apps/api/core'
-import {
-  braveSearch,
-  createLlmClient,
-  createMemoryAdapterArticleStore,
-  executeWebTool,
-  folderFromListing,
-  type AssistantConfig,
-  type FolderReader,
-} from '@buildaharness/aielia'
-import { rememberUserUrls } from '../user-urls'
-import type { WritePlatform } from './write-services'
+import { createLlmClient, folderFromListing, type AssistantConfig, type FolderReader } from '@buildaharness/aielia'
+import { createWebTools, pageReader } from '../web-context'
+import { indexedDbArticleStore, type WritePlatform } from './write-services'
 
 /**
  * Write inside the desktop app: what the Tauri shell can do that a browser tab cannot. The model client is the app's (the Claude CLI session, or a
@@ -21,24 +12,18 @@ import type { WritePlatform } from './write-services'
  * The Tauri modules are imported when this runs, so a plain browser build never loads them.
  */
 export async function desktopWritePlatform(config: AssistantConfig): Promise<WritePlatform> {
-  const [{ fetch: tauriFetch }, { tauriDnsResolver }, { TauriClaudeCliLLMClient }, { createTauriWorkspaceFsBackend }] = await Promise.all([
-    import('@tauri-apps/plugin-http'),
-    import('../tauri-dns-resolver'),
-    import('../tauri-claude-cli-llm-client'),
-    import('../tauri-workspace-fs-backend'),
-  ])
-  const search = config.braveApiKey ? (query: string) => braveSearch(query, config.braveApiKey ?? '', { fetchImpl: tauriFetch }) : undefined
+  const [{ TauriClaudeCliLLMClient }, { createTauriWorkspaceFsBackend }] = await Promise.all([import('../tauri-claude-cli-llm-client'), import('../tauri-workspace-fs-backend')])
+  // The same web plumbing as the chat: the Tauri fetch (a request made from Rust), the DNS guard and Brave search.
+  const web = await createWebTools(config, true)
+  const tauriFetch = web.fetchImpl as typeof fetch
   return {
-    store: createMemoryAdapterArticleStore(new IndexedDBAdapter({ namespace: 'aielia-write' })),
+    store: indexedDbArticleStore(),
     // No file or shell tools for Write's own model calls, whatever the chat has switched on.
     llm: createLlmClient(config, { fetchImpl: tauriFetch, claudeCli: () => new TauriClaudeCliLLMClient() }),
-    fetchWeb: async (url) => {
-      rememberUserUrls(url)
-      return (await executeWebTool({ search: search ?? (async () => []), fetchImpl: tauriFetch, dns: tauriDnsResolver }, 'fetch_url', { url })).text
-    },
-    searchWeb: search,
+    fetchWeb: pageReader(web),
+    searchWeb: config.braveApiKey ? web.search : undefined,
     // The webview's content-security policy blocks its own fetch to GitHub; the request is made from Rust instead.
-    githubFetch: tauriFetch as typeof fetch,
+    githubFetch: tauriFetch,
     pickFolder: () => pickDesktopFolder((root) => createTauriWorkspaceFsBackend(root)),
     keepGithubToken: true,
     hostName: 'app',

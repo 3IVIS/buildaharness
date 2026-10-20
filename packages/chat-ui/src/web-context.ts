@@ -1,5 +1,5 @@
-import { type AssistantConfig, type DnsResolver, type WebSearchResult } from '@buildaharness/aielia'
-import { isUserAuthoredUrl } from './user-urls'
+import { braveSearch, executeWebTool, type AssistantConfig, type DnsResolver, type WebSearchResult } from '@buildaharness/aielia'
+import { isUserAuthoredUrl, rememberUserUrls } from './user-urls'
 
 /**
  * Public sentinel IP (203.0.113.1, RFC 5737 TEST-NET-3 — never routable) handed to
@@ -76,3 +76,47 @@ export function createProxyWebTools(config: AssistantConfig): { search: (query: 
   return { search, fetchImpl, dns: PROXY_MODE_DNS_SENTINEL }
 }
 
+/**
+ * Builds the webTools context (search, fetchImpl, dns) for web_search/fetch_url.
+ *
+ * fetchImpl: Brave's Search API (and fetch_url's arbitrary target) aren't CORS-enabled for
+ * arbitrary browser origins, so a plain `fetch()` from inside this app fails outright with
+ * "Failed to fetch" (verified live). On desktop this is fixed by routing through
+ * @tauri-apps/plugin-http's fetch — a real HTTP request made from Rust, no CORS involved.
+ * Scoped via capabilities/default.json's `http:default` entry to any http(s) URL (originally
+ * just api.search.brave.com, which left fetch_url's arbitrary targets CORS-blocked on desktop
+ * — widened once fetch_url needed real page fetches too); the real gate against SSRF is the
+ * DNS-checked `assertPublicHttpUrl` guard below, not this scope. A plain browser tab has no
+ * equivalent escape hatch and is left on native fetch.
+ *
+ * A plain browser tab with `webBackend: 'proxy'` sidesteps the CORS problem entirely by never
+ * fetching the search backend or the target URL directly — see createProxyWebTools above.
+ * `webBackend` is otherwise ignored on desktop, which always keeps the Tauri path below.
+ *
+ * dns: fetch_url's SSRF guard (web-tools.ts's assertPublicHttpUrl) defaults to
+ * `node:dns/promises`, which doesn't exist in any webview or browser tab — without an
+ * override it throws on every fetch_url call, not just an occasional failure. Desktop gets
+ * a real resolver (tauriDnsResolver, backed by the dns_lookup Tauri command); a plain
+ * browser tab has no DNS API available at all and is left on the (always-failing) default,
+ * same "capability absent, not a crash" degradation as everywhere else this app can't fully
+ * support something — the failure is caught by assistant.ts's tool dispatch and reported to
+ * the model as an error result, never a crashed turn.
+ */
+export async function createWebTools(config: AssistantConfig, isDesktop: boolean): Promise<{ search: (query: string) => Promise<WebSearchResult[]>; fetchImpl?: typeof fetch; dns?: DnsResolver }> {
+  if (!isDesktop && config.webBackend === 'proxy') return createProxyWebTools(config)
+  const fetchImpl = isDesktop ? (await import('@tauri-apps/plugin-http')).fetch : undefined
+  const dns = isDesktop ? (await import('./tauri-dns-resolver')).tauriDnsResolver : undefined
+  const search = (query: string) => braveSearch(query, config.braveApiKey ?? '', { fetchImpl })
+  return { search, fetchImpl, dns }
+}
+
+/**
+ * Reads a web page as text through a webTools context (the one createWebTools or createProxyWebTools builds): the address the writer typed is
+ * remembered as theirs (so it may be fetched), then the page goes through fetch_url's address guard. One implementation for Write on every host.
+ */
+export function pageReader(ctx: { search: (query: string) => Promise<WebSearchResult[]>; fetchImpl?: typeof fetch; dns?: DnsResolver }): (url: string) => Promise<string> {
+  return async (url) => {
+    rememberUserUrls(url)
+    return (await executeWebTool({ search: ctx.search, fetchImpl: ctx.fetchImpl, dns: ctx.dns }, 'fetch_url', { url })).text
+  }
+}
