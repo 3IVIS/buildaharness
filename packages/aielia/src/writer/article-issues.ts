@@ -119,3 +119,22 @@ export function renderIssuesForChat(meta: ArticleMeta, perGroup = 5): string {
   }
   return lines.join('\n')
 }
+
+/**
+ * The article's records cut down to what bears on one piece of text, so `collectIssues` on the result lists only the issues there: suggestions and
+ * comments on that text, claims in it, and the section it is in (with the links that start from that section or from a claim in the text).
+ */
+export function issuesInRange(meta: ArticleMeta, range: { start: number; end: number }): ArticleMeta {
+  const touches = (a: { start: number; end: number }): boolean => a.start < Math.max(range.end, range.start + 1) && range.start < Math.max(a.end, a.start + 1)
+  const claims = meta.claims.filter((c) => touches({ start: c.position, end: c.position + c.quote.length }))
+  const sections = meta.sections.filter((s) => touches(s.span))
+  return {
+    ...meta,
+    suggestions: meta.suggestions.filter((s) => touches(s.span)),
+    comments: meta.comments.filter((c) => c.span && touches(c.span)),
+    claims,
+    sections,
+    links: meta.links.filter((l) => (l.from.type === 'section' && sections.some((s) => s.id === l.from.id)) || (l.from.type === 'claim' && claims.some((c) => c.id === l.from.id))),
+    corrections: [],
+  }
+}

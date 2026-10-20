@@ -80,3 +80,12 @@ export async function deriveStyle(
   }
   return { status: 'derived', meta: next, filled }
 }
+
+/** About one page of text. */
+export const STYLE_DERIVE_MIN_WORDS = 300
+
+/** Whether the style sheet should be drawn from the text now: there is a page of text and the writer has set nothing yet. */
+export function shouldDeriveStyle(meta: Pick<ArticleMeta, 'brief' | 'style'>, markdown: string): boolean {
+  if (meta.style || FIELDS.some((f) => (meta.brief?.[f] ?? '').trim())) return false
+  return (markdown.match(/\S+/g)?.length ?? 0) >= STYLE_DERIVE_MIN_WORDS
+}

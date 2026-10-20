@@ -79,9 +79,13 @@
 .write__badge--supported { background: var(--accent-a18); border-color: var(--green); }
 .write .write__link { background: none; border: none; padding: 2px 0; min-height: 0; margin: 0; text-align: left; font-weight: 600; text-decoration: underline; text-decoration-color: var(--border); }
 .write .write__link:hover { text-decoration-color: var(--accent); }
-.write .write__outline li { background: transparent; border: none; border-radius: 0; padding: 3px 0; }
-.write .write__outline li.is-nested { border-left: 2px solid var(--border); padding-left: 10px; }
-.write .write__outline-title .write__link { font-size: 1.02rem; }
+.write .write__outline { list-style: none; margin: 0; padding: 0; }
+.write .write__outline li { display: flex; gap: 8px; align-items: baseline; background: transparent; border: none; border-radius: 0; padding: 5px 0; }
+.write__outline-no { flex: none; min-width: 2.2em; color: var(--muted); font-variant-numeric: tabular-nums; }
+.write .write__outline-title { font-size: 1.05rem; }
+.write .write__outline li .write__rowacts { margin-left: auto; opacity: 0.35; }
+.write .write__outline li:hover .write__rowacts, .write .write__outline li:focus-within .write__rowacts { opacity: 1; }
+.write .write__outline .write__editing { flex: 1; }
 .write__legend { display: flex; flex-wrap: wrap; gap: 4px 14px; list-style: none; margin: 0 0 10px; padding: 8px 10px; font-size: 0.85rem; color: var(--muted); background: var(--tint-1); border: 1px solid var(--border); border-radius: 6px; }
 .write__legend li { display: inline-flex; align-items: center; gap: 6px; }
 .write__working { display: flex; align-items: center; justify-content: space-between; gap: 10px; padding: 8px 0 10px; border-bottom: 1px solid var(--border); }
@@ -273,3 +277,30 @@
 
 /* Write opened from the desktop app: a bar to go back, then the page itself */
 .write-host__bar { padding: 8px 16px; border-bottom: 1px solid var(--border); background: var(--surface); }
+
+/* The text pane: a toggle between the article and its outline. */
+.write__viewtoggle { align-self: flex-start; margin-bottom: 8px; }
+.write__outlineview { flex: 1 1 auto; min-height: 120px; overflow: auto; padding: 4px 2px; }
+.write__textview { display: flex; flex-direction: column; flex: 1; min-height: 0; }
+.write__textview.is-hidden { display: none; }
+
+/* Ideas: one scratchpad. */
+.write textarea.write__scratch { display: block; width: 100%; box-sizing: border-box; min-height: 50dvh; resize: vertical; line-height: 1.5; }
+
+/* Issues: a button per kind with its count; the list opens under it. */
+.write__rows:empty { display: none; }
+.write__chips { display: flex; flex-wrap: wrap; gap: 6px; margin: 6px 0 8px; }
+.write .write__issuechip { display: inline-flex; align-items: center; gap: 4px; min-height: 32px; padding: 2px 10px; font-size: 0.88rem; border-radius: 999px; }
+.write .write__issuechip .write__badge { margin-left: 2px; }
+.write .write__issuechip.is-on { background: var(--accent-solid); border-color: var(--accent-solid); color: var(--on-accent); }
+.write__batchhead { display: flex; align-items: center; gap: 8px; }
+.write__reasonhead { font-size: 0.9rem; margin: 8px 0 0; color: var(--muted); }
+.write__revtext { white-space: pre-wrap; overflow-wrap: anywhere; margin-top: 2px; }
+
+/* The box under the text: its panes are chosen with tabs that wrap instead of running off the edge. */
+.write__dock { overflow: hidden; }
+.write__docktabs { display: flex; flex-wrap: wrap; gap: 2px 4px; padding: 4px 8px 0; border-bottom: 1px solid var(--border); }
+.write .write__docktabs button { min-height: 30px; padding: 2px 10px; font-size: 0.85rem; background: transparent; border: none; border-bottom: 2px solid transparent; border-radius: 6px 6px 0 0; }
+.write .write__docktabs button.is-on { border-bottom-color: var(--accent); font-weight: 600; }
+.write__dockadd > .write__seg { max-width: 100%; }
+.write__dockscroll, .write__dockbody { min-width: 0; }

@@ -177,6 +177,8 @@ export const ArticleMetaSchema = z.object({
   suggestions: z.array(SuggestionSchema),
   /** Ideas: material the writer or the assistant collected, to be written into the article. */
   ideas: z.array(IdeaSchema).default([]),
+  /** The writer's free notes for this article: one block of text to click into and edit. */
+  scratchpad: z.string().optional(),
   /** The brief and the writing profile the assistant follows when it proposes text. */
   brief: BriefSchema.optional(),
   style: StyleProfileSchema.optional(),

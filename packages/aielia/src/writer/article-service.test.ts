@@ -32,6 +32,15 @@ const svc = (r: Router = {}, calls: string[] = []) => {
 }
 
 describe('ArticleService', () => {
+  it('keeps a scratchpad that travels with the article and reaches the chat as ideas', async () => {
+    const { svc: s, store } = svc()
+    const id = await s.create('Post', MD)
+    await s.setScratchpad(id, 'First thought.\n\nSecond thought.')
+    await s.appendToScratchpad(id, 'Third.')
+    expect((await s.get(id)).meta.scratchpad).toBe('First thought.\n\nSecond thought.\n\nThird.')
+    expect(await createArticleChatPort(store).ideasText?.(id)).toEqual(['First thought.', 'Second thought.', 'Third.'])
+  })
+
   it('creates an article with sections and lists it', async () => {
     const { svc: s } = svc()
     const id = await s.create('Post', MD)

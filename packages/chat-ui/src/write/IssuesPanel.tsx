@@ -1,3 +1,4 @@
+import { useState } from 'react'
 import type { IssueCategory } from '@buildaharness/aielia'
 import { collectIssues, issueCount, type ArticleMeta } from '@buildaharness/aielia'
 import { EditableText } from './EditableText'
@@ -40,15 +41,33 @@ const ACTION: Record<IssueCategory, { label: string; asks: boolean }> = {
   stale: { label: 'Dismiss all', asks: false },
 }
 
+type Open = IssueCategory | 'corrections'
+
+const sentence = (t: string): string => (t ? t.charAt(0).toUpperCase() + t.slice(1) : 'Other')
+
+/** Items that share a reason (twenty claims with "no source") are listed once under that reason. */
+function groupByReason<T extends { detail?: string }>(items: T[]): { reason: string; items: T[] }[] {
+  const groups = new Map<string, T[]>()
+  for (const i of items) groups.set(i.detail ?? '', [...(groups.get(i.detail ?? '') ?? []), i])
+  return [...groups].map(([reason, list]) => ({ reason, items: list }))
+}
+
 export function IssuesPanel(p: Props): React.JSX.Element {
   const { meta } = p
   const batches = collectIssues(meta)
   const total = issueCount(batches)
+  const [open, setOpen] = useState<Open[]>([])
+  const toggle = (c: Open): void => setOpen((o) => (o.includes(c) ? o.filter((x) => x !== c) : [...o, c]))
   const claimStart = (id: string): number => meta.claims.find((c) => c.id === id)?.position ?? 0
+
+  const claimItem = (i: { id: string; label: string; detail?: string }): React.JSX.Element => (
+    <li key={i.id}>
+      <div className="write__rowmain"><button type="button" className="write__link" onClick={() => p.onJump(claimStart(i.id))}>{i.label}</button></div>
+    </li>
+  )
 
   return (
     <>
-      <h2 className="write__panehead">Issues</h2>
       <div className="write__resolvebar">
         <span className="write__muted">{total === 0 ? 'Nothing needs your attention.' : `${total} to deal with, in ${batches.length} group${batches.length === 1 ? '' : 's'}.`}</span>
         {total > 0 && <button type="button" className="write__primary" onClick={p.onResolveAll} disabled={p.busy} title={`Does each group's action in turn. Text changes arrive as suggestions. Uses ${p.model}.`}>Resolve all</button>}
@@ -59,15 +78,26 @@ export function IssuesPanel(p: Props): React.JSX.Element {
           <li><button type="button" className="write__link" onClick={p.onClearNotes}>Dismiss</button></li>
         </ul>
       )}
-      {batches.map((b) => (
-        <details key={b.category} open className="write__batch">
-          <summary>
+      <div className="write__chips" role="group" aria-label="Kinds of issue">
+        {batches.map((b) => (
+          <button key={b.category} type="button" className={`write__issuechip ${open.includes(b.category) ? 'is-on' : ''}`} aria-expanded={open.includes(b.category)} onClick={() => toggle(b.category)}>
+            {b.title} <span className="write__badge">{b.items.length + (b.needsYourChoice?.length ?? 0)}</span>
+          </button>
+        ))}
+        {meta.corrections.length > 0 && (
+          <button type="button" className={`write__issuechip ${open.includes('corrections') ? 'is-on' : ''}`} aria-expanded={open.includes('corrections')} onClick={() => toggle('corrections')}>
+            What you corrected <span className="write__badge">{meta.corrections.length}</span>
+          </button>
+        )}
+      </div>
+      {batches.filter((b) => open.includes(b.category)).map((b) => (
+        <section key={b.category} className="write__batch" aria-label={b.title}>
+          <div className="write__batchhead">
             <span className="write__batchtitle">{b.title}</span>
-            <span className="write__badge">{b.items.length + (b.needsYourChoice?.length ?? 0)}</span>
             {b.items.length > 0 && (
-              <button type="button" className="write__batchbtn" disabled={p.busy} title={ACTION[b.category].asks ? `${ACTION[b.category].label} with ${p.model}` : ACTION[b.category].label} onClick={(e) => { e.preventDefault(); e.stopPropagation(); p.onResolve(b.category) }}>{ACTION[b.category].label}</button>
+              <button type="button" className="write__batchbtn" disabled={p.busy} title={ACTION[b.category].asks ? `${ACTION[b.category].label} with ${p.model}` : ACTION[b.category].label} onClick={() => p.onResolve(b.category)}>{ACTION[b.category].label}</button>
             )}
-          </summary>
+          </div>
           <ul className="write__rows">
             {b.category === 'suggestions' && meta.suggestions.filter((s) => s.state === 'pending').map((s) => (
               <li key={s.id}>
@@ -107,11 +137,6 @@ export function IssuesPanel(p: Props): React.JSX.Element {
                 </li>
               )
             })}
-            {(b.category === 'checkable' || b.category === 'unsupported') && b.items.map((i) => (
-              <li key={i.id}>
-                <div className="write__rowmain"><button type="button" className="write__link" onClick={() => p.onJump(claimStart(i.id))}>{i.label}</button>{i.detail && <span className="write__badge">{i.detail}</span>}</div>
-              </li>
-            ))}
             {b.category === 'sections' && b.items.map((i) => (
               <li key={i.id}>
                 <div className="write__rowmain"><strong>{i.label}</strong>{i.detail && <div className="write__reason">{i.detail}</div>}</div>
@@ -131,11 +156,17 @@ export function IssuesPanel(p: Props): React.JSX.Element {
               </li>
             ))}
           </ul>
-        </details>
+          {(b.category === 'checkable' || b.category === 'unsupported') && groupByReason(b.items).map((g) => (
+            <div key={g.reason} className="write__reasongroup">
+              <h4 className="write__reasonhead">{sentence(g.reason || 'Other')} <span className="write__badge">{g.items.length}</span></h4>
+              <ul className="write__rows">{g.items.map(claimItem)}</ul>
+            </div>
+          ))}
+        </section>
       ))}
-      {meta.corrections.length > 0 && (
-        <details open className="write__batch">
-          <summary><span className="write__batchtitle">What you corrected</span><span className="write__badge">{meta.corrections.length}</span></summary>
+      {open.includes('corrections') && meta.corrections.length > 0 && (
+        <section className="write__batch" aria-label="What you corrected">
+          <div className="write__batchhead"><span className="write__batchtitle">What you corrected</span></div>
           <ul className="write__rows">
             {meta.corrections.map((c) => (
               <li key={c.id}>
@@ -143,7 +174,7 @@ export function IssuesPanel(p: Props): React.JSX.Element {
               </li>
             ))}
           </ul>
-        </details>
+        </section>
       )}
     </>
   )

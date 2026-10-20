@@ -56,18 +56,31 @@ function contains(outer: SelectionRange, inner: SelectionRange): boolean {
   return outer.start <= inner.start && outer.end >= inner.end && outer.end - outer.start > inner.end - inner.start
 }
 
-/** The next larger unit around the selection, or undefined when the whole article is already selected. */
-export function expandSelection(text: string, range: SelectionRange): { range: SelectionRange; unit: SelectionUnit } | undefined {
+function unitCandidates(text: string, range: SelectionRange): { here: SelectionRange; candidates: { range: SelectionRange; unit: SelectionUnit }[] } {
   const lo = Math.max(0, Math.min(range.start, range.end, text.length))
   const hi = Math.min(text.length, Math.max(range.start, range.end))
-  const here = { start: lo, end: hi }
   const first = sentenceAround(text, lo, Math.max(lo, hi))
   const last = sentenceAround(text, Math.max(lo, hi - 1), hi)
-  const candidates: { range: SelectionRange; unit: SelectionUnit }[] = [
-    { range: trimmed(text, first.start, Math.max(first.end, last.end)), unit: 'sentence' },
-    { range: paragraphAround(text, lo, hi), unit: 'paragraph' },
-    { range: sectionAround(text, lo), unit: 'section' },
-    { range: trimmed(text, 0, text.length), unit: 'article' },
-  ]
+  return {
+    here: { start: lo, end: hi },
+    candidates: [
+      { range: trimmed(text, first.start, Math.max(first.end, last.end)), unit: 'sentence' },
+      { range: paragraphAround(text, lo, hi), unit: 'paragraph' },
+      { range: sectionAround(text, lo), unit: 'section' },
+      { range: trimmed(text, 0, text.length), unit: 'article' },
+    ],
+  }
+}
+
+/** The next larger unit around the selection, or undefined when the whole article is already selected. */
+export function expandSelection(text: string, range: SelectionRange): { range: SelectionRange; unit: SelectionUnit } | undefined {
+  const { here, candidates } = unitCandidates(text, range)
   return candidates.find((c) => c.range.end > c.range.start && contains(c.range, here))
+}
+
+/** The unit the selection is: a selection that is exactly a sentence, paragraph or section is that unit; a cursor or a phrase is the sentence around it; anything longer, the smallest unit that holds it. */
+export function unitOfSelection(text: string, range: SelectionRange): { range: SelectionRange; unit: SelectionUnit } | undefined {
+  const { here, candidates } = unitCandidates(text, range)
+  const t = trimmed(text, here.start, here.end)
+  return candidates.find((c) => c.range.end > c.range.start && c.range.start <= t.start && c.range.end >= t.end && (c.unit !== 'sentence' || !text.slice(c.range.start, c.range.end).includes('\n')) && (c.unit !== 'paragraph' || !text.slice(c.range.start, c.range.end).includes('\n\n')))
 }

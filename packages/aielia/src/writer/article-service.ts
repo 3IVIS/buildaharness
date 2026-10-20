@@ -920,6 +920,21 @@ export class ArticleService {
     return { ok: true }
   }
 
+  /** The scratchpad: the writer's free notes, kept as one block of text and given to the chat and the assistant as the ideas to draw on. */
+  async setScratchpad(id: string, text: string): Promise<void> {
+    const b = await this.get(id)
+    await this.store.save(id, { ...b, meta: { ...b.meta, scratchpad: text } })
+  }
+
+  /** Adds a line to the end of the scratchpad (a chat answer worth keeping). */
+  async appendToScratchpad(id: string, text: string): Promise<void> {
+    const b = await this.get(id)
+    const add = text.trim()
+    if (!add) return
+    const have = (b.meta.scratchpad ?? '').trimEnd()
+    await this.store.save(id, { ...b, meta: { ...b.meta, scratchpad: have ? `${have}\n\n${add}` : add } })
+  }
+
   async deleteIdea(id: string, ideaId: string): Promise<void> {
     const b = await this.get(id)
     await this.store.save(id, { ...b, meta: removeIdea(b.meta, ideaId) })
@@ -1207,8 +1222,10 @@ export function createArticleChatPort(store: ArticleStore): WriterChatPort {
       return m ? renderStyleGuide(m) : ''
     },
     async ideasText(articleId) {
-      const open = ((await store.load(articleId))?.meta.ideas ?? []).filter((i) => i.state === 'open')
-      return open.map((i) => i.text)
+      const meta = (await store.load(articleId))?.meta
+      const open = (meta?.ideas ?? []).filter((i) => i.state === 'open')
+      const notes = (meta?.scratchpad ?? '').split(/\n{2,}/).map((t) => t.trim()).filter(Boolean)
+      return [...notes, ...open.map((i) => i.text)]
     },
     async captureEnabled() {
       return (await loadPermissions(store)).captureChat
