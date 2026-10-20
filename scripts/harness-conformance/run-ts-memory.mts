@@ -47,6 +47,9 @@ const flags = fixture.flags ?? {}
 process.env.AUDIT_MEMORY_WRITE_GATE = flags.writeGate ? '1' : '0'
 process.env.AUDIT_MEMORY_AUDIT_LOG = flags.auditLog ? '1' : '0'
 process.env.AUDIT_SEMANTIC_CONTRADICTION = '0'
+// The transition-event log (AUDIT_MEMORY_EVENTS, default ON) is outside this contract: the Python twin has no events, and the TS event stamp reads the
+// injected clock once more per write, which shifts every later timestamp by a tick against the twin. Compare the contract with events off.
+process.env.AUDIT_MEMORY_EVENTS = '0'
 delete process.env.AUDIT_MEMORY_BUDGETED_RENDER
 delete process.env.AUDIT_MODEL_INFERRED_FACTS
 
