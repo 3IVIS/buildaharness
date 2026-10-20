@@ -16,6 +16,7 @@ const MARK = {
   sourceLinks: 'A writer added a source to an article',
   support: 'You check whether a claim from an article',
   links: 'You map how the sections',
+  style: 'You read an article and describe it so a co-writer',
 }
 function llm(replies: Partial<Record<keyof typeof MARK, unknown>>): ILLMClient {
   return {
@@ -44,7 +45,10 @@ const MD = '# Post\n\n## Latency\n\nThe p99 was 18 ms.\n'
 const MD2 = '# Post\n\n## Latency\n\nThe p99 was 18 ms. It is quick.\n\n## Conclusion\n\nSo p99 stays under 20 ms.\n'
 const openMenu = (): Promise<void> => userEvent.click(screen.getByRole('button', { name: 'Article' }))
 const rail = (name: string): HTMLElement => within(screen.getByRole('navigation', { name: 'Panels' })).getByRole('button', { name })
-const panel = (name: string): HTMLElement => screen.getByRole('region', { name })
+const panel = (name: string): HTMLElement => (name === 'Issues' || name === 'Links' ? screen.getByRole('tabpanel', { name }) : screen.getByRole('region', { name }))
+const dockTab = (name: RegExp | string): Promise<void> => userEvent.click(screen.getByRole('tab', { name }))
+/** Opens one kind of issue under its button at the top of the Issues pane. */
+const expand = (title: string): Promise<void> => userEvent.click(within(panel('Issues')).getByRole('button', { name: new RegExp(`^${title}`) }))
 const waitForText = async (): Promise<HTMLTextAreaElement> => (await screen.findByLabelText('Article text')) as HTMLTextAreaElement
 const putCursor = (needle: string): void => {
   const box = screen.getByLabelText('Article text') as HTMLTextAreaElement
@@ -78,8 +82,8 @@ describe('header and article menu', () => {
     await answerDialog('My post')
     const box = await waitForText()
     expect(box.value).toContain('# My post')
-    await userEvent.click(rail('Outline'))
-    expect(within(panel('Outline')).getByText('My post')).toBeInTheDocument()
+    await userEvent.click(screen.getByRole('button', { name: 'Outline view' }))
+    expect(within(screen.getByRole('list', { name: 'Outline' })).getByText('My post')).toBeInTheDocument()
   })
 
   it('shows a short name, cut off when long, separate from the title in the text, and lets the writer rename it', async () => {
@@ -170,66 +174,78 @@ describe('rail and panels', () => {
       const { container } = render(<WriteApp services={s} />)
       await waitForText()
       const main = container.querySelector('.write__main') as HTMLElement
-      expect(within(screen.getByRole('navigation', { name: 'Panels' })).getAllByRole('button').map((b) => b.getAttribute('aria-label'))).toEqual(['Text', 'Outline', 'Style', 'Ideas', 'Issues', 'Links', 'History', 'Chat', 'Settings'])
+      expect(within(screen.getByRole('navigation', { name: 'Panels' })).getAllByRole('button').map((b) => b.getAttribute('aria-label'))).toEqual(['Text', 'Style', 'Ideas', 'History', 'Chat', 'Settings'])
       expect(main.dataset.open).toBe('true')
-      await userEvent.click(rail('Outline'))
+      await userEvent.click(rail('Style'))
       expect(main.dataset.open).toBe('false')
       await userEvent.click(rail('History'))
       expect(main.dataset.open).toBe('true')
       expect(panel('History').className).toContain('is-shown')
-      expect(panel('Outline').className).not.toContain('is-shown')
+      expect(panel('Style').className).not.toContain('is-shown')
     }))
 
-  it('counts what needs attention on the Issues button', async () => {
+  it('counts what needs attention on the Issues tab under the text', async () => {
     const s = await services({}, MD)
     const id = (await s.service.list())[0].id
     await s.service.addComment(id, { start: 0, end: 0 }, 'x') // no text under a click at 0? the heading line is a unit
     render(<WriteApp services={s} />)
     await waitForText()
-    expect(within(rail('Issues')).getByLabelText(/1 issue/)).toBeInTheDocument()
+    expect(within(screen.getByRole('tab', { name: /Issues/ })).getByText('1')).toBeInTheDocument()
   })
 })
 
-describe('outline: edited in place', () => {
-  it('shows the title on top, indents only sub-headings, and jumps to a heading on a click', async () => {
+describe('outline: a view of the text, edited together with it', () => {
+  const outline = (): HTMLElement => screen.getByRole('list', { name: 'Outline' })
+  const showOutline = (): Promise<void> => userEvent.click(screen.getByRole('button', { name: 'Outline view' }))
+
+  it('is a toggle above the text, numbers the headings, and has no side panel of its own', async () => {
     const md = '# Post\n\n## One\n\ntext\n\n### One point one\n\ntext\n\n## Two\n\ntext\n'
     const s = await services({}, md)
     render(<WriteApp services={s} />)
-    const box = await waitForText()
-    await userEvent.click(rail('Outline'))
-    const li = (name: string) => within(panel('Outline')).getByRole('button', { name: `Heading: ${name}` }).closest('li') as HTMLElement
-    expect(li('Post').style.marginLeft).toBe('0px')
-    expect(li('One').style.marginLeft).toBe('0px')
-    expect(li('One point one').style.marginLeft).toBe('16px')
-    await userEvent.click(within(panel('Outline')).getByRole('button', { name: 'Heading: Two' }))
-    expect(box.selectionStart).toBe(md.indexOf('## Two'))
+    await waitForText()
+    expect(screen.queryByRole('button', { name: 'Outline' })).toBeNull() // not in the rail
+    await showOutline()
+    const li = (name: string) => within(outline()).getByRole('button', { name: `Heading: ${name}` }).closest('li') as HTMLElement
+    expect(within(li('One')).getByText('1')).toBeInTheDocument()
+    expect(within(li('One point one')).getByText('1.1')).toBeInTheDocument()
+    expect(within(li('Two')).getByText('2')).toBeInTheDocument()
+    expect(within(li('One')).queryByText(/What is this section for/)).toBeNull()
   })
 
-  it('renames a heading by double-clicking it: the heading in the text changes and nothing else does', async () => {
+  it('opens the text at a section when it is clicked, and the outline gives way to the text', async () => {
+    const md = '# Post\n\n## One\n\ntext\n\n## Two\n\ntext\n'
+    const s = await services({}, md)
+    render(<WriteApp services={s} />)
+    const box = await waitForText()
+    await showOutline()
+    expect(screen.getByRole('button', { name: 'Outline view' })).toHaveAttribute('aria-pressed', 'true')
+    await userEvent.click(within(outline()).getByRole('button', { name: 'Heading: Two' }))
+    expect(screen.queryByRole('list', { name: 'Outline' })).toBeNull()
+    expect(screen.getByRole('button', { name: 'Article view' })).toHaveAttribute('aria-pressed', 'true')
+    await waitFor(() => expect(box.selectionStart).toBe(md.indexOf('## Two')))
+  })
+
+  it('renames a heading with the pencil: the heading in the text changes and nothing else does', async () => {
     const s = await services({}, MD2)
     render(<WriteApp services={s} />)
     const box = await waitForText()
-    await userEvent.click(rail('Outline'))
-    await userEvent.dblClick(within(panel('Outline')).getByRole('button', { name: 'Heading: Latency' }))
+    await showOutline()
+    await userEvent.click(within(outline()).getByRole('button', { name: 'Rename Latency' }))
     const input = screen.getByLabelText('Heading: Latency')
     await userEvent.clear(input)
     await userEvent.type(input, 'Response time{Enter}')
     await waitFor(() => expect(box.value).toContain('## Response time\n'))
     expect(box.value).toContain('The p99 was 18 ms. It is quick.')
-    expect(within(panel('Outline')).getByRole('button', { name: 'Heading: Response time' })).toBeInTheDocument()
+    expect(within(outline()).getByRole('button', { name: 'Heading: Response time' })).toBeInTheDocument()
   })
 
-  it('lets the writer say what a section is for by clicking the line under it, and Escape puts it back', async () => {
+  it('follows what is typed in the text', async () => {
     const s = await services({}, MD)
     render(<WriteApp services={s} />)
-    await waitForText()
-    await userEvent.click(rail('Outline'))
-    await userEvent.click(within(panel('Outline')).getByRole('button', { name: 'Purpose of Latency' }))
-    await userEvent.type(screen.getByLabelText('Purpose of Latency'), 'Show the p99{Enter}')
-    expect(await within(panel('Outline')).findByText('Show the p99')).toBeInTheDocument()
-    await userEvent.click(within(panel('Outline')).getByRole('button', { name: 'Purpose of Latency' }))
-    await userEvent.type(screen.getByLabelText('Purpose of Latency'), ' extra{Escape}')
-    expect(within(panel('Outline')).getByText('Show the p99')).toBeInTheDocument()
+    const box = await waitForText()
+    fireEvent.change(box, { target: { value: `${MD}\n## Added\n\nmore\n` } })
+    await showOutline()
+    expect(within(outline()).getByRole('button', { name: 'Heading: Added' })).toBeInTheDocument()
   })
 })
 
@@ -344,7 +360,7 @@ describe('issues in batches', () => {
   const open = async (s: Awaited<ReturnType<typeof services>>): Promise<HTMLTextAreaElement> => {
     render(<WriteApp services={s} />)
     const box = await waitForText()
-    await userEvent.click(rail('Issues'))
+    await dockTab(/Issues/)
     return box
   }
 
@@ -361,7 +377,8 @@ describe('issues in batches', () => {
     }))
     await open(s)
     const issues = panel('Issues')
-    const group = (title: string): HTMLElement => within(issues).getByText(title).closest('details') as HTMLElement
+    for (const title of ['Suggested changes', 'Reviewer comments', 'Claims without support']) await expand(title)
+    const group = (title: string): HTMLElement => within(issues).getByRole('region', { name: title })
     expect(within(group('Suggested changes')).getByRole('button', { name: 'Accept all' })).toBeInTheDocument()
     expect(within(group('Reviewer comments')).getByRole('button', { name: 'Suggest fixes' })).toBeInTheDocument()
     expect(within(group('Claims without support')).getByRole('button', { name: 'Suggest fixes' })).toBeInTheDocument()
@@ -369,9 +386,30 @@ describe('issues in batches', () => {
     expect(within(issues).getByRole('button', { name: 'Resolve all' })).toBeInTheDocument()
   })
 
+  it('shows only a button per kind with its count until one is clicked, and lists claims with the same reason once under it', async () => {
+    const { s } = await seed({}, (m) => ({
+      ...m,
+      claims: [
+        { id: 'k1', sectionId: m.sections[1].id, quote: 'The p99 was 18 ms.', position: MD2.indexOf('The p99'), kind: 'factual', author: 'model', authorAt: 'now', confirmed: false, sourceStatus: 'none' },
+        { id: 'k2', sectionId: m.sections[2].id, quote: 'So p99 stays under 20 ms.', position: MD2.indexOf('So p99'), kind: 'factual', author: 'model', authorAt: 'now', confirmed: false, sourceStatus: 'none' },
+      ],
+    }))
+    await open(s)
+    const issues = panel('Issues')
+    expect(within(issues).getByRole('button', { name: /^Claims without support/ })).toHaveAttribute('aria-expanded', 'false')
+    expect(within(issues).queryByText('The p99 was 18 ms.')).toBeNull()
+    await expand('Claims without support')
+    expect(within(issues).getAllByText(/^No source$/)).toHaveLength(1)
+    expect(within(issues).getByText('The p99 was 18 ms.')).toBeInTheDocument()
+    expect(within(issues).getByText('So p99 stays under 20 ms.')).toBeInTheDocument()
+    await expand('Claims without support')
+    expect(within(issues).queryByText('The p99 was 18 ms.')).toBeNull()
+  })
+
   it('"Accept all" applies every waiting suggestion at once and says what it did', async () => {
     const { s } = await seed({}, (m) => ({ ...m, suggestions: [sg('sg1', '18 ms', '41 ms'), sg('sg2', 'under 20 ms', 'under 41 ms')] }))
     const box = await open(s)
+    await expand('Suggested changes')
     await userEvent.click(within(panel('Issues')).getByRole('button', { name: 'Accept all' }))
     await waitFor(() => expect(box.value).toContain('41 ms.'))
     expect(box.value).toContain('under 41 ms')
@@ -381,6 +419,7 @@ describe('issues in batches', () => {
   it('a suggestion\'s replacement text is edited where it stands, and the edited text is what is accepted', async () => {
     const { s } = await seed({}, (m) => ({ ...m, suggestions: [sg('sg1', '18 ms', '41 ms')] }))
     const box = await open(s)
+    await expand('Suggested changes')
     await userEvent.click(within(panel('Issues')).getByRole('button', { name: /Replacement text for 18 ms/ }))
     const input = screen.getByLabelText(/Replacement text for 18 ms/)
     await userEvent.clear(input)
@@ -393,9 +432,10 @@ describe('issues in batches', () => {
     const reply = { suggestions: [{ quote: 'The p99 was 18 ms.', replacement: 'The p99 was 18 ms (p99).', reason: 'C1', commentIds: ['wc1'] }] }
     const { s, id } = await seed({ edits: reply }, (m) => ({ ...m, comments: [{ id: 'wc1', articleId: m.id, label: 'C1', text: 'Say which percentile', state: 'open', conflictsWith: [], origin: 'reviewer', capturedAt: 'now' }] }))
     await open(s)
-    const comments = within(panel('Issues')).getByText('Reviewer comments').closest('details') as HTMLElement
-    await userEvent.click(within(comments).getByRole('button', { name: 'Suggest fixes' }))
+    await expand('Reviewer comments')
+    await userEvent.click(within(within(panel('Issues')).getByRole('region', { name: 'Reviewer comments' })).getByRole('button', { name: 'Suggest fixes' }))
     expect(await within(panel('Issues')).findByText(/1 suggested change/)).toBeInTheDocument()
+    await expand('Suggested changes')
     await userEvent.click(await within(panel('Issues')).findByRole('button', { name: 'Accept all' }))
     await waitFor(async () => expect((await s.service.get(id)).meta.comments[0].state).toBe('addressed'))
   })
@@ -412,6 +452,7 @@ describe('issues in batches', () => {
   it('comments are edited where they stand, and can be marked as dealt with with one icon', async () => {
     const { s, id } = await seed({}, (m) => ({ ...m, comments: [{ id: 'wc1', articleId: m.id, label: 'C1', text: 'Say which percentile', state: 'open', conflictsWith: [], origin: 'reviewer', capturedAt: 'now' }] }))
     await open(s)
+    await expand('Reviewer comments')
     await userEvent.click(within(panel('Issues')).getByRole('button', { name: 'Comment C1' }))
     const input = screen.getByLabelText('Comment C1')
     await userEvent.clear(input)
@@ -534,19 +575,24 @@ describe('comments and sources under the text', () => {
   })
 })
 
-describe('revise the text under the cursor', () => {
-  it('asks for a revision of just that text and gets suggested changes to accept in Issues', async () => {
-    const s = await services({ edits: { suggestions: [{ quote: 'The p99 was 18 ms.', replacement: 'The p99 was 18 ms on 8 cores.', reason: 'detail' }] } }, MD)
-    const id = (await s.service.list())[0].id
+describe('the box under the text', () => {
+  it('adds a comment or a source only; My word and Revise are gone and the buttons stay inside the box', async () => {
+    const s = await services({}, MD)
     render(<WriteApp services={s} />)
     await waitForText()
     putCursor('18 ms')
     const dock = screen.getByLabelText('Comments and sources for this text')
-    await userEvent.click(within(dock).getByRole('button', { name: 'Revise' }))
-    await userEvent.type(within(dock).getByLabelText('Add to this text', { selector: 'input' }), 'add the hardware{Enter}')
-    expect(await screen.findByText(/added 1 suggested change to that text/)).toBeInTheDocument()
-    expect((await s.service.get(id)).meta.suggestions[0]).toMatchObject({ state: 'pending', replacement: 'The p99 was 18 ms on 8 cores.' })
-    expect((await s.service.get(id)).markdown).toBe(MD)
+    const kinds = within(within(dock).getByRole('group', { name: 'What to add' })).getAllByRole('button').map((b) => b.textContent)
+    expect(kinds).toEqual(['Comment', 'Source'])
+    expect(within(dock).queryByRole('button', { name: 'Revise' })).toBeNull()
+    expect(within(dock).queryByRole('button', { name: 'My word' })).toBeNull()
+  })
+
+  it('has Notes, Issues, Links and History as tabs', async () => {
+    const s = await services({}, MD)
+    render(<WriteApp services={s} />)
+    await waitForText()
+    expect(within(screen.getByRole('tablist')).getAllByRole('tab').map((t) => t.textContent?.replace(/\d+$/, ''))).toEqual(['Notes', 'Issues', 'Links', 'History'])
   })
 })
 
@@ -743,33 +789,26 @@ describe('files from a folder on the computer', () => {
 })
 
 describe('ideas', () => {
-  it('adds an idea with Enter, edits it where it stands, asks Aielia for more with Enter, and writes one or all into the article', async () => {
-    const s = await services({
-      capture: { articleId: null, ops: [] },
-      ideas: { ideas: [{ text: 'Say what 18 ms means for users', sectionId: null }] },
-      edits: { suggestions: [{ quote: 'The p99 was 18 ms.', replacement: 'The p99 was 18 ms, which users cannot notice.', reason: 'idea', ideaIds: ['id2'] }] },
-    }, MD)
+  it('is a scratchpad: click, write, and it is kept with the article; nothing else to fill in', async () => {
+    const s = await services({}, MD)
     const id = (await s.service.list())[0].id
     render(<WriteApp services={s} />)
     await waitForText()
     await userEvent.click(rail('Ideas'))
     const ideas = panel('Ideas')
-    await userEvent.type(within(ideas).getByLabelText('New idea'), 'Mention the re-run{Enter}')
-    expect(await within(ideas).findByText('Mention the re-run')).toBeInTheDocument()
-    await userEvent.click(within(ideas).getByRole('button', { name: 'Idea' }))
-    const edit = screen.getByLabelText('Idea')
-    await userEvent.clear(edit)
-    await userEvent.type(edit, 'Mention the re-run on 15 October{Enter}')
-    expect(await within(ideas).findByText('Mention the re-run on 15 October')).toBeInTheDocument()
-    await userEvent.type(within(ideas).getByLabelText('Ask Aielia for ideas about'), '{Enter}')
-    expect(await within(ideas).findByText('Say what 18 ms means for users')).toBeInTheDocument()
-    expect(within(ideas).getByText(/Aielia · /)).toBeInTheDocument()
-    expect(within(ideas).getByRole('button', { name: /Write all 2 into the article/ })).toBeInTheDocument()
-    await userEvent.click(within(ideas).getAllByRole('button', { name: /Write this into the article with/ })[1])
-    expect(await screen.findByText(/added 1 suggested change from your ideas/)).toBeInTheDocument()
-    await userEvent.click(rail('Issues'))
-    await userEvent.click(await within(panel('Issues')).findByRole('button', { name: 'Accept' }))
-    await waitFor(async () => expect((await s.service.get(id)).meta.ideas.find((i) => i.id === 'id2')?.state).toBe('used'))
+    expect(within(ideas).getAllByRole('textbox')).toHaveLength(1)
+    await userEvent.type(within(ideas).getByLabelText('Scratchpad'), 'Mention the re-run')
+    await waitFor(async () => expect((await s.service.get(id)).meta.scratchpad).toBe('Mention the re-run'))
+  })
+
+  it('starts from the ideas an older article kept in a list', async () => {
+    const s = await services({}, MD)
+    const id = (await s.service.list())[0].id
+    await s.service.addIdea(id, { text: 'An old idea' })
+    render(<WriteApp services={s} />)
+    await waitForText()
+    await userEvent.click(rail('Ideas'))
+    expect(within(panel('Ideas')).getByLabelText('Scratchpad')).toHaveValue('An old idea')
   })
 })
 
@@ -791,43 +830,75 @@ describe('phone layout', () => {
 })
 
 describe('style', () => {
-  it('fills the brief by clicking, saves a writing profile once and uses it in the article', async () => {
+  it('has the brief only: no writing profile; a line is filled by clicking it', async () => {
     const s = await services({}, MD)
     const id = (await s.service.list())[0].id
     render(<WriteApp services={s} />)
     await waitForText()
     await userEvent.click(rail('Style'))
     const style = panel('Style')
+    expect(within(style).queryByText(/profile/i)).toBeNull()
     await userEvent.click(within(style).getByRole('button', { name: 'Audience' }))
     await userEvent.type(screen.getByLabelText('Audience'), 'SREs on call{Enter}')
     await waitFor(async () => expect((await s.service.get(id)).meta.brief).toEqual({ audience: 'SREs on call' }))
-    await userEvent.click(within(style).getByRole('button', { name: 'New profile' }))
-    await userEvent.type(within(style).getByLabelText('Profile name'), 'House')
-    await userEvent.type(within(style).getByLabelText('Voice'), 'plain and direct')
-    await userEvent.type(within(style).getByLabelText('Terms'), 'customer | user')
-    await userEvent.click(within(style).getByRole('button', { name: 'Save profile' }))
-    await waitFor(async () => expect((await s.service.get(id)).meta.style).toMatchObject({ name: 'House', voice: 'plain and direct', terms: [{ use: 'customer', instead: 'user' }] }))
-    expect(await within(style).findByText(/plain and direct · 1 term/)).toBeInTheDocument()
-    await userEvent.selectOptions(within(style).getByLabelText('Writing profile'), '')
-    await waitFor(async () => expect((await s.service.get(id)).meta.style).toBeUndefined())
-    expect((await s.service.profiles()).map((p) => p.name)).toEqual(['House'])
+  })
+
+  it('fills itself in once the article is about a page long', async () => {
+    const page = `# Guide\n\n${Array.from({ length: 320 }, (_, i) => `word${i}`).join(' ')}\n`
+    const s = await services({ style: { audience: 'Operators', purpose: 'Teach', tone: 'plain', length: 'about 320 words', notes: '', voice: 'direct', terms: [] } }, page)
+    const id = (await s.service.list())[0].id
+    render(<WriteApp services={s} />)
+    await waitForText()
+    await userEvent.click(rail('Style'))
+    expect(await within(panel('Style')).findByText('Operators')).toBeInTheDocument()
+    expect((await s.service.get(id)).meta.brief).toMatchObject({ audience: 'Operators', tone: 'plain' })
+  })
+
+  it('waits when there is less than a page of text', async () => {
+    const s = await services({ style: { audience: 'Operators', purpose: '', tone: '', length: '', notes: '', voice: '', terms: [] } }, MD)
+    const id = (await s.service.list())[0].id
+    render(<WriteApp services={s} />)
+    await waitForText()
+    await new Promise((r) => setTimeout(r, 100))
+    expect((await s.service.get(id)).meta.brief).toBeUndefined()
   })
 })
 
 describe('links, history', () => {
-  it('Links: finds links, confirms one with an icon, and adding one by hand is tucked away', async () => {
+  it('Links: shown in the box under the text for the section the selection is in; find, confirm, and adding one by hand is tucked away', async () => {
     const reply = { links: [{ from: 's3', to: 's2', kind: 'repeats', reason: 'repeats the bound', confidence: 0.8 }] }
     const s = await services({ links: reply }, MD2)
     render(<WriteApp services={s} />)
     await waitForText()
-    await userEvent.click(rail('Links'))
+    expect(screen.queryByRole('button', { name: 'Links' })).toBeNull() // not in the rail
+    await dockTab('Links')
     const links = panel('Links')
-    await userEvent.click(within(links).getByRole('button', { name: 'Find links' }))
-    expect(await within(links).findByText(/suggested 80%/)).toBeInTheDocument()
-    await userEvent.click(within(links).getByRole('button', { name: 'Confirm this link' }))
-    expect(await within(links).findByText('confirmed')).toBeInTheDocument()
-    const details = within(links).getByText('Add one yourself').closest('details') as HTMLDetailsElement
+    expect(within(links).getByText(/Click in the text/)).toBeInTheDocument()
+    await userEvent.click(within(links).getByRole('button', { name: /Look for links between sections/ }))
+    await dockTab('Notes')
+    putCursor('So p99 stays')
+    await dockTab('Links')
+    expect(await within(panel('Links')).findByText(/suggested 80%/)).toBeInTheDocument()
+    await userEvent.click(within(panel('Links')).getByRole('button', { name: 'Confirm this link' }))
+    expect(await within(panel('Links')).findByText('confirmed')).toBeInTheDocument()
+    const details = within(panel('Links')).getByText('Add one yourself').closest('details') as HTMLDetailsElement
     expect(details.open).toBe(false)
+    putCursor('The p99 was')
+    expect(await within(panel('Links')).findByText(/this section/)).toBeInTheDocument() // the other end of the same link
+  })
+
+  it('History of the text: how the selected sentence read in earlier versions', async () => {
+    const s = await services({}, MD)
+    const id = (await s.service.list())[0].id
+    await s.service.saveVersion(id, 'First draft')
+    await s.service.updateText(id, MD.replace('The p99 was 18 ms.', 'The p99 was 41 ms.'), { analyze: false })
+    render(<WriteApp services={s} />)
+    await waitForText()
+    putCursor('41 ms')
+    await dockTab('History')
+    const pane = screen.getByRole('tabpanel', { name: 'History of this text' })
+    expect(await within(pane).findByText('The p99 was 18 ms.')).toBeInTheDocument()
+    expect(within(pane).getByText('First draft')).toBeInTheDocument()
   })
 
   it('History: each version says what changed, icons are explained at the top, a saved version can be renamed in place, compared and restored', async () => {

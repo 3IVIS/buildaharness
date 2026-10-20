@@ -1,4 +1,4 @@
-import { useRef, useState } from 'react'
+import { useRef, useState, type ReactNode } from 'react'
 import { lookupNote, claimsInRange, commentsInRange, effectiveSourceStatus, matchFolderFiles, sourcesForClaim, textUnitAt, type ArticleMeta } from '@buildaharness/aielia'
 import { EditableText } from './EditableText'
 import { ICON_PATHS, Icon, IconButton } from './icons'
@@ -14,15 +14,22 @@ const STATUS_LABEL: Record<string, string> = {
   not_checked: 'not checked',
 }
 
-export type NoteKind = 'comment' | 'source' | 'say_so' | 'revise'
+export type NoteKind = 'comment' | 'source'
+
+export type DockPane = 'notes' | 'issues' | 'links' | 'history'
 
 interface Props {
+  /** The other panes of the box, drawn by the page: what needs attention in the article, how the selected text links, how it read before. */
+  issues: ReactNode
+  issuesCount: number
+  links: ReactNode
+  history: ReactNode
   meta: ArticleMeta
   markdown: string
   selection: { start: number; end: number } | null
   busy: boolean
   model: string
-  /** Add what the writer typed, as a comment on the text, a source for it, or their own word. A source that is a link is stored as a link; anything else as a passage. */
+  /** Add what the writer typed, as a comment on the text or a source for it. A source that is a link is stored as a link; anything else as a passage. */
   onAdd(kind: NoteKind, text: string): void
   onFiles(files: File[]): void
   onEditComment(id: string, text: string): void
@@ -57,17 +64,23 @@ export const looksLikeLink = (t: string): boolean => (t.startsWith('http://') ||
 const PLACEHOLDER: Record<NoteKind, string> = {
   comment: 'Write a comment on this text',
   source: 'Paste a link or a passage that backs this text',
-  say_so: 'What you know, in a sentence',
-  revise: 'Ask Aielia to revise this text, for example: tighten it',
 }
+
+const PANES: { id: DockPane; label: string }[] = [
+  { id: 'notes', label: 'Comments and sources' },
+  { id: 'issues', label: 'Issues' },
+  { id: 'links', label: 'Links' },
+  { id: 'history', label: 'History' },
+]
 
 /**
  * Comments and sources for the text under the cursor, at the bottom of the page. Click in the text or highlight a phrase, a sentence, a
  * paragraph or a section: its comments and sources show here. One line adds to it: type a comment, paste a link or passage, or state your own
  * word; drop a file anywhere in this box, or use the paperclip.
  */
-export function TextNotes({ meta, markdown, selection, busy, model, onAdd, onFiles, onEditComment, onResolveComment, onDeleteComment, onDetach, onConfirm, onRead, onAcceptNew, onLines, onVerify, folder, onPickFolder, onUseFolderFile, onCloseFolder, onCheck, canSearch, candidates, onFindSources, onUseCandidate, onDismissCandidates }: Props): React.JSX.Element {
+export function TextNotes({ issues, issuesCount, links, history, meta, markdown, selection, busy, model, onAdd, onFiles, onEditComment, onResolveComment, onDeleteComment, onDetach, onConfirm, onRead, onAcceptNew, onLines, onVerify, folder, onPickFolder, onUseFolderFile, onCloseFolder, onCheck, canSearch, candidates, onFindSources, onUseCandidate, onDismissCandidates }: Props): React.JSX.Element {
   const [collapsed, setCollapsed] = useState(false)
+  const [pane, setPane] = useState<DockPane>('notes')
   const [kind, setKind] = useState<NoteKind>('comment')
   const [text, setText] = useState('')
   const [over, setOver] = useState(false)
@@ -93,10 +106,20 @@ export function TextNotes({ meta, markdown, selection, busy, model, onAdd, onFil
       onDrop={(e) => { e.preventDefault(); setOver(false); const files = Array.from(e.dataTransfer.files); if (files.length > 0) onFiles(files) }}
     >
       <button type="button" className="write__dockhead" onClick={() => setCollapsed((c) => !c)} aria-expanded={!collapsed} title={collapsed ? 'Show' : 'Hide'}>
-        <strong>Comments and sources</strong>
+        <strong>{PANES.find((x) => x.id === pane)?.label}</strong>
         <span className="write__dockfor">{unit ? <>for “{clip(unit.quote, 70)}”</> : 'Click in the text, or highlight some, to comment or add a source'}</span>
       </button>
-      {!collapsed && (
+      <div className="write__docktabs" role="tablist" aria-label="What to show about this text">
+        {PANES.map((x) => (
+          <button key={x.id} type="button" role="tab" aria-selected={pane === x.id} className={pane === x.id ? 'is-on' : ''} onClick={() => { setPane(x.id); setCollapsed(false) }}>
+            {x.id === 'notes' ? 'Notes' : x.label}{x.id === 'issues' && issuesCount > 0 && <span className="write__badge">{issuesCount}</span>}
+          </button>
+        ))}
+      </div>
+      {!collapsed && pane === 'issues' && <div className="write__dockbody"><div className="write__dockscroll" role="tabpanel" aria-label="Issues">{issues}</div></div>}
+      {!collapsed && pane === 'links' && <div className="write__dockbody"><div className="write__dockscroll" role="tabpanel" aria-label="Links">{links}</div></div>}
+      {!collapsed && pane === 'history' && <div className="write__dockbody"><div className="write__dockscroll" role="tabpanel" aria-label="History of this text">{history}</div></div>}
+      {!collapsed && pane === 'notes' && (
         <div className="write__dockbody">
           <div className="write__dockscroll">
             {unit && comments.length === 0 && claims.length === 0 && <p className="write__muted">Nothing here yet.</p>}
@@ -172,8 +195,8 @@ export function TextNotes({ meta, markdown, selection, busy, model, onAdd, onFil
           )}
           <div className="write__dockadd" role="group" aria-label="Add to this text">
             <div className="write__seg" role="group" aria-label="What to add">
-              {(['comment', 'source', 'say_so', 'revise'] as const).map((k) => (
-                <button key={k} type="button" aria-pressed={kind === k} className={kind === k ? 'is-on' : ''} onClick={() => setKind(k)}>{k === 'comment' ? 'Comment' : k === 'source' ? 'Source' : k === 'say_so' ? 'My word' : 'Revise'}</button>
+              {(['comment', 'source'] as const).map((k) => (
+                <button key={k} type="button" aria-pressed={kind === k} className={kind === k ? 'is-on' : ''} onClick={() => setKind(k)}>{k === 'comment' ? 'Comment' : 'Source'}</button>
               ))}
             </div>
             <input

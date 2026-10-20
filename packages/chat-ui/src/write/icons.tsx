@@ -15,6 +15,7 @@ export const ICON_PATHS = {
   attach: 'M20 11l-8.5 8.5a5 5 0 0 1-7-7L13 4a3.5 3.5 0 0 1 5 5l-8.5 8.5a2 2 0 0 1-3-3L14 7',
   comment: 'M4 5h16v11H9l-5 4z',
   source: 'M6 3h9l4 4v14H6zM15 3v4h4M9 12h6M9 16h6',
+  rename: 'M12 20h9M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4z',
   check2: 'M4 12l4 4 6-8M12 16l2 2 6-9',
 }
 

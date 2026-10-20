@@ -1,9 +1,10 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
-import { githubRepoReader, parseGithubRepoAddress, type FolderReader, expandSelection, summarizeVerify, type VerifyReport, textPieces, collectIssues, parseLineRange, sourceKindForFile, computeReadiness, effectiveSourceStatus, issueCount, type ArticleBundle, type ChangeSummary, type DependencyKind, type IssueCategory, type StyleProfile, type WritePermissions } from '@buildaharness/aielia'
+import { githubRepoReader, parseGithubRepoAddress, type FolderReader, expandSelection, summarizeVerify, type VerifyReport, textPieces, collectIssues, parseLineRange, sourceKindForFile, computeReadiness, effectiveSourceStatus, issueCount, outlineOf, renameHeadingInText, shouldDeriveStyle, type ArticleBundle, type ChangeSummary, type DependencyKind, type IssueCategory, type Section, type WritePermissions } from '@buildaharness/aielia'
 import type { ChatAction } from './AdjustBar'
 import { ArticleSwitcher, type ArticleItem } from './ArticleSwitcher'
 import { ChatPane, type ChatLine } from './ChatPane'
 import { HistoryPanel, type VersionRow, type Viewing } from './HistoryPanel'
+import { TextHistory } from './TextHistory'
 import { IdeasPanel } from './IdeasPanel'
 import { StylePanel } from './StylePanel'
 import { MarkedText } from './MarkedText'
@@ -18,15 +19,15 @@ import { DialogProvider, useDialogs } from './dialogs'
 import type { WriteServices } from './write-services'
 import './write.css'
 
-type Tab = 'text' | 'outline' | 'style' | 'ideas' | 'issues' | 'links' | 'history' | 'chat' | 'settings'
+type Tab = 'text' | 'style' | 'ideas' | 'history' | 'chat' | 'settings'
+
+/** What the text pane shows: the article, or its outline. */
+type TextView = 'text' | 'outline'
 
 const TABS: { id: Tab; label: string }[] = [
   { id: 'text', label: 'Text' },
-  { id: 'outline', label: 'Outline' },
   { id: 'style', label: 'Style' },
   { id: 'ideas', label: 'Ideas' },
-  { id: 'issues', label: 'Issues' },
-  { id: 'links', label: 'Links' },
   { id: 'history', label: 'History' },
   { id: 'chat', label: 'Chat' },
   { id: 'settings', label: 'Settings' },
@@ -34,11 +35,8 @@ const TABS: { id: Tab; label: string }[] = [
 
 const RAIL_ICONS: Record<Tab, string> = {
   text: 'M5 5h14M5 9h14M5 13h14M5 17h9',
-  outline: 'M8 6h12M8 12h12M8 18h12M4 6h.01M4 12h.01M4 18h.01',
   style: 'M12 20h9M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4z',
   ideas: 'M9 18h6M10 21h4M12 3a6 6 0 0 0-3.5 10.9c.6.5 1 1.2 1 2.1h5c0-.9.4-1.6 1-2.1A6 6 0 0 0 12 3z',
-  issues: 'M12 3 2.5 20h19L12 3zM12 10v4M12 17h.01',
-  links: 'M10 14a4 4 0 0 0 5.7 0l3-3a4 4 0 0 0-5.7-5.7l-1 1M14 10a4 4 0 0 0-5.7 0l-3 3a4 4 0 0 0 5.7 5.7l1-1',
   history: 'M3 12a9 9 0 1 0 3-6.7M3 4v5h5M12 7v5l3 2',
   chat: 'M4 5h16v11H9l-5 4z',
   settings: 'M12 9a3 3 0 1 0 0 6 3 3 0 0 0 0-6zM12 3v3M12 18v3M3 12h3M18 12h3M5.6 5.6l2.1 2.1M16.3 16.3l2.1 2.1M18.4 5.6l-2.1 2.1M7.7 16.3l-2.1 2.1',
@@ -60,6 +58,13 @@ const STATUS_LABEL: Record<string, string> = {
 }
 
 
+/** The saved section that holds the cursor, found through the headings of the text as it is now (so it is right while typing). */
+function sectionAt(sections: Section[], markdown: string, selection: { start: number } | null): Section | undefined {
+  if (!selection) return undefined
+  const heading = outlineOf(markdown).filter((e) => e.start <= selection.start).at(-1)
+  return heading ? sections.find((x) => x.heading === heading.heading && x.level === heading.level) : sections.find((x) => x.level === 0)
+}
+
 let lineId = 0
 
 type WriteAppProps = { services: WriteServices; connection?: { value: WriteConnection; onSave: (c: WriteConnection) => void; onForget: () => void } }
@@ -75,7 +80,10 @@ function WriteAppBody({ services, connection }: WriteAppProps): React.JSX.Elemen
   const [activeId, setActiveId] = useState<string | undefined>()
   const [bundle, setBundle] = useState<ArticleBundle | undefined>()
   const [draft, setDraft] = useState('')
-  const [tab, setTab] = useState<Tab>(() => (isWide() ? 'outline' : 'text'))
+  const [tab, setTab] = useState<Tab>(() => (isWide() ? 'style' : 'text'))
+  const [view, setView] = useState<TextView>('text')
+  // Where to put the cursor once the text is on screen again (a section picked in the outline).
+  const pendingJump = useRef<number | null>(null)
   // Desktop: the side panel opens when a rail button is clicked and closes when it is clicked again.
   const [railOpen, setRailOpen] = useState<boolean>(() => isWide())
   const [versions, setVersions] = useState<VersionRow[]>([])
@@ -180,8 +188,6 @@ function WriteAppBody({ services, connection }: WriteAppProps): React.JSX.Elemen
   const folderRef = useRef(folder)
   folderRef.current = folder
   const [candidates, setCandidates] = useState<Record<string, { title: string; url: string; snippet: string }[]>>({})
-  const [profiles, setProfiles] = useState<StyleProfile[]>([])
-  useEffect(() => { void service.profiles().then(setProfiles).catch(() => undefined) }, [service])
 
   const change = (label: string, work: (id: string) => Promise<void>): void => {
     if (!activeId) return
@@ -224,6 +230,7 @@ function WriteAppBody({ services, connection }: WriteAppProps): React.JSX.Elemen
 
   /** Puts the cursor at a place in the text and scrolls to it. */
   function jumpTo(start: number): void {
+    if (view !== 'text') { pendingJump.current = start; setView('text'); return }
     const ta = textRef.current
     if (!ta) return
     const at = Math.min(start, ta.value.length)
@@ -234,6 +241,11 @@ function WriteAppBody({ services, connection }: WriteAppProps): React.JSX.Elemen
     ta.scrollTop = Math.max(0, (ta.value.slice(0, at).split('\n').length - 1) * lineHeight - lineHeight * 2)
     if (!isWide()) setTab('text')
   }
+
+  // A section picked in the outline: the outline gives way to the text, at that section.
+  useEffect(() => {
+    if (view === 'text' && pendingJump.current !== null) { const at = pendingJump.current; pendingJump.current = null; jumpTo(at) }
+  })
 
   function pickTab(id: Tab): void {
     if (isWide() && tab === id && railOpen) setRailOpen(false)
@@ -340,6 +352,35 @@ function WriteAppBody({ services, connection }: WriteAppProps): React.JSX.Elemen
       await flushDraft()
       setNotice(await prepareFromText(id))
     })
+  }
+
+  /** Reads the style from the text, filling only the empty lines. */
+  const deriveStyle = (): void => {
+    if (!activeId) return
+    const id = activeId
+    void run('Reading the style from the text', async () => {
+      await flushDraft()
+      const r = await service.deriveStyleFromText(id, services.models.auto())
+      setBundle(await service.get(id))
+      setNotice(r.filled.length > 0 ? `Filled in: ${r.filled.join(', ')}. Edit anything that is off.` : 'I found nothing to add to the style.')
+    })
+  }
+  // The style fills in by itself once there is about a page of text (typed, pasted or imported), once for each article.
+  const styleTried = useRef<Set<string>>(new Set())
+  useEffect(() => {
+    if (!activeId || !bundle || styleTried.current.has(activeId) || !shouldDeriveStyle(bundle.meta, bundle.markdown)) return
+    styleTried.current.add(activeId)
+    const id = activeId
+    void service.deriveStyleFromText(id, services.models.auto()).then(async () => { if (id === activeIdRef.current) setBundle(await service.get(id)) }, () => undefined)
+  }, [service, services.models, activeId, bundle])
+  const activeIdRef = useRef(activeId)
+  activeIdRef.current = activeId
+
+  /** The scratchpad is saved quietly as the writer types, without the busy line. */
+  const saveScratchpad = (text: string): void => {
+    if (!activeId) return
+    const id = activeId
+    void service.setScratchpad(id, text).then(async () => { if (id === activeIdRef.current) setBundle(await service.get(id)) }, (err) => setNotice(String(err)))
   }
 
   // ---- links
@@ -466,19 +507,11 @@ function WriteAppBody({ services, connection }: WriteAppProps): React.JSX.Elemen
 
   const addNote = (kind: NoteKind, text: string): void => {
     if (!selection) return
-    if (kind === 'revise') {
-      change(`Revising with ${chatModel}`, async (id) => {
-        const r = await service.reviseText(id, selection, text, chatModel)
-        setNotice(r.status === 'failed' ? ('reason' in r ? r.reason : 'The revision could not run.') : r.added.length === 0 ? 'I found nothing to change in that text.' : `I added ${r.added.length} suggested change${r.added.length === 1 ? '' : 's'} to that text (${chatModel}). Accept ${r.added.length === 1 ? 'it' : 'them'} in Issues.`)
-      })
-      return
-    }
     change(kind === 'comment' ? 'Adding the comment' : 'Adding the source', async (id) => {
       if (kind === 'comment') {
         const r = await service.addComment(id, selection, text)
         if (!r.ok) setNotice(r.reason)
-      } else if (kind === 'say_so') await addSourceAndPlace({ kind: 'say_so', note: text }, true)
-      else await addSourceAndPlace(looksLikeLink(text) ? { kind: 'web', address: text } : { kind: 'upload', passage: text }, true)
+      } else await addSourceAndPlace(looksLikeLink(text) ? { kind: 'web', address: text } : { kind: 'upload', passage: text }, true)
     })
   }
 
@@ -501,16 +534,6 @@ function WriteAppBody({ services, connection }: WriteAppProps): React.JSX.Elemen
       else setNotice(lines.join(' '))
     })
   }
-
-  // ---- ideas
-  const suggestIdeas = (request: string): void => change(`Finding ideas with ${chatModel}`, async (id) => {
-    const r = await service.suggestIdeas(id, request, chatModel)
-    setNotice(r.status === 'failed' ? 'The search for ideas could not run.' : r.added.length === 0 ? 'I had nothing new to add.' : `Added ${r.added.length} idea${r.added.length === 1 ? '' : 's'} (${chatModel}).`)
-  })
-  const writeIdeas = (ids: string[]): void => change(`Writing the ideas in with ${chatModel}`, async (id) => {
-    const r = await service.writeIdeasIn(id, ids, undefined, chatModel)
-    setNotice(r.status === 'failed' ? 'I could not turn the ideas into edits.' : r.added.length === 0 ? 'I found no place in the text for those ideas.' : `I added ${r.added.length} suggested change${r.added.length === 1 ? '' : 's'} from your ideas (${chatModel}). Accept them in Issues.`)
-  })
 
   // ---- issues in batches
   const resolveCategory = (category: IssueCategory): void => change('Working on it', async (id) => {
@@ -620,45 +643,17 @@ function WriteAppBody({ services, connection }: WriteAppProps): React.JSX.Elemen
             <button key={t.id} type="button" data-tab={t.id} className={isOn(t.id) ? 'is-on' : ''} aria-pressed={isOn(t.id)} aria-label={t.label} onClick={() => pickTab(t.id)}>
               <Icon d={RAIL_ICONS[t.id]} size={22} />
               <span>{t.label}</span>
-              {t.id === 'issues' && issues > 0 && <span className="write__railbadge" aria-label={`${issues} issues`}>{issues}</span>}
             </button>
           ))}
         </nav>
         <aside className="write__panel" aria-label="Side panel">
           {ready && meta ? (
             <>
-              <section className={`write__pane write__panel-pane ${tab === 'outline' ? 'is-shown' : ''}`} aria-label="Outline">
-                <OutlinePanel meta={meta} onJump={jumpTo} onRename={(sid, h) => change('Renaming the heading', async (id) => { const r = await service.renameSection(id, sid, h); if (!r.ok) setNotice(r.reason) })} onPurpose={(sid, t) => change('Saving', async (id) => { await service.setSectionPurpose(id, sid, t) })} onClear={(sid) => change('Saving', async (id) => { await service.setReview(id, sid, 'clean') })} />
-              </section>
               <section className={`write__pane write__panel-pane ${tab === 'style' ? 'is-shown' : ''}`} aria-label="Style">
-                <StylePanel meta={meta} profiles={profiles} busy={busy !== null} onBrief={(b) => change('Saving the brief', async (id) => { await service.setBrief(id, b) })} onUse={(pid) => change('Saving', async (id) => { const r = await service.useProfile(id, pid); if (!r.ok && r.reason) setNotice(r.reason) })} onSaveProfile={(p) => change('Saving the profile', async (id) => { const saved = await service.saveProfile(p); if (saved) await service.useProfile(id, saved.id); setProfiles(await service.profiles()) })} onDeleteProfile={(pid) => change('Deleting the profile', async () => { await service.deleteProfile(pid); setProfiles(await service.profiles()) })} />
+                <StylePanel meta={meta} hasText={bundle.markdown.trim().length > 0} busy={busy !== null} onBrief={(b) => change('Saving the brief', async (id) => { await service.setBrief(id, b) })} onDerive={deriveStyle} />
               </section>
               <section className={`write__pane write__panel-pane ${tab === 'ideas' ? 'is-shown' : ''}`} aria-label="Ideas">
-                <IdeasPanel meta={meta} busy={busy !== null} model={chatModel} onAdd={(t) => change('Adding the idea', async (id) => { const r = await service.addIdea(id, { text: t }); if (!r.ok) setNotice(r.reason) })} onSuggest={suggestIdeas} onEdit={(iid, t) => change('Saving', async (id) => { await service.updateIdea(id, iid, { text: t }) })} onWrite={writeIdeas} onRemove={(iid) => change('Saving', async (id) => { await service.deleteIdea(id, iid) })} />
-              </section>
-              <section className={`write__pane write__panel-pane ${tab === 'issues' ? 'is-shown' : ''}`} aria-label="Issues">
-                <IssuesPanel
-                  meta={meta}
-                  busy={busy !== null}
-                  model={chatModel}
-                  notes={notes}
-                  onResolve={resolveCategory}
-                  onResolveAll={resolveAll}
-                  onClearNotes={() => setNotes([])}
-                  onAccept={(sid) => change('Applying', async (id) => { const r = await service.acceptSuggestionAndUpdate(id, sid, undefined, { analyze: false }); if (!r.ok) setNotice(r.reason) })}
-                  onReject={(sid) => change('Saving', async (id) => { await service.rejectSuggestionById(id, sid) })}
-                  onEditSuggestion={(sid, t) => change('Saving', async (id) => { await service.editSuggestion(id, sid, t) })}
-                  onCommentState={(cid, st) => change('Saving', async (id) => { await service.setCommentState(id, cid, st) })}
-                  onEditComment={(cid, t) => change('Saving', async (id) => { await service.editComment(id, cid, { text: t }) })}
-                  onClearSection={(sid) => change('Saving', async (id) => { await service.setReview(id, sid, 'clean') })}
-                  onConfirmLink={(lid) => change('Saving', async (id) => { await service.confirmDependency(id, lid) })}
-                  onRemoveLink={(lid) => change('Saving', async (id) => { await service.removeDependency(id, lid) })}
-                  onEditCorrection={(cid, t) => change('Saving', async (id) => { await service.editCorrection(id, cid, { note: t }) })}
-                  onJump={jumpTo}
-                />
-              </section>
-              <section className={`write__pane write__panel-pane ${tab === 'links' ? 'is-shown' : ''}`} aria-label="Links">
-                <LinksPanel meta={meta} busy={busy !== null} model={chatModel} onFind={findLinks} onConfirm={(lid) => change('Saving', async (id) => { await service.confirmDependency(id, lid) })} onRemove={removeLink} onAdd={(f, t, k: DependencyKind) => change('Adding the link', async (id) => { const r = await service.addDependency(id, f, t, k); if (!r.ok) setNotice(r.reason) })} />
+                <IdeasPanel meta={meta} onSave={saveScratchpad} />
               </section>
               <section className={`write__pane write__panel-pane ${tab === 'history' ? 'is-shown' : ''}`} aria-label="History">
                 <HistoryPanel versions={versions} working={working} viewing={viewing} busy={busy !== null} statusLabel={STATUS_LABEL} onSave={saveVersion} onView={(i) => openVersion(i, 'view')} onCompare={(i) => openVersion(i, 'compare')} onRestore={restoreVersion} onRename={(i, l) => change('Saving', async (id) => { await service.renameVersion(id, i, l) })} onClose={() => setViewing(null)} />
@@ -673,8 +668,41 @@ function WriteAppBody({ services, connection }: WriteAppProps): React.JSX.Elemen
         </aside>
         {ready && meta ? (
           <section className={`write__pane write__pane--text ${tab === 'text' || tab === 'chat' ? 'is-shown' : ''}`} aria-label="Text">
+            <div className="write__seg write__viewtoggle" role="group" aria-label="Show">
+              <button type="button" aria-label="Article view" aria-pressed={view === 'text'} className={view === 'text' ? 'is-on' : ''} onClick={() => setView('text')}>Article</button>
+              <button type="button" aria-label="Outline view" aria-pressed={view === 'outline'} className={view === 'outline' ? 'is-on' : ''} onClick={() => setView('outline')}>Outline</button>
+            </div>
+            {view === 'outline' && (
+              <div className="write__outlineview">
+                <OutlinePanel markdown={draft} onOpen={jumpTo} onRename={(start, heading) => onType(renameHeadingInText(draft, start, heading))} />
+              </div>
+            )}
+            <div className={`write__textview ${view === 'outline' ? 'is-hidden' : ''}`}>
             <MarkedText textRef={textRef} value={draft} pieces={textPieces(meta, draft)} caret={selection?.start ?? 0} onChange={onType} onSelection={(r) => { setSelection(r); const g = grownTo.current; if (!g || g.start !== r.start || g.end !== r.end) { growth.current = []; grownTo.current = undefined; setGrownUnit(undefined) } }} onGrow={growSelection} onShrink={shrinkSelection} unit={grownUnit} />
+            </div>
             <TextNotes
+              issues={<IssuesPanel
+                meta={meta}
+                busy={busy !== null}
+                model={chatModel}
+                notes={notes}
+                onResolve={resolveCategory}
+                onResolveAll={resolveAll}
+                onClearNotes={() => setNotes([])}
+                onAccept={(sid) => change('Applying', async (id) => { const r = await service.acceptSuggestionAndUpdate(id, sid, undefined, { analyze: false }); if (!r.ok) setNotice(r.reason) })}
+                onReject={(sid) => change('Saving', async (id) => { await service.rejectSuggestionById(id, sid) })}
+                onEditSuggestion={(sid, t) => change('Saving', async (id) => { await service.editSuggestion(id, sid, t) })}
+                onCommentState={(cid, st) => change('Saving', async (id) => { await service.setCommentState(id, cid, st) })}
+                onEditComment={(cid, t) => change('Saving', async (id) => { await service.editComment(id, cid, { text: t }) })}
+                onClearSection={(sid) => change('Saving', async (id) => { await service.setReview(id, sid, 'clean') })}
+                onConfirmLink={(lid) => change('Saving', async (id) => { await service.confirmDependency(id, lid) })}
+                onRemoveLink={(lid) => change('Saving', async (id) => { await service.removeDependency(id, lid) })}
+                onEditCorrection={(cid, t) => change('Saving', async (id) => { await service.editCorrection(id, cid, { note: t }) })}
+                onJump={jumpTo}
+              />}
+              issuesCount={issues}
+              links={<LinksPanel meta={meta} sectionId={sectionAt(meta.sections, draft, selection)?.id} busy={busy !== null} model={chatModel} onFind={findLinks} onConfirm={(lid) => change('Saving', async (id) => { await service.confirmDependency(id, lid) })} onRemove={removeLink} onAdd={(f, t, k: DependencyKind) => change('Adding the link', async (id) => { const r = await service.addDependency(id, f, t, k); if (!r.ok) setNotice(r.reason) })} />}
+              history={<TextHistory markdown={draft} selection={selection} versions={bundle.snapshots.map((x, index) => ({ index, kind: x.kind, label: x.label, at: x.at, markdown: x.markdown }))} />}
               meta={meta}
               markdown={draft}
               selection={selection}
@@ -743,7 +771,7 @@ function WriteAppBody({ services, connection }: WriteAppProps): React.JSX.Elemen
           onRepoVerify={verifyInRepo}
           onPickRepoFolder={services.pickFolder ? pickRepoFolderAndVerify : undefined}
           onRemoveRepo={removeRepo}
-          onSaveIdea={(l) => change('Saving', async (id) => { const r = await service.addIdea(id, { text: l.text, origin: 'assistant', model: l.model }); if (!r.ok) setNotice(r.reason) })}
+          onSaveIdea={(l) => change('Saving', async (id) => { await service.appendToScratchpad(id, l.text) })}
           onDropFiles={(files) => dropFiles(files, false, true)}
         />
       </main>

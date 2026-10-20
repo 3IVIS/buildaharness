@@ -1,7 +1,7 @@
 import { describe, it, expect } from 'vitest'
 import type { ILLMClient } from '@buildaharness/runtime'
 import { createArticleMeta } from './article-model.js'
-import { deriveStyle } from './article-style-derive.js'
+import { deriveStyle, shouldDeriveStyle } from './article-style-derive.js'
 
 const client = (reply: unknown | Error, seen: string[] = []): ILLMClient =>
   ({ callChatStructured: async (m: { role: string; content: string }[]) => { seen.push(m[1].content); if (reply instanceof Error) throw reply; return { content: JSON.stringify(reply) } } }) as unknown as ILLMClient
@@ -34,5 +34,15 @@ describe('deriveStyle', () => {
     const empty = await deriveStyle({ meta, markdown: 'Text.' }, client({ audience: '', purpose: '', tone: '', length: '', notes: '', voice: '', terms: [] }))
     expect(empty).toMatchObject({ status: 'derived', filled: [] })
     expect(empty.meta).toBe(meta)
+  })
+})
+
+describe('shouldDeriveStyle', () => {
+  const page = Array.from({ length: 320 }, () => 'word').join(' ')
+  it('is true for a page of text and nothing set', () => {
+    const meta = createArticleMeta('a', 'A')
+    expect(shouldDeriveStyle(meta, page)).toBe(true)
+    expect(shouldDeriveStyle(meta, 'short text')).toBe(false)
+    expect(shouldDeriveStyle({ ...meta, brief: { tone: 'dry' } }, page)).toBe(false)
   })
 })
