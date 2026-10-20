@@ -725,6 +725,7 @@ function WriteAppBody({ services, connection }: WriteAppProps): React.JSX.Elemen
               meta={meta}
               markdown={draft}
               selection={selection}
+              grownUnit={grownUnit}
               busy={busy !== null}
               model={chatModel}
               onAdd={addNote}

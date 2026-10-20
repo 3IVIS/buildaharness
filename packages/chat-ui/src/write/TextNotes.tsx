@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState, type ReactNode } from 'react'
-import { lookupNote, claimsInRange, commentsInRange, effectiveSourceStatus, matchFolderFiles, sourcesForClaim, textUnitAt, unitOfSelection, type ArticleMeta } from '@buildaharness/aielia'
+import { lookupNote, claimsInRange, commentsInRange, effectiveSourceStatus, matchFolderFiles, sourcesForClaim, textUnitAt, type ArticleMeta } from '@buildaharness/aielia'
 import { ICON_PATHS, Icon, IconButton } from './icons'
 
 const STATUS_LABEL: Record<string, string> = {
@@ -43,6 +43,8 @@ interface Props {
   meta: ArticleMeta
   markdown: string
   selection: { start: number; end: number } | null
+  /** The unit the selection was grown to with Select more (sentence, paragraph, section, article), when it was. */
+  grownUnit?: string
   busy: boolean
   model: string
   /** Add what the writer typed, as a comment on the text or a source for it. A source that is a link is stored as a link; anything else as a passage. */
@@ -94,7 +96,7 @@ const PANES: { id: DockPane; label: string }[] = [
  * paragraph or a section: its comments and sources show here. One line adds to it: type a comment, paste a link or passage, or state your own
  * word; drop a file anywhere in this box, or use the paperclip.
  */
-export function TextNotes({ issues, issuesCount, links, history, meta, markdown, selection, busy, model, onAdd, onFiles, onSaveComments, onDetach, onConfirm, onRead, onAcceptNew, onLines, onVerify, folder, onPickFolder, onUseFolderFile, onCloseFolder, onCheck, canSearch, candidates, onFindSources, onUseCandidate, onDismissCandidates }: Props): React.JSX.Element {
+export function TextNotes({ issues, issuesCount, links, history, meta, markdown, selection, grownUnit, busy, model, onAdd, onFiles, onSaveComments, onDetach, onConfirm, onRead, onAcceptNew, onLines, onVerify, folder, onPickFolder, onUseFolderFile, onCloseFolder, onCheck, canSearch, candidates, onFindSources, onUseCandidate, onDismissCandidates }: Props): React.JSX.Element {
   const [collapsed, setCollapsed] = useState(false)
   const [pane, setPane] = useState<DockPane>('comments')
   const [text, setText] = useState('')
@@ -104,9 +106,8 @@ export function TextNotes({ issues, issuesCount, links, history, meta, markdown,
   const kind: NoteKind = pane === 'sources' ? 'source' : 'comment'
   const unit = selection ? textUnitAt(markdown, selection.start, selection.end) : undefined
   const claims = unit ? claimsInRange(meta, unit) : []
-  /** What the box is about, whichever tab is open: the sentence, paragraph, section or whole article selected, or a phrase picked out by hand. */
-  const found = selection ? unitOfSelection(markdown, selection) : undefined
-  const unitLabel = unit && found && found.range.start === unit.start && found.range.end === unit.end ? found.unit[0].toUpperCase() + found.unit.slice(1) : selection && selection.start === selection.end ? 'Sentence' : 'Selected text'
+  /** What the box is about, whichever tab is open: the unit picked with Select more, the sentence under the cursor, or a phrase picked out by hand. */
+  const unitLabel = grownUnit ? grownUnit[0].toUpperCase() + grownUnit.slice(1) : selection && selection.start === selection.end ? 'Sentence' : 'Selected text'
   const comments = unit ? commentsInRange(meta, unit) : []
   const open = comments.filter((c) => c.state === 'open')
   const [commentText, setCommentText] = useState('')
