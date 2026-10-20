@@ -16,7 +16,7 @@ const STATUS_LABEL: Record<string, string> = {
 
 export type NoteKind = 'comment' | 'source'
 
-export type DockPane = 'notes' | 'issues' | 'links' | 'history'
+export type DockPane = 'comments' | 'sources' | 'issues' | 'links' | 'history'
 
 interface Props {
   /** The other panes of the box, drawn by the page: what needs attention in the article, how the selected text links, how it read before. */
@@ -67,7 +67,8 @@ const PLACEHOLDER: Record<NoteKind, string> = {
 }
 
 const PANES: { id: DockPane; label: string }[] = [
-  { id: 'notes', label: 'Comments and sources' },
+  { id: 'comments', label: 'Comments' },
+  { id: 'sources', label: 'Sources' },
   { id: 'issues', label: 'Issues' },
   { id: 'links', label: 'Links' },
   { id: 'history', label: 'History' },
@@ -80,12 +81,12 @@ const PANES: { id: DockPane; label: string }[] = [
  */
 export function TextNotes({ issues, issuesCount, links, history, meta, markdown, selection, busy, model, onAdd, onFiles, onEditComment, onResolveComment, onDeleteComment, onDetach, onConfirm, onRead, onAcceptNew, onLines, onVerify, folder, onPickFolder, onUseFolderFile, onCloseFolder, onCheck, canSearch, candidates, onFindSources, onUseCandidate, onDismissCandidates }: Props): React.JSX.Element {
   const [collapsed, setCollapsed] = useState(false)
-  const [pane, setPane] = useState<DockPane>('notes')
-  const [kind, setKind] = useState<NoteKind>('comment')
+  const [pane, setPane] = useState<DockPane>('comments')
   const [text, setText] = useState('')
   const [over, setOver] = useState(false)
   const picker = useRef<HTMLInputElement | null>(null)
   const [fileQuery, setFileQuery] = useState('')
+  const kind: NoteKind = pane === 'sources' ? 'source' : 'comment'
   const unit = selection ? textUnitAt(markdown, selection.start, selection.end) : undefined
   const claims = unit ? claimsInRange(meta, unit) : []
   const comments = unit ? commentsInRange(meta, unit) : []
@@ -112,19 +113,19 @@ export function TextNotes({ issues, issuesCount, links, history, meta, markdown,
       <div className="write__docktabs" role="tablist" aria-label="What to show about this text">
         {PANES.map((x) => (
           <button key={x.id} type="button" role="tab" aria-selected={pane === x.id} className={pane === x.id ? 'is-on' : ''} onClick={() => { setPane(x.id); setCollapsed(false) }}>
-            {x.id === 'notes' ? 'Notes' : x.label}{x.id === 'issues' && issuesCount > 0 && <span className="write__badge">{issuesCount}</span>}
+            {x.label}{x.id === 'issues' && issuesCount > 0 && <span className="write__badge">{issuesCount}</span>}
           </button>
         ))}
       </div>
       {!collapsed && pane === 'issues' && <div className="write__dockbody"><div className="write__dockscroll" role="tabpanel" aria-label="Issues">{issues}</div></div>}
       {!collapsed && pane === 'links' && <div className="write__dockbody"><div className="write__dockscroll" role="tabpanel" aria-label="Links">{links}</div></div>}
       {!collapsed && pane === 'history' && <div className="write__dockbody"><div className="write__dockscroll" role="tabpanel" aria-label="History of this text">{history}</div></div>}
-      {!collapsed && pane === 'notes' && (
+      {!collapsed && (pane === 'comments' || pane === 'sources') && (
         <div className="write__dockbody">
           <div className="write__dockscroll">
-            {unit && comments.length === 0 && claims.length === 0 && <p className="write__muted">Nothing here yet.</p>}
+            {unit && (pane === 'comments' ? comments.length === 0 : claims.length === 0) && <p className="write__muted">Nothing here yet.</p>}
             <ul className="write__rows">
-              {comments.map((c) => (
+              {pane === 'comments' && comments.map((c) => (
                 <li key={c.id}>
                   <span className="write__rowicon" title="Comment"><Icon d={ICON_PATHS.comment} size={16} /></span>
                   <div className="write__rowmain"><EditableText label="Comment" value={c.text} multiline onSave={(v) => onEditComment(c.id, v)} /></div>
@@ -134,7 +135,7 @@ export function TextNotes({ issues, issuesCount, links, history, meta, markdown,
                   </span>
                 </li>
               ))}
-              {claims.map((c) => {
+              {pane === 'sources' && claims.map((c) => {
                 const srcs = sourcesForClaim(meta, c.id)
                 const status = effectiveSourceStatus(c, meta.sources)
                 return (
@@ -181,7 +182,7 @@ export function TextNotes({ issues, issuesCount, links, history, meta, markdown,
               })}
             </ul>
           </div>
-          {folder && (
+          {pane === 'sources' && folder && (
             <div className="write__found" role="group" aria-label="Files in the folder">
               <div className="write__dsrc">
                 <span className="write__dsrcname">{folder.name} · {folder.files.length} files</span>
@@ -194,11 +195,6 @@ export function TextNotes({ issues, issuesCount, links, history, meta, markdown,
             </div>
           )}
           <div className="write__dockadd" role="group" aria-label="Add to this text">
-            <div className="write__seg" role="group" aria-label="What to add">
-              {(['comment', 'source'] as const).map((k) => (
-                <button key={k} type="button" aria-pressed={kind === k} className={kind === k ? 'is-on' : ''} onClick={() => setKind(k)}>{k === 'comment' ? 'Comment' : 'Source'}</button>
-              ))}
-            </div>
             <input
               aria-label="Add to this text"
               value={text}
@@ -207,8 +203,8 @@ export function TextNotes({ issues, issuesCount, links, history, meta, markdown,
               onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); submit() } }}
               placeholder={unit ? PLACEHOLDER[kind] : 'Click in the text first'}
             />
-            <button type="button" className="write__iconbtn" aria-label="Add a file as a source" title="Add a file as a source" onClick={() => picker.current?.click()}><Icon d={ICON_PATHS.attach} /></button>
-            {onPickFolder && <button type="button" className="write__iconbtn" aria-label="Use files from a folder on this computer" title="Use files from a folder on this computer" onClick={onPickFolder}><Icon d={ICON_PATHS.folder} /></button>}
+            {pane === 'sources' && <button type="button" className="write__iconbtn" aria-label="Add a file as a source" title="Add a file as a source" onClick={() => picker.current?.click()}><Icon d={ICON_PATHS.attach} /></button>}
+            {pane === 'sources' && onPickFolder && <button type="button" className="write__iconbtn" aria-label="Use files from a folder on this computer" title="Use files from a folder on this computer" onClick={onPickFolder}><Icon d={ICON_PATHS.folder} /></button>}
             <input ref={picker} type="file" multiple hidden aria-label="Choose files" onChange={(e) => { const files = Array.from(e.target.files ?? []); if (files.length > 0) onFiles(files); e.target.value = '' }} />
           </div>
         </div>

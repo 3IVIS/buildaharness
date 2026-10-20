@@ -523,14 +523,14 @@ describe('comments and sources under the text', () => {
     await waitFor(async () => expect((await s.service.get(id)).meta.comments[0].span?.quote).toBe(MD2.slice(start, end)))
   })
 
-  it('a pasted passage or a link becomes a source for the text; the unit switch picks what is added; one icon removes it', async () => {
+  it('a pasted passage or a link becomes a source for the text; in the Sources tab; one icon removes it', async () => {
     const s = await services({}, MD)
     const id = (await s.service.list())[0].id
     render(<WriteApp services={s} />)
     await waitForText()
     putCursor('18 ms')
+    await dockTab('Sources')
     const dock = screen.getByLabelText('Comments and sources for this text')
-    await userEvent.click(within(dock).getByRole('button', { name: 'Source' }))
     await userEvent.type(within(dock).getByLabelText('Add to this text', { selector: 'input' }), 'p99 latency: 18 ms{Enter}')
     expect(await within(dock).findByText(/p99 latency: 18 ms/)).toBeInTheDocument()
     await userEvent.type(within(dock).getByLabelText('Add to this text', { selector: 'input' }), 'https://example.com/bench{Enter}')
@@ -544,6 +544,7 @@ describe('comments and sources under the text', () => {
     render(<WriteApp services={s} />)
     await waitForText()
     putCursor('18 ms')
+    await dockTab('Sources')
     const dock = screen.getByLabelText('Comments and sources for this text')
     fireEvent.drop(dock, { dataTransfer: { files: [new File(['p99: 18 ms measured on 8 cores'], 'bench.txt', { type: 'text/plain' }), new File(['%PDF'], 'paper.pdf', { type: 'application/pdf' })] } })
     expect(await within(dock).findByText('bench.txt')).toBeInTheDocument()
@@ -574,6 +575,7 @@ describe('comments and sources under the text', () => {
     fireEvent.drop(panel('Chat'), { dataTransfer: { files: [new File(['p99 is 18 ms'], 'notes.txt', { type: 'text/plain' })] } })
     expect(await screen.findByText(/notes\.txt: added/)).toBeInTheDocument()
     putCursor('18 ms')
+    await dockTab('Sources')
     const dock = screen.getByLabelText('Comments and sources for this text')
     expect(await within(dock).findByText('notes.txt')).toBeInTheDocument()
     expect(within(dock).getByText(/suggested 90%/)).toBeInTheDocument()
@@ -583,23 +585,25 @@ describe('comments and sources under the text', () => {
 })
 
 describe('the box under the text', () => {
-  it('adds a comment or a source only; My word and Revise are gone and the buttons stay inside the box', async () => {
+  it('adds a comment or a source only, each in its own tab; My word and Revise are gone and the buttons stay inside the box', async () => {
     const s = await services({}, MD)
     render(<WriteApp services={s} />)
     await waitForText()
     putCursor('18 ms')
     const dock = screen.getByLabelText('Comments and sources for this text')
-    const kinds = within(within(dock).getByRole('group', { name: 'What to add' })).getAllByRole('button').map((b) => b.textContent)
-    expect(kinds).toEqual(['Comment', 'Source'])
+    expect(within(dock).queryByRole('group', { name: 'What to add' })).toBeNull() // Comments and Sources are tabs, not a switch
+    expect(within(dock).queryByRole('button', { name: 'Add a file as a source' })).toBeNull() // files belong to the Sources tab
+    await dockTab('Sources')
+    expect(within(dock).getByRole('button', { name: 'Add a file as a source' })).toBeInTheDocument()
     expect(within(dock).queryByRole('button', { name: 'Revise' })).toBeNull()
     expect(within(dock).queryByRole('button', { name: 'My word' })).toBeNull()
   })
 
-  it('has Notes, Issues, Links and History as tabs', async () => {
+  it('has Comments, Sources, Issues, Links and History as tabs', async () => {
     const s = await services({}, MD)
     render(<WriteApp services={s} />)
     await waitForText()
-    expect(within(screen.getByRole('tablist')).getAllByRole('tab').map((t) => t.textContent?.replace(/\d+$/, ''))).toEqual(['Notes', 'Issues', 'Links', 'History'])
+    expect(within(screen.getByRole('tablist')).getAllByRole('tab').map((t) => t.textContent?.replace(/\d+$/, ''))).toEqual(['Comments', 'Sources', 'Issues', 'Links', 'History'])
   })
 })
 
@@ -611,6 +615,7 @@ describe('finding sources', () => {
     render(<WriteApp services={s} />)
     await waitForText()
     putCursor('18 ms')
+    await dockTab('Sources')
     const dock = screen.getByLabelText('Comments and sources for this text')
     await userEvent.click(await within(dock).findByRole('button', { name: 'Find sources for this claim' }))
     const found = await within(dock).findByRole('group', { name: 'Pages that may back this claim' })
@@ -627,6 +632,7 @@ describe('finding sources', () => {
     render(<WriteApp services={s} />)
     await waitForText()
     putCursor('18 ms')
+    await dockTab('Sources')
     const dock = screen.getByLabelText('Comments and sources for this text')
     await userEvent.click(await within(dock).findByRole('button', { name: 'Look for a source and check this claim' }))
     await waitFor(async () => expect((await s.service.get(id)).meta.claims[0]).toMatchObject({ sourceStatus: 'supported' }))
@@ -644,6 +650,7 @@ describe('finding sources', () => {
     expect(await screen.findByText(/Looked at 1 claim, none backed: 1 with no source found/)).toBeInTheDocument()
     expect((await s.service.get(id)).meta.claims[0].lookup).toMatchObject({ outcome: 'no_results' })
     putCursor('18 ms')
+    await dockTab('Sources')
     expect(await within(screen.getByLabelText('Comments and sources for this text')).findByText(/No source found: searched the web/)).toBeInTheDocument()
   })
   it('offers no search button when no search is set up', async () => {
@@ -652,6 +659,7 @@ describe('finding sources', () => {
     render(<WriteApp services={s} />)
     await waitForText()
     putCursor('18 ms')
+    await dockTab('Sources')
     await within(screen.getByLabelText('Comments and sources for this text')).findByRole('button', { name: /Check this claim/ })
     expect(screen.queryByRole('button', { name: 'Find sources for this claim' })).toBeNull()
   })
@@ -665,8 +673,8 @@ describe('web links', () => {
     render(<WriteApp services={s} />)
     await waitForText()
     putCursor('18 ms')
+    await dockTab('Sources')
     const dock = screen.getByLabelText('Comments and sources for this text')
-    await userEvent.click(within(dock).getByRole('button', { name: 'Source' }))
     await userEvent.type(within(dock).getByLabelText('Add to this text', { selector: 'input' }), 'https://example.com/bench{Enter}')
     await waitFor(async () => expect((await s.service.get(id)).meta.sources[0]).toMatchObject({ kind: 'web', passage: 'p99 latency is 18 ms.' }))
     page = 'p99 latency is now 30 ms.'
@@ -682,8 +690,8 @@ describe('web links', () => {
     render(<WriteApp services={s} />)
     await waitForText()
     putCursor('18 ms')
+    await dockTab('Sources')
     const dock = screen.getByLabelText('Comments and sources for this text')
-    await userEvent.click(within(dock).getByRole('button', { name: 'Source' }))
     await userEvent.type(within(dock).getByLabelText('Add to this text', { selector: 'input' }), 'https://example.com/bench{Enter}')
     expect(await screen.findByText(/This browser cannot read web pages/)).toBeInTheDocument()
     expect((await s.service.get(id)).meta.sources[0]).toMatchObject({ kind: 'web', address: 'https://example.com/bench' })
@@ -698,8 +706,8 @@ describe('code sources', () => {
     render(<WriteApp services={s} />)
     await waitForText()
     putCursor('18 ms')
+    await dockTab('Sources')
     const dock = screen.getByLabelText('Comments and sources for this text')
-    await userEvent.click(within(dock).getByRole('button', { name: 'Source' }))
     await userEvent.type(within(dock).getByLabelText('Add to this text', { selector: 'input' }), 'https://github.com/o/r/blob/main/a.ts#L2-L3{Enter}')
     await waitFor(async () => expect((await s.service.get(id)).meta.sources[0]).toMatchObject({ kind: 'code', passage: 'two\nthree', lines: { from: 2, to: 3 } }))
     expect(fetched).toEqual(['https://raw.githubusercontent.com/o/r/main/a.ts'])
@@ -775,6 +783,7 @@ describe('files from a folder on the computer', () => {
     render(<WriteApp services={s} />)
     await waitForText()
     putCursor('18 ms')
+    await dockTab('Sources')
     const dock = screen.getByLabelText('Comments and sources for this text')
     await userEvent.click(within(dock).getByRole('button', { name: 'Use files from a folder on this computer' }))
     const group = await within(dock).findByRole('group', { name: 'Files in the folder' })
@@ -882,7 +891,7 @@ describe('links, history', () => {
     const links = panel('Links')
     expect(within(links).getByText(/Click in the text/)).toBeInTheDocument()
     await userEvent.click(within(links).getByRole('button', { name: /Look for links between sections/ }))
-    await dockTab('Notes')
+    await dockTab('Comments')
     putCursor('So p99 stays')
     await dockTab('Links')
     expect(await within(panel('Links')).findByText(/suggested 80%/)).toBeInTheDocument()
