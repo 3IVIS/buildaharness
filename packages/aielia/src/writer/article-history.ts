@@ -122,3 +122,56 @@ export function isLargeChange(before: string, after: string): boolean {
   const longer = Math.max(before.split('\n').length, after.split('\n').length)
   return changed >= 5 && changed >= longer * 0.4
 }
+
+export interface InlinePart {
+  type: 'same' | 'del' | 'add'
+  text: string
+}
+
+/** One line of a change as shown to the writer: a line only in one version, or a line changed in place with its words marked. */
+export type DisplayLine = { type: 'add' | 'del'; text: string } | { type: 'change'; parts: InlinePart[] }
+
+const tokens = (t: string): string[] => t.split(/(\s+)/).filter((x) => x !== '')
+
+/** The words of a line changed into the words of another, as one run of parts; undefined when the two lines have too little in common to read as an edit of each other. */
+export function inlineDiff(before: string, after: string): InlinePart[] | undefined {
+  const a = tokens(before)
+  const b = tokens(after)
+  const m = a.length
+  const n = b.length
+  const lcs: number[][] = Array.from({ length: m + 1 }, () => new Array<number>(n + 1).fill(0))
+  for (let i = m - 1; i >= 0; i--) for (let j = n - 1; j >= 0; j--) lcs[i][j] = a[i] === b[j] ? lcs[i + 1][j + 1] + 1 : Math.max(lcs[i + 1][j], lcs[i][j + 1])
+  const parts: InlinePart[] = []
+  const push = (type: InlinePart['type'], text: string): void => {
+    const last = parts[parts.length - 1]
+    if (last && last.type === type) last.text += text
+    else parts.push({ type, text })
+  }
+  let kept = 0
+  for (let i = 0, j = 0; i < m || j < n; ) {
+    if (i < m && j < n && a[i] === b[j]) { push('same', a[i]); if (a[i].trim()) kept++; i++; j++ } else if (i < m && (j >= n || lcs[i + 1][j] >= lcs[i][j + 1])) push('del', a[i++])
+    else push('add', b[j++])
+  }
+  const words = Math.max(a.filter((t) => t.trim()).length, b.filter((t) => t.trim()).length)
+  return words > 0 && kept / words >= 0.3 ? parts : undefined
+}
+
+/** The changed lines of a comparison, without the unchanged ones; a removed line followed by an added line that is an edit of it becomes one line with the changed words marked. */
+export function diffForDisplay(lines: readonly DiffLine[]): DisplayLine[] {
+  const out: DisplayLine[] = []
+  for (let i = 0; i < lines.length; ) {
+    if (lines[i].type === 'same') { i++; continue }
+    const dels: string[] = []
+    const adds: string[] = []
+    while (i < lines.length && lines[i].type === 'del') dels.push(lines[i++].text)
+    while (i < lines.length && lines[i].type === 'add') adds.push(lines[i++].text)
+    const edits = Array.from({ length: Math.min(dels.length, adds.length) }, (_, k) => inlineDiff(dels[k], adds[k]))
+    for (let k = 0; k < dels.length; k++) {
+      const e = edits[k]
+      if (e) out.push({ type: 'change', parts: e })
+      else out.push({ type: 'del', text: dels[k] })
+    }
+    for (let k = 0; k < adds.length; k++) if (!edits[k]) out.push({ type: 'add', text: adds[k] })
+  }
+  return out
+}
