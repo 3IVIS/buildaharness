@@ -55,7 +55,7 @@ export function HistoryPanel({ versions, working, busy, onSave, onView, onCompar
             <span className="write__hkind" title={v.kind === 'published' ? 'Published (frozen)' : 'Saved'}><Icon d={v.kind === 'published' ? ICON_PATHS.published : ICON_PATHS.saved} /></span>
             <div className="write__hmain">
               <div className="write__hline">
-                {v.kind === 'published' ? <strong>{v.label ?? 'Published'}</strong> : <strong><EditableText label="Version name" value={v.label ?? 'Saved'} onSave={(t) => onRename(v.index, t)} /></strong>}
+                {v.kind === 'published' ? <><strong>{v.label ?? 'Published'}</strong> <span className="write__badge">published</span></> : <strong><EditableText label="Version name" value={v.label ?? 'Saved'} onSave={(t) => onRename(v.index, t)} /></strong>}
                 <time dateTime={v.at}>{new Date(v.at).toLocaleString(undefined, { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' })}</time>
               </div>
               <div className="write__hchange">{describeChange(v.change)}</div>
