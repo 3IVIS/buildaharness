@@ -69,3 +69,15 @@ describe('collectIssues', () => {
     expect(issueCount(batches)).toBe(4)
   })
 })
+
+describe('issuesInRange', () => {
+  it('keeps only what bears on the text', async () => {
+    const { issuesInRange } = await import('./article-issues.js')
+    const { createArticleMeta } = await import('./article-model.js')
+    const base = createArticleMeta('a', 'A')
+    const sg = (id: string, start: number, end: number) => ({ id, span: { start, end, quote: 'q' }, replacement: 'r', reason: '', proposedBy: 'assistant' as const, state: 'pending' as const, createdAt: 'n' })
+    const meta = { ...base, suggestions: [sg('x', 0, 10), sg('y', 50, 60)] }
+    expect(issuesInRange(meta, { start: 5, end: 5 }).suggestions.map((s) => s.id)).toEqual(['x'])
+    expect(issuesInRange(meta, { start: 40, end: 70 }).suggestions.map((s) => s.id)).toEqual(['y'])
+  })
+})

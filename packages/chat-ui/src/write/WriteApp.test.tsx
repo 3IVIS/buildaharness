@@ -45,7 +45,7 @@ const MD = '# Post\n\n## Latency\n\nThe p99 was 18 ms.\n'
 const MD2 = '# Post\n\n## Latency\n\nThe p99 was 18 ms. It is quick.\n\n## Conclusion\n\nSo p99 stays under 20 ms.\n'
 const openMenu = (): Promise<void> => userEvent.click(screen.getByRole('button', { name: 'Article' }))
 const rail = (name: string): HTMLElement => within(screen.getByRole('navigation', { name: 'Panels' })).getByRole('button', { name })
-const panel = (name: string): HTMLElement => (name === 'Issues' || name === 'Links' ? screen.getByRole('tabpanel', { name }) : screen.getByRole('region', { name }))
+const panel = (name: string): HTMLElement => (name === 'Links' ? screen.getByRole('tabpanel', { name }) : screen.getByRole('region', { name }))
 const dockTab = (name: RegExp | string): Promise<void> => userEvent.click(screen.getByRole('tab', { name }))
 /** Opens one kind of issue under its button at the top of the Issues pane. */
 const expand = (title: string): Promise<void> => userEvent.click(within(panel('Issues')).getByRole('button', { name: new RegExp(`^${title}`) }))
@@ -174,7 +174,7 @@ describe('rail and panels', () => {
       const { container } = render(<WriteApp services={s} />)
       await waitForText()
       const main = container.querySelector('.write__main') as HTMLElement
-      expect(within(screen.getByRole('navigation', { name: 'Panels' })).getAllByRole('button').map((b) => b.getAttribute('aria-label'))).toEqual(['Text', 'Style', 'Ideas', 'History', 'Chat', 'Settings'])
+      expect(within(screen.getByRole('navigation', { name: 'Panels' })).getAllByRole('button').map((b) => b.getAttribute('aria-label'))).toEqual(['Text', 'Style', 'Ideas', 'Issues', 'History', 'Chat', 'Settings'])
       expect(main.dataset.open).toBe('true')
       await userEvent.click(rail('Style'))
       expect(main.dataset.open).toBe('false')
@@ -184,13 +184,20 @@ describe('rail and panels', () => {
       expect(panel('Style').className).not.toContain('is-shown')
     }))
 
-  it('counts what needs attention on the Issues tab under the text', async () => {
-    const s = await services({}, MD)
+  it('counts what needs attention on the Issues button, and the box under the text lists only the issues of the selected text', async () => {
+    const s = await services({}, MD2)
     const id = (await s.service.list())[0].id
-    await s.service.addComment(id, { start: 0, end: 0 }, 'x') // no text under a click at 0? the heading line is a unit
+    await s.service.addComment(id, { start: MD2.indexOf('So p99'), end: MD2.indexOf('So p99') }, 'x')
     render(<WriteApp services={s} />)
     await waitForText()
-    expect(within(screen.getByRole('tab', { name: /Issues/ })).getByText('1')).toBeInTheDocument()
+    expect(within(rail('Issues')).getByLabelText(/1 issue/)).toBeInTheDocument()
+    await dockTab(/Issues/)
+    const pane = screen.getByRole('tabpanel', { name: 'Issues' })
+    expect(within(pane).getByText(/Click in the text/)).toBeInTheDocument()
+    putCursor('The p99 was')
+    expect(await within(pane).findByText(/Nothing needs your attention/)).toBeInTheDocument()
+    putCursor('So p99 stays')
+    expect(await within(pane).findByRole('button', { name: /^Reviewer comments/ })).toBeInTheDocument()
   })
 })
 
@@ -360,7 +367,7 @@ describe('issues in batches', () => {
   const open = async (s: Awaited<ReturnType<typeof services>>): Promise<HTMLTextAreaElement> => {
     render(<WriteApp services={s} />)
     const box = await waitForText()
-    await dockTab(/Issues/)
+    await userEvent.click(rail('Issues'))
     return box
   }
 

@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
-import { githubRepoReader, parseGithubRepoAddress, type FolderReader, expandSelection, summarizeVerify, type VerifyReport, textPieces, collectIssues, parseLineRange, sourceKindForFile, computeReadiness, effectiveSourceStatus, issueCount, outlineOf, renameHeadingInText, shouldDeriveStyle, type ArticleBundle, type ChangeSummary, type DependencyKind, type IssueCategory, type Section, type WritePermissions } from '@buildaharness/aielia'
+import { githubRepoReader, parseGithubRepoAddress, type FolderReader, expandSelection, summarizeVerify, type VerifyReport, textPieces, collectIssues, parseLineRange, sourceKindForFile, computeReadiness, effectiveSourceStatus, issueCount, outlineOf, renameHeadingInText, issuesInRange, unitOfSelection, shouldDeriveStyle, type ArticleBundle, type ChangeSummary, type DependencyKind, type IssueCategory, type Section, type WritePermissions } from '@buildaharness/aielia'
 import type { ChatAction } from './AdjustBar'
 import { ArticleSwitcher, type ArticleItem } from './ArticleSwitcher'
 import { ChatPane, type ChatLine } from './ChatPane'
@@ -19,7 +19,7 @@ import { DialogProvider, useDialogs } from './dialogs'
 import type { WriteServices } from './write-services'
 import './write.css'
 
-type Tab = 'text' | 'style' | 'ideas' | 'history' | 'chat' | 'settings'
+type Tab = 'text' | 'style' | 'ideas' | 'issues' | 'history' | 'chat' | 'settings'
 
 /** What the text pane shows: the article, or its outline. */
 type TextView = 'text' | 'outline'
@@ -28,6 +28,7 @@ const TABS: { id: Tab; label: string }[] = [
   { id: 'text', label: 'Text' },
   { id: 'style', label: 'Style' },
   { id: 'ideas', label: 'Ideas' },
+  { id: 'issues', label: 'Issues' },
   { id: 'history', label: 'History' },
   { id: 'chat', label: 'Chat' },
   { id: 'settings', label: 'Settings' },
@@ -37,6 +38,7 @@ const RAIL_ICONS: Record<Tab, string> = {
   text: 'M5 5h14M5 9h14M5 13h14M5 17h9',
   style: 'M12 20h9M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4z',
   ideas: 'M9 18h6M10 21h4M12 3a6 6 0 0 0-3.5 10.9c.6.5 1 1.2 1 2.1h5c0-.9.4-1.6 1-2.1A6 6 0 0 0 12 3z',
+  issues: 'M12 3 2.5 20h19L12 3zM12 10v4M12 17h.01',
   history: 'M3 12a9 9 0 1 0 3-6.7M3 4v5h5M12 7v5l3 2',
   chat: 'M4 5h16v11H9l-5 4z',
   settings: 'M12 9a3 3 0 1 0 0 6 3 3 0 0 0 0-6zM12 3v3M12 18v3M3 12h3M18 12h3M5.6 5.6l2.1 2.1M16.3 16.3l2.1 2.1M18.4 5.6l-2.1 2.1M7.7 16.3l-2.1 2.1',
@@ -619,7 +621,30 @@ function WriteAppBody({ services, connection }: WriteAppProps): React.JSX.Elemen
   const readiness = meta ? computeReadiness(meta) : undefined
   const issues = meta ? issueCount(collectIssues(meta)) : 0
   const ready = Boolean(activeId && bundle && meta)
+  // The box under the text lists the issues of the selected text only; the side panel lists the whole article.
+  const unit = selection ? unitOfSelection(draft, selection) : undefined
+  const unitMeta = meta && unit ? issuesInRange(meta, unit.range) : meta
+  const unitIssues = unitMeta && unit ? issueCount(collectIssues(unitMeta)) : 0
 
+  const issuesNode = (m: typeof meta & object): React.JSX.Element => <IssuesPanel
+                meta={m}
+                busy={busy !== null}
+                model={chatModel}
+                notes={notes}
+                onResolve={resolveCategory}
+                onResolveAll={resolveAll}
+                onClearNotes={() => setNotes([])}
+                onAccept={(sid) => change('Applying', async (id) => { const r = await service.acceptSuggestionAndUpdate(id, sid, undefined, { analyze: false }); if (!r.ok) setNotice(r.reason) })}
+                onReject={(sid) => change('Saving', async (id) => { await service.rejectSuggestionById(id, sid) })}
+                onEditSuggestion={(sid, t) => change('Saving', async (id) => { await service.editSuggestion(id, sid, t) })}
+                onCommentState={(cid, st) => change('Saving', async (id) => { await service.setCommentState(id, cid, st) })}
+                onEditComment={(cid, t) => change('Saving', async (id) => { await service.editComment(id, cid, { text: t }) })}
+                onClearSection={(sid) => change('Saving', async (id) => { await service.setReview(id, sid, 'clean') })}
+                onConfirmLink={(lid) => change('Saving', async (id) => { await service.confirmDependency(id, lid) })}
+                onRemoveLink={(lid) => change('Saving', async (id) => { await service.removeDependency(id, lid) })}
+                onEditCorrection={(cid, t) => change('Saving', async (id) => { await service.editCorrection(id, cid, { note: t }) })}
+                onJump={jumpTo}
+              />
   return (
     <div className="write">
       <header className="write__bar">
@@ -643,6 +668,7 @@ function WriteAppBody({ services, connection }: WriteAppProps): React.JSX.Elemen
             <button key={t.id} type="button" data-tab={t.id} className={isOn(t.id) ? 'is-on' : ''} aria-pressed={isOn(t.id)} aria-label={t.label} onClick={() => pickTab(t.id)}>
               <Icon d={RAIL_ICONS[t.id]} size={22} />
               <span>{t.label}</span>
+              {t.id === 'issues' && issues > 0 && <span className="write__railbadge" aria-label={`${issues} issues`}>{issues}</span>}
             </button>
           ))}
         </nav>
@@ -654,6 +680,10 @@ function WriteAppBody({ services, connection }: WriteAppProps): React.JSX.Elemen
               </section>
               <section className={`write__pane write__panel-pane ${tab === 'ideas' ? 'is-shown' : ''}`} aria-label="Ideas">
                 <IdeasPanel meta={meta} onSave={saveScratchpad} />
+              </section>
+              <section className={`write__pane write__panel-pane ${tab === 'issues' ? 'is-shown' : ''}`} aria-label="Issues">
+                <h2 className="write__panehead">Issues</h2>
+                {issuesNode(meta)}
               </section>
               <section className={`write__pane write__panel-pane ${tab === 'history' ? 'is-shown' : ''}`} aria-label="History">
                 <HistoryPanel versions={versions} working={working} viewing={viewing} busy={busy !== null} statusLabel={STATUS_LABEL} onSave={saveVersion} onView={(i) => openVersion(i, 'view')} onCompare={(i) => openVersion(i, 'compare')} onRestore={restoreVersion} onRename={(i, l) => change('Saving', async (id) => { await service.renameVersion(id, i, l) })} onClose={() => setViewing(null)} />
@@ -681,26 +711,8 @@ function WriteAppBody({ services, connection }: WriteAppProps): React.JSX.Elemen
             <MarkedText textRef={textRef} value={draft} pieces={textPieces(meta, draft)} caret={selection?.start ?? 0} onChange={onType} onSelection={(r) => { setSelection(r); const g = grownTo.current; if (!g || g.start !== r.start || g.end !== r.end) { growth.current = []; grownTo.current = undefined; setGrownUnit(undefined) } }} onGrow={growSelection} onShrink={shrinkSelection} unit={grownUnit} />
             </div>
             <TextNotes
-              issues={<IssuesPanel
-                meta={meta}
-                busy={busy !== null}
-                model={chatModel}
-                notes={notes}
-                onResolve={resolveCategory}
-                onResolveAll={resolveAll}
-                onClearNotes={() => setNotes([])}
-                onAccept={(sid) => change('Applying', async (id) => { const r = await service.acceptSuggestionAndUpdate(id, sid, undefined, { analyze: false }); if (!r.ok) setNotice(r.reason) })}
-                onReject={(sid) => change('Saving', async (id) => { await service.rejectSuggestionById(id, sid) })}
-                onEditSuggestion={(sid, t) => change('Saving', async (id) => { await service.editSuggestion(id, sid, t) })}
-                onCommentState={(cid, st) => change('Saving', async (id) => { await service.setCommentState(id, cid, st) })}
-                onEditComment={(cid, t) => change('Saving', async (id) => { await service.editComment(id, cid, { text: t }) })}
-                onClearSection={(sid) => change('Saving', async (id) => { await service.setReview(id, sid, 'clean') })}
-                onConfirmLink={(lid) => change('Saving', async (id) => { await service.confirmDependency(id, lid) })}
-                onRemoveLink={(lid) => change('Saving', async (id) => { await service.removeDependency(id, lid) })}
-                onEditCorrection={(cid, t) => change('Saving', async (id) => { await service.editCorrection(id, cid, { note: t }) })}
-                onJump={jumpTo}
-              />}
-              issuesCount={issues}
+              issues={unit && unitMeta ? issuesNode(unitMeta) : <p className="write__muted">Click in the text, or highlight some, to see the issues in it. The Issues button at the side lists the whole article.</p>}
+              issuesCount={unitIssues}
               links={<LinksPanel meta={meta} sectionId={sectionAt(meta.sections, draft, selection)?.id} busy={busy !== null} model={chatModel} onFind={findLinks} onConfirm={(lid) => change('Saving', async (id) => { await service.confirmDependency(id, lid) })} onRemove={removeLink} onAdd={(f, t, k: DependencyKind) => change('Adding the link', async (id) => { const r = await service.addDependency(id, f, t, k); if (!r.ok) setNotice(r.reason) })} />}
               history={<TextHistory markdown={draft} selection={selection} versions={bundle.snapshots.map((x, index) => ({ index, kind: x.kind, label: x.label, at: x.at, markdown: x.markdown }))} />}
               meta={meta}
