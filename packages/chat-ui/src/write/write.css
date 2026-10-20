@@ -304,3 +304,8 @@
 .write .write__docktabs button.is-on { border-bottom-color: var(--accent); font-weight: 600; }
 .write__dockadd > .write__seg { max-width: 100%; }
 .write__dockscroll, .write__dockbody { min-width: 0; }
+
+/* The outline as text: a plain box, one heading per line. */
+.write__outlineedit { display: flex; flex-direction: column; gap: 6px; height: 100%; }
+.write .write__outlinetext { flex: 1 1 auto; min-height: 160px; width: 100%; resize: none; font-family: inherit; line-height: 1.7; }
+.write__outlinebar { display: flex; gap: 12px; align-items: baseline; justify-content: space-between; font-size: 0.85rem; }

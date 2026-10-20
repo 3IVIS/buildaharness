@@ -83,7 +83,7 @@ describe('header and article menu', () => {
     const box = await waitForText()
     expect(box.value).toContain('# My post')
     await userEvent.click(screen.getByRole('button', { name: 'Outline view' }))
-    expect(within(screen.getByRole('list', { name: 'Outline' })).getByText('My post')).toBeInTheDocument()
+    expect((screen.getByRole('textbox', { name: 'Outline' }) as HTMLTextAreaElement).value).toContain('My post')
   })
 
   it('shows a short name, cut off when long, separate from the title in the text, and lets the writer rename it', async () => {
@@ -201,49 +201,56 @@ describe('rail and panels', () => {
   })
 })
 
-describe('outline: a view of the text, edited together with it', () => {
-  const outline = (): HTMLElement => screen.getByRole('list', { name: 'Outline' })
+describe('outline: a view of the text, edited as text together with it', () => {
+  const outline = (): HTMLTextAreaElement => screen.getByRole('textbox', { name: 'Outline' }) as HTMLTextAreaElement
   const showOutline = (): Promise<void> => userEvent.click(screen.getByRole('button', { name: 'Outline view' }))
 
-  it('is a toggle above the text, numbers the headings, and has no side panel of its own', async () => {
+  it('is a toggle above the text and shows the headings as plain text, one per line', async () => {
     const md = '# Post\n\n## One\n\ntext\n\n### One point one\n\ntext\n\n## Two\n\ntext\n'
     const s = await services({}, md)
     render(<WriteApp services={s} />)
     await waitForText()
     expect(screen.queryByRole('button', { name: 'Outline' })).toBeNull() // not in the rail
     await showOutline()
-    const li = (name: string) => within(outline()).getByRole('button', { name: `Heading: ${name}` }).closest('li') as HTMLElement
-    expect(within(li('One')).getByText('1')).toBeInTheDocument()
-    expect(within(li('One point one')).getByText('1.1')).toBeInTheDocument()
-    expect(within(li('Two')).getByText('2')).toBeInTheDocument()
-    expect(within(li('One')).queryByText(/What is this section for/)).toBeNull()
+    expect(outline().value).toBe('# Post\n## One\n### One point one\n## Two')
   })
 
-  it('opens the text at a section when it is clicked, and the outline gives way to the text', async () => {
+  it('opens the text at the section the cursor is on, and the outline gives way to the text', async () => {
     const md = '# Post\n\n## One\n\ntext\n\n## Two\n\ntext\n'
     const s = await services({}, md)
     render(<WriteApp services={s} />)
     const box = await waitForText()
     await showOutline()
     expect(screen.getByRole('button', { name: 'Outline view' })).toHaveAttribute('aria-pressed', 'true')
-    await userEvent.click(within(outline()).getByRole('button', { name: 'Heading: Two' }))
-    expect(screen.queryByRole('list', { name: 'Outline' })).toBeNull()
+    outline().setSelectionRange(outline().value.length, outline().value.length) // on the last line, "## Two"
+    await userEvent.click(screen.getByRole('button', { name: 'Open this section' }))
+    expect(screen.queryByRole('textbox', { name: 'Outline' })).toBeNull()
     expect(screen.getByRole('button', { name: 'Article view' })).toHaveAttribute('aria-pressed', 'true')
     await waitFor(() => expect(box.selectionStart).toBe(md.indexOf('## Two')))
   })
 
-  it('renames a heading with the pencil: the heading in the text changes and nothing else does', async () => {
+  it('rewording a line rewords the heading in the text and nothing else changes', async () => {
     const s = await services({}, MD2)
     render(<WriteApp services={s} />)
     const box = await waitForText()
     await showOutline()
-    await userEvent.click(within(outline()).getByRole('button', { name: 'Rename Latency' }))
-    const input = screen.getByLabelText('Heading: Latency')
-    await userEvent.clear(input)
-    await userEvent.type(input, 'Response time{Enter}')
+    fireEvent.change(outline(), { target: { value: outline().value.replace('Latency', 'Response time') } })
+    fireEvent.blur(outline())
     await waitFor(() => expect(box.value).toContain('## Response time\n'))
     expect(box.value).toContain('The p99 was 18 ms. It is quick.')
-    expect(within(outline()).getByRole('button', { name: 'Heading: Response time' })).toBeInTheDocument()
+  })
+
+  it('a new line is a new section and more hashes make a subsection', async () => {
+    const md = '# Post\n\n## One\n\ntext\n'
+    const s = await services({}, md)
+    render(<WriteApp services={s} />)
+    const box = await waitForText()
+    await showOutline()
+    fireEvent.change(outline(), { target: { value: '# Post\n## One\n### Detail\n## Two' } })
+    fireEvent.blur(outline())
+    await waitFor(() => expect(box.value).toContain('### Detail'))
+    expect(box.value).toContain('## Two')
+    expect(box.value).toContain('text')
   })
 
   it('follows what is typed in the text', async () => {
@@ -252,7 +259,7 @@ describe('outline: a view of the text, edited together with it', () => {
     const box = await waitForText()
     fireEvent.change(box, { target: { value: `${MD}\n## Added\n\nmore\n` } })
     await showOutline()
-    expect(within(outline()).getByRole('button', { name: 'Heading: Added' })).toBeInTheDocument()
+    expect(outline().value).toContain('## Added')
   })
 })
 

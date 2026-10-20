@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
-import { githubRepoReader, parseGithubRepoAddress, type FolderReader, expandSelection, summarizeVerify, type VerifyReport, textPieces, collectIssues, parseLineRange, sourceKindForFile, computeReadiness, effectiveSourceStatus, issueCount, outlineOf, renameHeadingInText, issuesInRange, unitOfSelection, shouldDeriveStyle, type ArticleBundle, type ChangeSummary, type DependencyKind, type IssueCategory, type Section, type WritePermissions } from '@buildaharness/aielia'
+import { githubRepoReader, parseGithubRepoAddress, type FolderReader, expandSelection, summarizeVerify, type VerifyReport, textPieces, collectIssues, parseLineRange, sourceKindForFile, computeReadiness, effectiveSourceStatus, issueCount, outlineOf, issuesInRange, unitOfSelection, shouldDeriveStyle, type ArticleBundle, type ChangeSummary, type DependencyKind, type IssueCategory, type Section, type WritePermissions } from '@buildaharness/aielia'
 import type { ChatAction } from './AdjustBar'
 import { ArticleSwitcher, type ArticleItem } from './ArticleSwitcher'
 import { ChatPane, type ChatLine } from './ChatPane'
@@ -704,7 +704,7 @@ function WriteAppBody({ services, connection }: WriteAppProps): React.JSX.Elemen
             </div>
             {view === 'outline' && (
               <div className="write__outlineview">
-                <OutlinePanel markdown={draft} onOpen={jumpTo} onRename={(start, heading) => onType(renameHeadingInText(draft, start, heading))} />
+                <OutlinePanel markdown={draft} onOpen={jumpTo} onChange={onType} />
               </div>
             )}
             <div className={`write__textview ${view === 'outline' ? 'is-hidden' : ''}`}>
