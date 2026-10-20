@@ -103,8 +103,12 @@
 .write__form textarea, .write__form input, .write__form select, .write__form button { width: 100%; box-sizing: border-box; }
 
 .write__pre { white-space: pre-wrap; overflow-wrap: anywhere; margin: 8px 0; padding: 8px; max-height: 320px; overflow: auto; font: 0.85rem/1.5 ui-monospace, Menlo, monospace; background: var(--tint-1); border-radius: 6px; }
-.write__diff--add { color: var(--green); }
-.write__diff--del { color: var(--red); }
+.write__diffline { white-space: pre-wrap; padding: 1px 6px; border-left: 3px solid transparent; }
+.write__diffline--add { border-left-color: var(--green); background: color-mix(in srgb, var(--green) 10%, transparent); }
+.write__diffline--del { border-left-color: var(--red); background: color-mix(in srgb, var(--red) 10%, transparent); text-decoration: line-through; }
+.write__diffline--change { border-left-color: var(--accent); }
+.write ins.write__diff--add { text-decoration: none; color: inherit; background: color-mix(in srgb, var(--green) 30%, transparent); border-radius: 3px; }
+.write del.write__diff--del { color: inherit; background: color-mix(in srgb, var(--red) 30%, transparent); border-radius: 3px; }
 .write__chathead { display: flex; align-items: center; gap: 10px; margin-bottom: 8px; }
 .write__chathead h2 { margin: 0; flex: none; }
 .write__linemeta { display: flex; flex-wrap: wrap; gap: 4px 10px; align-items: center; margin-top: 6px; }

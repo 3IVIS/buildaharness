@@ -2,7 +2,7 @@ import { describe, it, expect } from 'vitest'
 import { createArticleMeta, type ArticleMeta, type Claim } from './article-model.js'
 import { createSnapshot } from './article-rules.js'
 import { createSource } from './article-sources.js'
-import { addSnapshot, compareVersions, diffLines, isLargeChange, MAX_CHECKPOINTS, summarizeChange } from './article-history.js'
+import { addSnapshot, compareVersions, diffForDisplay, diffLines, isLargeChange, MAX_CHECKPOINTS, summarizeChange } from './article-history.js'
 
 const NOW = '2026-10-16T10:00:00.000Z'
 const claim = (over: Partial<Claim>): Claim => ({ id: 'k1', sectionId: 's1', quote: 'It is fast.', position: 0, kind: 'factual', author: 'model', authorAt: NOW, confirmed: false, sourceStatus: 'none', ...over })
@@ -80,5 +80,18 @@ describe('summarizeChange', () => {
     const cSections = [{ heading: 'One', start: 0, end: 12 }, { heading: 'Three', start: 12, end: C.length }]
     expect(summarizeChange(side(A, aSections), side(C, cSections)).sections.sort()).toEqual(['Three', 'Two'])
     expect(summarizeChange(undefined, side(A, aSections))).toMatchObject({ first: true, added: 5, removed: 0 })
+  })
+})
+
+describe('diffForDisplay', () => {
+  it('marks the changed words in one line instead of showing the old and the new line', () => {
+    const lines = diffLines('Intro.\nThe p99 was 18 ms. It is quick.\nEnd.', 'Intro.\nThe p99 was 41 ms. It is quick.\nEnd.')
+    const shown = diffForDisplay(lines)
+    expect(shown).toHaveLength(1)
+    expect(shown[0]).toEqual({ type: 'change', parts: [{ type: 'same', text: 'The p99 was ' }, { type: 'del', text: '18' }, { type: 'add', text: '41' }, { type: 'same', text: ' ms. It is quick.' }] })
+  })
+  it('keeps whole lines that were only added or removed, and lines that share almost nothing', () => {
+    expect(diffForDisplay(diffLines('a\nb', 'a\nb\nnew line here'))).toEqual([{ type: 'add', text: 'new line here' }])
+    expect(diffForDisplay(diffLines('one two three', 'completely different words'))).toEqual([{ type: 'del', text: 'one two three' }, { type: 'add', text: 'completely different words' }])
   })
 })

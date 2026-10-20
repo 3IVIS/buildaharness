@@ -1002,8 +1002,10 @@ describe('links, history', () => {
     await userEvent.clear(input)
     await userEvent.type(input, 'Memory added{Enter}')
     expect(await within(history).findByText('Memory added')).toBeInTheDocument()
-    await userEvent.click(within(history).getAllByRole('button', { name: 'Compare with now' })[0])
-    expect(await screen.findByLabelText('Version detail')).toBeInTheDocument()
+    await userEvent.click(within(history).getAllByRole('button', { name: 'Compare with now' })[1]) // the oldest: 18 ms became 41 ms
+    const detail = await screen.findByLabelText('Version detail')
+    expect(detail.querySelector('ins')?.textContent).toBe('41') // the changed word is marked inside its line, not the whole line twice
+    expect(detail.querySelector('del')?.textContent).toBe('18')
     expect(within(history).queryByLabelText('Version detail')).toBeNull() // shown in the main text window, not in the side panel
     await userEvent.click(within(screen.getByRole('group', { name: 'Which text' })).getByRole('button', { name: 'Current' }))
     expect(screen.queryByLabelText('Version detail')).toBeNull()
