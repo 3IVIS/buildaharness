@@ -148,3 +148,39 @@ export function applyOutlineText(markdown: string, outlineText: string): string 
 }
 
 type ParsedHeadingLike = { start: number; end: number }
+
+/**
+ * Growing a selection in the outline text: the heading line, then that heading with the headings under it, then the heading it sits under with
+ * everything under that, and so on up. The whole outline is never offered, so the largest selection is the one just below it. `range` is in the
+ * outline text (`outlineToText`), not in the article.
+ */
+export function expandOutlineSelection(outlineText: string, range: { start: number; end: number }): { range: { start: number; end: number }; unit: 'heading' | 'section' } | undefined {
+  const lines: { at: number; end: number; level: number }[] = []
+  let at = 0
+  let level = 1
+  for (const line of outlineText.split('\n')) {
+    const hashes = /^\s*(#{1,6})/.exec(line)
+    if (hashes) level = hashes[1].length
+    if (line.trim()) lines.push({ at: at + (line.length - line.trimStart().length), end: at + line.trimEnd().length, level })
+    at += line.length + 1
+  }
+  if (lines.length === 0) return undefined
+  const lo = Math.max(0, Math.min(range.start, range.end))
+  const hi = Math.max(range.start, range.end)
+  let from = lines.findIndex((l) => l.end >= lo)
+  if (from === -1) from = lines.length - 1
+  const whole = { start: lines[0].at, end: lines[lines.length - 1].end }
+  const candidates: { start: number; end: number; unit: 'heading' | 'section' }[] = [{ start: lines[from].at, end: lines[from].end, unit: 'heading' }]
+  let above = Infinity
+  for (let i = from; i >= 0; i--) {
+    if (lines[i].level >= above) continue
+    above = lines[i].level
+    const next = lines.slice(i + 1).findIndex((l) => l.level <= lines[i].level)
+    const last = next === -1 ? lines.length - 1 : i + next
+    if (last > i) candidates.push({ start: lines[i].at, end: lines[last].end, unit: 'section' })
+  }
+  return candidates
+    .filter((c) => !(c.start === whole.start && c.end === whole.end))
+    .map((c) => ({ range: { start: c.start, end: c.end }, unit: c.unit }))
+    .find((c) => c.range.start <= lo && c.range.end >= hi && c.range.end - c.range.start > hi - lo)
+}

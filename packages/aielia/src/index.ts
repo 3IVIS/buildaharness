@@ -211,7 +211,7 @@ export { CALL_TYPES, callTypeLabel, classifyCall } from './writer/write-spend.js
 export type { CallType } from './writer/write-spend.js'
 export { claimMarks } from './writer/article-marks.js'
 export { expandSelection, unitOfSelection, type SelectionRange, type SelectionUnit } from './writer/article-selection.js'
-export { outlineOf, outlineToText, applyOutlineText, renameHeadingInText, type OutlineEntry } from './writer/article-outline.js'
+export { outlineOf, expandOutlineSelection, outlineToText, applyOutlineText, renameHeadingInText, type OutlineEntry } from './writer/article-outline.js'
 export { revisionsOfText, type TextRevision, type TextRevisions, type VersionText } from './writer/article-revisions.js'
 export { shouldDeriveStyle, STYLE_DERIVE_MIN_WORDS } from './writer/article-style-derive.js'
 export { textPieces, describeAt, type TextPiece } from './writer/article-decorations.js'

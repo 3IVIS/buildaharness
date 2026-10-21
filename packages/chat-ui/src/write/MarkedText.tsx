@@ -12,6 +12,10 @@ interface Props {
   onGrow(): void
   /** Goes back to the smaller selection. */
   onShrink(): void
+  /** A click is starting: the page notes what was selected by earlier double-clicks, because the click itself changes the selection. */
+  onPress(): void
+  /** A double-click at this place in the text: select the sentence, and on each further double-click the next larger unit, then start over. */
+  onDoubleClick(at: number): void
   /** What the current selection was grown to, when it was. */
   unit?: string
 }
@@ -32,7 +36,7 @@ function loadTint(): boolean {
  * text area, laid out the same way and scrolled with it, so the writer types in a plain text area and the marks follow the words. Nothing changes
  * the layout of the text. The copy is hidden from screen readers; the line under the text and the box under that say the same in words.
  */
-export function MarkedText({ textRef, value, pieces, onChange, onSelection, onGrow, onShrink, unit }: Props): React.JSX.Element {
+export function MarkedText({ textRef, value, pieces, onChange, onSelection, onGrow, onShrink, onPress, onDoubleClick, unit }: Props): React.JSX.Element {
   const back = useRef<HTMLDivElement | null>(null)
   const [tint, setTint] = useState(loadTint)
   const shown = tint ? pieces : []
@@ -57,6 +61,8 @@ export function MarkedText({ textRef, value, pieces, onChange, onSelection, onGr
         value={value}
         onChange={(e) => onChange(e.target.value)}
         onKeyDown={(e) => { if (e.altKey && e.shiftKey && e.key === 'ArrowUp') { e.preventDefault(); onGrow() } else if (e.altKey && e.shiftKey && e.key === 'ArrowDown') { e.preventDefault(); onShrink() } }}
+        onMouseDown={(e) => { if (e.detail <= 1) onPress(); else e.preventDefault() /* the browser would select a word; the double-click selects a sentence */ }}
+        onDoubleClick={(e) => onDoubleClick(e.currentTarget.selectionStart)}
         onScroll={(e) => { if (back.current) back.current.scrollTop = e.currentTarget.scrollTop }}
         onSelect={(e) => onSelection({ start: e.currentTarget.selectionStart, end: e.currentTarget.selectionEnd })}
         onClick={(e) => onSelection({ start: e.currentTarget.selectionStart, end: e.currentTarget.selectionEnd })}

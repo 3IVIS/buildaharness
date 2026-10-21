@@ -33,8 +33,11 @@ function headingLevel(line: string): number {
   return n > 0 && n <= 6 && line[n] === ' ' ? n : 0
 }
 
-/** The section that holds `start`: from its heading line to just before the next heading of the same or a higher level. The text before the first heading is a section of its own. */
-function sectionAround(text: string, start: number): SelectionRange {
+/**
+ * The sections that hold `start`, the deepest first: its own heading down to the next heading of the same or a higher level, then the section
+ * that heading sits in, and so on up. The text before the first heading is a section of its own, and is the only one when there is no heading above `start`.
+ */
+function sectionsAround(text: string, start: number): SelectionRange[] {
   const lines: { at: number; level: number }[] = []
   let at = 0
   for (const line of text.split('\n')) {
@@ -45,11 +48,17 @@ function sectionAround(text: string, start: number): SelectionRange {
   for (let i = 0; i < lines.length; i++) if (lines[i].level > 0 && lines[i].at <= start) from = i
   if (from === -1) {
     const first = lines.find((l) => l.level > 0)
-    return trimmed(text, 0, first ? first.at : text.length)
+    return [trimmed(text, 0, first ? first.at : text.length)]
   }
-  const level = lines[from].level
-  const next = lines.slice(from + 1).find((l) => l.level > 0 && l.level <= level)
-  return trimmed(text, lines[from].at, next ? next.at : text.length)
+  const out: SelectionRange[] = []
+  let level = Infinity
+  for (let i = from; i >= 0; i--) {
+    if (lines[i].level === 0 || lines[i].level >= level) continue
+    level = lines[i].level
+    const next = lines.slice(i + 1).find((l) => l.level > 0 && l.level <= level)
+    out.push(trimmed(text, lines[i].at, next ? next.at : text.length))
+  }
+  return out
 }
 
 function contains(outer: SelectionRange, inner: SelectionRange): boolean {
@@ -66,16 +75,21 @@ function unitCandidates(text: string, range: SelectionRange): { here: SelectionR
     candidates: [
       { range: trimmed(text, first.start, Math.max(first.end, last.end)), unit: 'sentence' },
       { range: paragraphAround(text, lo, hi), unit: 'paragraph' },
-      { range: sectionAround(text, lo), unit: 'section' },
+      ...sectionsAround(text, lo).map((range) => ({ range, unit: 'section' as const })),
       { range: trimmed(text, 0, text.length), unit: 'article' },
     ],
   }
 }
 
-/** The next larger unit around the selection, or undefined when the whole article is already selected. */
-export function expandSelection(text: string, range: SelectionRange): { range: SelectionRange; unit: SelectionUnit } | undefined {
+/**
+ * The next larger unit around the selection, or undefined when the whole article is already selected. With `wholeArticle: false` the whole article
+ * is never offered (nor a section that is all of it), so the largest selection is the one just below it: the writer then starts over from the sentence.
+ */
+export function expandSelection(text: string, range: SelectionRange, options: { wholeArticle?: boolean } = {}): { range: SelectionRange; unit: SelectionUnit } | undefined {
   const { here, candidates } = unitCandidates(text, range)
-  return candidates.find((c) => c.range.end > c.range.start && contains(c.range, here))
+  const whole = trimmed(text, 0, text.length)
+  const isWhole = (r: SelectionRange): boolean => r.start === whole.start && r.end === whole.end
+  return candidates.find((c) => c.range.end > c.range.start && contains(c.range, here) && (options.wholeArticle !== false || !isWhole(c.range)))
 }
 
 /** The unit the selection is: a selection that is exactly a sentence, paragraph or section is that unit; a cursor or a phrase is the sentence around it; anything longer, the smallest unit that holds it. */

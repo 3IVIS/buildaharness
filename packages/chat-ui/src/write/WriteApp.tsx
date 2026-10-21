@@ -277,6 +277,24 @@ function WriteAppBody({ services, connection, onDeleted }: WriteAppProps): React
     setGrownUnit(growth.current.at(-1)?.unit)
     applySelection(back.range)
   }
+  // Double-click: the sentence, then each larger unit, up to the one just below the whole article, then the sentence again.
+  const pressedFrom = useRef<{ start: number; end: number } | undefined>()
+  const pressText = (): void => { pressedFrom.current = grownTo.current }
+  const doubleClickText = (at: number): void => {
+    const t = textRef.current
+    if (!t) return
+    const prev = pressedFrom.current
+    pressedFrom.current = undefined
+    const inside = prev !== undefined && at >= prev.start && at <= prev.end
+    let from = inside ? prev : { start: at, end: at }
+    let next = expandSelection(t.value, from, { wholeArticle: false })
+    if (!next && inside) { from = { start: at, end: at }; next = expandSelection(t.value, from, { wholeArticle: false }); growth.current = [] }
+    if (!next) return
+    if (!inside) growth.current = []
+    growth.current.push({ range: from, unit: next.unit })
+    setGrownUnit(next.unit)
+    applySelection(next.range)
+  }
   const [repoTick, setRepoTick] = useState(0)
   const [folder, setFolder] = useState<{ reader: FolderReader; files: string[] } | undefined>()
   const folderRef = useRef(folder)
@@ -882,7 +900,7 @@ function WriteAppBody({ services, connection, onDeleted }: WriteAppProps): React
               </div>
             )}
             <div className={`write__textview ${view === 'outline' || (viewing && showHistory) ? 'is-hidden' : ''}`}>
-            <MarkedText textRef={textRef} value={draft} pieces={textPieces(meta, draft)} onChange={onType} onSelection={(r) => { setSelection(r); const g = grownTo.current; if (!g || g.start !== r.start || g.end !== r.end) { growth.current = []; grownTo.current = undefined; setGrownUnit(undefined) } }} onGrow={growSelection} onShrink={shrinkSelection} unit={grownUnit} />
+            <MarkedText textRef={textRef} value={draft} pieces={textPieces(meta, draft)} onChange={onType} onSelection={(r) => { setSelection(r); const g = grownTo.current; if (!g || g.start !== r.start || g.end !== r.end) { growth.current = []; grownTo.current = undefined; setGrownUnit(undefined) } }} onGrow={growSelection} onShrink={shrinkSelection} onPress={pressText} onDoubleClick={doubleClickText} unit={grownUnit} />
             </div>
             <button type="button" className="write__dockchev" aria-pressed={dockOn} aria-label={dockOn ? 'Hide the box under the text' : 'Show the box under the text'} title={dockOn ? 'Hide the box under the text' : 'Show the box under the text'} onClick={toggleDock}>{dockOn ? '⌄' : '⌃'}</button>
             {dockOn && <TextNotes

@@ -614,6 +614,31 @@ describe('issues in batches', () => {
   })
 })
 
+describe('double-click selects bigger and bigger pieces', () => {
+  it('the sentence, then the paragraph, then each section up to just below the whole article, then the sentence again', async () => {
+    const s = await services({}, MD2)
+    render(<WriteApp services={s} />)
+    const box = await waitForText()
+    const doubleClick = (needle: string): void => {
+      const at = box.value.indexOf(needle) + 2
+      fireEvent.mouseDown(box, { detail: 1 })
+      box.setSelectionRange(at, at)
+      fireEvent.mouseDown(box, { detail: 2 })
+      fireEvent.doubleClick(box)
+    }
+    const picked = (): string => box.value.slice(box.selectionStart, box.selectionEnd)
+    doubleClick('The p99')
+    expect(picked()).toBe('The p99 was 18 ms.')
+    doubleClick('The p99')
+    expect(picked()).toBe('The p99 was 18 ms. It is quick.') // the paragraph
+    doubleClick('The p99')
+    expect(picked()).toBe('## Latency\n\nThe p99 was 18 ms. It is quick.') // its section
+    // `# Post` is the whole article here, so the section above was the largest one: the next double-click starts over
+    doubleClick('The p99')
+    expect(picked()).toBe('The p99 was 18 ms.')
+  })
+})
+
 describe('comments and sources under the text', () => {
   it('asks you to click in the text first, and shows what is under the cursor', async () => {
     const s = await services({}, MD)

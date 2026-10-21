@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react'
-import { applyOutlineText, outlineOf, outlineToText } from '@buildaharness/aielia'
+import { applyOutlineText, expandOutlineSelection, outlineOf, outlineToText } from '@buildaharness/aielia'
 
 interface Props {
   /** The text as it is now: the outline is drawn from it, so it always matches what is written. */
@@ -52,6 +52,26 @@ export function OutlinePanel({ markdown, onChange, onOpen, onSelect }: Props): R
     const cursorLine = value.slice(0, box.current?.selectionStart ?? 0).split('\n').length - 1
     return Math.max(0, value.split('\n').slice(0, cursorLine + 1).filter((l) => l.trim()).length - 1)
   }
+  // Double-click: the heading, then each larger group of headings, up to the one just below the whole outline, then the heading again.
+  const grown = useRef<{ start: number; end: number } | null>(null)
+  const pressed = useRef<{ start: number; end: number } | null>(null)
+  function doubleClick(): void {
+    const t = box.current
+    if (!t) return
+    const at = t.selectionStart
+    const prev = pressed.current
+    pressed.current = null
+    const inside = prev !== null && at >= prev.start && at <= prev.end
+    let next = expandOutlineSelection(t.value, inside ? prev : { start: at, end: at })
+    if (!next && inside) next = expandOutlineSelection(t.value, { start: at, end: at })
+    if (!next) return
+    t.setSelectionRange(next.range.start, next.range.end)
+    grown.current = next.range
+    // the box under the text shows the heading the selection starts at
+    const index = t.value.slice(0, next.range.start).split('\n').filter((l) => l.trim()).length
+    const start = headingAt(index)
+    if (start !== undefined) onSelect(start)
+  }
   const selectHeading = (): void => { const at = headingAt(lineAtCursor()); if (at !== undefined) onSelect(at) }
 
   // The "go to the text" marks sit right after each line: a copy of the lines, invisible, with a mark at the end of each, laid over the box and scrolled with it.
@@ -79,6 +99,9 @@ export function OutlinePanel({ markdown, onChange, onOpen, onSelect }: Props): R
           onScroll={(e) => setScroll({ top: e.currentTarget.scrollTop, left: e.currentTarget.scrollLeft })}
           onBlur={(e) => apply(e.target.value)}
           onClick={selectHeading}
+          onMouseDown={(e) => { if (e.detail <= 1) pressed.current = grown.current; else e.preventDefault() }}
+          onDoubleClick={doubleClick}
+          onSelect={(e) => { const g = grown.current; if (g && (e.currentTarget.selectionStart !== g.start || e.currentTarget.selectionEnd !== g.end)) grown.current = null }}
           onKeyUp={(e) => { if (e.key.startsWith('Arrow') || e.key === 'Home' || e.key === 'End' || e.key === 'PageUp' || e.key === 'PageDown') selectHeading() }}
         />
         <div className="write__outlinemarks">
