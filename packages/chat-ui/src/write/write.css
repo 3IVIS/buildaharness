@@ -353,7 +353,8 @@
 .write__split { display: none; }
 body.write--resizing { user-select: none; -webkit-user-select: none; cursor: col-resize; }
 @media (min-width: 640px) {
-  .write__main { --panel-w: var(--panel-size, 340px); --chat-w: var(--chat-size, 320px); grid-template-columns: 76px minmax(0, 1fr) var(--chat-w); }
+  /* Normal sizes follow the screen (so the text keeps room on a small one); a size the writer dragged to wins, but never takes more than half the screen. */
+  .write__main { --panel-w: min(var(--panel-size, clamp(260px, 26vw, 340px)), 45vw); --chat-w: min(var(--chat-size, clamp(260px, 34vw, 320px)), 50vw); grid-template-columns: 76px minmax(0, 1fr) var(--chat-w); }
   .write__panel { width: min(var(--panel-size, 340px), 60vw); }
   .write__split { display: block; position: absolute; z-index: 6; touch-action: none; background: transparent; transition: background 0.12s; }
   .write__split:hover, .write__split:focus-visible, body.write--resizing .write__split { background: var(--accent-a08, rgba(80, 120, 255, 0.18)); outline: none; }
@@ -364,9 +365,16 @@ body.write--resizing { user-select: none; -webkit-user-select: none; cursor: col
   .write__dock { position: relative; }
 }
 @media (min-width: 960px) {
-  .write__main { --chat-w: var(--chat-size, 400px); grid-template-columns: 76px var(--panel-w) minmax(0, 1fr) var(--chat-w); }
+  .write__main { --chat-w: min(var(--chat-size, clamp(280px, 28vw, 400px)), 50vw); grid-template-columns: 76px var(--panel-w) minmax(0, 1fr) var(--chat-w); }
+  .write__panel { width: auto; }
   .write__split--panel { left: calc(76px + var(--panel-w) - 4px); }
 }
 
-/* A selection kept visible while the text box is not in use. */
-.write__mark.write__sel, .write__outlineghost .write__sel { background: color-mix(in srgb, var(--accent, #3b6fd4) 30%, transparent); }
+/* The corner buttons of the text pane stay under the floating side panel instead of showing through it. */
+.write__pane--text { isolation: isolate; }
+/* A narrow side panel: dates stay whole, and the Save version button goes under its text instead of squeezing it. */
+.write__hline time { white-space: nowrap; }
+.write .write__hchange { overflow-wrap: break-word; word-break: normal; }
+.write__working { flex-wrap: wrap; }
+.write__form .write__model input { width: auto; flex: 1 1 auto; }
+.write__form .write__model .write__chev { width: auto; flex: none; }

@@ -71,6 +71,7 @@ function topOfPosition(ta: HTMLTextAreaElement, at: number): number {
 /** What the chat says when a model call fails: the reason, and what to try. Never an empty answer. */
 export const failureText = (what: string, err: unknown): string => `${what}: ${err instanceof Error ? err.message : String(err)}. Check your key and the model in Settings, or pick another model next to the chat, then try again.`
 
+const isDesktop = (): boolean => typeof window !== 'undefined' && window.matchMedia?.('(min-width: 960px)').matches === true
 const isWide = (): boolean => typeof window !== 'undefined' && window.matchMedia?.('(min-width: 640px)').matches === true
 
 const STATUS_LABEL: Record<string, string> = {
@@ -139,7 +140,8 @@ function WriteAppBody({ services, connection, onDeleted }: WriteAppProps): React
   // Where to put the cursor once the text is on screen again (a section picked in the outline).
   const pendingJump = useRef<number | null>(null)
   // Desktop: the side panel opens when a rail button is clicked and closes when it is clicked again.
-  const [railOpen, setRailOpen] = useState<boolean>(() => isWide())
+  // On a tablet the panel floats over the text, so it starts closed there; on a desktop it has its own column and starts open.
+  const [railOpen, setRailOpen] = useState<boolean>(() => isDesktop())
   const [versions, setVersions] = useState<VersionRow[]>([])
   const [working, setWorking] = useState<ChangeSummary | undefined>(undefined)
   const [viewing, setViewing] = useState<Viewing | null>(null)
@@ -164,6 +166,8 @@ function WriteAppBody({ services, connection, onDeleted }: WriteAppProps): React
   })
   const widthOf = (selector: string, fallback: number): number => mainRef.current?.querySelector(selector)?.getBoundingClientRect().width || fallback
   const roomFor = (other: number): number => Math.max(0, (mainRef.current?.clientWidth ?? 1200) - RAIL_WIDTH - other - MIN_TEXT)
+  /** On a tablet the side panel floats over the text, so it takes no room from it (and the chat may use all but the text's minimum). */
+  const panelTakesRoom = (): boolean => railOpen && isDesktop()
   const [notice, setNotice] = useState<string | null>(null)
   const [busy, setBusy] = useState<string | null>(null)
   const [chat, setChat] = useState<ChatLine[]>([])
@@ -865,8 +869,8 @@ function WriteAppBody({ services, connection, onDeleted }: WriteAppProps): React
             </button>
           ))}
         </nav>
-        {railOpen && <Splitter label="Side panel width" axis="x" grow={1} className="write__split--panel" measure={() => widthOf('.write__panel', 340)} limits={() => ({ min: 220, max: Math.min(640, roomFor(widthOf('.write__pane--chat', 320))) })} onSize={(px) => resize('panel', px)} onReset={() => resize('panel', undefined)} />}
-        <Splitter label="Chat width" axis="x" grow={-1} className="write__split--chat" measure={() => widthOf('.write__pane--chat', 320)} limits={() => ({ min: 260, max: Math.min(720, roomFor(railOpen ? widthOf('.write__panel', 340) : 0)) })} onSize={(px) => resize('chat', px)} onReset={() => resize('chat', undefined)} />
+        {railOpen && <Splitter label="Side panel width" axis="x" grow={1} className="write__split--panel" measure={() => widthOf('.write__panel', 340)} limits={() => ({ min: 260, max: isDesktop() ? Math.min(640, roomFor(widthOf('.write__pane--chat', 320))) : Math.min(640, Math.round(window.innerWidth * 0.6)) })} onSize={(px) => resize('panel', px)} onReset={() => resize('panel', undefined)} />}
+        <Splitter label="Chat width" axis="x" grow={-1} className="write__split--chat" measure={() => widthOf('.write__pane--chat', 320)} limits={() => ({ min: 260, max: Math.min(720, roomFor(panelTakesRoom() ? widthOf('.write__panel', 340) : 0)) })} onSize={(px) => resize('chat', px)} onReset={() => resize('chat', undefined)} />
         <aside className="write__panel" aria-label="Side panel">
           {ready && meta ? (
             <>

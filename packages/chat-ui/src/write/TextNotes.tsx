@@ -155,13 +155,13 @@ export function TextNotes({ issues, issuesCount, links, history, meta, markdown,
     <section
       ref={dockRef}
       className={`write__dock ${over ? 'is-over' : ''}`}
-      style={height ? { height, maxHeight: '85%' } : undefined}
+      style={height ? { height, maxHeight: '70%' } : undefined}
       aria-label="Comments and sources for this text"
       onDragOver={(e) => { e.preventDefault(); setOver(true) }}
       onDragLeave={() => setOver(false)}
       onDrop={(e) => { e.preventDefault(); setOver(false); const files = Array.from(e.dataTransfer.files); if (files.length > 0) onFiles(files) }}
     >
-      <Splitter label="Height of the box under the text" axis="y" grow={-1} className="write__split--dock" measure={() => dockRef.current?.getBoundingClientRect().height ?? 200} limits={() => ({ min: 96, max: Math.round((dockRef.current?.parentElement?.clientHeight ?? 600) * 0.85) })} onSize={onHeight} onReset={() => onHeight(undefined)} />
+      <Splitter label="Height of the box under the text" axis="y" grow={-1} className="write__split--dock" measure={() => dockRef.current?.getBoundingClientRect().height ?? 200} limits={() => ({ min: 96, max: Math.round((dockRef.current?.parentElement?.clientHeight ?? 600) * 0.7) })} onSize={onHeight} onReset={() => onHeight(undefined)} />
       <button type="button" className="write__dockchev" aria-label="Hide the box under the text" title="Hide the box under the text" onClick={onHide}>⌄</button>
       <button type="button" className="write__dockhead" onClick={() => setCollapsed((c) => !c)} aria-expanded={!collapsed} title={collapsed ? 'Show' : 'Hide'}>
         <strong>{unit ? unitLabel : 'This text'}</strong>
