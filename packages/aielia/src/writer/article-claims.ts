@@ -45,7 +45,7 @@ const SCHEMA = {
 
 const SYSTEM_PROMPT =
   'You read parts of an article and list the claims in them. A claim is something the text asserts that could be wrong: a figure, a date, a cause, a comparison, a statement about how something works. ' +
-  'Quote at the size of a sentence: one claim is normally one whole sentence, and the next sentence is joined to it only when it cannot be understood without it (for example one that begins "that number"). Do not cut a sentence into pieces, and do not list a sentence that only repeats a claim you already listed or that states nothing that could be checked. ' +
+  'Quote at the size of a sentence: one claim is normally one whole sentence. Join the next sentence(s) into the same claim, as one contiguous quote, when they cannot be understood without it (for example one that begins "that number") or when they together make one point that a single source would back or fail to back (a statement and the figures, examples or explanation that go with it). A source backs a point, not a sentence: do not list the sentences of such a point separately. Do not cut a sentence into pieces. List every statement once: never list a sentence that is already inside a longer claim you listed, that only repeats a claim you already listed, or that states nothing that could be checked. ' +
   'Opinions, framing and advice are not factual claims: list them with kind "opinion" or "framing" only when they are stated as if they were findings. ' +
   'You are given JSON with "sections" (id, heading, text) and "known" (claims already recorded: id, quote, confirmed). ' +
   'Respond with JSON only: {"claims":[{"quote": an exact, contiguous quote of the claim from the text, "kind":"factual"|"opinion"|"framing", "matchesId": the id of the known claim this is the same claim as, or null if it is new, "sure": true when you are certain it is the same claim, false when it may be a different one}]}. ' +
@@ -141,7 +141,10 @@ export async function extractClaims(
   const unanchored: string[] = []
 
   // confirmed claims are matched first
-  const ordered = [...modelClaims].sort((a, b) => Number(byId.get(b.matchesId ?? '')?.confirmed === true) - Number(byId.get(a.matchesId ?? '')?.confirmed === true))
+  const ordered = [...modelClaims].sort((a, b) => Number(byId.get(b.matchesId ?? '')?.confirmed === true) - Number(byId.get(a.matchesId ?? '')?.confirmed === true) || b.quote.length - a.quote.length)
+  // A stretch of text is one claim: a quote that overlaps one already taken is dropped, so the same sentence is never reported twice
+  // (as itself and again inside a longer claim) and a multi-sentence claim is not also listed sentence by sentence.
+  const takenSpans: { start: number; end: number }[] = []
   for (const mc of ordered) {
     const prev = mc.matchesId && !result.has(mc.matchesId) ? byId.get(mc.matchesId) : undefined
     const pos = locate(input.markdown, mc.quote, prev?.position, 0, input.markdown.length)
@@ -154,6 +157,8 @@ export async function extractClaims(
       unanchored.push(mc.quote)
       continue
     }
+    if (takenSpans.some((t) => pos < t.end && t.start < pos + mc.quote.length)) continue
+    takenSpans.push({ start: pos, end: pos + mc.quote.length })
     if (prev) {
       let claim: Claim = { ...prev, position: pos, sectionId: section.id }
       if (prev.quote !== mc.quote) claim = editClaimText(claim, mc.quote, 'model', input.now)
