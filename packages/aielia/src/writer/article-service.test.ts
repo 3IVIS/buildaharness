@@ -8,7 +8,7 @@ import { effectiveSourceStatus } from './article-rules.js'
 
 const NOW = '2026-10-16T10:00:00.000Z'
 const MD = '# Post\n\nIntro: p99 under 20 ms.\n\n## Latency\n\nThe p99 was 18 ms.\n\n## Conclusion\n\nSo p99 stays under 20 ms.\n'
-const MARK = { claims: 'You read parts of an article and list the claims', resolve: 'You help a writer keep an article consistent', support: 'You check whether a claim from an article', capture: 'A writer is working with an assistant', edits: 'You propose edits to an article', consistency: 'You check an article for two kinds of problem', repo: 'You help check a claim from an article against a software repository', repoFolders: 'You narrow down where in a software repository' }
+const MARK = { claims: 'You read parts of an article and list the claims', resolve: 'You help a writer keep an article consistent', support: 'You check whether a claim from an article', capture: 'A writer is working with an assistant', edits: 'You propose edits to an article', outline: 'You rework the outline of an article', consistency: 'You check an article for two kinds of problem', repo: 'You help check a claim from an article against a software repository', repoFolders: 'You narrow down where in a software repository' }
 
 type Router = Partial<Record<keyof typeof MARK, unknown | ((user: string) => unknown)>>
 function routed(r: Router, calls: string[] = []): ILLMClient {
@@ -586,5 +586,51 @@ describe('serializeByArticle', () => {
     expect(await build(false)).toHaveLength(1) // the lost update this wrapper exists for
     expect(await build(true)).toEqual(expect.arrayContaining([expect.any(String)]))
     expect((await build(true))).toHaveLength(2)
+  })
+})
+
+describe('the chat edits the article itself', () => {
+  it('saves a version first, then applies only the changes of this request, and the text is the edited one', async () => {
+    const { svc: s } = svc({ edits: { suggestions: [{ quote: 'The p99 was 18 ms.', replacement: 'The p99 was 12 ms.', reason: 'new figure' }] } })
+    const id = await s.create('Post', MD)
+    const r = await s.editFromChat(id, 'Use the new p99 figure of 12 ms')
+    expect(r.status).toBe('applied')
+    expect(r.applied).toEqual([{ quote: 'The p99 was 18 ms.', replacement: 'The p99 was 12 ms.' }])
+    const b = await s.get(id)
+    expect(b.markdown).toContain('The p99 was 12 ms.')
+    const saved = b.snapshots.find((x) => x.label === r.savedAs)
+    expect(saved?.markdown).toBe(MD) // the text as it was before the edit
+    expect(r.savedAs).toMatch(/^Before a chat edit: Use the new p99/)
+  })
+  it('saves a version even when nothing changes, and leaves other waiting suggestions alone', async () => {
+    const { svc: s } = svc({ edits: { suggestions: [] } })
+    const id = await s.create('Post', MD)
+    const r = await s.editFromChat(id, 'Tighten the intro')
+    expect(r.status).toBe('nothing')
+    expect((await s.get(id)).snapshots.some((x) => x.label === r.savedAs)).toBe(true)
+    expect((await s.get(id)).markdown).toBe(MD)
+  })
+  it('a failed edit still leaves the saved version and the text as it was', async () => {
+    const { svc: s } = svc({})
+    const id = await s.create('Post', MD)
+    const r = await s.editFromChat(id, 'Tighten the intro')
+    expect(r.status).toBe('failed')
+    expect((await s.get(id)).markdown).toBe(MD)
+  })
+  it('the outline: saved first, then the headings are reworked and each section keeps its text', async () => {
+    const { svc: s } = svc({ outline: { outline: '# Post\n## Conclusion\n## Latency' } })
+    const id = await s.create('Post', MD)
+    const r = await s.editOutlineFromChat(id, 'Put the conclusion before latency')
+    expect(r.status).toBe('applied')
+    expect(r.after).toBe('# Post\n## Conclusion\n## Latency')
+    const b = await s.get(id)
+    expect(b.markdown.indexOf('## Conclusion')).toBeLessThan(b.markdown.indexOf('## Latency'))
+    expect(b.markdown).toContain('So p99 stays under 20 ms.')
+    expect(b.snapshots.find((x) => x.label === r.savedAs)?.markdown).toBe(MD)
+  })
+  it('an outline that comes back unchanged is reported as nothing to do', async () => {
+    const { svc: s } = svc({ outline: { outline: '# Post\n## Latency\n## Conclusion' } })
+    const id = await s.create('Post', MD)
+    expect((await s.editOutlineFromChat(id, 'Leave it')).status).toBe('nothing')
   })
 })

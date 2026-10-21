@@ -132,6 +132,25 @@ export function TextNotes({ issues, issuesCount, links, history, meta, markdown,
   }
 
   const dockRef = useRef<HTMLElement | null>(null)
+  // The tabs sit in one line. When they do not all fit, an arrow at each end moves them along to show the ones that are hidden.
+  const tabsRef = useRef<HTMLDivElement | null>(null)
+  const [tabsMore, setTabsMore] = useState({ left: false, right: false })
+  const measureTabs = (): void => {
+    const el = tabsRef.current
+    if (!el) return
+    const next = { left: el.scrollLeft > 1, right: el.scrollLeft + el.clientWidth < el.scrollWidth - 1 }
+    setTabsMore((m) => (m.left === next.left && m.right === next.right ? m : next))
+  }
+  const shiftTabs = (dir: -1 | 1): void => { tabsRef.current?.scrollBy?.({ left: dir * Math.max(80, (tabsRef.current?.clientWidth ?? 200) * 0.6), behavior: 'smooth' }) }
+  useEffect(() => {
+    measureTabs()
+    const el = tabsRef.current
+    if (!el || typeof ResizeObserver === 'undefined') return
+    const watch = new ResizeObserver(measureTabs)
+    watch.observe(el)
+    return () => watch.disconnect()
+  }, [])
+  useEffect(() => { tabsRef.current?.querySelector<HTMLElement>('[aria-selected="true"]')?.scrollIntoView?.({ block: 'nearest', inline: 'nearest' }) }, [pane])
   return (
     <section
       ref={dockRef}
@@ -148,12 +167,16 @@ export function TextNotes({ issues, issuesCount, links, history, meta, markdown,
         <strong>{unit ? unitLabel : 'This text'}</strong>
         <span className="write__dockfor">{unit ? <>“{clip(unit.quote, 90)}”</> : 'Click in the text, or highlight some, to comment or add a source'}</span>
       </button>
-      <div className="write__docktabs" role="tablist" aria-label="What to show about this text">
-        {PANES.map((x) => (
-          <button key={x.id} type="button" role="tab" aria-selected={pane === x.id} className={pane === x.id ? 'is-on' : ''} onClick={() => { setPane(x.id); setCollapsed(false) }}>
-            {x.label}{x.id === 'issues' && issuesCount > 0 && <span className="write__badge">{issuesCount}</span>}
-          </button>
-        ))}
+      <div className="write__docktabsbar">
+        {tabsMore.left && <button type="button" className="write__tabarrow" aria-label="Show the tabs before" title="Show the tabs before" onClick={() => shiftTabs(-1)}>‹</button>}
+        <div ref={tabsRef} className="write__docktabs" role="tablist" aria-label="What to show about this text" onScroll={measureTabs}>
+          {PANES.map((x) => (
+            <button key={x.id} type="button" role="tab" aria-selected={pane === x.id} className={pane === x.id ? 'is-on' : ''} onClick={() => { setPane(x.id); setCollapsed(false) }}>
+              {x.label}{x.id === 'issues' && issuesCount > 0 && <span className="write__badge">{issuesCount}</span>}
+            </button>
+          ))}
+        </div>
+        {tabsMore.right && <button type="button" className="write__tabarrow" aria-label="Show the tabs after" title="Show the tabs after" onClick={() => shiftTabs(1)}>›</button>}
       </div>
       {!collapsed && pane === 'issues' && <div className="write__dockbody"><div className="write__dockscroll" role="tabpanel" aria-label="Issues">{issues}</div></div>}
       {!collapsed && pane === 'links' && <div className="write__dockbody"><div className="write__dockscroll" role="tabpanel" aria-label="Links">{links}</div></div>}

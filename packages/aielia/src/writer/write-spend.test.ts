@@ -44,6 +44,7 @@ describe('call types', () => {
     await svc.deriveStyleFromText(id) // style sheet
     await svc.suggest(id, 'tighten it') // edits
     await svc.suggestIdeas(id) // ideas
+    await svc.editOutlineFromChat(id, 'rename a section') // outline
     await processWriterMessage({ port: createArticleChatPort(store), message: 'Dana says check the figure', now: NOW }, recording(seen)) // capture
     expect(new Set(seen)).toEqual(new Set(CALL_TYPES.map((t) => t.id)))
   })

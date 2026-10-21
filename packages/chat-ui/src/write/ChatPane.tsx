@@ -2,6 +2,8 @@ import { AdjustBar, type ChatAction } from './AdjustBar'
 import { ModelPicker } from './ModelPicker'
 import { ICON_PATHS, Icon, IconButton } from './icons'
 
+export type ChatMode = 'answer' | 'suggest' | 'edit'
+
 export interface ChatLine {
   id: number
   from: 'you' | 'aielia'
@@ -16,8 +18,11 @@ interface Props {
   onModel: (model: string) => void
   input: string
   onInput: (value: string) => void
-  edits: boolean
-  onEdits: (value: boolean) => void
+  /** What a request for a change does: only answers, suggests changes to accept, or makes the edit (after saving a version). */
+  mode: ChatMode
+  onMode: (mode: ChatMode) => void
+  /** What "edit" edits where the writer is now: the article, or its outline. */
+  editLabel: string
   busy: boolean
   canAct: boolean
   shown: boolean
@@ -72,8 +77,12 @@ export function ChatPane(p: Props): React.JSX.Element {
           placeholder="Message Aielia. Enter sends, Shift+Enter starts a new line."
         />
         <div className="write__composebar">
-          <label className="write__switch2" title="Turn what you ask for into suggested changes to the text">
-            <input type="checkbox" checked={p.edits} onChange={(e) => p.onEdits(e.target.checked)} aria-label="Suggest edits" /> Suggest edits
+          <label className="write__switch2" title="What happens when you ask for a change to the text. Editing saves a version first, so it can be undone from History.">
+            <select aria-label="When I ask for a change" value={p.mode} onChange={(e) => p.onMode(e.target.value as ChatMode)}>
+              <option value="answer">Just answer</option>
+              <option value="suggest">Suggest edits</option>
+              <option value="edit">{p.editLabel}</option>
+            </select>
           </label>
           <button type="button" className="write__iconbtn write__send" aria-label="Send" title="Send" onClick={p.onSend} disabled={p.busy || !p.input.trim()}><Icon d={ICON_PATHS.write} /></button>
         </div>

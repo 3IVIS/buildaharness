@@ -2,7 +2,7 @@ import { useCallback, useEffect, useRef, useState } from 'react'
 import { githubRepoReader, parseGithubRepoAddress, type FolderReader, expandSelection, summarizeVerify, type VerifyReport, textPieces, collectIssues, parseLineRange, sourceKindForFile, computeReadiness, effectiveSourceStatus, issueCount, textUnitAt, autosaveStep, outlineOf, issuesInRange, unitOfSelection, shouldDeriveStyle, type ArticleBundle, type ChangeSummary, type DependencyKind, type IssueCategory, type Section, type WritePermissions } from '@buildaharness/aielia'
 import type { ChatAction } from './AdjustBar'
 import { ArticleSwitcher, type ArticleItem } from './ArticleSwitcher'
-import { ChatPane, type ChatLine } from './ChatPane'
+import { ChatPane, type ChatLine, type ChatMode } from './ChatPane'
 import { HistoryPanel, type VersionRow } from './HistoryPanel'
 import { VersionOutline, VersionView, type Viewing } from './VersionView'
 import { TextHistory } from './TextHistory'
@@ -168,7 +168,7 @@ function WriteAppBody({ services, connection, onDeleted }: WriteAppProps): React
   const [busy, setBusy] = useState<string | null>(null)
   const [chat, setChat] = useState<ChatLine[]>([])
   const [chatInput, setChatInput] = useState('')
-  const [askForEdits, setAskForEdits] = useState(false)
+  const [chatMode, setChatMode] = useState<ChatMode>('answer')
   // Where the cursor or selection is in the text: the comments and sources under it are for that text.
   const [selection, setSelection] = useState<{ start: number; end: number } | null>(null)
   const [notes, setNotes] = useState<ResolveNote[]>([])
@@ -754,17 +754,37 @@ function WriteAppBody({ services, connection, onDeleted }: WriteAppProps): React
     })
   }
 
-  /** One chat message, the same path whether typed or composed by the Adjust control. `edits` overrides "Suggest edits" for this message. */
-  async function sendChat(override?: string, edits?: boolean): Promise<void> {
+  /** One chat message, the same path whether typed or composed by the Adjust control. `mode` overrides the chat's mode for this message. */
+  async function sendChat(override?: string, mode?: ChatMode): Promise<void> {
     const text = (override ?? chatInput).trim()
     if (!text) return
-    const wantEdits = edits ?? askForEdits
+    const how = mode ?? chatMode
+    const wantEdits = how === 'suggest'
     if (override === undefined) setChatInput('')
     setChat((c) => [...c, { id: ++lineId, from: 'you', text }])
-    await run(wantEdits ? 'Asking for edits' : 'Thinking', async () => {
+    await run(how === 'edit' ? 'Editing' : wantEdits ? 'Asking for edits' : 'Thinking', async () => {
      try {
       if (activeId) await service.updateText(activeId, draft, { analyze: false })
-      if (wantEdits && activeId) {
+      if (how === 'edit' && activeId) {
+        // The writer's words are recorded as in any chat turn. Then the version is saved, the edit is made, and the edited article is what is shown.
+        const id = activeId
+        const { reply, model: said } = await services.chat(text, id)
+        const outline = view === 'outline'
+        const r = outline ? await service.editOutlineFromChat(id, text, said) : await service.editFromChat(id, text, said)
+        await reload(id)
+        setViewing(null)
+        setShowHistory(false)
+        setVersionsTick((t) => t + 1)
+        void refreshList()
+        const saved = `I saved a version first (“${r.savedAs}”).`
+        const short = (t: string): string => (t.length > 140 ? `${t.slice(0, 140)}…` : t)
+        let body: string
+        if (r.status === 'failed') body = `${reply}\n\n${saved} I could not make that edit${'reason' in r && r.reason ? `: ${r.reason}` : ''}, so the ${outline ? 'outline' : 'article'} is unchanged.`
+        else if (r.status === 'nothing') body = `${saved} I found nothing to change in the ${outline ? 'outline' : 'text'} for that, so it is unchanged.`
+        else if ('applied' in r) body = `${saved} Then I made ${r.applied.length} change${r.applied.length === 1 ? '' : 's'}${r.skipped > 0 ? ` (${r.skipped} no longer fitted)` : ''}, and the article now shows the edited text. To go back, restore that version in History.\n${r.applied.slice(0, 4).map((x) => `• “${short(x.quote)}” → “${short(x.replacement)}”`).join('\n')}${r.applied.length > 4 ? `\n…and ${r.applied.length - 4} more.` : ''}`
+        else body = `${saved} Then I reworked the outline, and the article now shows it. To go back, restore that version in History.\nThe outline is now:\n${(r.after ?? '').split('\n').slice(0, 20).join('\n')}`
+        setChat((c) => [...c, { id: ++lineId, from: 'aielia', text: body, model: said }])
+      } else if (wantEdits && activeId) {
         // Record what the writer said (comments, corrections) the same way a chat turn does, then turn the request into suggestions.
         const { reply, model: said } = await services.chat(text, activeId)
         const r = await service.suggest(activeId, text, said)
@@ -967,13 +987,14 @@ function WriteAppBody({ services, connection, onDeleted }: WriteAppProps): React
           onModel={(m) => void services.models.setChat(m).then(() => setModelTick((t) => t + 1))}
           input={chatInput}
           onInput={setChatInput}
-          edits={askForEdits}
-          onEdits={setAskForEdits}
+          mode={chatMode}
+          onMode={setChatMode}
+          editLabel={view === 'outline' ? 'Edit the outline' : 'Edit the article'}
           busy={busy !== null}
           canAct={Boolean(activeId)}
           shown={tab === 'chat'}
           onSend={() => void sendChat()}
-          onAdjust={(m) => { setAskForEdits(true); void sendChat(m, true) }}
+          onAdjust={(m) => { const mode = chatMode === 'answer' ? 'suggest' : chatMode; setChatMode(mode); void sendChat(m, mode) }}
           onAction={(a: ChatAction) => { if (a === 'check') checkFromChat(); else if (a === 'prepare') prepareFromChat(); else verifyFromChat() }}
           repos={activeId ? (void repoTick, service.attachedRepos(activeId)) : []}
           onRepoVerify={verifyInRepo}

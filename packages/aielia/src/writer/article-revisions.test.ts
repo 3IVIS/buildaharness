@@ -28,4 +28,17 @@ describe('revisionsOfText', () => {
     expect(r?.unit).toBe('section')
     expect(r?.revisions[1].text).toContain('Old words')
   })
+  it('another sentence of the paragraph is not an earlier wording of the picked one: when the picked one was new, it was not there', () => {
+    const now = '# T\n\nLatency is low. The p99 latency is low on all machines.\n'
+    const at = now.indexOf('The p99')
+    const r = revisionsOfText(now, { start: at, end: at }, [v(0, '# T\n\nLatency is low.\n')])
+    expect(r?.revisions.map((x) => x.text)).toEqual(['The p99 latency is low on all machines.', undefined])
+    expect(r?.revisions[1].index).toBe(0)
+  })
+  it('finds a sentence that has a number with a point in it or runs over a line break, as the selection does', () => {
+    const now = '# T\n\nVersion 1.2 shipped in May. The p99 fell to 18 ms.\n'
+    const at = now.indexOf('Version')
+    const r = revisionsOfText(now, { start: at, end: at }, [v(0, '# T\n\nVersion 1.2 shipped in June. The p99 fell to 18 ms.\n')])
+    expect(r?.revisions.map((x) => x.text)).toEqual(['Version 1.2 shipped in May.', 'Version 1.2 shipped in June.'])
+  })
 })

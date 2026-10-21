@@ -183,7 +183,7 @@ export type { SourceCandidate, SourceRecheckReport } from './writer/article-serv
 export { githubRepoReader, parseGithubRepoAddress } from './writer/repo-reader.js'
 export type { RepoReader, GithubRepoSpec } from './writer/repo-reader.js'
 export { ArticleService, createArticleChatPort, createMemoryArticleStore, serializeByArticle } from './writer/article-service.js'
-export type { ArticleStore, ArticleServiceOptions, UpdateOutcome } from './writer/article-service.js'
+export type { ArticleStore, ArticleServiceOptions, UpdateOutcome, ChatEditResult, OutlineEditResult } from './writer/article-service.js'
 export { createMemoryAdapterArticleStore } from './writer/article-memory-store.js'
 export { suggestEdits } from './writer/article-edit-suggest.js'
 export type { EditSuggestResult } from './writer/article-edit-suggest.js'

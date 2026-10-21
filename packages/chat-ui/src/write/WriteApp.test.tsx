@@ -11,6 +11,7 @@ const MARK = {
   claims: 'You read parts of an article and list the claims',
   resolve: 'You help a writer keep an article consistent',
   edits: 'You propose edits to an article',
+  outline: 'You rework the outline of an article',
   capture: 'A writer is working with an assistant',
   ideas: 'You help a writer collect ideas',
   sourceLinks: 'A writer added a source to an article',
@@ -332,6 +333,38 @@ describe('chat: model, check and adjust', () => {
     await userEvent.type(screen.getByLabelText('Message'), 'hello{Enter}')
     expect(await screen.findByText('Noted.')).toBeInTheDocument()
     expect(screen.getAllByTitle('The model that wrote this')[0]).toHaveTextContent('my-own-model')
+  })
+
+  it('"Edit the article" saves a version first, then edits, and the page shows the edited text', async () => {
+    const s = await services({ capture: { articleId: null, ops: [] }, edits: { suggestions: [{ quote: 'It is quick.', replacement: 'It is very quick.', reason: 'stronger' }] } }, MD2)
+    const id = (await s.service.list())[0].id
+    render(<WriteApp services={s} />)
+    const box = await waitForText()
+    await userEvent.click(rail('Chat'))
+    await userEvent.selectOptions(screen.getByLabelText('When I ask for a change'), 'edit')
+    await userEvent.type(screen.getByLabelText('Message'), 'Make it stronger{Enter}')
+    expect(await screen.findByText(/I saved a version first/)).toBeInTheDocument()
+    await waitFor(() => expect(box.value).toContain('It is very quick.')) // the edited text is on screen
+    const b = await s.service.get(id)
+    expect(b.markdown).toContain('It is very quick.')
+    expect(b.snapshots.find((x) => x.label === 'Before a chat edit: Make it stronger')?.markdown).toBe(MD2) // the text as it was
+    expect(b.meta.suggestions.filter((x) => x.state === 'pending')).toHaveLength(0) // nothing is left waiting to accept
+  })
+  it('with the Outline showing, the edit is of the outline, also after a saved version', async () => {
+    const s = await services({ capture: { articleId: null, ops: [] }, outline: { outline: '# Post\n## Conclusion\n## Latency' } }, MD2)
+    const id = (await s.service.list())[0].id
+    render(<WriteApp services={s} />)
+    await waitForText()
+    await userEvent.click(screen.getByRole('button', { name: 'Outline view' }))
+    await userEvent.click(rail('Chat'))
+    await userEvent.selectOptions(screen.getByLabelText('When I ask for a change'), 'edit')
+    expect(screen.getByRole('option', { name: 'Edit the outline' })).toBeInTheDocument()
+    await userEvent.type(screen.getByLabelText('Message'), 'Conclusion first{Enter}')
+    expect(await screen.findByText(/I reworked the outline/)).toBeInTheDocument()
+    const b = await s.service.get(id)
+    expect(b.markdown.indexOf('## Conclusion')).toBeLessThan(b.markdown.indexOf('## Latency'))
+    expect(b.snapshots.some((x) => x.label === 'Before a chat edit of the outline: Conclusion first' && x.markdown === MD2)).toBe(true)
+    expect((screen.getByLabelText('Outline', { exact: true }) as HTMLTextAreaElement).value).toBe('# Post\n## Conclusion\n## Latency')
   })
 
   it('the conversation is still there after the page is opened again', async () => {
