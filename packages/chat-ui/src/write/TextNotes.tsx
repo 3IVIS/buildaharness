@@ -159,7 +159,7 @@ export function TextNotes({ issues, issuesCount, links, history, meta, markdown,
       aria-label="Comments and sources for this text"
       onDragOver={(e) => { e.preventDefault(); setOver(true) }}
       onDragLeave={() => setOver(false)}
-      onDrop={(e) => { e.preventDefault(); setOver(false); const files = Array.from(e.dataTransfer.files); if (files.length > 0) onFiles(files) }}
+      onDrop={(e) => { e.preventDefault(); e.stopPropagation(); setOver(false); const files = Array.from(e.dataTransfer.files); if (files.length > 0) onFiles(files) }}
     >
       <Splitter label="Height of the box under the text" axis="y" grow={-1} className="write__split--dock" measure={() => dockRef.current?.getBoundingClientRect().height ?? 200} limits={() => ({ min: 96, max: Math.round((dockRef.current?.parentElement?.clientHeight ?? 600) * 0.7) })} onSize={onHeight} onReset={() => onHeight(undefined)} />
       <button type="button" className="write__dockchev" aria-label="Hide the box under the text" title="Hide the box under the text" onClick={onHide}>⌄</button>

@@ -25,7 +25,7 @@ import { verifyBatchWithTools, type LoopOptions, type LoopResult, type LoopStep 
 import { deriveStyle } from './article-style-derive.js'
 import { checkConsistency, type ConsistencyResult } from './article-consistency.js'
 import { looksLikeHtml } from '../html-to-markdown.js'
-import { acceptNewPassage, applyRecheck, createSource, excerptFor, pageToArticle, sourceKindForFile, parseRepoFileLink, sliceLines, type LineRange } from './article-sources.js'
+import { acceptNewPassage, applyRecheck, createSource, excerptFor, renderSourcesForModel, pageToArticle, sourceKindForFile, parseRepoFileLink, sliceLines, type LineRange } from './article-sources.js'
 import { acceptSuggestion, refreshSuggestions, rejectSuggestion } from './article-suggestions.js'
 import { checkClaimSupport, needsAutoCheck, sourcesForClaim, type SupportCheck } from './article-support.js'
 import { loadPermissions } from './write-permissions.js'
@@ -1292,6 +1292,10 @@ export function createArticleChatPort(store: ArticleStore): WriterChatPort {
     async openItemsText(articleId) {
       const m = (await store.load(articleId))?.meta
       return m ? renderIssuesForChat(m) : ''
+    },
+    async sourcesText(articleId) {
+      const m = (await store.load(articleId))?.meta
+      return m ? renderSourcesForModel(m) : ''
     },
     async styleText(articleId) {
       const m = (await store.load(articleId))?.meta

@@ -93,12 +93,22 @@ export function acceptNewPassage(source: Source, passage: string, now: string): 
 const TEXT_EXTENSIONS = ['.txt', '.md', '.mdx', '.markdown', '.rst', '.csv', '.tsv', '.json', '.log']
 const CODE_EXTENSIONS = ['.ts', '.tsx', '.js', '.jsx', '.mjs', '.cjs', '.py', '.rb', '.go', '.rs', '.java', '.kt', '.swift', '.c', '.h', '.cc', '.cpp', '.hpp', '.cs', '.php', '.sh', '.bash', '.sql', '.yaml', '.yml', '.toml', '.ini', '.xml', '.html', '.css', '.scss', '.lua', '.r', '.scala']
 
+/** A PDF or Word file: not text, so the page has to extract its text before it is stored (the extraction needs the browser, so it is not done here). */
+export function documentFormatForFile(file: { name: string; type?: string }): 'pdf' | 'docx' | undefined {
+  const name = file.name.toLowerCase()
+  const type = file.type ?? ''
+  if (name.endsWith('.pdf') || type === 'application/pdf') return 'pdf'
+  if (name.endsWith('.docx') || type === 'application/vnd.openxmlformats-officedocument.wordprocessingml.document') return 'docx'
+  return undefined
+}
+
 /**
  * What kind of source a dropped file is, from its name and type: code (program text, so claims about what it does are checked against the
- * code itself), an uploaded text document, or undefined when it cannot be read as text. The caller reads the file's text.
+ * code itself), an uploaded text document, or undefined when it cannot be read as text. PDF and Word files count as uploaded documents; the caller reads the file's text (see `documentFormatForFile`).
  */
 export function sourceKindForFile(file: { name: string; type?: string }): 'code' | 'upload' | undefined {
   const name = file.name.toLowerCase()
+  if (documentFormatForFile(file)) return 'upload'
   if (CODE_EXTENSIONS.some((e) => name.endsWith(e))) return 'code'
   if (TEXT_EXTENSIONS.some((e) => name.endsWith(e)) || (file.type ?? '').startsWith('text/')) return 'upload'
   return undefined
@@ -123,4 +133,23 @@ export function pageToArticle(text: string, address: string): { title: string; m
   }
   const title = heading && heading.length <= 120 ? heading : (isHtml ? htmlTitle(text) : undefined) ?? first ?? host
   return { title, markdown: markdown ? `${markdown}\n` : '' }
+}
+
+const SOURCES_BUDGET_CHARS = 16000
+
+/**
+ * The stored sources of an article as text for a model: each one's address and the passage as read, cut to its share of a fixed budget so a
+ * few large documents cannot crowd out the rest. Empty when no source has text. The passages are data, never instructions.
+ */
+export function renderSourcesForModel(meta: { sources: { kind: string; address?: string; passage?: string }[] }, budget = SOURCES_BUDGET_CHARS): string {
+  const withText = meta.sources.filter((x) => (x.passage ?? '').trim() !== '')
+  if (withText.length === 0) return ''
+  const share = Math.max(1500, Math.floor(budget / withText.length))
+  return withText
+    .map((x, i) => {
+      const text = (x.passage as string).trim()
+      const cut = text.length > share ? `${text.slice(0, share)}\n[... the rest of this source is not shown]` : text
+      return `Source ${i + 1} (${x.kind}${x.address ? `: ${x.address}` : ''}):\n${cut}`
+    })
+    .join('\n\n')
 }

@@ -12,6 +12,8 @@ export default defineConfig({
     // Without this, any `import ... from '@/...'` compiles in TS but fails at build time.
     alias: {
       '@': resolve(__dirname, 'src'),
+      // chat-ui's Word-file reader runs on mammoth's browser build in the page; the tests run in Node and are pointed at the same build.
+      mammoth: 'mammoth/mammoth.browser.js',
       // Mirror packages/*/src/index.ts so vitest resolves packages from source
       // rather than requiring each package to be pre-built before running tests.
       '@buildaharness/runtime': resolve(__dirname, 'packages/runtime/src/index.ts'),

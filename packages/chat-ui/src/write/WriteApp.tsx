@@ -3,6 +3,7 @@ import { SpendBadge } from './SpendBadge'
 import { githubRepoReader, parseGithubRepoAddress, type FolderReader, expandSelection, summarizeVerify, summarizeArticleSources, type VerifyReport, textPieces, collectIssues, parseLineRange, sourceKindForFile, computeReadiness, effectiveSourceStatus, issueCount, textUnitAt, autosaveStep, outlineOf, issuesInRange, unitOfSelection, shouldDeriveStyle, type ArticleBundle, type ChangeSummary, type DependencyKind, type IssueCategory, type Section, type WritePermissions } from '@buildaharness/aielia'
 import type { ChatAction } from './AdjustBar'
 import { ArticleSwitcher, type ArticleItem } from './ArticleSwitcher'
+import { readFileText } from './file-text'
 import { ChatPane, type ChatLine, type ChatMode } from './ChatPane'
 import { HistoryPanel, type VersionRow } from './HistoryPanel'
 import { VersionOutline, VersionView, type Viewing } from './VersionView'
@@ -194,6 +195,8 @@ function WriteAppBody({ services, connection, onDeleted }: WriteAppProps): React
   const [busy, setBusy] = useState<string | null>(null)
   // What has been spent follows every model call, so the header is right while a command is still running.
   const [spendTick, setSpendTick] = useState(0)
+  // A file dragged over anywhere in the window is added to the sources when dropped.
+  const [dropping, setDropping] = useState(false)
   useEffect(() => services.spend.subscribe(() => setSpendTick((n) => n + 1)), [services.spend])
   const [chat, setChat] = useState<ChatLine[]>([])
   const [chatInput, setChatInput] = useState('')
@@ -744,8 +747,10 @@ function WriteAppBody({ services, connection, onDeleted }: WriteAppProps): React
       const lines: string[] = []
       for (const f of files) {
         const kind = sourceKindForFile(f)
-        if (!kind) { lines.push(`${f.name}: only text and code files can be read for now.`); continue }
-        const text = await f.text()
+        if (!kind) { lines.push(`${f.name}: only text, code, PDF and Word (.docx) files can be read.`); continue }
+        let text: string
+        try { text = await readFileText(f) } catch (e) { lines.push(`${f.name}: could not be read (${e instanceof Error ? e.message : String(e)}).`); continue }
+        if (!text.trim()) { lines.push(`${f.name}: has no text I can read${/\.pdf$/i.test(f.name) ? ' (a scanned PDF is a picture of text)' : ''}.`); continue }
         const again = await service.offerFileVersion(activeId as string, f.name, text, services.models.auto())
         if (again.status !== 'no_match') {
           lines.push(`${f.name}: ${again.status === 'unchanged' ? 'the same as the stored copy.' : again.status === 'changed' ? `changed. ${again.impacts.length === 0 ? 'No claim looks affected.' : `${again.impacts.length} claim${again.impacts.length === 1 ? '' : 's'} may be affected.`} Use the new text from the source row when you are ready.` : 'stored.'}`)
@@ -927,7 +932,12 @@ function WriteAppBody({ services, connection, onDeleted }: WriteAppProps): React
                 onJump={jumpTo}
               />
   return (
-    <div className="write">
+    <div
+      className={`write${dropping ? ' is-dropping' : ''}`}
+      onDragOver={(e) => { if (!e.dataTransfer.types.includes('Files')) return; e.preventDefault(); setDropping(true) }}
+      onDragLeave={(e) => { if (e.currentTarget === e.target || !e.currentTarget.contains(e.relatedTarget as Node | null)) setDropping(false) }}
+      onDrop={(e) => { setDropping(false); const files = Array.from(e.dataTransfer.files); if (files.length === 0) return; e.preventDefault(); dropFiles(files, false) }}
+    >
       <header className="write__bar">
         <h1 className="write__title">Aielia Write</h1>
         <ArticleSwitcher articles={articles} activeId={activeId} onSelect={(id) => void run('Opening the article', async () => { await select(id) }, true, ' It is open.')} onRename={() => void renameArticle()} onNew={() => void createArticle()} onExport={() => void exportArticle()} onImport={(f) => void importArticle(f)} onOpenPage={services.canReadPages ? () => void openPage() : undefined} />

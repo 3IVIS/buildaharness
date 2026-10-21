@@ -206,7 +206,7 @@ export { setBrief, applyProfile, cleanProfile, renderStyleGuide, loadProfiles, s
 export { folderFileAddress, pathInFolder, walkFolder, folderFromFsBackend, folderFromListing, matchFolderFiles, isSkippedFolder, type FolderReader } from './writer/local-folder.js'
 export { verifyTargets, lookupNote, currentLookup, summarizeVerify, summarizeArticleSources, DEFAULT_VERIFY_LIMIT, type VerifyEntry, type VerifyOutcome, type VerifyReport } from './writer/article-verify.js'
 export { htmlToMarkdown, looksLikeHtml } from './html-to-markdown.js'
-export { pageToArticle, sourceKindForFile, parseLineRange, parseRepoFileLink, sliceLines, excerptFor, type LineRange } from './writer/article-sources.js'
+export { pageToArticle, sourceKindForFile, documentFormatForFile, parseLineRange, parseRepoFileLink, sliceLines, excerptFor, type LineRange } from './writer/article-sources.js'
 export { CALL_TYPES, callTypeLabel, classifyCall } from './writer/write-spend.js'
 export type { CallType } from './writer/write-spend.js'
 export { claimMarks } from './writer/article-marks.js'

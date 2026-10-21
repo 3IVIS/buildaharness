@@ -124,6 +124,7 @@
 .write__composebar button { overflow-wrap: anywhere; }
 /* Sources for the text under the cursor, at the bottom of the text. */
 .write__dock { margin-top: 10px; border: 1px solid var(--border); border-radius: 8px; background: var(--surface); min-width: 0; }
+.write.is-dropping { outline: 2px dashed var(--accent); outline-offset: -6px; }
 .write__dock.is-over { border-color: var(--accent); background: var(--accent-a08); }
 .write__dockfor { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--muted); font-size: 0.9rem; }
 .write__dockbody { display: flex; flex-direction: column; max-height: 300px; min-height: 0; padding: 8px 12px 10px; }
