@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { SpendBadge } from './SpendBadge'
-import { githubRepoReader, parseGithubRepoAddress, type FolderReader, expandSelection, summarizeVerify, type VerifyReport, textPieces, collectIssues, parseLineRange, sourceKindForFile, computeReadiness, effectiveSourceStatus, issueCount, textUnitAt, autosaveStep, outlineOf, issuesInRange, unitOfSelection, shouldDeriveStyle, type ArticleBundle, type ChangeSummary, type DependencyKind, type IssueCategory, type Section, type WritePermissions } from '@buildaharness/aielia'
+import { githubRepoReader, parseGithubRepoAddress, type FolderReader, expandSelection, summarizeVerify, summarizeArticleSources, type VerifyReport, textPieces, collectIssues, parseLineRange, sourceKindForFile, computeReadiness, effectiveSourceStatus, issueCount, textUnitAt, autosaveStep, outlineOf, issuesInRange, unitOfSelection, shouldDeriveStyle, type ArticleBundle, type ChangeSummary, type DependencyKind, type IssueCategory, type Section, type WritePermissions } from '@buildaharness/aielia'
 import type { ChatAction } from './AdjustBar'
 import { ArticleSwitcher, type ArticleItem } from './ArticleSwitcher'
 import { ChatPane, type ChatLine, type ChatMode } from './ChatPane'
@@ -768,10 +768,10 @@ function WriteAppBody({ services, connection, onDeleted }: WriteAppProps): React
   })
 
   // ---- chat
-  const verifyText = (r: VerifyReport): string => {
+  const verifyText = (r: VerifyReport, meta?: Parameters<typeof summarizeArticleSources>[0]): string => {
     const label = (o: string): string => (o === 'contradicted' ? 'Contradicted' : o === 'no_source_found' ? 'No source found' : o === 'search_failed' ? 'Search failed' : 'Could not check')
     const lines = r.entries.filter((e) => ['no_source_found', 'contradicted', 'could_not_check', 'search_failed'].includes(e.outcome)).slice(0, 12).map((e) => `• ${label(e.outcome)}: ${e.quote.slice(0, 100)}${e.outcome !== 'no_source_found' && e.reason ? ` (${e.reason.slice(0, 160)})` : ''}`)
-    return [summarizeVerify(r), ...lines, r.entries.some((e) => e.found.length > 0) ? 'Pages that were found are kept as suggested sources under the text: confirm the ones that are right.' : ''].filter(Boolean).join('\n')
+    return [summarizeVerify(r), ...lines, meta ? summarizeArticleSources(meta) : '', r.entries.some((e) => e.found.length > 0) ? 'Pages that were found are kept as suggested sources under the text: confirm the ones that are right.' : ''].filter(Boolean).join('\n')
   }
   const verifyFromChat = (repoOnly = false, said?: string | null): void => {
     const used = services.models.chat()
@@ -783,8 +783,9 @@ function WriteAppBody({ services, connection, onDeleted }: WriteAppProps): React
         step('finding the claims to check')
         let calls = 0
         const r = await service.verifyClaims(activeId, { model: used, repoOnly, onStep: (st) => step(`${stepText(st)} (lookup ${++calls})`) })
-        setBundle(await service.get(activeId))
-        setChat((c) => [...c, { id: ++lineId, from: 'aielia', text: verifyText(r), model: used }])
+        const fresh = await service.get(activeId)
+        setBundle(fresh)
+        setChat((c) => [...c, { id: ++lineId, from: 'aielia', text: verifyText(r, fresh.meta), model: used }])
       } catch (e) {
         setChat((c) => [...c, { id: ++lineId, from: 'aielia', text: failureText('The check could not finish', e) }])
       }
