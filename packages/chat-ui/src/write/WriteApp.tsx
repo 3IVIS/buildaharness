@@ -250,7 +250,7 @@ function WriteAppBody({ services, connection, onDeleted }: WriteAppProps): React
    * Every action is a short conversation in the chat: the writer's action as a line, the progress as the last line while it runs, then
    * what came of it, or what went wrong. `announce` is false when the writer's own words already opened the exchange (a typed message).
    */
-  async function run(label: string, work: (step: (text: string) => void) => Promise<void>, announce = true): Promise<void> {
+  async function run(label: string, work: (step: (text: string) => void) => Promise<void>, announce = true, doneNote = ''): Promise<void> {
     if (announce) setChat((c) => [...c, { id: ++lineId, from: 'you', text: label }])
     const mark = lineId
     setBusy(label)
@@ -259,7 +259,7 @@ function WriteAppBody({ services, connection, onDeleted }: WriteAppProps): React
     try {
       await work((text) => setProgress(`${label}: ${text}`))
       // An action that had nothing to say still says it is done.
-      if (lineId === mark) sayInChat(`${label}: done.`)
+      if (lineId === mark) sayInChat(`${label}: done.${doneNote}`)
     } catch (err) {
       sayInChat(`${label} did not finish: ${err instanceof Error ? err.message : String(err)}`)
     } finally {
@@ -331,8 +331,8 @@ function WriteAppBody({ services, connection, onDeleted }: WriteAppProps): React
   const [candidates, setCandidates] = useState<Record<string, { title: string; url: string; snippet: string }[]>>({})
 
   const change = (label: string, work: (id: string) => Promise<void>): void => {
-    if (!activeId) return
-    void run(label, async () => { await flushDraft(); await work(activeId); await reload(activeId) })
+    if (!activeId) { sayInChat('Open or create an article first.'); return }
+    void run(label, async () => { await flushDraft(); await work(activeId); await reload(activeId) }, true, ' The article is updated.')
   }
 
   async function select(id: string): Promise<void> {
@@ -352,11 +352,11 @@ function WriteAppBody({ services, connection, onDeleted }: WriteAppProps): React
   }
 
   async function renameArticle(): Promise<void> {
-    if (!activeId) return
+    if (!activeId) { sayInChat('Open or create an article first.'); return }
     const current = articles.find((a) => a.id === activeId)
     const name = (await dialogs.ask('New name for this article?', { initial: current?.name ?? current?.title ?? '' }))?.trim()
     if (!name) return
-    await run('Renaming', async () => { await service.rename(activeId, name); await refreshList() })
+    await run('Renaming', async () => { await service.rename(activeId, name); await refreshList() }, true, ' The article has its new name.')
   }
 
   function onType(value: string): void {
@@ -425,7 +425,7 @@ function WriteAppBody({ services, connection, onDeleted }: WriteAppProps): React
 
   // ---- publish, export, import
   async function publish(): Promise<void> {
-    if (!activeId) return
+    if (!activeId) { sayInChat('Open or create an article first.'); return }
     const label = await dialogs.ask('Label for this published version (optional)?')
     await run('Publishing', async () => {
       await flushDraft()
@@ -442,17 +442,21 @@ function WriteAppBody({ services, connection, onDeleted }: WriteAppProps): React
   }
 
   async function exportArticle(): Promise<void> {
-    if (!activeId) return
-    const folder = await service.exportArticle(activeId)
-    const fileName = `${bundle?.meta.name ?? bundle?.meta.title ?? 'article'}.aielia-article.json`
-    const text = JSON.stringify(folder, null, 2)
-    // A host with its own way to save a file (a save dialog) is used; a browser tab gets a download link.
-    if (services.saveFile) { await run('Saving the file', async () => { await services.saveFile?.(fileName, text) }); return }
-    const a = document.createElement('a')
-    a.href = URL.createObjectURL(new Blob([text], { type: 'application/json' }))
-    a.download = fileName
-    a.click()
-    URL.revokeObjectURL(a.href)
+    if (!activeId) { sayInChat('Open or create an article first.'); return }
+    const id = activeId
+    await run('Exporting the article', async () => {
+      const folder = await service.exportArticle(id)
+      const fileName = `${bundle?.meta.name ?? bundle?.meta.title ?? 'article'}.aielia-article.json`
+      const text = JSON.stringify(folder, null, 2)
+      // A host with its own way to save a file (a save dialog) is used; a browser tab gets a download link.
+      if (services.saveFile) { await services.saveFile(fileName, text); sayInChat(`The article was saved as ${fileName}.`); return }
+      const a = document.createElement('a')
+      a.href = URL.createObjectURL(new Blob([text], { type: 'application/json' }))
+      a.download = fileName
+      a.click()
+      URL.revokeObjectURL(a.href)
+      sayInChat(`The article was exported as ${fileName}. Your browser has put it in your downloads.`)
+    })
   }
 
   async function importArticle(file: File): Promise<void> {
@@ -492,13 +496,14 @@ function WriteAppBody({ services, connection, onDeleted }: WriteAppProps): React
     change('Saving the version', async (id) => { await service.saveVersion(id, label) })
   }
   const openVersion = (index: number, mode: 'view' | 'compare'): void => {
-    if (!activeId) return
+    if (!activeId) { sayInChat('Open or create an article first.'); return }
     void run('Opening the version', async () => {
       if (mode === 'compare') await flushDraft()
       const snap = await service.getVersion(activeId, index)
       setViewing(mode === 'view' ? { mode, index, markdown: snap.markdown } : { mode, index, markdown: snap.markdown, diff: await service.compareWithCurrent(activeId, index) })
       setShowHistory(true)
       if (!isWide()) setTab('text')
+      sayInChat(mode === 'view' ? 'That version is shown in the main window. Switch back with “Current”.' : 'That version is compared with the article as it is now in the main window.')
     })
   }
   const restoreVersion = async (index: number): Promise<void> => {
@@ -538,7 +543,7 @@ function WriteAppBody({ services, connection, onDeleted }: WriteAppProps): React
 
   /** Reads the style from the text, filling only the empty lines. */
   const deriveStyle = (): void => {
-    if (!activeId) return
+    if (!activeId) { sayInChat('Open or create an article first.'); return }
     const id = activeId
     void run('Reading the style from the text', async () => {
       await flushDraft()
@@ -661,24 +666,20 @@ function WriteAppBody({ services, connection, onDeleted }: WriteAppProps): React
     })()
   }
   const removeRepo = (name: string): void => {
-    if (!activeId) return
+    if (!activeId) { sayInChat('Open or create an article first.'); return }
     service.detachRepo(activeId, name)
     setRepoTick((n) => n + 1)
+    sayInChat(`${name} is no longer used for checking claims.`)
   }
 
   const pickFolder = (): void => {
-    void (async () => {
-      try {
-        const reader = await services.pickFolder?.()
-        if (!reader) return
-        setBusy('Listing the folder')
-        setFolder({ reader, files: await reader.files() })
-      } catch (e) {
-        setNotice(e instanceof Error ? e.message : String(e))
-      } finally {
-        setBusy(null)
-      }
-    })()
+    void run('Choosing a folder', async () => {
+      const reader = await services.pickFolder?.()
+      if (!reader) { sayInChat('No folder was chosen.'); return }
+      const files = await reader.files()
+      setFolder({ reader, files })
+      sayInChat(`Read ${files.length} file${files.length === 1 ? '' : 's'} from ${reader.name}. Pick one in the Sources box to add it as a source.`)
+    })
   }
   const useFolderFile = (path: string): void => {
     const f = folder
@@ -699,7 +700,7 @@ function WriteAppBody({ services, connection, onDeleted }: WriteAppProps): React
   })
 
   const addNote = (kind: NoteKind, text: string): void => {
-    if (!selection) return
+    if (!selection) { sayInChat('Select some text in the article first, then add it.'); return }
     change(kind === 'comment' ? 'Adding the comment' : 'Adding the source', async (id) => {
       if (kind === 'comment') {
         const r = await service.addComment(id, selection, text)
@@ -879,7 +880,7 @@ function WriteAppBody({ services, connection, onDeleted }: WriteAppProps): React
     <div className="write">
       <header className="write__bar">
         <h1 className="write__title">Aielia Write</h1>
-        <ArticleSwitcher articles={articles} activeId={activeId} onSelect={(id) => void select(id)} onRename={() => void renameArticle()} onNew={() => void createArticle()} onExport={() => void exportArticle()} onImport={(f) => void importArticle(f)} onOpenPage={services.canReadPages ? () => void openPage() : undefined} />
+        <ArticleSwitcher articles={articles} activeId={activeId} onSelect={(id) => void run('Opening the article', async () => { await select(id) }, true, ' It is open.')} onRename={() => void renameArticle()} onNew={() => void createArticle()} onExport={() => void exportArticle()} onImport={(f) => void importArticle(f)} onOpenPage={services.canReadPages ? () => void openPage() : undefined} />
         <div className="write__actions">
           <button type="button" className="write__primary" onClick={() => void publish()} disabled={!activeId || busy !== null}>Publish</button>
         </div>
@@ -935,7 +936,7 @@ function WriteAppBody({ services, connection, onDeleted }: WriteAppProps): React
             <p className="write__muted">Create or import an article to use the panels.</p>
           )}
           <section className={`write__pane write__panel-pane ${tab === 'settings' ? 'is-shown' : ''}`} aria-label="Settings">
-            <SettingsPane hostName={services.hostName} connection={connection} github={services.setGithubToken ? { token: services.githubToken, onSave: async (t) => { await services.setGithubToken?.(t); setModelTick((n) => n + 1) } } : undefined} perms={perms} busy={busy !== null} onDeleteAll={() => void deleteAllData()} spent={services.spentUsd()} spentByType={services.spendByType()} autoModel={services.models.auto()} chatModel={chatModel} suggestions={services.models.suggestions} onAutoModel={(m) => void services.models.setAuto(m).then(() => setModelTick((t) => t + 1))} onSave={(p) => run('Saving', async () => { await services.permissions.set(p); permsRef.current = p; setPerms(p) })} />
+            <SettingsPane hostName={services.hostName} connection={connection && { value: connection.value, onSave: (c) => { try { connection.onSave(c); sayInChat('The connection is saved.') } catch (e) { sayInChat(`The connection could not be saved: ${e instanceof Error ? e.message : String(e)}`) } }, onForget: () => { try { connection.onForget(); sayInChat('The connection was forgotten.') } catch (e) { sayInChat(`The connection could not be forgotten: ${e instanceof Error ? e.message : String(e)}`) } } }} github={services.setGithubToken ? { token: services.githubToken, onSave: (t) => run('Saving the GitHub token', async () => { await services.setGithubToken?.(t); setModelTick((n) => n + 1); sayInChat(t?.trim() ? 'The GitHub token is saved.' : 'The GitHub token is removed.') }) } : undefined} perms={perms} busy={busy !== null} onDeleteAll={() => void deleteAllData()} spent={services.spentUsd()} spentByType={services.spendByType()} autoModel={services.models.auto()} chatModel={chatModel} suggestions={services.models.suggestions} onAutoModel={(m) => void run(`Switching the automatic checks to ${m}`, async () => { await services.models.setAuto(m); setModelTick((t) => t + 1); sayInChat(`Automatic checks now use ${m}.`) })} onSave={(p) => run('Saving the settings', async () => { await services.permissions.set(p); permsRef.current = p; setPerms(p); sayInChat('Settings saved.') })} />
           </section>
         </aside>
         {ready && meta ? (
@@ -978,7 +979,7 @@ function WriteAppBody({ services, connection, onDeleted }: WriteAppProps): React
               onFiles={(files) => dropFiles(files, selection !== null)}
               onSaveComments={(c) => change('Saving', async (id) => {
                 for (const e of c.edit) await service.editComment(id, e.id, { text: e.text })
-                for (const t of c.add) { if (!selection) break; const r = await service.addComment(id, selection, t); if (!r.ok) setNotice(r.reason) }
+                for (const t of c.add) { if (!selection) { setNotice('Select some text in the article to attach a new comment to it.'); break } const r = await service.addComment(id, selection, t); if (!r.ok) setNotice(r.reason) }
                 for (const rid of c.remove) await service.deleteComment(id, rid)
               })}
               onDetach={(claimId, sourceId) => change('Saving', async (id) => { await service.detachSource(id, claimId, sourceId) })}
@@ -1021,7 +1022,7 @@ function WriteAppBody({ services, connection, onDeleted }: WriteAppProps): React
           lines={chat}
           model={chatModel}
           suggestions={services.models.suggestions}
-          onModel={(m) => void services.models.setChat(m).then(() => setModelTick((t) => t + 1))}
+          onModel={(m) => void run(`Switching the chat model to ${m}`, async () => { await services.models.setChat(m); setModelTick((t) => t + 1); sayInChat(`The chat now uses ${m}.`) })}
           input={chatInput}
           onInput={setChatInput}
           mode={chatMode}

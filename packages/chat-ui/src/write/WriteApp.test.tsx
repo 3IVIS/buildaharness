@@ -169,6 +169,28 @@ describe('header and article menu', () => {
   })
 })
 
+describe('every action is told in the chat', () => {
+  const chatText = (): string => (document.querySelector('.write__chat') as HTMLElement).textContent ?? ''
+  it('says the action, then that the article is updated, for a plain change', async () => {
+    const s = await services({}, MD)
+    render(<WriteApp services={s} />)
+    await waitForText()
+    await userEvent.click(rail('History'))
+    await userEvent.click(await within(panel('History')).findByRole('button', { name: /Save version/i }))
+    await answerDialog('mine')
+    await waitFor(() => expect(chatText()).toMatch(/Saving the version[\s\S]*Saving the version: done\. The article is updated\./))
+  })
+  it('tells a failure in the chat, with the action that failed and the reason', async () => {
+    const s = await services({}, MD)
+    render(<WriteApp services={{ ...s, service: Object.assign(s.service, { rename: async () => { throw new Error('disk gone') } }) }} />)
+    await waitForText()
+    await userEvent.click(screen.getByRole('button', { name: 'Article' }))
+    await userEvent.click(screen.getByRole('button', { name: /Rename this article/ }))
+    await answerDialog('New name')
+    await waitFor(() => expect(chatText()).toMatch(/Renaming did not finish: disk gone/))
+  })
+})
+
 describe('rail and panels', () => {
   it('has a rail of buttons; on desktop the panel opens from the rail and closes when the same button is clicked again', () =>
     wide(async () => {
