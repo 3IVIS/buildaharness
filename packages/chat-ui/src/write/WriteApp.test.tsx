@@ -442,6 +442,31 @@ describe('chat: model, check and adjust', () => {
     expect(screen.getByText('Create an article, or import one, to begin.')).toBeInTheDocument()
   })
 
+  it('the lines between the panes can be moved (arrow keys here, the mouse in a browser), are remembered, and double-click puts them back', async () => {
+    const width = vi.spyOn(HTMLElement.prototype, 'clientWidth', 'get').mockReturnValue(1400)
+    try {
+      const s = await services({}, MD)
+      const first = render(<WriteApp services={s} />)
+      await waitForText()
+      const main = document.querySelector('.write__main') as HTMLElement
+      const chatLine = screen.getByRole('separator', { name: 'Chat width' })
+      fireEvent.keyDown(chatLine, { key: 'ArrowLeft' }) // toward the text: the chat gets wider
+      expect(main.style.getPropertyValue('--chat-size')).toBe('336px')
+      const dockLine = screen.getByRole('separator', { name: 'Height of the box under the text' })
+      fireEvent.keyDown(dockLine, { key: 'ArrowUp' })
+      expect(JSON.parse(localStorage.getItem('aielia-write.layout') ?? '{}')).toMatchObject({ chat: 336 })
+      first.unmount()
+      render(<WriteApp services={s} />) // opened again: the size is where it was left
+      await waitForText()
+      expect((document.querySelector('.write__main') as HTMLElement).style.getPropertyValue('--chat-size')).toBe('336px')
+      fireEvent.doubleClick(screen.getByRole('separator', { name: 'Chat width' }))
+      expect((document.querySelector('.write__main') as HTMLElement).style.getPropertyValue('--chat-size')).toBe('')
+    } finally {
+      width.mockRestore()
+      localStorage.removeItem('aielia-write.layout')
+    }
+  })
+
   it('warns in Settings when the automatic checks use the same model as the chat', async () => {
     const s = await services({}, MD)
     await s.models.setAuto(s.models.chat())

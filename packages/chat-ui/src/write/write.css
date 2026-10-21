@@ -340,3 +340,22 @@
 .write__srcclaims { list-style: none; margin: 4px 0 0; padding: 0; display: grid; gap: 2px; }
 .write__srcclaims > li { display: flex; gap: 6px; align-items: baseline; border: none; padding: 0; }
 .write .write__srcclaims .write__link { text-align: left; }
+
+/* Handles between the panes: drag one to change the sizes. They only exist where the panes sit side by side (not on a phone). */
+.write__split { display: none; }
+body.write--resizing { user-select: none; -webkit-user-select: none; cursor: col-resize; }
+@media (min-width: 640px) {
+  .write__main { --panel-w: var(--panel-size, 340px); --chat-w: var(--chat-size, 320px); grid-template-columns: 76px minmax(0, 1fr) var(--chat-w); }
+  .write__panel { width: min(var(--panel-size, 340px), 60vw); }
+  .write__split { display: block; position: absolute; z-index: 6; touch-action: none; background: transparent; transition: background 0.12s; }
+  .write__split:hover, .write__split:focus-visible, body.write--resizing .write__split { background: var(--accent-a08, rgba(80, 120, 255, 0.18)); outline: none; }
+  .write__split--x { top: 0; bottom: 0; width: 9px; cursor: col-resize; }
+  .write__split--y { left: 0; right: 0; top: 0; height: 9px; cursor: row-resize; z-index: 2; }
+  .write__split--panel { left: calc(76px + min(var(--panel-size, 340px), 60vw) - 4px); }
+  .write__split--chat { right: calc(var(--chat-w) - 5px); }
+  .write__dock { position: relative; }
+}
+@media (min-width: 960px) {
+  .write__main { --chat-w: var(--chat-size, 400px); grid-template-columns: 76px var(--panel-w) minmax(0, 1fr) var(--chat-w); }
+  .write__split--panel { left: calc(76px + var(--panel-w) - 4px); }
+}

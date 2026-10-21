@@ -14,6 +14,7 @@ import { LinksPanel } from './LinksPanel'
 import { SourcesPanel } from './SourcesPanel'
 import { OutlinePanel } from './OutlinePanel'
 import { SettingsPane } from './SettingsPane'
+import { Splitter } from './Splitter'
 import type { WriteConnection } from './write-config'
 import { TextNotes, looksLikeLink, type NoteKind } from './TextNotes'
 import { Icon } from './icons'
@@ -96,8 +97,23 @@ let lineId = 0
 /** Where the chat lines are kept, so a reload does not erase the conversation. */
 const CHAT_LINES_KEY = 'chat-lines'
 const MAX_SAVED_LINES = 200
+/** Sizes the writer dragged the panes to, in pixels; a missing one is the pane's normal size. */
+interface Layout { panel?: number; chat?: number; dock?: number }
+const LAYOUT_KEY = 'aielia-write.layout'
+function loadLayout(): Layout {
+  try {
+    const raw: unknown = JSON.parse(localStorage.getItem(LAYOUT_KEY) ?? '{}')
+    const n = (v: unknown): number | undefined => (typeof v === 'number' && Number.isFinite(v) && v > 0 ? v : undefined)
+    const o = (raw && typeof raw === 'object' ? raw : {}) as Record<string, unknown>
+    return { panel: n(o.panel), chat: n(o.chat), dock: n(o.dock) }
+  } catch { return {} }
+}
+/** The room the text keeps for itself when a side pane is dragged wider. */
+const MIN_TEXT = 300
+const RAIL_WIDTH = 76
+
 /** What the page keeps in the browser's own storage besides the articles. */
-const LOCAL_KEYS = ['aielia-write.dock', 'aielia-write.layout']
+const LOCAL_KEYS = ['aielia-write.dock', LAYOUT_KEY]
 const isChatLine = (x: unknown): x is ChatLine => typeof x === 'object' && x !== null && typeof (x as ChatLine).id === 'number' && ((x as ChatLine).from === 'you' || (x as ChatLine).from === 'aielia') && typeof (x as ChatLine).text === 'string'
 
 type WriteAppProps = {
@@ -139,6 +155,15 @@ function WriteAppBody({ services, connection, onDeleted }: WriteAppProps): React
   /** The box under the text (comments, sources, issues, links, history of the selected text) can be hidden to give the text the whole page. */
   const [dockOn, setDockOn] = useState<boolean>(() => { try { return localStorage.getItem('aielia-write.dock') !== 'off' } catch { return true } })
   const toggleDock = (): void => { const next = !dockOn; setDockOn(next); try { localStorage.setItem('aielia-write.dock', next ? 'on' : 'off') } catch { /* the choice just is not remembered */ } }
+  const [layout, setLayout] = useState<Layout>(loadLayout)
+  const mainRef = useRef<HTMLElement | null>(null)
+  const resize = (key: keyof Layout, px: number | undefined): void => setLayout((l) => {
+    const next = { ...l, [key]: px }
+    try { localStorage.setItem(LAYOUT_KEY, JSON.stringify(next)) } catch { /* the sizes just are not remembered */ }
+    return next
+  })
+  const widthOf = (selector: string, fallback: number): number => mainRef.current?.querySelector(selector)?.getBoundingClientRect().width || fallback
+  const roomFor = (other: number): number => Math.max(0, (mainRef.current?.clientWidth ?? 1200) - RAIL_WIDTH - other - MIN_TEXT)
   const [notice, setNotice] = useState<string | null>(null)
   const [busy, setBusy] = useState<string | null>(null)
   const [chat, setChat] = useState<ChatLine[]>([])
@@ -792,7 +817,7 @@ function WriteAppBody({ services, connection, onDeleted }: WriteAppProps): React
         </p>
       )}
 
-      <main className="write__main" data-open={railOpen ? 'true' : 'false'} data-tab={tab}>
+      <main ref={mainRef} className="write__main" data-open={railOpen ? 'true' : 'false'} data-tab={tab} style={{ ...(layout.panel ? { '--panel-size': `${layout.panel}px` } : {}), ...(layout.chat ? { '--chat-size': `${layout.chat}px` } : {}) } as React.CSSProperties}>
         <nav className="write__rail" aria-label="Panels">
           {TABS.map((t) => (
             <button key={t.id} type="button" data-tab={t.id} className={isOn(t.id) ? 'is-on' : ''} aria-pressed={isOn(t.id)} aria-label={t.label} onClick={() => pickTab(t.id)}>
@@ -802,6 +827,8 @@ function WriteAppBody({ services, connection, onDeleted }: WriteAppProps): React
             </button>
           ))}
         </nav>
+        {railOpen && <Splitter label="Side panel width" axis="x" grow={1} className="write__split--panel" measure={() => widthOf('.write__panel', 340)} limits={() => ({ min: 220, max: Math.min(640, roomFor(widthOf('.write__pane--chat', 320))) })} onSize={(px) => resize('panel', px)} onReset={() => resize('panel', undefined)} />}
+        <Splitter label="Chat width" axis="x" grow={-1} className="write__split--chat" measure={() => widthOf('.write__pane--chat', 320)} limits={() => ({ min: 260, max: Math.min(720, roomFor(railOpen ? widthOf('.write__panel', 340) : 0)) })} onSize={(px) => resize('chat', px)} onReset={() => resize('chat', undefined)} />
         <aside className="write__panel" aria-label="Side panel">
           {ready && meta ? (
             <>
@@ -869,6 +896,8 @@ function WriteAppBody({ services, connection, onDeleted }: WriteAppProps): React
               grownUnit={grownUnit}
               busy={busy !== null}
               model={chatModel}
+              height={layout.dock}
+              onHeight={(px) => resize('dock', px)}
               onAdd={addNote}
               onFiles={(files) => dropFiles(files, selection !== null)}
               onSaveComments={(c) => change('Saving', async (id) => {
