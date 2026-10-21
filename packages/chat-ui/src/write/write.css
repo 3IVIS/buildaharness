@@ -332,6 +332,11 @@
 .write .write__dockchev { align-self: center; border: none; background: transparent; padding: 0 14px; line-height: 1; font-size: 1.1rem; color: var(--muted); cursor: pointer; }
 .write .write__dockchev:hover { color: var(--accent); }
 
+.write__danger { margin-top: 28px; padding-top: 14px; border-top: 1px solid var(--border); display: grid; gap: 6px; }
+.write .write__dangerbtn { justify-self: start; background: #c62828; border-color: #c62828; color: #fff; }
+.write .write__dangerbtn:hover:not(:disabled) { background: #b71c1c; border-color: #b71c1c; }
+.write .write__dangerbtn:disabled { opacity: 0.55; }
+
 .write__srcclaims { list-style: none; margin: 4px 0 0; padding: 0; display: grid; gap: 2px; }
 .write__srcclaims > li { display: flex; gap: 6px; align-items: baseline; border: none; padding: 0; }
 .write .write__srcclaims .write__link { text-align: left; }

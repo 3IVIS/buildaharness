@@ -58,4 +58,8 @@ export class InMemoryAdapter implements MemoryAdapter {
   async delete(key: string): Promise<void> {
     this.store.delete(this.prefixed(key))
   }
+
+  async clear(): Promise<void> {
+    for (const key of [...this.store.keys()]) if (key.startsWith(this.prefix)) this.store.delete(key)
+  }
 }

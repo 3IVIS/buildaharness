@@ -37,4 +37,14 @@ describe('createMemoryAdapterArticleStore', () => {
     await memory.set('writer:article:bad', { 'article.md': 'x' })
     await expect(store.load('bad')).rejects.toThrow('could not be read')
   })
+
+  it('clearAll removes every article and every setting', async () => {
+    const store = createMemoryAdapterArticleStore(mem())
+    const s = new ArticleService({ store, llm, newId: () => 'a1' })
+    await s.create('Post', '# Post\n')
+    await store.setSetting('x', 42)
+    await store.clearAll?.()
+    expect(await store.list()).toEqual([])
+    expect(await store.getSetting('x')).toBeUndefined()
+  })
 })

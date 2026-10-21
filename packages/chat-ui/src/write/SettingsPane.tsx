@@ -20,9 +20,12 @@ interface Props {
   /** Where the spending is counted: 'browser' (default) or 'app'. */
   hostName?: 'browser' | 'app'
   github?: { token: string | undefined; onSave: (token: string | undefined) => Promise<void> }
+  /** Deletes everything the writer has stored here, after asking. */
+  onDeleteAll?: () => void
+  busy?: boolean
 }
 
-export function SettingsPane({ perms, spent, spentByType, autoModel, chatModel, suggestions, onAutoModel, onSave, connection, github, hostName = 'browser' }: Props): React.JSX.Element {
+export function SettingsPane({ perms, spent, spentByType, autoModel, chatModel, suggestions, onAutoModel, onSave, connection, github, hostName = 'browser', onDeleteAll, busy }: Props): React.JSX.Element {
   const [cap, setCap] = useState<string>('')
   const [ghToken, setGhToken] = useState<string>(github?.token ?? '')
   useEffect(() => setCap(perms?.spendCapUsd !== undefined ? String(perms.spendCapUsd) : ''), [perms])
@@ -57,6 +60,12 @@ export function SettingsPane({ perms, spent, spentByType, autoModel, chatModel, 
             ))}
           </ul>
         </details>
+      )}
+      {onDeleteAll && (
+        <div className="write__danger">
+          <button type="button" className="write__dangerbtn" onClick={onDeleteAll} disabled={busy}>Delete all my data</button>
+          <p className="write__muted">Removes every article with its versions, comments and sources, the chat, your settings and the spending record from this {hostName}. Your key stays.</p>
+        </div>
       )}
     </div>
   )

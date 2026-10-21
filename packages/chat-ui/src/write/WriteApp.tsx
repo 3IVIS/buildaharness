@@ -96,15 +96,22 @@ let lineId = 0
 /** Where the chat lines are kept, so a reload does not erase the conversation. */
 const CHAT_LINES_KEY = 'chat-lines'
 const MAX_SAVED_LINES = 200
+/** What the page keeps in the browser's own storage besides the articles. */
+const LOCAL_KEYS = ['aielia-write.dock', 'aielia-write.layout']
 const isChatLine = (x: unknown): x is ChatLine => typeof x === 'object' && x !== null && typeof (x as ChatLine).id === 'number' && ((x as ChatLine).from === 'you' || (x as ChatLine).from === 'aielia') && typeof (x as ChatLine).text === 'string'
 
-type WriteAppProps = { services: WriteServices; connection?: { value: WriteConnection; onSave: (c: WriteConnection) => void; onForget: () => void } }
+type WriteAppProps = {
+  services: WriteServices
+  connection?: { value: WriteConnection; onSave: (c: WriteConnection) => void; onForget: () => void }
+  /** Called when the writer deleted all their data, so the host can start the page afresh (its models and spending were reset). */
+  onDeleted?: () => void
+}
 
 export function WriteApp(props: WriteAppProps): React.JSX.Element {
   return <DialogProvider><WriteAppBody {...props} /></DialogProvider>
 }
 
-function WriteAppBody({ services, connection }: WriteAppProps): React.JSX.Element {
+function WriteAppBody({ services, connection, onDeleted }: WriteAppProps): React.JSX.Element {
   const { service, port } = services
   const dialogs = useDialogs()
   const [articles, setArticles] = useState<ArticleItem[]>([])
@@ -323,6 +330,25 @@ function WriteAppBody({ services, connection }: WriteAppProps): React.JSX.Elemen
     else { setTab(id); setRailOpen(true) }
   }
   const isOn = (id: Tab): boolean => tab === id && (railOpen || id === 'text' || id === 'chat')
+
+  // ---- delete all data
+  async function deleteAllData(): Promise<void> {
+    if (!(await dialogs.confirm('Delete everything stored in this page? Every article with its versions, comments and sources, the chat, your settings and the spending record are removed. This cannot be undone. Export an article first if you want to keep it.', { yes: 'Delete everything' }))) return
+    await run('Deleting', async () => {
+      if (saveTimer.current) clearTimeout(saveTimer.current)
+      await queue.current.catch(() => undefined)
+      await services.deleteAllData()
+      for (const key of LOCAL_KEYS) { try { localStorage.removeItem(key) } catch { /* nothing was stored */ } }
+      chatRead.current = false
+      setArticles([]); setActiveId(undefined); setBundle(undefined); setDraft(''); draftRef.current = ''
+      setChat([]); setChatInput(''); setNotes([]); setSelection(null); setViewing(null); setVersions([]); setWorking(undefined)
+      setPerms(await services.permissions.get()); permsRef.current = undefined
+      chatRead.current = true
+      setModelTick((n) => n + 1)
+      setNotice('All your data was deleted.')
+      onDeleted?.()
+    })
+  }
 
   // ---- publish, export, import
   async function publish(): Promise<void> {
@@ -807,7 +833,7 @@ function WriteAppBody({ services, connection }: WriteAppProps): React.JSX.Elemen
             <p className="write__muted">Create or import an article to use the panels.</p>
           )}
           <section className={`write__pane write__panel-pane ${tab === 'settings' ? 'is-shown' : ''}`} aria-label="Settings">
-            <SettingsPane hostName={services.hostName} connection={connection} github={services.setGithubToken ? { token: services.githubToken, onSave: async (t) => { await services.setGithubToken?.(t); setModelTick((n) => n + 1) } } : undefined} perms={perms} spent={services.spentUsd()} spentByType={services.spendByType()} autoModel={services.models.auto()} chatModel={chatModel} suggestions={services.models.suggestions} onAutoModel={(m) => void services.models.setAuto(m).then(() => setModelTick((t) => t + 1))} onSave={(p) => run('Saving', async () => { await services.permissions.set(p); permsRef.current = p; setPerms(p) })} />
+            <SettingsPane hostName={services.hostName} connection={connection} github={services.setGithubToken ? { token: services.githubToken, onSave: async (t) => { await services.setGithubToken?.(t); setModelTick((n) => n + 1) } } : undefined} perms={perms} busy={busy !== null} onDeleteAll={() => void deleteAllData()} spent={services.spentUsd()} spentByType={services.spendByType()} autoModel={services.models.auto()} chatModel={chatModel} suggestions={services.models.suggestions} onAutoModel={(m) => void services.models.setAuto(m).then(() => setModelTick((t) => t + 1))} onSave={(p) => run('Saving', async () => { await services.permissions.set(p); permsRef.current = p; setPerms(p) })} />
           </section>
         </aside>
         {ready && meta ? (

@@ -12,6 +12,8 @@ import { createWriteServicesFor, type WriteServices } from './write-services'
 export default function WriteHost({ config, onClose }: { config: AssistantConfig; onClose: () => void }): React.JSX.Element {
   const [services, setServices] = useState<WriteServices | undefined>()
   const [error, setError] = useState<string | undefined>()
+  // Bumped after all the data was deleted, so the services are built again from the empty store.
+  const [fresh, setFresh] = useState(0)
 
   useEffect(() => {
     let live = true
@@ -19,12 +21,12 @@ export default function WriteHost({ config, onClose }: { config: AssistantConfig
       .then((platform) => createWriteServicesFor(config, platform))
       .then((s) => { if (live) setServices(s) }, (e) => { if (live) setError(e instanceof Error ? e.message : String(e)) })
     return () => { live = false }
-  }, [config])
+  }, [config, fresh])
 
   return (
     <div className="write-host">
       <div className="write-host__bar"><button type="button" onClick={onClose}>← Back to chat</button></div>
-      {error ? <p role="alert">Write could not start: {error}</p> : services ? <WriteApp services={services} /> : <p>Opening your articles…</p>}
+      {error ? <p role="alert">Write could not start: {error}</p> : services ? <WriteApp services={services} onDeleted={() => { setServices(undefined); setFresh((n) => n + 1) }} /> : <p>Opening your articles…</p>}
     </div>
   )
 }

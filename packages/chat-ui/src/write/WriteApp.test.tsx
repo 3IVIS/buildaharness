@@ -4,7 +4,7 @@ import userEvent from '@testing-library/user-event'
 import { ArticleService, createMemoryArticleStore, type PersonalAssistant } from '@buildaharness/aielia'
 import type { ILLMClient } from '@buildaharness/runtime'
 import { WriteApp } from './WriteApp'
-import { answerDialog } from './dialog-test-utils'
+import { answerDialog, declineDialog } from './dialog-test-utils'
 import { assembleWriteServices } from './write-services'
 
 const MARK = {
@@ -416,6 +416,30 @@ describe('chat: model, check and adjust', () => {
     await userEvent.type(screen.getByLabelText('What to adjust'), 'pacing')
     await userEvent.type(screen.getByLabelText('How'), 'slower in the middle{Enter}')
     expect(await screen.findByText(/pacing is: slower in the middle/)).toBeInTheDocument()
+  })
+
+  it('Delete all my data asks first, then removes the articles, the chat and the settings', async () => {
+    const s = await services({}, MD)
+    const onDeleted = vi.fn()
+    render(<WriteApp services={s} onDeleted={onDeleted} />)
+    await waitForText()
+    await userEvent.click(rail('Chat'))
+    await userEvent.type(screen.getByLabelText('Message'), 'hello{Enter}')
+    expect(await screen.findByText('Noted.')).toBeInTheDocument()
+    await userEvent.click(rail('Settings'))
+    const button = await within(panel('Settings')).findByRole('button', { name: 'Delete all my data' })
+    expect(button.className).toContain('write__dangerbtn') // red, at the bottom of Settings
+    await userEvent.click(button)
+    await declineDialog() // keeping the data is the way out
+    expect(await s.service.list()).toHaveLength(1)
+    expect(onDeleted).not.toHaveBeenCalled()
+    await userEvent.click(button)
+    await answerDialog()
+    await waitFor(() => expect(onDeleted).toHaveBeenCalled())
+    expect(await s.service.list()).toEqual([])
+    expect(await s.store.getSetting('chat-lines')).toBeUndefined()
+    expect(screen.queryByText('Noted.')).toBeNull()
+    expect(screen.getByText('Create an article, or import one, to begin.')).toBeInTheDocument()
   })
 
   it('warns in Settings when the automatic checks use the same model as the chat', async () => {

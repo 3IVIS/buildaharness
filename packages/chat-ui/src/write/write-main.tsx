@@ -30,6 +30,7 @@ function Root(): React.JSX.Element {
   return (
     <WriteApp
       services={services}
+      onDeleted={() => { setServices(undefined); setConnection(loadConnection()) }}
       connection={{
         value: connection,
         onSave: (c) => { saveConnection(c); setServices(undefined); setConnection(loadConnection()) },
