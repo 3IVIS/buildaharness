@@ -12,6 +12,7 @@ const MARK = {
   resolve: 'You help a writer keep an article consistent',
   edits: 'You propose edits to an article',
   outline: 'You rework the outline of an article',
+  draft: 'You write the first draft of an article',
   capture: 'A writer is working with an assistant',
   ideas: 'You help a writer collect ideas',
   sourceLinks: 'A writer added a source to an article',
@@ -434,6 +435,30 @@ describe('chat: model, check and adjust', () => {
     expect(b.markdown).toContain('It is very quick.')
     expect(b.snapshots.find((x) => x.label === 'Before a chat edit: Make it stronger')?.markdown).toBe(MD2) // the text as it was
     expect(b.meta.suggestions.filter((x) => x.state === 'pending')).toHaveLength(0) // nothing is left waiting to accept
+  })
+  it('"Edit the article" on an empty article writes the draft into the article, not into the chat', async () => {
+    const s = await services({ capture: { articleId: null, ops: [] }, draft: { name: 'Quick post', markdown: '# Post\n## Intro\nIt is quick.' } }, MD2)
+    render(<WriteApp services={s} />)
+    const box = await waitForText()
+    fireEvent.change(box, { target: { value: '' } })
+    await userEvent.click(rail('Chat'))
+    await userEvent.selectOptions(screen.getByLabelText('When I ask for a change'), 'edit')
+    await userEvent.type(screen.getByLabelText('Message'), 'Write the article{Enter}')
+    expect(await screen.findByText(/I wrote the first draft/)).toBeInTheDocument()
+    await waitFor(() => expect(box.value).toContain('It is quick.'))
+  })
+  it('with no article at all, the chat makes one, writes it and names it, without the mode being picked', async () => {
+    const s = await services({ capture: { articleId: null, ops: [] }, draft: { name: 'Quick post', markdown: '# Post\n## Intro\nIt is quick.' } })
+    render(<WriteApp services={s} />)
+    await userEvent.click(rail('Chat'))
+    expect((screen.getByLabelText('When I ask for a change') as HTMLSelectElement).value).toBe('edit')
+    await userEvent.type(screen.getByLabelText('Message'), 'Write an article about speed{Enter}')
+    expect(await screen.findByText(/named the article “Quick post”/)).toBeInTheDocument()
+    const box = await waitForText()
+    await waitFor(() => expect(box.value).toContain('It is quick.'))
+    const list = await s.service.list()
+    expect(list).toHaveLength(1)
+    expect(list[0].name).toBe('Quick post')
   })
   it('with the Outline showing, the edit is of the outline, also after a saved version', async () => {
     const s = await services({ capture: { articleId: null, ops: [] }, outline: { outline: '# Post\n## Conclusion\n## Latency' } }, MD2)

@@ -198,6 +198,8 @@ function WriteAppBody({ services, connection, onDeleted }: WriteAppProps): React
   const [chat, setChat] = useState<ChatLine[]>([])
   const [chatInput, setChatInput] = useState('')
   const [chatMode, setChatMode] = useState<ChatMode>('answer')
+  // Until the writer picks a mode, a chat with no article, or an empty one, writes the article; otherwise it answers.
+  const [modePicked, setModePicked] = useState(false)
   // Where the cursor or selection is in the text: the comments and sources under it are for that text.
   const [selection, setSelection] = useState<{ start: number; end: number } | null>(null)
   const [notes, setNotes] = useState<ResolveNote[]>([])
@@ -825,18 +827,36 @@ function WriteAppBody({ services, connection, onDeleted }: WriteAppProps): React
   async function sendChat(override?: string, mode?: ChatMode): Promise<void> {
     const text = (override ?? chatInput).trim()
     if (!text) return
-    const how = mode ?? chatMode
+    const how = mode ?? effectiveMode
     const wantEdits = how === 'suggest'
     if (override === undefined) setChatInput('')
     setChat((c) => [...c, { id: ++lineId, from: 'you', text }])
     await chatRun(how === 'edit' ? 'Editing' : wantEdits ? 'Asking for edits' : 'Thinking', async () => {
      try {
       if (activeId) await service.updateText(activeId, draft, { analyze: false })
-      if (how === 'edit' && activeId) {
+      if (how === 'edit' && (activeId || view !== 'outline')) {
         // The writer's words are recorded as in any chat turn. Then the version is saved, the edit is made, and the edited article is what is shown.
-        const id = activeId
+        // With no article open, the chat makes one first; it is named from the draft below.
+        const fresh = !activeId
+        let id = activeId
+        if (!id) {
+          id = await service.create('New article', '')
+          await refreshList()
+          await select(id)
+        }
         const { reply, model: said } = await services.chat(text, id)
         const outline = view === 'outline'
+        if (!outline && (fresh || !draft.trim())) {
+          // An empty article has no text to quote, so the chat writes the first draft instead of editing.
+          const d = await service.draftFromChat(id, text, said, fresh)
+          await reload(id)
+          setViewing(null)
+          setShowHistory(false)
+          setVersionsTick((t) => t + 1)
+          void refreshList()
+          setChat((c) => [...c, { id: ++lineId, from: 'aielia', text: d.status === 'drafted' ? `I wrote the first draft${d.name ? ` and named the article “${d.name}”` : ''}, and the article now shows it. To go back, restore the earlier version in History.` : `${reply}\n\nI could not write the draft${d.reason ? `: ${d.reason}` : ''}, so the article is unchanged.`, model: said }])
+          return
+        }
         const r = outline ? await service.editOutlineFromChat(id, text, said) : await service.editFromChat(id, text, said)
         await reload(id)
         setViewing(null)
@@ -876,6 +896,7 @@ function WriteAppBody({ services, connection, onDeleted }: WriteAppProps): React
     })
   }
 
+  const effectiveMode: ChatMode = modePicked || (activeId && draft.trim()) ? chatMode : 'edit'
   const meta = bundle?.meta
   const readiness = meta ? computeReadiness(meta) : undefined
   const issues = meta ? issueCount(collectIssues(meta)) : 0
@@ -911,17 +932,15 @@ function WriteAppBody({ services, connection, onDeleted }: WriteAppProps): React
         <h1 className="write__title">Aielia Write</h1>
         <ArticleSwitcher articles={articles} activeId={activeId} onSelect={(id) => void run('Opening the article', async () => { await select(id) }, true, ' It is open.')} onRename={() => void renameArticle()} onNew={() => void createArticle()} onExport={() => void exportArticle()} onImport={(f) => void importArticle(f)} onOpenPage={services.canReadPages ? () => void openPage() : undefined} />
         <div className="write__actions">
-          <SpendBadge usd={(void spendTick, services.spentUsd())} byType={(void spendTick, services.spendByType())} hostName={services.hostName} />
           <button type="button" className="write__primary" onClick={() => void publish()} disabled={!activeId || busy !== null}>Publish</button>
         </div>
       </header>
       {(busy || banner) && !(isWide() || tab === 'chat') && <p className="write__notice" role="status">{busy ? `${busy}…` : banner}</p>}
 
-      {readiness && (
-        <p className="write__status" aria-label="How close the article is to publishable">
-          {readiness.unsourcedFactualClaims} unsourced · {readiness.staleOrUnsupportedClaims} stale or unsupported · {readiness.openComments} open comment{readiness.openComments === 1 ? '' : 's'} · {readiness.sectionsNeedingReview} section{readiness.sectionsNeedingReview === 1 ? '' : 's'} to review
-        </p>
-      )}
+      <div className="write__status" role="group" aria-label="How close the article is to publishable, and what has been spent">
+        <span>{readiness && `${readiness.unsourcedFactualClaims} unsourced · ${readiness.staleOrUnsupportedClaims} stale or unsupported · ${readiness.openComments} open comment${readiness.openComments === 1 ? '' : 's'} · ${readiness.sectionsNeedingReview} section${readiness.sectionsNeedingReview === 1 ? '' : 's'} to review`}</span>
+        <SpendBadge usd={(void spendTick, services.spentUsd())} tokens={(void spendTick, services.spend.snapshot().inputTokens + services.spend.snapshot().outputTokens)} byType={(void spendTick, services.spendByType())} hostName={services.hostName} />
+      </div>
 
       <main ref={mainRef} className="write__main" data-open={railOpen ? 'true' : 'false'} data-tab={tab} style={{ ...(layout.panel ? { '--panel-size': `${layout.panel}px` } : {}), ...(layout.chat ? { '--chat-size': `${layout.chat}px` } : {}) } as React.CSSProperties}>
         <nav className="write__rail" aria-label="Panels">
@@ -1055,14 +1074,14 @@ function WriteAppBody({ services, connection, onDeleted }: WriteAppProps): React
           onModel={(m) => void run(`Switching the chat model to ${m}`, async () => { await services.models.setChat(m); setModelTick((t) => t + 1); sayInChat(`The chat now uses ${m}.`) })}
           input={chatInput}
           onInput={setChatInput}
-          mode={chatMode}
-          onMode={setChatMode}
+          mode={effectiveMode}
+          onMode={(m) => { setModePicked(true); setChatMode(m) }}
           editLabel={view === 'outline' ? 'Edit the outline' : 'Edit the article'}
           busy={busy !== null}
           canAct={Boolean(activeId)}
           shown={tab === 'chat'}
           onSend={() => void sendChat()}
-          onAdjust={(m) => { const mode = chatMode === 'answer' ? 'suggest' : chatMode; setChatMode(mode); void sendChat(m, mode) }}
+          onAdjust={(m) => { const mode = effectiveMode === 'answer' ? 'suggest' : effectiveMode; setChatMode(mode); setModePicked(true); void sendChat(m, mode) }}
           onAction={(a: ChatAction) => { if (a === 'check') checkFromChat(); else if (a === 'prepare') prepareFromChat(); else verifyFromChat() }}
           repos={activeId ? (void repoTick, service.attachedRepos(activeId)) : []}
           progress={progress}

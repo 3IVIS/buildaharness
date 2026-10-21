@@ -12,6 +12,10 @@ describe('SpendBadge', () => {
     const list = screen.getByRole('list', { name: 'Spending by kind of call' })
     expect(within(list).getAllByRole('listitem').map((li) => li.textContent)).toEqual(['Chat$0.30 · 7 calls', 'Checking claims against sources$0.12 · 1 call'])
   })
+  it('shows the total tokens next to the cost', () => {
+    render(<SpendBadge usd={0.42} tokens={12345} byType={[]} />)
+    expect(screen.getByLabelText(/Spent so far/).textContent).toBe('12,345 tokens · $0.420')
+  })
   it('says app, not browser, on the desktop host', () => {
     render(<SpendBadge usd={0.42} byType={[]} hostName="app" />)
     expect(screen.getByLabelText('Spent so far in this app: $0.42')).toBeInTheDocument()

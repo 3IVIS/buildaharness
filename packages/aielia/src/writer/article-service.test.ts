@@ -8,7 +8,7 @@ import { effectiveSourceStatus } from './article-rules.js'
 
 const NOW = '2026-10-16T10:00:00.000Z'
 const MD = '# Post\n\nIntro: p99 under 20 ms.\n\n## Latency\n\nThe p99 was 18 ms.\n\n## Conclusion\n\nSo p99 stays under 20 ms.\n'
-const MARK = { claims: 'You read parts of an article and list the claims', resolve: 'You help a writer keep an article consistent', support: 'You check whether a claim from an article', capture: 'A writer is working with an assistant', edits: 'You propose edits to an article', outline: 'You rework the outline of an article', consistency: 'You check an article for two kinds of problem', repo: 'You help check a claim from an article against a software repository', repoFolders: 'You narrow down where in a software repository' }
+const MARK = { claims: 'You read parts of an article and list the claims', resolve: 'You help a writer keep an article consistent', support: 'You check whether a claim from an article', capture: 'A writer is working with an assistant', edits: 'You propose edits to an article', outline: 'You rework the outline of an article', draft: 'You write the first draft of an article', consistency: 'You check an article for two kinds of problem', repo: 'You help check a claim from an article against a software repository', repoFolders: 'You narrow down where in a software repository' }
 
 type Router = Partial<Record<keyof typeof MARK, unknown | ((user: string) => unknown)>>
 function routed(r: Router, calls: string[] = []): ILLMClient {
@@ -616,6 +616,21 @@ describe('the chat edits the article itself', () => {
     const r = await s.editFromChat(id, 'Tighten the intro')
     expect(r.status).toBe('failed')
     expect((await s.get(id)).markdown).toBe(MD)
+  })
+  it('an article with no text is drafted from the instruction, after a saved version', async () => {
+    const { svc: s } = svc({ draft: { markdown: '# Post\n## Intro\nIt is quick.' } })
+    const id = await s.create('Post', '')
+    const r = await s.draftFromChat(id, 'Write it from my notes')
+    expect(r.status).toBe('drafted')
+    const b = await s.get(id)
+    expect(b.markdown).toBe('# Post\n## Intro\nIt is quick.\n')
+    expect(b.snapshots.some((x) => x.label === r.savedAs)).toBe(true)
+  })
+  it('a draft that fails leaves the text as it was', async () => {
+    const { svc: s } = svc({})
+    const id = await s.create('Post', '')
+    expect((await s.draftFromChat(id, 'Write it')).status).toBe('failed')
+    expect((await s.get(id)).markdown).toBe('')
   })
   it('the outline: saved first, then the headings are reworked and each section keeps its text', async () => {
     const { svc: s } = svc({ outline: { outline: '# Post\n## Conclusion\n## Latency' } })

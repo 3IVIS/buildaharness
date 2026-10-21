@@ -14,6 +14,7 @@ import { addSnapshot, AUTOSAVE_LABEL, compareVersions, isLargeChange, summarizeC
 import { checkIntegrity, computeReadiness, confirmLink, createSnapshot, removeLink, restoreSnapshot, setSectionReview, type Problem, type Readiness, type Snapshot } from './article-rules.js'
 import { applyOutlineText, outlineToText } from './article-outline.js'
 import { editOutline } from './article-edit-outline.js'
+import { draftArticle } from './article-draft.js'
 import { suggestEdits, type EditSuggestResult } from './article-edit-suggest.js'
 import { reconcileSections } from './article-sections.js'
 import { DEFAULT_VERIFY_LIMIT, DEFAULT_VERIFY_PAGES, verifyTargets, type VerifyEntry, type VerifyReport } from './article-verify.js'
@@ -754,6 +755,22 @@ export class ArticleService {
     await this.store.save(id, { ...b, markdown: md, meta })
     await this.updateText(id, md, { analyze: false })
     return { status: 'applied', savedAs, applied, skipped }
+  }
+
+  /**
+   * The chat writes the text of an article that has none: a version is saved first (as for any chat edit), then the draft becomes the text.
+   * With `nameIt`, the article is also given the name the draft came with (for an article the chat has just made, which has no name of its own yet).
+   */
+  async draftFromChat(id: string, instruction: string, modelOverride?: string, nameIt = false): Promise<{ status: 'drafted' | 'failed'; savedAs: string; name?: string; reason?: string }> {
+    const savedAs = `Before a chat draft: ${clipLabel(instruction)}`
+    await this.saveVersion(id, savedAs)
+    const b = await this.get(id)
+    const { llm, onUsage } = this.opts
+    const r = await draftArticle({ meta: b.meta, instruction }, llm, modelOverride ?? this.writer(), onUsage)
+    if (r.status === 'failed') return { status: 'failed', savedAs, reason: r.reason }
+    await this.updateText(id, r.markdown, { analyze: false })
+    if (nameIt && r.name) await this.rename(id, r.name)
+    return { status: 'drafted', savedAs, name: nameIt && r.name ? r.name : undefined }
   }
 
   /** The same for the outline: saved first, then the headings are reworked (reworded, added, removed, moved) and each section's text follows its heading. */
