@@ -147,7 +147,10 @@ export function TextNotes({ issues, issuesCount, links, history, meta, markdown,
       {!collapsed && pane === 'issues' && <div className="write__dockbody"><div className="write__dockscroll" role="tabpanel" aria-label="Issues">{issues}</div></div>}
       {!collapsed && pane === 'links' && <div className="write__dockbody"><div className="write__dockscroll" role="tabpanel" aria-label="Links">{links}</div></div>}
       {!collapsed && pane === 'history' && <div className="write__dockbody"><div className="write__dockscroll" role="tabpanel" aria-label="History of this text">{history}</div></div>}
-      {!collapsed && (pane === 'comments' || pane === 'sources') && (
+      {!collapsed && !unit && (pane === 'comments' || pane === 'sources') && (
+        <div className="write__dockbody"><div className="write__dockscroll" role="tabpanel" aria-label={pane === 'comments' ? 'Comments' : 'Sources'}><p className="write__muted">Click in the text, or highlight some, to see {pane === 'comments' ? 'the comments on it and to add one' : 'the sources for it and to add one'}. The {pane === 'comments' ? 'Issues button' : 'Sources button'} at the side lists the whole article.</p></div></div>
+      )}
+      {!collapsed && unit && (pane === 'comments' || pane === 'sources') && (
         <div className="write__dockbody">
           <div className="write__dockscroll">
             {pane === 'comments' && (
