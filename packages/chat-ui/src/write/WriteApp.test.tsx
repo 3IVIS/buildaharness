@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, afterEach } from 'vitest'
-import { render, screen, waitFor, fireEvent, within, cleanup } from '@testing-library/react'
+import { act, render, screen, waitFor, fireEvent, within, cleanup } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { ArticleService, createMemoryArticleStore, type PersonalAssistant } from '@buildaharness/aielia'
 import type { ILLMClient } from '@buildaharness/runtime'
@@ -11,6 +11,7 @@ const MARK = {
   claims: 'You read parts of an article and list the claims',
   resolve: 'You help a writer keep an article consistent',
   edits: 'You propose edits to an article',
+  outline: 'You rework the outline of an article',
   capture: 'A writer is working with an assistant',
   ideas: 'You help a writer collect ideas',
   sourceLinks: 'A writer added a source to an article',
@@ -334,6 +335,38 @@ describe('chat: model, check and adjust', () => {
     expect(screen.getAllByTitle('The model that wrote this')[0]).toHaveTextContent('my-own-model')
   })
 
+  it('"Edit the article" saves a version first, then edits, and the page shows the edited text', async () => {
+    const s = await services({ capture: { articleId: null, ops: [] }, edits: { suggestions: [{ quote: 'It is quick.', replacement: 'It is very quick.', reason: 'stronger' }] } }, MD2)
+    const id = (await s.service.list())[0].id
+    render(<WriteApp services={s} />)
+    const box = await waitForText()
+    await userEvent.click(rail('Chat'))
+    await userEvent.selectOptions(screen.getByLabelText('When I ask for a change'), 'edit')
+    await userEvent.type(screen.getByLabelText('Message'), 'Make it stronger{Enter}')
+    expect(await screen.findByText(/I saved a version first/)).toBeInTheDocument()
+    await waitFor(() => expect(box.value).toContain('It is very quick.')) // the edited text is on screen
+    const b = await s.service.get(id)
+    expect(b.markdown).toContain('It is very quick.')
+    expect(b.snapshots.find((x) => x.label === 'Before a chat edit: Make it stronger')?.markdown).toBe(MD2) // the text as it was
+    expect(b.meta.suggestions.filter((x) => x.state === 'pending')).toHaveLength(0) // nothing is left waiting to accept
+  })
+  it('with the Outline showing, the edit is of the outline, also after a saved version', async () => {
+    const s = await services({ capture: { articleId: null, ops: [] }, outline: { outline: '# Post\n## Conclusion\n## Latency' } }, MD2)
+    const id = (await s.service.list())[0].id
+    render(<WriteApp services={s} />)
+    await waitForText()
+    await userEvent.click(screen.getByRole('button', { name: 'Outline view' }))
+    await userEvent.click(rail('Chat'))
+    await userEvent.selectOptions(screen.getByLabelText('When I ask for a change'), 'edit')
+    expect(screen.getByRole('option', { name: 'Edit the outline' })).toBeInTheDocument()
+    await userEvent.type(screen.getByLabelText('Message'), 'Conclusion first{Enter}')
+    expect(await screen.findByText(/I reworked the outline/)).toBeInTheDocument()
+    const b = await s.service.get(id)
+    expect(b.markdown.indexOf('## Conclusion')).toBeLessThan(b.markdown.indexOf('## Latency'))
+    expect(b.snapshots.some((x) => x.label === 'Before a chat edit of the outline: Conclusion first' && x.markdown === MD2)).toBe(true)
+    expect((screen.getByLabelText('Outline', { exact: true }) as HTMLTextAreaElement).value).toBe('# Post\n## Conclusion\n## Latency')
+  })
+
   it('the conversation is still there after the page is opened again', async () => {
     const s = await services({}, MD)
     const first = render(<WriteApp services={s} />)
@@ -353,7 +386,7 @@ describe('chat: model, check and adjust', () => {
     await waitFor(async () => expect(await s.store.getSetting('chat-lines')).toHaveLength(4))
   })
 
-  it('"Check the article" is an action in the Adjust list, runs as soon as it is picked, and says which model checked', async () => {
+  it('"Find the factual claims and check them" is an action in the Adjust list, without a model name in its label, runs as soon as it is picked, and says which model checked', async () => {
     const s = await services({ capture: { articleId: null, ops: [] }, claims: { claims: [{ quote: 'The p99 was 18 ms.', kind: 'factual', matchesId: null, sure: true }] }, resolve: { affected: [] } }, MD)
     render(<WriteApp services={s} />)
     await waitForText()
@@ -384,7 +417,7 @@ describe('chat: model, check and adjust', () => {
     await screen.findByText(/I found 1 factual claim/)
     await waitFor(() => expect(container.querySelector('mark')?.textContent).toBe('The p99 was 18 ms.'))
     expect(container.querySelector('mark')).toHaveClass('write__mark--look')
-    expect(screen.getByText('not looked at yet')).toBeInTheDocument()
+    expect(screen.getByText('needs checking')).toBeInTheDocument()
     expect(container.querySelector('.write__backdrop')).toHaveAttribute('aria-hidden', 'true')
     putCursor('18 ms')
     expect(screen.queryByText(/Here:/)).toBeNull() // the box under the text says it
@@ -611,6 +644,52 @@ describe('issues in batches', () => {
     await open(s)
     expect(within(panel('Issues')).getByText(/Nothing needs your attention/)).toBeInTheDocument()
     expect(within(panel('Issues')).queryByRole('button', { name: 'Resolve all' })).toBeNull()
+  })
+})
+
+describe('double-click selects bigger and bigger pieces', () => {
+  it('the sentence, then the paragraph, then each section up to just below the whole article, then the sentence again', async () => {
+    const s = await services({}, MD2)
+    render(<WriteApp services={s} />)
+    const box = await waitForText()
+    const doubleClick = (needle: string): void => {
+      const at = box.value.indexOf(needle) + 2
+      fireEvent.mouseDown(box, { detail: 1 })
+      box.setSelectionRange(at, at)
+      fireEvent.mouseDown(box, { detail: 2 })
+      fireEvent.doubleClick(box)
+    }
+    const picked = (): string => box.value.slice(box.selectionStart, box.selectionEnd)
+    doubleClick('The p99')
+    expect(picked()).toBe('The p99 was 18 ms.')
+    doubleClick('The p99')
+    expect(picked()).toBe('The p99 was 18 ms. It is quick.') // the paragraph
+    doubleClick('The p99')
+    expect(picked()).toBe('## Latency\n\nThe p99 was 18 ms. It is quick.') // its section
+    // `# Post` is the whole article here, so the section above was the largest one: the next double-click starts over
+    doubleClick('The p99')
+    expect(picked()).toBe('The p99 was 18 ms.')
+  })
+})
+
+describe('a picked piece of text stays marked', () => {
+  it('stays drawn when the writer clicks in the box under the text, and goes when the text is clicked again', async () => {
+    const s = await services({}, MD2)
+    const { container } = render(<WriteApp services={s} />)
+    const box = await waitForText()
+    const at = box.value.indexOf('The p99')
+    await waitFor(() => {
+      box.focus()
+      box.setSelectionRange(at + 4, at + 17)
+      fireEvent.click(box) // the page reads the selection on a click (React drops a repeated select event for a range it has already seen)
+      expect(container.querySelector('mark.write__sel')).toBeNull() // while the box is in use the browser draws it
+      act(() => box.blur()) // a real blur, as when the writer clicks elsewhere
+      expect(container.querySelector('mark.write__sel')?.textContent).toBe('p99 was 18 ms')
+    })
+    await dockTab('Sources')
+    expect(container.querySelector('mark.write__sel')?.textContent).toBe('p99 was 18 ms')
+    act(() => box.focus())
+    expect(container.querySelector('mark.write__sel')).toBeNull()
   })
 })
 
@@ -915,29 +994,29 @@ describe('bringing a page or file in to edit', () => {
 describe('selecting by sentence, paragraph and section', () => {
   const TEXT = '# Post\n\nFirst one. The p99 was 18 ms. Last one.\n\n## Latency\n\nIt is quick.\n'
   const selected = (): string => { const t = screen.getByLabelText('Article text') as HTMLTextAreaElement; return t.value.slice(t.selectionStart, t.selectionEnd) }
-  it('grows from the cursor to the sentence, paragraph and section with one button, shrinks back, and works from the keyboard', async () => {
+  it('grows from the cursor to the sentence, paragraph and section from the keyboard, and shrinks back; there are no select buttons under the text', async () => {
     const s = await services({}, TEXT)
     render(<WriteApp services={s} />)
     await waitForText()
     putCursor('18 ms')
-    const more = screen.getByRole('button', { name: /Select more/ })
-    await userEvent.click(more)
+    expect(screen.queryByRole('group', { name: 'Select text' })).toBeNull()
+    const box = screen.getByLabelText('Article text')
+    const more = (): void => { fireEvent.keyDown(box, { key: 'ArrowUp', altKey: true, shiftKey: true }) }
+    const less = (): void => { fireEvent.keyDown(box, { key: 'ArrowDown', altKey: true, shiftKey: true }) }
+    more()
     expect(selected()).toBe('The p99 was 18 ms.')
-    expect(await screen.findByText('Selected: sentence')).toBeInTheDocument()
     const dock = (): HTMLElement => screen.getByLabelText('Comments and sources for this text')
     expect(within(dock()).getByText('Sentence')).toBeInTheDocument()
     await dockTab('Links')
     expect(within(dock()).getByText('Sentence')).toBeInTheDocument() // the title names the selection, not the tab
-    await userEvent.click(more)
+    more()
     expect(selected()).toBe('First one. The p99 was 18 ms. Last one.')
     expect(within(dock()).getByText('Paragraph')).toBeInTheDocument()
-    await userEvent.click(more)
+    more()
     expect(selected()).toBe(TEXT.trim())
-    expect(await screen.findByText('Selected: section')).toBeInTheDocument()
-    await userEvent.click(screen.getByRole('button', { name: /Select less/ }))
+    expect(within(dock()).getByText('Section')).toBeInTheDocument()
+    less()
     expect(selected()).toBe('First one. The p99 was 18 ms. Last one.')
-    fireEvent.keyDown(screen.getByLabelText('Article text'), { key: 'ArrowUp', altKey: true, shiftKey: true })
-    expect(await screen.findByText('Selected: section')).toBeInTheDocument()
   })
 })
 
@@ -1126,6 +1205,14 @@ describe('links, history', () => {
     expect(detail.querySelector('ins')?.textContent).toBe('41') // the changed word is marked inside its line, not the whole line twice
     expect(detail.querySelector('del')?.textContent).toBe('18')
     expect(within(history).queryByLabelText('Version detail')).toBeNull() // shown in the main text window, not in the side panel
+    // the Article / Outline toggle stays at the top and works on the version too
+    const show = screen.getByRole('group', { name: 'Show' })
+    expect(screen.getByLabelText('Version detail').compareDocumentPosition(show) & Node.DOCUMENT_POSITION_PRECEDING).toBeTruthy() // above the version, not under it
+    await userEvent.click(within(show).getByRole('button', { name: 'Outline view' }))
+    expect(screen.queryByLabelText('Version detail')).toBeNull()
+    expect(within(screen.getByLabelText('Version outline')).getByText(/# Post/)).toBeInTheDocument()
+    await userEvent.click(within(show).getByRole('button', { name: 'Article view' }))
+    expect(await screen.findByLabelText('Version detail')).toBeInTheDocument()
     await userEvent.click(within(screen.getByRole('group', { name: 'Which text' })).getByRole('button', { name: 'Current' }))
     expect(screen.queryByLabelText('Version detail')).toBeNull()
     expect(screen.queryByRole('group', { name: 'Which text' })).toBeNull() // back to the article, nothing left to toggle

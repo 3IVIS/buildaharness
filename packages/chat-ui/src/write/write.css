@@ -53,7 +53,6 @@
 .write__mark.has-suggestion { text-decoration: underline dashed #8b5cf6; text-decoration-thickness: 2px; text-underline-offset: 3px; }
 .write__mark.has-comment.has-suggestion { text-decoration-style: double; }
 .write__mark.has-review { box-shadow: inset 0 -3px 0 #d89a1c; }
-.write__selbar { display: flex; gap: 6px; align-items: center; margin-top: 4px; font-size: 0.82rem; }
 .write__marklegend { margin: 4px 0 0; font-size: 0.82rem; color: var(--muted); display: flex; flex-wrap: wrap; gap: 4px 10px; align-items: center; }
 .write__tintswitch { display: inline-flex; gap: 4px; align-items: center; }
 .write__tone { margin-left: 0; padding: 0 5px; border-radius: 3px; }
@@ -303,7 +302,12 @@
 
 /* The box under the text: its panes are chosen with tabs that wrap instead of running off the edge. */
 .write__dock { overflow: hidden; }
-.write__docktabs { display: flex; flex-wrap: wrap; gap: 2px 4px; padding: 4px 8px 0; border-bottom: 1px solid var(--border); }
+.write__docktabsbar { display: flex; align-items: stretch; padding: 4px 4px 0; border-bottom: 1px solid var(--border); min-width: 0; }
+.write__docktabs { display: flex; flex-wrap: nowrap; gap: 2px 4px; flex: 1 1 auto; min-width: 0; padding: 0 4px; overflow-x: auto; scrollbar-width: none; }
+.write__docktabs::-webkit-scrollbar { display: none; }
+.write .write__docktabs button { flex: none; white-space: nowrap; }
+.write .write__tabarrow { flex: none; width: 24px; min-height: 30px; padding: 0; border: none; background: transparent; color: var(--muted); font-size: 1.2rem; line-height: 1; cursor: pointer; border-radius: 6px 6px 0 0; }
+.write .write__tabarrow:hover { color: var(--accent); background: var(--accent-a08, rgba(80, 120, 255, 0.12)); }
 .write .write__docktabs button { min-height: 30px; padding: 2px 10px; font-size: 0.85rem; background: transparent; border: none; border-bottom: 2px solid transparent; border-radius: 6px 6px 0 0; }
 .write .write__docktabs button.is-on { border-bottom-color: var(--accent); font-weight: 600; }
 .write__dockadd > .write__seg { max-width: 100%; }
@@ -329,8 +333,12 @@
 .write__versionview .write__pre { max-height: none; }
 
 /* Shows or hides the box under the text. */
-.write .write__dockchev { align-self: center; border: none; background: transparent; padding: 0 14px; line-height: 1; font-size: 1.1rem; color: var(--muted); cursor: pointer; }
-.write .write__dockchev:hover { color: var(--accent); }
+.write .write__dockchev { position: absolute; top: 5px; right: 8px; z-index: 3; width: 24px; height: 24px; min-height: 0; padding: 0; border: none; border-radius: 6px; background: transparent; line-height: 1; font-size: 1.1rem; color: var(--muted); cursor: pointer; }
+.write .write__dockchev:hover { color: var(--accent); background: var(--accent-a08, rgba(80, 120, 255, 0.12)); }
+.write .write__dockchev--show { top: auto; bottom: 8px; right: 22px; background: var(--surface); border: 1px solid var(--border); }
+.write .write__dockhead { padding-right: 40px; }
+.write__dock { position: relative; }
+.write__pane--text { position: relative; }
 
 .write__danger { margin-top: 28px; padding-top: 14px; border-top: 1px solid var(--border); display: grid; gap: 6px; }
 .write .write__dangerbtn { justify-self: start; background: #c62828; border-color: #c62828; color: #fff; }
@@ -359,3 +367,6 @@ body.write--resizing { user-select: none; -webkit-user-select: none; cursor: col
   .write__main { --chat-w: var(--chat-size, 400px); grid-template-columns: 76px var(--panel-w) minmax(0, 1fr) var(--chat-w); }
   .write__split--panel { left: calc(76px + var(--panel-w) - 4px); }
 }
+
+/* A selection kept visible while the text box is not in use. */
+.write__mark.write__sel, .write__outlineghost .write__sel { background: color-mix(in srgb, var(--accent, #3b6fd4) 30%, transparent); }

@@ -12,6 +12,8 @@ import { attachSourceToText, proposeSourceLinks, textUnitAt, type SourceLinkProp
 import { addDrawnLink, proposeDependencies, type DependencyKind, type DependencyProposal } from './article-dependencies.js'
 import { addSnapshot, AUTOSAVE_LABEL, compareVersions, isLargeChange, summarizeChange, type ChangeSummary, type VersionComparison } from './article-history.js'
 import { checkIntegrity, computeReadiness, confirmLink, createSnapshot, removeLink, restoreSnapshot, setSectionReview, type Problem, type Readiness, type Snapshot } from './article-rules.js'
+import { applyOutlineText, outlineToText } from './article-outline.js'
+import { editOutline } from './article-edit-outline.js'
 import { suggestEdits, type EditSuggestResult } from './article-edit-suggest.js'
 import { reconcileSections } from './article-sections.js'
 import { DEFAULT_VERIFY_LIMIT, DEFAULT_VERIFY_PAGES, verifyTargets, type VerifyEntry, type VerifyReport } from './article-verify.js'
@@ -729,6 +731,46 @@ export class ArticleService {
     return this.suggest(id, instruction, modelOverride, { focus: { start: unit.start, end: unit.end } })
   }
 
+  /**
+   * The chat edits the article itself. The text as it is now is saved as a version first, always, so the edit can be undone from History; then
+   * the edit is made, and only the changes this request produced are applied (suggestions waiting from before stay as they are).
+   */
+  async editFromChat(id: string, instruction: string, modelOverride?: string): Promise<ChatEditResult> {
+    const savedAs = `Before a chat edit: ${clipLabel(instruction)}`
+    await this.saveVersion(id, savedAs)
+    const r = await this.suggest(id, instruction, modelOverride)
+    if (r.status === 'failed') return { status: 'failed', savedAs, applied: [], skipped: 0 }
+    const b = await this.get(id)
+    const mine = b.meta.suggestions.filter((x) => r.added.includes(x.id)).sort((x, y) => y.span.start - x.span.start)
+    let meta = b.meta
+    let md = b.markdown
+    const applied: { quote: string; replacement: string }[] = []
+    let skipped = 0
+    for (const sg of mine) {
+      const a = acceptSuggestion(meta, md, sg.id)
+      if (a.ok) { meta = a.meta; md = a.markdown; applied.unshift({ quote: sg.span.quote, replacement: sg.replacement }) } else skipped++
+    }
+    if (applied.length === 0) return { status: 'nothing', savedAs, applied, skipped }
+    await this.store.save(id, { ...b, markdown: md, meta })
+    await this.updateText(id, md, { analyze: false })
+    return { status: 'applied', savedAs, applied, skipped }
+  }
+
+  /** The same for the outline: saved first, then the headings are reworked (reworded, added, removed, moved) and each section's text follows its heading. */
+  async editOutlineFromChat(id: string, instruction: string, modelOverride?: string): Promise<OutlineEditResult> {
+    const savedAs = `Before a chat edit of the outline: ${clipLabel(instruction)}`
+    await this.saveVersion(id, savedAs)
+    const b = await this.get(id)
+    const before = outlineToText(b.markdown)
+    const { llm, onUsage } = this.opts
+    const r = await editOutline({ meta: b.meta, outline: before, instruction }, llm, modelOverride ?? this.writer(), onUsage)
+    if (r.status === 'failed') return { status: 'failed', savedAs, reason: r.reason }
+    const next = applyOutlineText(b.markdown, r.outline)
+    if (next === b.markdown) return { status: 'nothing', savedAs, before, after: before }
+    await this.updateText(id, next, { analyze: false })
+    return { status: 'applied', savedAs, before, after: outlineToText(next) }
+  }
+
   /** Accepts a suggestion (optionally with the writer\'s own wording): the Markdown changes, then the usual update runs. */
   async acceptSuggestionAndUpdate(id: string, suggestionId: string, edited?: string, options: { analyze?: boolean } = {}): Promise<{ ok: true; outcome: UpdateOutcome } | { ok: false; reason: string }> {
     const b = await this.get(id)
@@ -1312,4 +1354,26 @@ export function serializeByArticle<T extends object>(service: T): T {
       }
     },
   })
+}
+
+/** What a chat edit of the text did: the version saved before it, and each change made. */
+export interface ChatEditResult {
+  status: 'applied' | 'nothing' | 'failed'
+  savedAs: string
+  applied: { quote: string; replacement: string }[]
+  /** Changes that no longer fitted the text when they were made. */
+  skipped: number
+}
+
+export interface OutlineEditResult {
+  status: 'applied' | 'nothing' | 'failed'
+  savedAs: string
+  before?: string
+  after?: string
+  reason?: string
+}
+
+const clipLabel = (instruction: string): string => {
+  const t = instruction.replace(/\s+/g, ' ').trim()
+  return t.length > 60 ? `${t.slice(0, 60)}…` : t
 }

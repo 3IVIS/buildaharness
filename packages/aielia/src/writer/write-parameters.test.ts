@@ -9,7 +9,9 @@ describe('write parameters', () => {
     const basics = WRITE_PARAMETERS.filter((x) => x.group === 'basics')
     expect(basics.length).toBeGreaterThanOrEqual(8)
     expect(basics.length).toBeLessThanOrEqual(12)
-    expect(PARAMETER_GROUPS.map((g) => g.id)).toEqual(['basics', 'revise', 'advanced'])
+    expect(PARAMETER_GROUPS.map((g) => g.id)).toEqual(['basics', 'revise', 'voice', 'structure', 'seo', 'research', 'brand', 'promotion', 'output'])
+    // every parameter is in a listed group, and no group is long
+    for (const g of PARAMETER_GROUPS) { const n = WRITE_PARAMETERS.filter((x) => x.group === g.id).length; expect(n).toBeGreaterThan(0); expect(n).toBeLessThanOrEqual(13) }
     expect(WRITE_PARAMETERS.length).toBeGreaterThan(70)
   })
   it('keeps options that contain commas and punctuation intact', () => {

@@ -23,6 +23,7 @@ export const CALL_TYPES: readonly CallType[] = [
   { id: 'source_links', label: 'Placing a new source', marker: 'A writer added a source to an article' },
   { id: 'links', label: 'Finding links between sections', marker: 'You map how the sections' },
   { id: 'edits', label: 'Suggesting edits', marker: 'You propose edits to an article' },
+  { id: 'outline', label: 'Reworking the outline', marker: 'You rework the outline of an article' },
   { id: 'ideas', label: 'Suggesting ideas', marker: 'You help a writer collect ideas' },
   { id: 'capture', label: 'Remembering comments and corrections', marker: 'A writer is working with an assistant' },
 ]

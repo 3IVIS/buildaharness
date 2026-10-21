@@ -1,3 +1,4 @@
+import { sentenceAround } from './article-marks.js'
 import { unitOfSelection, type SelectionRange, type SelectionUnit } from './article-selection.js'
 
 /**
@@ -31,7 +32,8 @@ export interface TextRevisions {
   revisions: TextRevision[]
 }
 
-const MIN_SHARED = 0.4
+/** How much of its words a sentence must share with the one it is compared with. Lower finds more rewordings, and mistakes another sentence of the paragraph for the one picked. */
+const MIN_SHARED = 0.5
 
 const words = (t: string): Set<string> => new Set(t.toLowerCase().match(/[\p{L}\p{N}']+/gu) ?? [])
 
@@ -42,22 +44,41 @@ function overlap(a: Set<string>, b: Set<string>): number {
   return shared / Math.max(a.size, b.size)
 }
 
-/** Every unit of one kind in the text, in order. */
-function unitsOf(text: string, unit: SelectionUnit): string[] {
-  if (unit === 'article') return [text.trim()]
-  if (unit === 'paragraph') return text.split(/\n{2,}/).map((p) => p.trim()).filter(Boolean)
-  if (unit === 'section') {
-    const parts = text.split(/\n(?=#{1,6} )/).map((p) => p.trim()).filter(Boolean)
-    return parts
+const squash = (t: string): string => t.replace(/\s+/g, ' ').trim()
+
+/** The sentences of a text, found the way the selection finds them (so "the sentence under the cursor" is one of them), in order. */
+function sentencesOf(text: string): string[] {
+  const out: string[] = []
+  let at = 0
+  while (at < text.length) {
+    if (/\s/.test(text[at])) { at++; continue }
+    const s = sentenceAround(text, at, at)
+    const t = squash(text.slice(s.start, s.end))
+    if (t) out.push(t)
+    at = Math.max(s.end, at + 1)
   }
-  return text.split(/\n+/).flatMap((line) => line.match(/[^.!?]+[.!?]+["')\]]*|[^.!?]+$/g) ?? []).map((s) => s.trim()).filter(Boolean)
+  return out
 }
 
-function counterpart(markdown: string, unit: SelectionUnit, now: string): string | undefined {
+/** Every unit of one kind in the text, in order, with the white space inside each squeezed to single spaces. */
+function unitsOf(text: string, unit: SelectionUnit): string[] {
+  if (unit === 'article') return [squash(text)]
+  if (unit === 'paragraph') return text.split(/\n{2,}/).map(squash).filter(Boolean)
+  if (unit === 'section') return text.split(/\n(?=#{1,6} )/).map(squash).filter(Boolean)
+  return sentencesOf(text)
+}
+
+/**
+ * The unit of an older version that is the picked one: the same words, or the one that shares most of its words with it. Units that are, word
+ * for word, another unit of the text as it is now are not it (another sentence of the paragraph is not an earlier wording of this one), so when
+ * only such units resemble it, the piece was not in that version.
+ */
+function counterpart(markdown: string, unit: SelectionUnit, now: string, others: Set<string>): string | undefined {
   const target = words(now)
   let best: { text: string; score: number } | undefined
   for (const u of unitsOf(markdown, unit)) {
     if (u === now) return u
+    if (others.has(u)) continue
     const score = overlap(words(u), target)
     if (score >= MIN_SHARED && (!best || score > best.score)) best = { text: u, score }
   }
@@ -68,11 +89,12 @@ function counterpart(markdown: string, unit: SelectionUnit, now: string): string
 export function revisionsOfText(markdown: string, range: SelectionRange, versions: readonly VersionText[]): TextRevisions | undefined {
   const found = unitOfSelection(markdown, range)
   if (!found) return undefined
-  const now = markdown.slice(found.range.start, found.range.end).trim()
+  const now = squash(markdown.slice(found.range.start, found.range.end))
+  const others = new Set(unitsOf(markdown, found.unit).filter((u) => u !== now))
   const revisions: TextRevision[] = [{ text: now }]
   let last: string | undefined = now
   for (const v of [...versions].sort((a, b) => b.index - a.index)) {
-    const text = counterpart(v.markdown, found.unit, now)
+    const text = counterpart(v.markdown, found.unit, now, others)
     if (text === last) continue
     revisions.push({ index: v.index, kind: v.kind, label: v.label, at: v.at, text })
     last = text

@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { outlineOf, renameHeadingInText, outlineToText, applyOutlineText } from './article-outline.js'
+import { expandOutlineSelection, outlineOf, renameHeadingInText, outlineToText, applyOutlineText } from './article-outline.js'
 
 const TEXT = '# Title\n\nIntro.\n\n## One\n\nText.\n\n### One A\n\nMore.\n\n### One B\n\n## Two\n\nEnd.\n'
 
@@ -66,5 +66,27 @@ describe('outline as text', () => {
   })
   it('waits while a line is only hashes', () => {
     expect(applyOutlineText(T, '# Title\n## One\n##\n## Two')).toBe(T)
+  })
+})
+
+describe('expandOutlineSelection', () => {
+  const text = '# Post\n## Latency\n### Detail\n### Other\n## Cost'
+  const steps = (at: number): string[] => {
+    const out: string[] = []
+    let r = { start: at, end: at }
+    for (let i = 0; i < 8; i++) {
+      const n = expandOutlineSelection(text, r)
+      if (!n) break
+      out.push(`${n.unit}: ${text.slice(n.range.start, n.range.end).replace(/\n/g, '⏎')}`)
+      r = n.range
+    }
+    return out
+  }
+  it('the heading, then it with the headings under it, then up through each heading above, never the whole outline', () => {
+    expect(steps(text.indexOf('Detail'))).toEqual(['heading: ### Detail', 'section: ## Latency⏎### Detail⏎### Other'])
+    expect(steps(text.indexOf('Cost'))).toEqual(['heading: ## Cost'])
+  })
+  it('a heading with nothing under it has no section step, and an empty outline has nothing to select', () => {
+    expect(expandOutlineSelection('', { start: 0, end: 0 })).toBeUndefined()
   })
 })

@@ -42,3 +42,28 @@ describe('growing a selection', () => {
     expect(expandSelection('', { start: 0, end: 0 })).toBeUndefined()
   })
 })
+
+describe('growing without the whole article', () => {
+  const steps = (text: string, at: number): string[] => {
+    const out: string[] = []
+    let r = { start: at, end: at }
+    for (let i = 0; i < 8; i++) {
+      const n = expandSelection(text, r, { wholeArticle: false })
+      if (!n) break
+      out.push(n.unit)
+      r = n.range
+    }
+    return out
+  }
+  it('climbs through every section above the text and stops one short of the whole article', () => {
+    const nested = 'Intro.\n\n# Post\n\nBody here.\n\n## Latency\n\n### Detail\n\nA deep sentence.\n\n## Cost\n\nCheap.\n'
+    // sentence, then the ### section, the ## section, the # section; the article (with the intro) is not offered
+    expect(steps(nested, nested.indexOf('deep'))).toEqual(['sentence', 'section', 'section', 'section'])
+  })
+  it('a section that is the whole article is not offered either', () => {
+    const only = '# Post\n\nOne sentence here. Another one.\n\n## Part\n\nText.\n'
+    // the # section is the whole article, so the ## section is the largest
+    expect(steps(only, only.indexOf('Text'))).toEqual(['sentence', 'section'])
+    expect(steps('Just one sentence.', 3)).toEqual([])
+  })
+})

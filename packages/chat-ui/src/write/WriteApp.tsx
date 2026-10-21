@@ -2,9 +2,9 @@ import { useCallback, useEffect, useRef, useState } from 'react'
 import { githubRepoReader, parseGithubRepoAddress, type FolderReader, expandSelection, summarizeVerify, type VerifyReport, textPieces, collectIssues, parseLineRange, sourceKindForFile, computeReadiness, effectiveSourceStatus, issueCount, textUnitAt, autosaveStep, outlineOf, issuesInRange, unitOfSelection, shouldDeriveStyle, type ArticleBundle, type ChangeSummary, type DependencyKind, type IssueCategory, type Section, type WritePermissions } from '@buildaharness/aielia'
 import type { ChatAction } from './AdjustBar'
 import { ArticleSwitcher, type ArticleItem } from './ArticleSwitcher'
-import { ChatPane, type ChatLine } from './ChatPane'
+import { ChatPane, type ChatLine, type ChatMode } from './ChatPane'
 import { HistoryPanel, type VersionRow } from './HistoryPanel'
-import { VersionView, type Viewing } from './VersionView'
+import { VersionOutline, VersionView, type Viewing } from './VersionView'
 import { TextHistory } from './TextHistory'
 import { IdeasPanel } from './IdeasPanel'
 import { StylePanel } from './StylePanel'
@@ -168,7 +168,7 @@ function WriteAppBody({ services, connection, onDeleted }: WriteAppProps): React
   const [busy, setBusy] = useState<string | null>(null)
   const [chat, setChat] = useState<ChatLine[]>([])
   const [chatInput, setChatInput] = useState('')
-  const [askForEdits, setAskForEdits] = useState(false)
+  const [chatMode, setChatMode] = useState<ChatMode>('answer')
   // Where the cursor or selection is in the text: the comments and sources under it are for that text.
   const [selection, setSelection] = useState<{ start: number; end: number } | null>(null)
   const [notes, setNotes] = useState<ResolveNote[]>([])
@@ -276,6 +276,24 @@ function WriteAppBody({ services, connection, onDeleted }: WriteAppProps): React
     if (!back) { const t = textRef.current; if (t) applySelection({ start: t.selectionStart, end: t.selectionStart }); setGrownUnit(undefined); return }
     setGrownUnit(growth.current.at(-1)?.unit)
     applySelection(back.range)
+  }
+  // Double-click: the sentence, then each larger unit, up to the one just below the whole article, then the sentence again.
+  const pressedFrom = useRef<{ start: number; end: number } | undefined>()
+  const pressText = (): void => { pressedFrom.current = grownTo.current }
+  const doubleClickText = (at: number): void => {
+    const t = textRef.current
+    if (!t) return
+    const prev = pressedFrom.current
+    pressedFrom.current = undefined
+    const inside = prev !== undefined && at >= prev.start && at <= prev.end
+    let from = inside ? prev : { start: at, end: at }
+    let next = expandSelection(t.value, from, { wholeArticle: false })
+    if (!next && inside) { from = { start: at, end: at }; next = expandSelection(t.value, from, { wholeArticle: false }); growth.current = [] }
+    if (!next) return
+    if (!inside) growth.current = []
+    growth.current.push({ range: from, unit: next.unit })
+    setGrownUnit(next.unit)
+    applySelection(next.range)
   }
   const [repoTick, setRepoTick] = useState(0)
   const [folder, setFolder] = useState<{ reader: FolderReader; files: string[] } | undefined>()
@@ -694,7 +712,7 @@ function WriteAppBody({ services, connection, onDeleted }: WriteAppProps): React
   const verifyFromChat = (repoOnly = false, said?: string | null): void => {
     if (!activeId) return
     const used = services.models.chat()
-    if (said !== null) setChat((c) => [...c, { id: ++lineId, from: 'you', text: said ?? (repoOnly ? 'Verify the claims against the repository' : 'Verify the claims and look for sources') }])
+    if (said !== null) setChat((c) => [...c, { id: ++lineId, from: 'you', text: said ?? (repoOnly ? 'Verify the claims against the repository' : 'Search the web for sources and verify the claims') }])
     void run(`Verifying with ${used}`, async () => {
       try {
         await flushDraft()
@@ -710,7 +728,7 @@ function WriteAppBody({ services, connection, onDeleted }: WriteAppProps): React
   const checkFromChat = (): void => {
     if (!activeId) return
     const used = services.models.chat()
-    setChat((c) => [...c, { id: ++lineId, from: 'you', text: 'Check the article' }])
+    setChat((c) => [...c, { id: ++lineId, from: 'you', text: 'Find the factual claims and check them against their sources' }])
     void run(`Checking with ${used}`, async () => {
       try {
       if (saveTimer.current) clearTimeout(saveTimer.current)
@@ -736,17 +754,37 @@ function WriteAppBody({ services, connection, onDeleted }: WriteAppProps): React
     })
   }
 
-  /** One chat message, the same path whether typed or composed by the Adjust control. `edits` overrides "Suggest edits" for this message. */
-  async function sendChat(override?: string, edits?: boolean): Promise<void> {
+  /** One chat message, the same path whether typed or composed by the Adjust control. `mode` overrides the chat's mode for this message. */
+  async function sendChat(override?: string, mode?: ChatMode): Promise<void> {
     const text = (override ?? chatInput).trim()
     if (!text) return
-    const wantEdits = edits ?? askForEdits
+    const how = mode ?? chatMode
+    const wantEdits = how === 'suggest'
     if (override === undefined) setChatInput('')
     setChat((c) => [...c, { id: ++lineId, from: 'you', text }])
-    await run(wantEdits ? 'Asking for edits' : 'Thinking', async () => {
+    await run(how === 'edit' ? 'Editing' : wantEdits ? 'Asking for edits' : 'Thinking', async () => {
      try {
       if (activeId) await service.updateText(activeId, draft, { analyze: false })
-      if (wantEdits && activeId) {
+      if (how === 'edit' && activeId) {
+        // The writer's words are recorded as in any chat turn. Then the version is saved, the edit is made, and the edited article is what is shown.
+        const id = activeId
+        const { reply, model: said } = await services.chat(text, id)
+        const outline = view === 'outline'
+        const r = outline ? await service.editOutlineFromChat(id, text, said) : await service.editFromChat(id, text, said)
+        await reload(id)
+        setViewing(null)
+        setShowHistory(false)
+        setVersionsTick((t) => t + 1)
+        void refreshList()
+        const saved = `I saved a version first (“${r.savedAs}”).`
+        const short = (t: string): string => (t.length > 140 ? `${t.slice(0, 140)}…` : t)
+        let body: string
+        if (r.status === 'failed') body = `${reply}\n\n${saved} I could not make that edit${'reason' in r && r.reason ? `: ${r.reason}` : ''}, so the ${outline ? 'outline' : 'article'} is unchanged.`
+        else if (r.status === 'nothing') body = `${saved} I found nothing to change in the ${outline ? 'outline' : 'text'} for that, so it is unchanged.`
+        else if ('applied' in r) body = `${saved} Then I made ${r.applied.length} change${r.applied.length === 1 ? '' : 's'}${r.skipped > 0 ? ` (${r.skipped} no longer fitted)` : ''}, and the article now shows the edited text. To go back, restore that version in History.\n${r.applied.slice(0, 4).map((x) => `• “${short(x.quote)}” → “${short(x.replacement)}”`).join('\n')}${r.applied.length > 4 ? `\n…and ${r.applied.length - 4} more.` : ''}`
+        else body = `${saved} Then I reworked the outline, and the article now shows it. To go back, restore that version in History.\nThe outline is now:\n${(r.after ?? '').split('\n').slice(0, 20).join('\n')}`
+        setChat((c) => [...c, { id: ++lineId, from: 'aielia', text: body, model: said }])
+      } else if (wantEdits && activeId) {
         // Record what the writer said (comments, corrections) the same way a chat turn does, then turn the request into suggestions.
         const { reply, model: said } = await services.chat(text, activeId)
         const r = await service.suggest(activeId, text, said)
@@ -871,20 +909,20 @@ function WriteAppBody({ services, connection, onDeleted }: WriteAppProps): React
                 <button type="button" aria-pressed={showHistory} className={showHistory ? 'is-on' : ''} onClick={() => setShowHistory(true)}>History</button>
               </div>
             )}
-            {viewing && showHistory && <VersionView viewing={viewing} statusLabel={STATUS_LABEL} onRestore={(i) => void restoreVersion(i)} />}
-            <div className="write__seg write__viewtoggle" role="group" aria-label="Show" hidden={Boolean(viewing && showHistory)}>
+            <div className="write__seg write__viewtoggle" role="group" aria-label="Show">
               <button type="button" aria-label="Article view" aria-pressed={view === 'text'} className={view === 'text' ? 'is-on' : ''} onClick={() => setView('text')}>Article</button>
               <button type="button" aria-label="Outline view" aria-pressed={view === 'outline'} className={view === 'outline' ? 'is-on' : ''} onClick={() => setView('outline')}>Outline</button>
             </div>
+            {viewing && showHistory && (view === 'outline' ? <VersionOutline viewing={viewing} onRestore={(i) => void restoreVersion(i)} /> : <VersionView viewing={viewing} statusLabel={STATUS_LABEL} onRestore={(i) => void restoreVersion(i)} />)}
             {view === 'outline' && !(viewing && showHistory) && (
               <div className="write__outlineview">
                 <OutlinePanel markdown={draft} onOpen={jumpTo} onChange={onType} onSelect={(start) => { setSelection({ start, end: start }); growth.current = []; grownTo.current = undefined; setGrownUnit(undefined) }} />
               </div>
             )}
             <div className={`write__textview ${view === 'outline' || (viewing && showHistory) ? 'is-hidden' : ''}`}>
-            <MarkedText textRef={textRef} value={draft} pieces={textPieces(meta, draft)} onChange={onType} onSelection={(r) => { setSelection(r); const g = grownTo.current; if (!g || g.start !== r.start || g.end !== r.end) { growth.current = []; grownTo.current = undefined; setGrownUnit(undefined) } }} onGrow={growSelection} onShrink={shrinkSelection} unit={grownUnit} />
+            <MarkedText textRef={textRef} value={draft} pieces={textPieces(meta, draft)} onChange={onType} onSelection={(r) => { setSelection(r); const g = grownTo.current; if (!g || g.start !== r.start || g.end !== r.end) { growth.current = []; grownTo.current = undefined; setGrownUnit(undefined) } }} onGrow={growSelection} onShrink={shrinkSelection} onPress={pressText} onDoubleClick={doubleClickText} selection={selection} />
             </div>
-            <button type="button" className="write__dockchev" aria-pressed={dockOn} aria-label={dockOn ? 'Hide the box under the text' : 'Show the box under the text'} title={dockOn ? 'Hide the box under the text' : 'Show the box under the text'} onClick={toggleDock}>{dockOn ? '⌄' : '⌃'}</button>
+            {!dockOn && <button type="button" className="write__dockchev write__dockchev--show" aria-label="Show the box under the text" title="Show the box under the text" onClick={toggleDock}>⌃</button>}
             {dockOn && <TextNotes
               issues={unit && unitMeta ? issuesNode(unitMeta, selection ? textUnitAt(draft, selection.start, selection.end)?.quote : undefined) : <p className="write__muted">Click in the text, or highlight some, to see the issues in it. The Issues button at the side lists the whole article.</p>}
               issuesCount={unitIssues}
@@ -896,6 +934,7 @@ function WriteAppBody({ services, connection, onDeleted }: WriteAppProps): React
               grownUnit={grownUnit}
               busy={busy !== null}
               model={chatModel}
+              onHide={toggleDock}
               height={layout.dock}
               onHeight={(px) => resize('dock', px)}
               onAdd={addNote}
@@ -948,13 +987,14 @@ function WriteAppBody({ services, connection, onDeleted }: WriteAppProps): React
           onModel={(m) => void services.models.setChat(m).then(() => setModelTick((t) => t + 1))}
           input={chatInput}
           onInput={setChatInput}
-          edits={askForEdits}
-          onEdits={setAskForEdits}
+          mode={chatMode}
+          onMode={setChatMode}
+          editLabel={view === 'outline' ? 'Edit the outline' : 'Edit the article'}
           busy={busy !== null}
           canAct={Boolean(activeId)}
           shown={tab === 'chat'}
           onSend={() => void sendChat()}
-          onAdjust={(m) => { setAskForEdits(true); void sendChat(m, true) }}
+          onAdjust={(m) => { const mode = chatMode === 'answer' ? 'suggest' : chatMode; setChatMode(mode); void sendChat(m, mode) }}
           onAction={(a: ChatAction) => { if (a === 'check') checkFromChat(); else if (a === 'prepare') prepareFromChat(); else verifyFromChat() }}
           repos={activeId ? (void repoTick, service.attachedRepos(activeId)) : []}
           onRepoVerify={verifyInRepo}
