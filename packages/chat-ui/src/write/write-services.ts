@@ -15,6 +15,7 @@ import {
   suggestedModels,
   withSpendCap,
   type ArticleStore,
+  type SpendSnapshot,
   type AssistantConfig,
   type WritePermissions,
   type WriterChatPort,
@@ -45,6 +46,8 @@ export interface WriteServices {
   permissions: { get(): Promise<WritePermissions>; set(p: WritePermissions): Promise<void> }
   /** Dollars spent on model calls in this browser so far (counts toward the cap). */
   spentUsd(): number
+  /** What has been spent and used so far, and a way to hear about every new model call. */
+  spend: { snapshot(): SpendSnapshot; subscribe(listener: () => void): () => void }
   /** Whether this page can search the web for sources (a proxy and a search key are set up). */
   canSearch: boolean
   /** Whether this page can read a web page by its address (a proxy is set up). */
@@ -195,6 +198,7 @@ export async function assembleWriteServices(parts: {
       githubToken = parts.githubToken
     },
     spentUsd: () => meter.spentUsd(),
+    spend: { snapshot: () => meter.snapshot(), subscribe: (l) => meter.subscribe(l) },
     spendByType: () => Object.entries(meter.byType()).map(([id, v]) => ({ id, ...v })).sort((a, b) => b.usd - a.usd),
   }
 }

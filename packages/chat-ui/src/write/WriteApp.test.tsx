@@ -21,7 +21,8 @@ const MARK = {
 }
 function llm(replies: Partial<Record<keyof typeof MARK, unknown>>): ILLMClient {
   return {
-    callChatStructured: async (messages: { role: string; content: string }[]) => {
+    callChatStructured: async (messages: { role: string; content: string }[], _tools?: unknown, options?: { onUsage?: (u: { inputTokens: number; outputTokens: number; costUsd: number }) => void }) => {
+      options?.onUsage?.({ inputTokens: 100, outputTokens: 20, costUsd: 0.01 })
       const sys = messages.find((m) => m.role === 'system')!.content
       const key = (Object.keys(MARK) as (keyof typeof MARK)[]).find((k) => sys.includes(MARK[k]))
       const out = key ? replies[key] : undefined
@@ -136,7 +137,7 @@ describe('header and article menu', () => {
     await waitForText()
     await userEvent.click(screen.getByRole('button', { name: 'Publish' }))
     await answerDialog('v1')
-    expect(await screen.findByText(/1 item was still open/)).toBeInTheDocument()
+    expect((await screen.findAllByText(/1 item was still open/)).length).toBeGreaterThan(0)
     expect((await svc.get(id)).snapshots).toHaveLength(1)
   })
 
@@ -152,7 +153,7 @@ describe('header and article menu', () => {
     await waitForText()
     await userEvent.click(screen.getByRole('button', { name: 'Publish' }))
     await answerDialog('v1')
-    expect(await screen.findByText(/1 web source has changed since you read it/)).toBeInTheDocument()
+    expect((await screen.findAllByText(/1 web source has changed since you read it/)).length).toBeGreaterThan(0)
     expect((await s.service.get(id)).snapshots).toHaveLength(1)
     await userEvent.click(rail('Settings'))
     await userEvent.click(screen.getByLabelText(/Reread web sources before publishing/))
@@ -165,7 +166,79 @@ describe('header and article menu', () => {
     await waitForText()
     await userEvent.click(screen.getByRole('button', { name: 'Publish' }))
     await answerDialog('v1')
-    expect(await screen.findByText('storage is full')).toBeInTheDocument()
+    expect((await screen.findAllByText(/Publishing did not finish: storage is full/)).length).toBeGreaterThan(0)
+  })
+})
+
+describe('every action is told in the chat', () => {
+  const chatText = (): string => (document.querySelector('.write__chat') as HTMLElement).textContent ?? ''
+  it('says the action, then that the article is updated, for a plain change', async () => {
+    const s = await services({}, MD)
+    render(<WriteApp services={s} />)
+    await waitForText()
+    await userEvent.click(rail('History'))
+    await userEvent.click(await within(panel('History')).findByRole('button', { name: /Save version/i }))
+    await answerDialog('mine')
+    await waitFor(() => expect(chatText()).toMatch(/Saving the version[\s\S]*Saving the version: done\. The article is updated\./))
+  })
+  it('tells a failure in the chat, with the action that failed and the reason', async () => {
+    const s = await services({}, MD)
+    render(<WriteApp services={{ ...s, service: Object.assign(s.service, { rename: async () => { throw new Error('disk gone') } }) }} />)
+    await waitForText()
+    await userEvent.click(screen.getByRole('button', { name: 'Article' }))
+    await userEvent.click(screen.getByRole('button', { name: /Rename this article/ }))
+    await answerDialog('New name')
+    await waitFor(() => expect(chatText()).toMatch(/Renaming did not finish: disk gone/))
+  })
+})
+
+describe('spending is shown in the header, and each request says what it used', () => {
+  it('counts every model call in the header as it happens, and puts tokens, time and cost under the last message of the turn', async () => {
+    const claims = { claims: [{ quote: 'The p99 was 18 ms.', kind: 'factual', matchesId: null, sure: true }] }
+    const s = await services({ claims, resolve: { affected: [] } }, MD, async () => 'x', async () => [])
+    const id = (await s.service.list())[0].id
+    await s.service.analyze(id)
+    const before = s.spentUsd()
+    render(<WriteApp services={s} />)
+    await waitForText()
+    expect(screen.getByLabelText(/Spent so far in this browser/)).toBeInTheDocument()
+    expect(screen.queryByText(/Spent so far in this browser: \$/, { selector: 'p' })).toBeNull() // no longer in Settings
+    await userEvent.selectOptions(screen.getByLabelText('Adjust', { selector: 'select' }), 'action:check')
+    const chat = (): HTMLElement => document.querySelector('.write__chat') as HTMLElement
+    expect(await within(chat()).findByText(/I found 1 factual claim/)).toBeInTheDocument()
+    const usage = await within(chat()).findByTitle('Tokens, time and cost of this request')
+    expect(usage.textContent).toMatch(/\d+ tokens \(\d+ in, \d+ out\) · \d+ calls? · .+ · \$/)
+    expect(s.spentUsd()).toBeGreaterThan(before)
+    expect(screen.getByLabelText(/Spent so far in this browser/).getAttribute('aria-label')).toContain(s.spentUsd().toFixed(2))
+  })
+  it('says when a request made no model call', async () => {
+    const s = await services({}, MD)
+    render(<WriteApp services={s} />)
+    await waitForText()
+    await userEvent.click(screen.getByRole('button', { name: 'Article' }))
+    await userEvent.click(screen.getByRole('button', { name: /Rename this article/ }))
+    await answerDialog('Other')
+    const chat = document.querySelector('.write__chat') as HTMLElement
+    expect((await within(chat).findByTitle('Tokens, time and cost of this request')).textContent).toMatch(/^no model call · /)
+  })
+})
+
+describe('the chat is stored as shown', () => {
+  it('keeps the action, the result and the notices, and tells about an action cut short by closing the page', async () => {
+    const s = await services({}, MD)
+    await s.store.setSetting('chat-pending', 'Publishing')
+    render(<WriteApp services={s} />)
+    await waitForText()
+    expect((await screen.findAllByText(/“Publishing” was still running when this page was closed/)).length).toBeGreaterThan(0)
+    await userEvent.click(rail('History'))
+    await userEvent.click(await within(panel('History')).findByRole('button', { name: /Save version/i }))
+    await answerDialog('mine')
+    await waitFor(async () => {
+      const texts = ((await s.store.getSetting('chat-lines')) as { text: string }[]).map((l) => l.text)
+      expect(texts).toContain('Saving the version')
+      expect(texts).toContain('Saving the version: done. The article is updated.')
+    })
+    expect(await s.store.getSetting('chat-pending')).toBe('')
   })
 })
 
@@ -482,7 +555,7 @@ describe('chat: model, check and adjust', () => {
     await answerDialog()
     await waitFor(() => expect(onDeleted).toHaveBeenCalled())
     expect(await s.service.list()).toEqual([])
-    expect(await s.store.getSetting('chat-lines')).toBeUndefined()
+    await waitFor(async () => expect(((await s.store.getSetting('chat-lines')) as { text: string }[]).map((l) => l.text)).toEqual(['All your data was deleted.'])) // only the line saying so, nothing from before
     expect(screen.queryByText('Noted.')).toBeNull()
     expect(screen.getByText('Create an article, or import one, to begin.')).toBeInTheDocument()
   })
@@ -783,7 +856,7 @@ describe('comments and sources under the text', () => {
     const dock = screen.getByLabelText('Comments and sources for this text')
     fireEvent.drop(dock, { dataTransfer: { files: [new File(['p99: 18 ms measured on 8 cores'], 'bench.txt', { type: 'text/plain' }), new File(['%PDF'], 'paper.pdf', { type: 'application/pdf' })] } })
     expect(await within(dock).findByText('bench.txt')).toBeInTheDocument()
-    expect(await screen.findByText(/paper\.pdf: only text and code files can be read/)).toBeInTheDocument()
+    expect((await screen.findAllByText(/paper\.pdf: only text and code files can be read/)).length).toBeGreaterThan(0)
   })
 
   it('stores a dropped code file as a code source', async () => {
@@ -907,6 +980,22 @@ describe('finding sources', () => {
     await dockTab('Sources')
     expect(await within(screen.getByLabelText('Comments and sources for this text')).findByText(/No source found: searched the web/)).toBeInTheDocument()
   })
+  it('shows a progress line in the chat while a command runs, and replaces it with the result', async () => {
+    const claims = { claims: [{ quote: 'The p99 was 18 ms.', kind: 'factual', matchesId: null, sure: true }] }
+    let release: () => void = () => undefined
+    const gate = new Promise<void>((r) => { release = r })
+    const s = await services({ claims, resolve: { affected: [] } }, MD, async () => 'x', async () => { await gate; return [] })
+    const id = (await s.service.list())[0].id
+    await s.service.analyze(id)
+    render(<WriteApp services={s} />)
+    await waitForText()
+    await userEvent.selectOptions(screen.getByLabelText('Adjust', { selector: 'select' }), 'action:verify')
+    const chatList = (): HTMLElement => document.querySelector('.write__chat') as HTMLElement
+    expect(await within(chatList()).findByText(/^Verifying with /)).toBeInTheDocument()
+    release()
+    expect(await screen.findByText(/Looked at 1 claim/)).toBeInTheDocument()
+    await waitFor(() => expect(within(chatList()).queryByText(/^Verifying with /)).toBeNull())
+  })
   it('offers no search button when no search is set up', async () => {
     const s = await services({ claims: { claims: [{ quote: 'The p99 was 18 ms.', kind: 'factual', matchesId: null, sure: true }] }, resolve: { affected: [] } }, MD)
     await s.service.analyze((await s.service.list())[0].id)
@@ -947,7 +1036,7 @@ describe('web links', () => {
     await dockTab('Sources')
     const dock = screen.getByLabelText('Comments and sources for this text')
     await userEvent.type(within(dock).getByLabelText('Add to this text', { selector: 'input' }), 'https://example.com/bench{Enter}')
-    expect(await screen.findByText(/This browser cannot read web pages/)).toBeInTheDocument()
+    expect((await screen.findAllByText(/This browser cannot read web pages/)).length).toBeGreaterThan(0)
     expect((await s.service.get(id)).meta.sources[0]).toMatchObject({ kind: 'web', address: 'https://example.com/bench' })
   })
 })
@@ -980,7 +1069,7 @@ describe('bringing a page or file in to edit', () => {
     await openMenu()
     await userEvent.click(screen.getByRole('button', { name: /Open a web page to edit/ }))
     await answerDialog('https://example.com/post')
-    expect(await screen.findByText(/This is a copy of the page/)).toBeInTheDocument()
+    expect((await screen.findAllByText(/This is a copy of the page/)).length).toBeGreaterThan(0)
     await waitFor(async () => expect((await base.service.list()).length).toBe(2))
     const made = (await base.service.list()).find((a) => a.name === 'Caching' || a.title === 'Caching')
     if (!made) throw new Error('no imported article')
@@ -998,7 +1087,7 @@ describe('bringing a page or file in to edit', () => {
     await waitForText()
     const file = new File(['<html><body><h1>From a file</h1><p>Body.</p></body></html>'], 'page.html', { type: 'text/html' })
     await userEvent.upload(screen.getByLabelText('Choose an exported article'), file)
-    expect(await screen.findByText(/This is a copy of the file/)).toBeInTheDocument()
+    expect((await screen.findAllByText(/This is a copy of the file/)).length).toBeGreaterThan(0)
     await waitFor(async () => expect((await s.service.list()).length).toBe(2))
   })
 })

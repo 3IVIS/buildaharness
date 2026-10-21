@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
+import { SpendBadge } from './SpendBadge'
 import { githubRepoReader, parseGithubRepoAddress, type FolderReader, expandSelection, summarizeVerify, type VerifyReport, textPieces, collectIssues, parseLineRange, sourceKindForFile, computeReadiness, effectiveSourceStatus, issueCount, textUnitAt, autosaveStep, outlineOf, issuesInRange, unitOfSelection, shouldDeriveStyle, type ArticleBundle, type ChangeSummary, type DependencyKind, type IssueCategory, type Section, type WritePermissions } from '@buildaharness/aielia'
 import type { ChatAction } from './AdjustBar'
 import { ArticleSwitcher, type ArticleItem } from './ArticleSwitcher'
@@ -69,6 +70,19 @@ function topOfPosition(ta: HTMLTextAreaElement, at: number): number {
 }
 
 /** What the chat says when a model call fails: the reason, and what to try. Never an empty answer. */
+/** What one request used, for the small line after its last message. */
+export const usageText = (ms: number, d: { usd: number; inputTokens: number; outputTokens: number; calls: number }): string => {
+  const time = ms < 1000 ? `${Math.max(0, Math.round(ms))} ms` : ms < 60000 ? `${(ms / 1000).toFixed(1)} s` : `${Math.floor(ms / 60000)} min ${Math.round((ms % 60000) / 1000)} s`
+  if (d.calls === 0) return `no model call · ${time}`
+  const total = d.inputTokens + d.outputTokens
+  return `${total.toLocaleString('en-US')} tokens (${d.inputTokens.toLocaleString('en-US')} in, ${d.outputTokens.toLocaleString('en-US')} out) · ${d.calls} call${d.calls === 1 ? '' : 's'} · ${time} · $${d.usd < 0.01 ? d.usd.toFixed(4) : d.usd.toFixed(2)}`
+}
+/** One lookup the repository search makes, in words. */
+export const stepText = (step: { tool: string; input: Record<string, unknown> }): string => {
+  const arg = (k: string): string => (typeof step.input[k] === 'string' ? (step.input[k] as string) : '')
+  const what = step.tool === 'search' ? `searching for “${arg('pattern') || arg('query')}”` : step.tool === 'read' ? `reading ${arg('path') || arg('file')}` : step.tool === 'list' ? 'listing files' : `using ${step.tool}`
+  return what
+}
 export const failureText = (what: string, err: unknown): string => `${what}: ${err instanceof Error ? err.message : String(err)}. Check your key and the model in Settings, or pick another model next to the chat, then try again.`
 
 const isDesktop = (): boolean => typeof window !== 'undefined' && window.matchMedia?.('(min-width: 960px)').matches === true
@@ -97,7 +111,10 @@ let lineId = 0
 
 /** Where the chat lines are kept, so a reload does not erase the conversation. */
 const CHAT_LINES_KEY = 'chat-lines'
-const MAX_SAVED_LINES = 200
+/** Everything the chat shows is stored; the cap only keeps a years-long chat from growing without end. */
+const MAX_SAVED_LINES = 5000
+/** The action running now, stored so that a page closed in the middle of it is told about it on the next start. */
+const PENDING_KEY = 'chat-pending'
 /** Sizes the writer dragged the panes to, in pixels; a missing one is the pane's normal size. */
 interface Layout { panel?: number; chat?: number; dock?: number }
 const LAYOUT_KEY = 'aielia-write.layout'
@@ -168,8 +185,16 @@ function WriteAppBody({ services, connection, onDeleted }: WriteAppProps): React
   const roomFor = (other: number): number => Math.max(0, (mainRef.current?.clientWidth ?? 1200) - RAIL_WIDTH - other - MIN_TEXT)
   /** On a tablet the side panel floats over the text, so it takes no room from it (and the chat may use all but the text's minimum). */
   const panelTakesRoom = (): boolean => railOpen && isDesktop()
-  const [notice, setNotice] = useState<string | null>(null)
+  // Every message the app has for the writer goes into the chat; the banner only repeats the latest one where the chat is not on screen.
+  const [banner, setBanner] = useState<string | null>(null)
+  const sayInChat = useCallback((text: string): void => setChat((c) => [...c, { id: ++lineId, from: 'aielia', text }]), [])
+  const setNotice = useCallback((text: string | null): void => { setBanner(text); if (text) sayInChat(text) }, [sayInChat])
+  /** What a command sent through the chat is doing right now, shown as the last line of the chat until the result or the error replaces it. */
+  const [progress, setProgress] = useState<string | null>(null)
   const [busy, setBusy] = useState<string | null>(null)
+  // What has been spent follows every model call, so the header is right while a command is still running.
+  const [spendTick, setSpendTick] = useState(0)
+  useEffect(() => services.spend.subscribe(() => setSpendTick((n) => n + 1)), [services.spend])
   const [chat, setChat] = useState<ChatLine[]>([])
   const [chatInput, setChatInput] = useState('')
   const [chatMode, setChatMode] = useState<ChatMode>('answer')
@@ -207,10 +232,11 @@ function WriteAppBody({ services, connection, onDeleted }: WriteAppProps): React
         await reload(first.id)
       }
     })().catch((err) => setNotice(String(err)))
-  }, [service, port, refreshList, reload, services.permissions])
+  }, [service, port, refreshList, reload, services.permissions, setNotice])
 
   // The chat comes back after a reload. It is saved only once the saved one has been read, so the empty start never overwrites it.
   const chatRead = useRef(false)
+  const saveFailed = useRef(false)
   useEffect(() => {
     let live = true
     void services.store.getSetting(CHAT_LINES_KEY).then((raw) => {
@@ -218,12 +244,20 @@ function WriteAppBody({ services, connection, onDeleted }: WriteAppProps): React
       const saved = Array.isArray(raw) ? raw.filter(isChatLine) : []
       lineId = Math.max(lineId, ...saved.map((l) => l.id))
       setChat((now) => [...saved, ...now])
-    }, () => undefined).finally(() => { if (live) chatRead.current = true })
+      return services.store.getSetting(PENDING_KEY).then((p) => {
+        if (live && typeof p === 'string' && p) setChat((now) => [...now, { id: ++lineId, from: 'aielia', text: `“${p}” was still running when this page was closed, so it may not have finished. Check the article and run it again if needed.` }])
+      })
+    }).catch(() => { if (live) setChat((now) => [...now, { id: ++lineId, from: 'aielia', text: 'The earlier chat could not be read from storage, so it is not shown here.' }]) }).finally(() => { if (live) chatRead.current = true })
     return () => { live = false }
   }, [services.store])
   useEffect(() => {
     if (!chatRead.current) return
-    void services.store.setSetting(CHAT_LINES_KEY, chat.slice(-MAX_SAVED_LINES)).catch(() => undefined)
+    void services.store.setSetting(CHAT_LINES_KEY, chat.slice(-MAX_SAVED_LINES)).then(() => { saveFailed.current = false }, (e) => {
+      // Said once, in the chat itself; the failing save is not retried by this line, or it would loop.
+      if (saveFailed.current) return
+      saveFailed.current = true
+      setChat((now) => [...now, { id: ++lineId, from: 'aielia', text: `The chat could not be stored, so it will not be here next time: ${e instanceof Error ? e.message : String(e)}` }])
+    })
   }, [chat, services.store])
 
   useEffect(() => {
@@ -233,17 +267,37 @@ function WriteAppBody({ services, connection, onDeleted }: WriteAppProps): React
     setViewing(null)
   }, [service, activeId, bundle, versionsTick])
 
-  async function run(label: string, work: () => Promise<void>): Promise<void> {
+  /**
+   * Every action is a short conversation in the chat: the writer's action as a line, the progress as the last line while it runs, then
+   * what came of it, or what went wrong. `announce` is false when the writer's own words already opened the exchange (a typed message).
+   */
+  async function run(label: string, work: (step: (text: string) => void) => Promise<void>, announce = true, doneNote = ''): Promise<void> {
+    if (announce) setChat((c) => [...c, { id: ++lineId, from: 'you', text: label }])
+    const mark = lineId
+    const before = services.spend.snapshot()
+    const started = Date.now()
     setBusy(label)
-    setNotice(null)
+    setBanner(null)
+    setProgress(`${label}…`)
+    void services.store.setSetting(PENDING_KEY, label).catch(() => undefined)
     try {
-      await work()
+      await work((text) => setProgress(`${label}: ${text}`))
+      // An action that had nothing to say still says it is done.
+      if (lineId === mark) sayInChat(`${label}: done.${doneNote}`)
     } catch (err) {
-      setNotice(err instanceof Error ? err.message : String(err))
+      sayInChat(`${label} did not finish: ${err instanceof Error ? err.message : String(err)}`)
     } finally {
+      // The last thing said in this turn carries what the whole request used, in small type.
+      const after = services.spend.snapshot()
+      const usage = usageText(Date.now() - started, { usd: after.usd - before.usd, inputTokens: after.inputTokens - before.inputTokens, outputTokens: after.outputTokens - before.outputTokens, calls: after.calls - before.calls })
+      setChat((c) => { let i = -1; c.forEach((l, k) => { if (l.from === 'aielia' && l.id > mark) i = k }); return i < 0 ? c : c.map((l, k) => (k === i ? { ...l, usage } : l)) })
       setBusy(null)
+      setProgress(null)
+      void services.store.setSetting(PENDING_KEY, '').catch(() => undefined)
     }
   }
+  /** A command the writer sent through the chat: the writer's line is already there, so it is not repeated. */
+  const chatRun = (label: string, work: (step: (text: string) => void) => Promise<void>): Promise<void> => run(label, work, false)
 
   /** Saves what is in the text box now, so a comparison, a restore or a batch starts from what the writer sees, not from the last autosave. */
   async function flushDraft(): Promise<void> {
@@ -306,8 +360,8 @@ function WriteAppBody({ services, connection, onDeleted }: WriteAppProps): React
   const [candidates, setCandidates] = useState<Record<string, { title: string; url: string; snippet: string }[]>>({})
 
   const change = (label: string, work: (id: string) => Promise<void>): void => {
-    if (!activeId) return
-    void run(label, async () => { await flushDraft(); await work(activeId); await reload(activeId) })
+    if (!activeId) { sayInChat('Open or create an article first.'); return }
+    void run(label, async () => { await flushDraft(); await work(activeId); await reload(activeId) }, true, ' The article is updated.')
   }
 
   async function select(id: string): Promise<void> {
@@ -327,11 +381,11 @@ function WriteAppBody({ services, connection, onDeleted }: WriteAppProps): React
   }
 
   async function renameArticle(): Promise<void> {
-    if (!activeId) return
+    if (!activeId) { sayInChat('Open or create an article first.'); return }
     const current = articles.find((a) => a.id === activeId)
     const name = (await dialogs.ask('New name for this article?', { initial: current?.name ?? current?.title ?? '' }))?.trim()
     if (!name) return
-    await run('Renaming', async () => { await service.rename(activeId, name); await refreshList() })
+    await run('Renaming', async () => { await service.rename(activeId, name); await refreshList() }, true, ' The article has its new name.')
   }
 
   function onType(value: string): void {
@@ -392,14 +446,14 @@ function WriteAppBody({ services, connection, onDeleted }: WriteAppProps): React
       setPerms(await services.permissions.get()); permsRef.current = undefined
       chatRead.current = true
       setModelTick((n) => n + 1)
-      setNotice('All your data was deleted.')
+      setChat([{ id: ++lineId, from: 'aielia', text: 'All your data was deleted.' }])
       onDeleted?.()
     })
   }
 
   // ---- publish, export, import
   async function publish(): Promise<void> {
-    if (!activeId) return
+    if (!activeId) { sayInChat('Open or create an article first.'); return }
     const label = await dialogs.ask('Label for this published version (optional)?')
     await run('Publishing', async () => {
       await flushDraft()
@@ -416,17 +470,21 @@ function WriteAppBody({ services, connection, onDeleted }: WriteAppProps): React
   }
 
   async function exportArticle(): Promise<void> {
-    if (!activeId) return
-    const folder = await service.exportArticle(activeId)
-    const fileName = `${bundle?.meta.name ?? bundle?.meta.title ?? 'article'}.aielia-article.json`
-    const text = JSON.stringify(folder, null, 2)
-    // A host with its own way to save a file (a save dialog) is used; a browser tab gets a download link.
-    if (services.saveFile) { await run('Saving the file', async () => { await services.saveFile?.(fileName, text) }); return }
-    const a = document.createElement('a')
-    a.href = URL.createObjectURL(new Blob([text], { type: 'application/json' }))
-    a.download = fileName
-    a.click()
-    URL.revokeObjectURL(a.href)
+    if (!activeId) { sayInChat('Open or create an article first.'); return }
+    const id = activeId
+    await run('Exporting the article', async () => {
+      const folder = await service.exportArticle(id)
+      const fileName = `${bundle?.meta.name ?? bundle?.meta.title ?? 'article'}.aielia-article.json`
+      const text = JSON.stringify(folder, null, 2)
+      // A host with its own way to save a file (a save dialog) is used; a browser tab gets a download link.
+      if (services.saveFile) { await services.saveFile(fileName, text); sayInChat(`The article was saved as ${fileName}.`); return }
+      const a = document.createElement('a')
+      a.href = URL.createObjectURL(new Blob([text], { type: 'application/json' }))
+      a.download = fileName
+      a.click()
+      URL.revokeObjectURL(a.href)
+      sayInChat(`The article was exported as ${fileName}. Your browser has put it in your downloads.`)
+    })
   }
 
   async function importArticle(file: File): Promise<void> {
@@ -466,13 +524,14 @@ function WriteAppBody({ services, connection, onDeleted }: WriteAppProps): React
     change('Saving the version', async (id) => { await service.saveVersion(id, label) })
   }
   const openVersion = (index: number, mode: 'view' | 'compare'): void => {
-    if (!activeId) return
+    if (!activeId) { sayInChat('Open or create an article first.'); return }
     void run('Opening the version', async () => {
       if (mode === 'compare') await flushDraft()
       const snap = await service.getVersion(activeId, index)
       setViewing(mode === 'view' ? { mode, index, markdown: snap.markdown } : { mode, index, markdown: snap.markdown, diff: await service.compareWithCurrent(activeId, index) })
       setShowHistory(true)
       if (!isWide()) setTab('text')
+      sayInChat(mode === 'view' ? 'That version is shown in the main window. Switch back with “Current”.' : 'That version is compared with the article as it is now in the main window.')
     })
   }
   const restoreVersion = async (index: number): Promise<void> => {
@@ -495,11 +554,11 @@ function WriteAppBody({ services, connection, onDeleted }: WriteAppProps): React
     return `I ${s} and ${l}. ${failed ? 'Check your key and the model in Settings, or pick another model next to the chat, then try again.' : 'Edit anything that is off.'}`
   }
   const prepareFromChat = (): void => {
-    if (!activeId) return
+    if (!activeId) { sayInChat('Open or create an article first.'); return }
     const id = activeId
     const used = services.models.chat() // started from the chat, so it runs on the model chosen there
     setChat((c) => [...c, { id: ++lineId, from: 'you', text: 'Fill in the style and links from the article' }])
-    void run('Filling in the style and links', async () => {
+    void chatRun('Filling in the style and links', async () => {
       try {
         await flushDraft()
         const text = await prepareFromText(id, used)
@@ -512,7 +571,7 @@ function WriteAppBody({ services, connection, onDeleted }: WriteAppProps): React
 
   /** Reads the style from the text, filling only the empty lines. */
   const deriveStyle = (): void => {
-    if (!activeId) return
+    if (!activeId) { sayInChat('Open or create an article first.'); return }
     const id = activeId
     void run('Reading the style from the text', async () => {
       await flushDraft()
@@ -591,6 +650,7 @@ function WriteAppBody({ services, connection, onDeleted }: WriteAppProps): React
       if (spec) {
         let listed = false
         setBusy('Listing the repository')
+        setProgress(`Listing ${typed}…`)
         setNotice(null)
         try {
           const reader = githubRepoReader(spec, { token: services.githubToken, fetchImpl: services.githubFetch })
@@ -602,6 +662,7 @@ function WriteAppBody({ services, connection, onDeleted }: WriteAppProps): React
           say(`I could not list ${typed}: ${e instanceof Error ? e.message : String(e)}`)
         } finally {
           setBusy(null)
+          setProgress(null)
         }
         if (!listed) return
       }
@@ -610,14 +671,15 @@ function WriteAppBody({ services, connection, onDeleted }: WriteAppProps): React
   }
   /** Chooses a repository folder on this computer, attaches it and checks the claims against it. */
   const pickRepoFolderAndVerify = (): void => {
-    if (!activeId) return
     setChat((c) => [...c, { id: ++lineId, from: 'you', text: 'Verify the claims against a folder on this computer' }])
+    if (!activeId) { sayInChat('Open or create an article first, then choose the folder.'); return }
     const id = activeId
     void (async () => {
       try {
         const reader = await services.pickFolder?.()
-        if (!reader) return
+        if (!reader) { sayInChat('No folder was chosen, so nothing was checked.'); return }
         setBusy('Listing the folder')
+        setProgress('Listing the folder…')
         await reader.files()
         service.attachRepo(id, reader)
         setRepoTick((n) => n + 1)
@@ -626,29 +688,26 @@ function WriteAppBody({ services, connection, onDeleted }: WriteAppProps): React
         return
       } finally {
         setBusy(null)
+        setProgress(null)
       }
       verifyFromChat(true, null)
     })()
   }
   const removeRepo = (name: string): void => {
-    if (!activeId) return
+    if (!activeId) { sayInChat('Open or create an article first.'); return }
     service.detachRepo(activeId, name)
     setRepoTick((n) => n + 1)
+    sayInChat(`${name} is no longer used for checking claims.`)
   }
 
   const pickFolder = (): void => {
-    void (async () => {
-      try {
-        const reader = await services.pickFolder?.()
-        if (!reader) return
-        setBusy('Listing the folder')
-        setFolder({ reader, files: await reader.files() })
-      } catch (e) {
-        setNotice(e instanceof Error ? e.message : String(e))
-      } finally {
-        setBusy(null)
-      }
-    })()
+    void run('Choosing a folder', async () => {
+      const reader = await services.pickFolder?.()
+      if (!reader) { sayInChat('No folder was chosen.'); return }
+      const files = await reader.files()
+      setFolder({ reader, files })
+      sayInChat(`Read ${files.length} file${files.length === 1 ? '' : 's'} from ${reader.name}. Pick one in the Sources box to add it as a source.`)
+    })
   }
   const useFolderFile = (path: string): void => {
     const f = folder
@@ -669,7 +728,7 @@ function WriteAppBody({ services, connection, onDeleted }: WriteAppProps): React
   })
 
   const addNote = (kind: NoteKind, text: string): void => {
-    if (!selection) return
+    if (!selection) { sayInChat('Select some text in the article first, then add it.'); return }
     change(kind === 'comment' ? 'Adding the comment' : 'Adding the source', async (id) => {
       if (kind === 'comment') {
         const r = await service.addComment(id, selection, text)
@@ -710,17 +769,20 @@ function WriteAppBody({ services, connection, onDeleted }: WriteAppProps): React
 
   // ---- chat
   const verifyText = (r: VerifyReport): string => {
-    const lines = r.entries.filter((e) => e.outcome === 'no_source_found' || e.outcome === 'contradicted').map((e) => `• ${e.outcome === 'contradicted' ? 'Contradicted' : 'No source found'}: ${e.quote.slice(0, 100)}`)
+    const label = (o: string): string => (o === 'contradicted' ? 'Contradicted' : o === 'no_source_found' ? 'No source found' : o === 'search_failed' ? 'Search failed' : 'Could not check')
+    const lines = r.entries.filter((e) => ['no_source_found', 'contradicted', 'could_not_check', 'search_failed'].includes(e.outcome)).slice(0, 12).map((e) => `• ${label(e.outcome)}: ${e.quote.slice(0, 100)}${e.outcome !== 'no_source_found' && e.reason ? ` (${e.reason.slice(0, 160)})` : ''}`)
     return [summarizeVerify(r), ...lines, r.entries.some((e) => e.found.length > 0) ? 'Pages that were found are kept as suggested sources under the text: confirm the ones that are right.' : ''].filter(Boolean).join('\n')
   }
   const verifyFromChat = (repoOnly = false, said?: string | null): void => {
-    if (!activeId) return
     const used = services.models.chat()
     if (said !== null) setChat((c) => [...c, { id: ++lineId, from: 'you', text: said ?? (repoOnly ? 'Verify the claims against the repository' : 'Search the web for sources and verify the claims') }])
-    void run(`Verifying with ${used}`, async () => {
+    if (!activeId) { sayInChat('Open or create an article first.'); return }
+    void chatRun(`Verifying with ${used}`, async (step) => {
       try {
         await flushDraft()
-        const r = await service.verifyClaims(activeId, { model: used, repoOnly })
+        step('finding the claims to check')
+        let calls = 0
+        const r = await service.verifyClaims(activeId, { model: used, repoOnly, onStep: (st) => step(`${stepText(st)} (lookup ${++calls})`) })
         setBundle(await service.get(activeId))
         setChat((c) => [...c, { id: ++lineId, from: 'aielia', text: verifyText(r), model: used }])
       } catch (e) {
@@ -730,10 +792,10 @@ function WriteAppBody({ services, connection, onDeleted }: WriteAppProps): React
   }
   /** A check started from the chat, with the model chosen there. The result is said in the chat, with the model's name. */
   const checkFromChat = (): void => {
-    if (!activeId) return
     const used = services.models.chat()
     setChat((c) => [...c, { id: ++lineId, from: 'you', text: 'Find the factual claims and check them against their sources' }])
-    void run(`Checking with ${used}`, async () => {
+    if (!activeId) { sayInChat('Open or create an article first.'); return }
+    void chatRun(`Checking with ${used}`, async () => {
       try {
       if (saveTimer.current) clearTimeout(saveTimer.current)
       const o = await service.updateText(activeId, draft, { model: used })
@@ -766,7 +828,7 @@ function WriteAppBody({ services, connection, onDeleted }: WriteAppProps): React
     const wantEdits = how === 'suggest'
     if (override === undefined) setChatInput('')
     setChat((c) => [...c, { id: ++lineId, from: 'you', text }])
-    await run(how === 'edit' ? 'Editing' : wantEdits ? 'Asking for edits' : 'Thinking', async () => {
+    await chatRun(how === 'edit' ? 'Editing' : wantEdits ? 'Asking for edits' : 'Thinking', async () => {
      try {
       if (activeId) await service.updateText(activeId, draft, { analyze: false })
       if (how === 'edit' && activeId) {
@@ -846,12 +908,13 @@ function WriteAppBody({ services, connection, onDeleted }: WriteAppProps): React
     <div className="write">
       <header className="write__bar">
         <h1 className="write__title">Aielia Write</h1>
-        <ArticleSwitcher articles={articles} activeId={activeId} onSelect={(id) => void select(id)} onRename={() => void renameArticle()} onNew={() => void createArticle()} onExport={() => void exportArticle()} onImport={(f) => void importArticle(f)} onOpenPage={services.canReadPages ? () => void openPage() : undefined} />
+        <ArticleSwitcher articles={articles} activeId={activeId} onSelect={(id) => void run('Opening the article', async () => { await select(id) }, true, ' It is open.')} onRename={() => void renameArticle()} onNew={() => void createArticle()} onExport={() => void exportArticle()} onImport={(f) => void importArticle(f)} onOpenPage={services.canReadPages ? () => void openPage() : undefined} />
         <div className="write__actions">
+          <SpendBadge usd={(void spendTick, services.spentUsd())} byType={(void spendTick, services.spendByType())} hostName={services.hostName} />
           <button type="button" className="write__primary" onClick={() => void publish()} disabled={!activeId || busy !== null}>Publish</button>
         </div>
       </header>
-      {(busy || notice) && <p className="write__notice" role="status">{busy ? `${busy}…` : notice}</p>}
+      {(busy || banner) && !(isWide() || tab === 'chat') && <p className="write__notice" role="status">{busy ? `${busy}…` : banner}</p>}
 
       {readiness && (
         <p className="write__status" aria-label="How close the article is to publishable">
@@ -902,7 +965,7 @@ function WriteAppBody({ services, connection, onDeleted }: WriteAppProps): React
             <p className="write__muted">Create or import an article to use the panels.</p>
           )}
           <section className={`write__pane write__panel-pane ${tab === 'settings' ? 'is-shown' : ''}`} aria-label="Settings">
-            <SettingsPane hostName={services.hostName} connection={connection} github={services.setGithubToken ? { token: services.githubToken, onSave: async (t) => { await services.setGithubToken?.(t); setModelTick((n) => n + 1) } } : undefined} perms={perms} busy={busy !== null} onDeleteAll={() => void deleteAllData()} spent={services.spentUsd()} spentByType={services.spendByType()} autoModel={services.models.auto()} chatModel={chatModel} suggestions={services.models.suggestions} onAutoModel={(m) => void services.models.setAuto(m).then(() => setModelTick((t) => t + 1))} onSave={(p) => run('Saving', async () => { await services.permissions.set(p); permsRef.current = p; setPerms(p) })} />
+            <SettingsPane hostName={services.hostName} connection={connection && { value: connection.value, onSave: (c) => { try { connection.onSave(c); sayInChat('The connection is saved.') } catch (e) { sayInChat(`The connection could not be saved: ${e instanceof Error ? e.message : String(e)}`) } }, onForget: () => { try { connection.onForget(); sayInChat('The connection was forgotten.') } catch (e) { sayInChat(`The connection could not be forgotten: ${e instanceof Error ? e.message : String(e)}`) } } }} github={services.setGithubToken ? { token: services.githubToken, onSave: (t) => run('Saving the GitHub token', async () => { await services.setGithubToken?.(t); setModelTick((n) => n + 1); sayInChat(t?.trim() ? 'The GitHub token is saved.' : 'The GitHub token is removed.') }) } : undefined} perms={perms} busy={busy !== null} onDeleteAll={() => void deleteAllData()} autoModel={services.models.auto()} chatModel={chatModel} suggestions={services.models.suggestions} onAutoModel={(m) => void run(`Switching the automatic checks to ${m}`, async () => { await services.models.setAuto(m); setModelTick((t) => t + 1); sayInChat(`Automatic checks now use ${m}.`) })} onSave={(p) => run('Saving the settings', async () => { await services.permissions.set(p); permsRef.current = p; setPerms(p); sayInChat('Settings saved.') })} />
           </section>
         </aside>
         {ready && meta ? (
@@ -945,7 +1008,7 @@ function WriteAppBody({ services, connection, onDeleted }: WriteAppProps): React
               onFiles={(files) => dropFiles(files, selection !== null)}
               onSaveComments={(c) => change('Saving', async (id) => {
                 for (const e of c.edit) await service.editComment(id, e.id, { text: e.text })
-                for (const t of c.add) { if (!selection) break; const r = await service.addComment(id, selection, t); if (!r.ok) setNotice(r.reason) }
+                for (const t of c.add) { if (!selection) { setNotice('Select some text in the article to attach a new comment to it.'); break } const r = await service.addComment(id, selection, t); if (!r.ok) setNotice(r.reason) }
                 for (const rid of c.remove) await service.deleteComment(id, rid)
               })}
               onDetach={(claimId, sourceId) => change('Saving', async (id) => { await service.detachSource(id, claimId, sourceId) })}
@@ -988,7 +1051,7 @@ function WriteAppBody({ services, connection, onDeleted }: WriteAppProps): React
           lines={chat}
           model={chatModel}
           suggestions={services.models.suggestions}
-          onModel={(m) => void services.models.setChat(m).then(() => setModelTick((t) => t + 1))}
+          onModel={(m) => void run(`Switching the chat model to ${m}`, async () => { await services.models.setChat(m); setModelTick((t) => t + 1); sayInChat(`The chat now uses ${m}.`) })}
           input={chatInput}
           onInput={setChatInput}
           mode={chatMode}
@@ -1001,6 +1064,7 @@ function WriteAppBody({ services, connection, onDeleted }: WriteAppProps): React
           onAdjust={(m) => { const mode = chatMode === 'answer' ? 'suggest' : chatMode; setChatMode(mode); void sendChat(m, mode) }}
           onAction={(a: ChatAction) => { if (a === 'check') checkFromChat(); else if (a === 'prepare') prepareFromChat(); else verifyFromChat() }}
           repos={activeId ? (void repoTick, service.attachedRepos(activeId)) : []}
+          progress={progress}
           onRepoVerify={verifyInRepo}
           onPickRepoFolder={services.pickFolder ? pickRepoFolderAndVerify : undefined}
           onRemoveRepo={removeRepo}

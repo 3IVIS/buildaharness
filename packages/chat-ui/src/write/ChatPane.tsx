@@ -9,6 +9,8 @@ export interface ChatLine {
   from: 'you' | 'aielia'
   text: string
   model?: string
+  /** What the request that ended with this line used: tokens, time and cost, in small type. */
+  usage?: string
 }
 
 interface Props {
@@ -24,6 +26,8 @@ interface Props {
   /** What "edit" edits where the writer is now: the article, or its outline. */
   editLabel: string
   busy: boolean
+  /** What a command sent through the chat is doing now; shown as the last line until the result or the error replaces it. */
+  progress?: string | null
   canAct: boolean
   shown: boolean
   onSend: () => void
@@ -57,6 +61,7 @@ export function ChatPane(p: Props): React.JSX.Element {
         {p.lines.map((l) => (
           <li key={l.id} className={`write__line write__line--${l.from}`}>
             <div>{l.text}</div>
+            {l.usage && <div className="write__lineusage" title="Tokens, time and cost of this request">{l.usage}</div>}
             {l.from === 'aielia' && l.model && (
               <div className="write__linemeta">
                 <span className="write__linemodel" title="The model that wrote this">{l.model}</span>
@@ -64,7 +69,8 @@ export function ChatPane(p: Props): React.JSX.Element {
             )}
           </li>
         ))}
-        {p.lines.length === 0 && <li className="write__muted">Talk to Aielia about the article, paste reviewer comments, or drop a file here to use it as a source.</li>}
+        {p.progress && <li className="write__line write__line--aielia write__line--progress" role="status">{p.progress}</li>}
+        {p.lines.length === 0 && !p.progress && <li className="write__muted">Talk to Aielia about the article, paste reviewer comments, or drop a file here to use it as a source.</li>}
       </ul>
       <AdjustBar disabled={p.busy || !p.canAct} checkLabel="Find the factual claims and check them against their sources" verifyLabel="Search the web for sources and verify the claims" repos={p.repos} onRepoVerify={p.onRepoVerify} onPickRepoFolder={p.onPickRepoFolder} onRemoveRepo={p.onRemoveRepo} onSend={p.onAdjust} onAction={p.onAction} />
       <div className="write__compose">
