@@ -103,4 +103,12 @@ export class IndexedDBAdapter implements MemoryAdapter {
     }
     this.fallback!.delete(key)
   }
+
+  async clear(): Promise<void> {
+    if (this.db) {
+      await this.db.entries.clear()
+      return
+    }
+    this.fallback!.clear()
+  }
 }

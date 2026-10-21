@@ -9,7 +9,7 @@ export async function answerDialog(text?: string): Promise<void> {
     await userEvent.clear(input)
     if (text) await userEvent.type(input, text)
   }
-  await userEvent.click(box.getByRole('button', { name: /^(OK|Yes|Restore|Remove|Forget)$/ }))
+  await userEvent.click(box.getByRole('button', { name: /^(OK|Yes|Restore|Remove|Forget|Delete everything)$/ }))
 }
 
 /** Declines the question the page is asking (Cancel, or No). */

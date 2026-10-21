@@ -11,8 +11,10 @@ import { StylePanel } from './StylePanel'
 import { MarkedText } from './MarkedText'
 import { IssuesPanel, type ResolveNote } from './IssuesPanel'
 import { LinksPanel } from './LinksPanel'
+import { SourcesPanel } from './SourcesPanel'
 import { OutlinePanel } from './OutlinePanel'
 import { SettingsPane } from './SettingsPane'
+import { Splitter } from './Splitter'
 import type { WriteConnection } from './write-config'
 import { TextNotes, looksLikeLink, type NoteKind } from './TextNotes'
 import { Icon } from './icons'
@@ -20,7 +22,7 @@ import { DialogProvider, useDialogs } from './dialogs'
 import type { WriteServices } from './write-services'
 import './write.css'
 
-type Tab = 'text' | 'style' | 'ideas' | 'issues' | 'history' | 'chat' | 'settings'
+type Tab = 'text' | 'style' | 'ideas' | 'issues' | 'sources' | 'history' | 'chat' | 'settings'
 
 /** What the text pane shows: the article, or its outline. */
 type TextView = 'text' | 'outline'
@@ -30,6 +32,7 @@ const TABS: { id: Tab; label: string }[] = [
   { id: 'style', label: 'Style' },
   { id: 'ideas', label: 'Ideas' },
   { id: 'issues', label: 'Issues' },
+  { id: 'sources', label: 'Sources' },
   { id: 'history', label: 'History' },
   { id: 'chat', label: 'Chat' },
   { id: 'settings', label: 'Settings' },
@@ -40,6 +43,7 @@ const RAIL_ICONS: Record<Tab, string> = {
   style: 'M12 20h9M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4z',
   ideas: 'M9 18h6M10 21h4M12 3a6 6 0 0 0-3.5 10.9c.6.5 1 1.2 1 2.1h5c0-.9.4-1.6 1-2.1A6 6 0 0 0 12 3z',
   issues: 'M12 3 2.5 20h19L12 3zM12 10v4M12 17h.01',
+  sources: 'M6 3h9l4 4v14H6zM15 3v4h4M9 12h6M9 16h6',
   history: 'M3 12a9 9 0 1 0 3-6.7M3 4v5h5M12 7v5l3 2',
   chat: 'M4 5h16v11H9l-5 4z',
   settings: 'M12 9a3 3 0 1 0 0 6 3 3 0 0 0 0-6zM12 3v3M12 18v3M3 12h3M18 12h3M5.6 5.6l2.1 2.1M16.3 16.3l2.1 2.1M18.4 5.6l-2.1 2.1M7.7 16.3l-2.1 2.1',
@@ -90,13 +94,40 @@ function sectionAt(sections: Section[], markdown: string, selection: { start: nu
 
 let lineId = 0
 
-type WriteAppProps = { services: WriteServices; connection?: { value: WriteConnection; onSave: (c: WriteConnection) => void; onForget: () => void } }
+/** Where the chat lines are kept, so a reload does not erase the conversation. */
+const CHAT_LINES_KEY = 'chat-lines'
+const MAX_SAVED_LINES = 200
+/** Sizes the writer dragged the panes to, in pixels; a missing one is the pane's normal size. */
+interface Layout { panel?: number; chat?: number; dock?: number }
+const LAYOUT_KEY = 'aielia-write.layout'
+function loadLayout(): Layout {
+  try {
+    const raw: unknown = JSON.parse(localStorage.getItem(LAYOUT_KEY) ?? '{}')
+    const n = (v: unknown): number | undefined => (typeof v === 'number' && Number.isFinite(v) && v > 0 ? v : undefined)
+    const o = (raw && typeof raw === 'object' ? raw : {}) as Record<string, unknown>
+    return { panel: n(o.panel), chat: n(o.chat), dock: n(o.dock) }
+  } catch { return {} }
+}
+/** The room the text keeps for itself when a side pane is dragged wider. */
+const MIN_TEXT = 300
+const RAIL_WIDTH = 76
+
+/** What the page keeps in the browser's own storage besides the articles. */
+const LOCAL_KEYS = ['aielia-write.dock', LAYOUT_KEY]
+const isChatLine = (x: unknown): x is ChatLine => typeof x === 'object' && x !== null && typeof (x as ChatLine).id === 'number' && ((x as ChatLine).from === 'you' || (x as ChatLine).from === 'aielia') && typeof (x as ChatLine).text === 'string'
+
+type WriteAppProps = {
+  services: WriteServices
+  connection?: { value: WriteConnection; onSave: (c: WriteConnection) => void; onForget: () => void }
+  /** Called when the writer deleted all their data, so the host can start the page afresh (its models and spending were reset). */
+  onDeleted?: () => void
+}
 
 export function WriteApp(props: WriteAppProps): React.JSX.Element {
   return <DialogProvider><WriteAppBody {...props} /></DialogProvider>
 }
 
-function WriteAppBody({ services, connection }: WriteAppProps): React.JSX.Element {
+function WriteAppBody({ services, connection, onDeleted }: WriteAppProps): React.JSX.Element {
   const { service, port } = services
   const dialogs = useDialogs()
   const [articles, setArticles] = useState<ArticleItem[]>([])
@@ -124,6 +155,15 @@ function WriteAppBody({ services, connection }: WriteAppProps): React.JSX.Elemen
   /** The box under the text (comments, sources, issues, links, history of the selected text) can be hidden to give the text the whole page. */
   const [dockOn, setDockOn] = useState<boolean>(() => { try { return localStorage.getItem('aielia-write.dock') !== 'off' } catch { return true } })
   const toggleDock = (): void => { const next = !dockOn; setDockOn(next); try { localStorage.setItem('aielia-write.dock', next ? 'on' : 'off') } catch { /* the choice just is not remembered */ } }
+  const [layout, setLayout] = useState<Layout>(loadLayout)
+  const mainRef = useRef<HTMLElement | null>(null)
+  const resize = (key: keyof Layout, px: number | undefined): void => setLayout((l) => {
+    const next = { ...l, [key]: px }
+    try { localStorage.setItem(LAYOUT_KEY, JSON.stringify(next)) } catch { /* the sizes just are not remembered */ }
+    return next
+  })
+  const widthOf = (selector: string, fallback: number): number => mainRef.current?.querySelector(selector)?.getBoundingClientRect().width || fallback
+  const roomFor = (other: number): number => Math.max(0, (mainRef.current?.clientWidth ?? 1200) - RAIL_WIDTH - other - MIN_TEXT)
   const [notice, setNotice] = useState<string | null>(null)
   const [busy, setBusy] = useState<string | null>(null)
   const [chat, setChat] = useState<ChatLine[]>([])
@@ -164,6 +204,23 @@ function WriteAppBody({ services, connection }: WriteAppProps): React.JSX.Elemen
       }
     })().catch((err) => setNotice(String(err)))
   }, [service, port, refreshList, reload, services.permissions])
+
+  // The chat comes back after a reload. It is saved only once the saved one has been read, so the empty start never overwrites it.
+  const chatRead = useRef(false)
+  useEffect(() => {
+    let live = true
+    void services.store.getSetting(CHAT_LINES_KEY).then((raw) => {
+      if (!live) return
+      const saved = Array.isArray(raw) ? raw.filter(isChatLine) : []
+      lineId = Math.max(lineId, ...saved.map((l) => l.id))
+      setChat((now) => [...saved, ...now])
+    }, () => undefined).finally(() => { if (live) chatRead.current = true })
+    return () => { live = false }
+  }, [services.store])
+  useEffect(() => {
+    if (!chatRead.current) return
+    void services.store.setSetting(CHAT_LINES_KEY, chat.slice(-MAX_SAVED_LINES)).catch(() => undefined)
+  }, [chat, services.store])
 
   useEffect(() => {
     if (!activeId) { setVersions([]); setWorking(undefined); return }
@@ -298,6 +355,25 @@ function WriteAppBody({ services, connection }: WriteAppProps): React.JSX.Elemen
     else { setTab(id); setRailOpen(true) }
   }
   const isOn = (id: Tab): boolean => tab === id && (railOpen || id === 'text' || id === 'chat')
+
+  // ---- delete all data
+  async function deleteAllData(): Promise<void> {
+    if (!(await dialogs.confirm('Delete everything stored in this page? Every article with its versions, comments and sources, the chat, your settings and the spending record are removed. This cannot be undone. Export an article first if you want to keep it.', { yes: 'Delete everything' }))) return
+    await run('Deleting', async () => {
+      if (saveTimer.current) clearTimeout(saveTimer.current)
+      await queue.current.catch(() => undefined)
+      await services.deleteAllData()
+      for (const key of LOCAL_KEYS) { try { localStorage.removeItem(key) } catch { /* nothing was stored */ } }
+      chatRead.current = false
+      setArticles([]); setActiveId(undefined); setBundle(undefined); setDraft(''); draftRef.current = ''
+      setChat([]); setChatInput(''); setNotes([]); setSelection(null); setViewing(null); setVersions([]); setWorking(undefined)
+      setPerms(await services.permissions.get()); permsRef.current = undefined
+      chatRead.current = true
+      setModelTick((n) => n + 1)
+      setNotice('All your data was deleted.')
+      onDeleted?.()
+    })
+  }
 
   // ---- publish, export, import
   async function publish(): Promise<void> {
@@ -565,6 +641,11 @@ function WriteAppBody({ services, connection }: WriteAppProps): React.JSX.Elemen
     })
   }
 
+  const readSourceNow = (sourceId: string): void => change('Reading the page', async (id) => {
+    const r = await service.readSource(id, sourceId, services.models.auto())
+    setNotice(r.status === 'read' ? 'I read the page and stored its text.' : r.status === 'unchanged' ? 'The page has not changed.' : r.status === 'changed' ? `The page has changed. ${r.impacts.filter((i) => i.impact !== 'none').length} claim${r.impacts.filter((i) => i.impact !== 'none').length === 1 ? '' : 's'} may be affected. Accept the new text to use it.` : r.reason ?? 'The page could not be read.')
+  })
+
   const addNote = (kind: NoteKind, text: string): void => {
     if (!selection) return
     change(kind === 'comment' ? 'Adding the comment' : 'Adding the source', async (id) => {
@@ -736,7 +817,7 @@ function WriteAppBody({ services, connection }: WriteAppProps): React.JSX.Elemen
         </p>
       )}
 
-      <main className="write__main" data-open={railOpen ? 'true' : 'false'} data-tab={tab}>
+      <main ref={mainRef} className="write__main" data-open={railOpen ? 'true' : 'false'} data-tab={tab} style={{ ...(layout.panel ? { '--panel-size': `${layout.panel}px` } : {}), ...(layout.chat ? { '--chat-size': `${layout.chat}px` } : {}) } as React.CSSProperties}>
         <nav className="write__rail" aria-label="Panels">
           {TABS.map((t) => (
             <button key={t.id} type="button" data-tab={t.id} className={isOn(t.id) ? 'is-on' : ''} aria-pressed={isOn(t.id)} aria-label={t.label} onClick={() => pickTab(t.id)}>
@@ -746,6 +827,8 @@ function WriteAppBody({ services, connection }: WriteAppProps): React.JSX.Elemen
             </button>
           ))}
         </nav>
+        {railOpen && <Splitter label="Side panel width" axis="x" grow={1} className="write__split--panel" measure={() => widthOf('.write__panel', 340)} limits={() => ({ min: 220, max: Math.min(640, roomFor(widthOf('.write__pane--chat', 320))) })} onSize={(px) => resize('panel', px)} onReset={() => resize('panel', undefined)} />}
+        <Splitter label="Chat width" axis="x" grow={-1} className="write__split--chat" measure={() => widthOf('.write__pane--chat', 320)} limits={() => ({ min: 260, max: Math.min(720, roomFor(railOpen ? widthOf('.write__panel', 340) : 0)) })} onSize={(px) => resize('chat', px)} onReset={() => resize('chat', undefined)} />
         <aside className="write__panel" aria-label="Side panel">
           {ready && meta ? (
             <>
@@ -759,6 +842,16 @@ function WriteAppBody({ services, connection }: WriteAppProps): React.JSX.Elemen
                 <h2 className="write__panehead">Issues</h2>
                 {issuesNode(meta)}
               </section>
+              <section className={`write__pane write__panel-pane ${tab === 'sources' ? 'is-shown' : ''}`} aria-label="Sources">
+                <h2 className="write__panehead">Sources</h2>
+                <SourcesPanel
+                  meta={meta}
+                  busy={busy !== null}
+                  onJump={jumpTo}
+                  onRead={(sourceId) => readSourceNow(sourceId)}
+                  onAcceptNew={(sourceId) => change('Saving', async (id) => { const r = await service.acceptSourceChange(id, sourceId); if (!r.ok && r.reason) setNotice(r.reason) })}
+                />
+              </section>
               <section className={`write__pane write__panel-pane ${tab === 'history' ? 'is-shown' : ''}`} aria-label="History">
                 <HistoryPanel versions={versions} working={working} busy={busy !== null} onSave={saveVersion} onView={(i) => openVersion(i, 'view')} onCompare={(i) => openVersion(i, 'compare')} onRestore={restoreVersion} onRename={(i, l) => change('Saving', async (id) => { await service.renameVersion(id, i, l) })} />
               </section>
@@ -767,7 +860,7 @@ function WriteAppBody({ services, connection }: WriteAppProps): React.JSX.Elemen
             <p className="write__muted">Create or import an article to use the panels.</p>
           )}
           <section className={`write__pane write__panel-pane ${tab === 'settings' ? 'is-shown' : ''}`} aria-label="Settings">
-            <SettingsPane hostName={services.hostName} connection={connection} github={services.setGithubToken ? { token: services.githubToken, onSave: async (t) => { await services.setGithubToken?.(t); setModelTick((n) => n + 1) } } : undefined} perms={perms} spent={services.spentUsd()} spentByType={services.spendByType()} autoModel={services.models.auto()} chatModel={chatModel} suggestions={services.models.suggestions} onAutoModel={(m) => void services.models.setAuto(m).then(() => setModelTick((t) => t + 1))} onSave={(p) => run('Saving', async () => { await services.permissions.set(p); permsRef.current = p; setPerms(p) })} />
+            <SettingsPane hostName={services.hostName} connection={connection} github={services.setGithubToken ? { token: services.githubToken, onSave: async (t) => { await services.setGithubToken?.(t); setModelTick((n) => n + 1) } } : undefined} perms={perms} busy={busy !== null} onDeleteAll={() => void deleteAllData()} spent={services.spentUsd()} spentByType={services.spendByType()} autoModel={services.models.auto()} chatModel={chatModel} suggestions={services.models.suggestions} onAutoModel={(m) => void services.models.setAuto(m).then(() => setModelTick((t) => t + 1))} onSave={(p) => run('Saving', async () => { await services.permissions.set(p); permsRef.current = p; setPerms(p) })} />
           </section>
         </aside>
         {ready && meta ? (
@@ -803,6 +896,8 @@ function WriteAppBody({ services, connection }: WriteAppProps): React.JSX.Elemen
               grownUnit={grownUnit}
               busy={busy !== null}
               model={chatModel}
+              height={layout.dock}
+              onHeight={(px) => resize('dock', px)}
               onAdd={addNote}
               onFiles={(files) => dropFiles(files, selection !== null)}
               onSaveComments={(c) => change('Saving', async (id) => {
@@ -812,10 +907,7 @@ function WriteAppBody({ services, connection }: WriteAppProps): React.JSX.Elemen
               })}
               onDetach={(claimId, sourceId) => change('Saving', async (id) => { await service.detachSource(id, claimId, sourceId) })}
               onConfirm={(claimId, sourceId) => change('Saving', async (id) => { const link = meta.links.find((l) => l.kind === 'supported_by' && l.from.id === claimId && l.to.id === sourceId); if (link) await service.confirmDependency(id, link.id) })}
-              onRead={(sourceId) => change('Reading the page', async (id) => {
-                const r = await service.readSource(id, sourceId, services.models.auto())
-                setNotice(r.status === 'read' ? 'I read the page and stored its text.' : r.status === 'unchanged' ? 'The page has not changed.' : r.status === 'changed' ? `The page has changed. ${r.impacts.filter((i) => i.impact !== 'none').length} claim${r.impacts.filter((i) => i.impact !== 'none').length === 1 ? '' : 's'} may be affected. Accept the new text to use it.` : r.reason ?? 'The page could not be read.')
-              })}
+              onRead={readSourceNow}
               canSearch={services.canSearch}
               candidates={candidates}
               onFindSources={(claimId) => change('Searching the web', async (id) => {

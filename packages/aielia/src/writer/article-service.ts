@@ -41,6 +41,8 @@ export interface ArticleStore {
   remove(id: string): Promise<void>
   getSetting(key: string): Promise<unknown>
   setSetting(key: string, value: unknown): Promise<void>
+  /** Deletes every article and every setting this store holds. Optional: a store that cannot do it leaves the host to remove the articles one by one. */
+  clearAll?(): Promise<void>
 }
 
 export function createMemoryArticleStore(): ArticleStore {
@@ -59,6 +61,10 @@ export function createMemoryArticleStore(): ArticleStore {
     },
     async remove(id) {
       bundles.delete(id)
+    },
+    async clearAll() {
+      bundles.clear()
+      settings.clear()
     },
     async getSetting(key) {
       return settings.get(key)

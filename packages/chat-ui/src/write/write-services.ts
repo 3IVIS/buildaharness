@@ -63,6 +63,8 @@ export interface WriteServices {
   saveFile?: (name: string, text: string) => Promise<void>
   /** Dollars and calls so far for each kind of call, biggest first. */
   spendByType(): { id: string; usd: number; calls: number }[]
+  /** Deletes every article, version, comment, source and saved setting, the chat and the spending record, and puts the models back to their defaults. The connection (the key) is kept. */
+  deleteAllData(): Promise<void>
 }
 
 const SESSION_ID = 'write'
@@ -180,6 +182,18 @@ export async function assembleWriteServices(parts: {
         }
       : undefined,
     saveFile: parts.saveFile,
+    async deleteAllData() {
+      // The conversation Write held with the assistant goes too (a leftover transcript is scratch state, so a failure there is not fatal).
+      try { await assistant.clearSession(SESSION_ID) } catch { /* nothing to remove */ }
+      if (store.clearAll) await store.clearAll()
+      else for (const a of await store.list()) await store.remove(a.id)
+      meter.reset()
+      cap = undefined
+      chatModel = defaults.chat
+      autoModel = defaults.auto
+      assistant.setModel?.(defaults.chat)
+      githubToken = parts.githubToken
+    },
     spentUsd: () => meter.spentUsd(),
     spendByType: () => Object.entries(meter.byType()).map(([id, v]) => ({ id, ...v })).sort((a, b) => b.usd - a.usd),
   }

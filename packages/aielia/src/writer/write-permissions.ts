@@ -55,6 +55,8 @@ export interface SpendMeter {
   byType(): Record<string, { usd: number; calls: number }>
   /** Throws SpendCapReachedError when the cap is set and reached. */
   assertWithinCap(capUsd: number | undefined): void
+  /** Back to nothing spent, after the stored totals were deleted. */
+  reset(): void
 }
 
 const SPEND_KEY = 'writer:spent-usd'
@@ -83,6 +85,10 @@ export async function createSpendMeter(store: SettingsStore, pricing: { backend?
     },
     assertWithinCap(capUsd) {
       if (capUsd !== undefined && total >= capUsd) throw new SpendCapReachedError(capUsd, total)
+    },
+    reset() {
+      total = 0
+      for (const k of Object.keys(types)) delete types[k]
     },
   }
 }

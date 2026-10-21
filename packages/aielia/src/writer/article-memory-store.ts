@@ -37,6 +37,7 @@ export function createMemoryAdapterArticleStore(memory: MemoryAdapter): ArticleS
       await memory.delete(articleKey(id))
       await memory.set(INDEX_KEY, (await readIndex()).filter((r) => r.id !== id))
     },
+    clearAll: memory.clear ? () => memory.clear!() : undefined,
     async getSetting(key) {
       return memory.get(settingKey(key))
     },

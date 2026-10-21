@@ -4,7 +4,7 @@ import userEvent from '@testing-library/user-event'
 import { ArticleService, createMemoryArticleStore, type PersonalAssistant } from '@buildaharness/aielia'
 import type { ILLMClient } from '@buildaharness/runtime'
 import { WriteApp } from './WriteApp'
-import { answerDialog } from './dialog-test-utils'
+import { answerDialog, declineDialog } from './dialog-test-utils'
 import { assembleWriteServices } from './write-services'
 
 const MARK = {
@@ -174,7 +174,7 @@ describe('rail and panels', () => {
       const { container } = render(<WriteApp services={s} />)
       await waitForText()
       const main = container.querySelector('.write__main') as HTMLElement
-      expect(within(screen.getByRole('navigation', { name: 'Panels' })).getAllByRole('button').map((b) => b.getAttribute('aria-label'))).toEqual(['Text', 'Style', 'Ideas', 'Issues', 'History', 'Chat', 'Settings'])
+      expect(within(screen.getByRole('navigation', { name: 'Panels' })).getAllByRole('button').map((b) => b.getAttribute('aria-label'))).toEqual(['Text', 'Style', 'Ideas', 'Issues', 'Sources', 'History', 'Chat', 'Settings'])
       expect(main.dataset.open).toBe('true')
       await userEvent.click(rail('Style'))
       expect(main.dataset.open).toBe('false')
@@ -334,6 +334,25 @@ describe('chat: model, check and adjust', () => {
     expect(screen.getAllByTitle('The model that wrote this')[0]).toHaveTextContent('my-own-model')
   })
 
+  it('the conversation is still there after the page is opened again', async () => {
+    const s = await services({}, MD)
+    const first = render(<WriteApp services={s} />)
+    await waitForText()
+    await userEvent.click(rail('Chat'))
+    await userEvent.type(screen.getByLabelText('Message'), 'hello{Enter}')
+    expect(await screen.findByText('Noted.')).toBeInTheDocument()
+    await waitFor(async () => expect(await s.store.getSetting('chat-lines')).toHaveLength(2))
+    first.unmount()
+    render(<WriteApp services={s} />)
+    await waitForText()
+    expect(await screen.findByText('hello')).toBeInTheDocument()
+    expect(screen.getByText('Noted.')).toBeInTheDocument()
+    // a new message continues after the old ones
+    await userEvent.click(rail('Chat'))
+    await userEvent.type(screen.getByLabelText('Message'), 'again{Enter}')
+    await waitFor(async () => expect(await s.store.getSetting('chat-lines')).toHaveLength(4))
+  })
+
   it('"Check the article" is an action in the Adjust list, runs as soon as it is picked, and says which model checked', async () => {
     const s = await services({ capture: { articleId: null, ops: [] }, claims: { claims: [{ quote: 'The p99 was 18 ms.', kind: 'factual', matchesId: null, sure: true }] }, resolve: { affected: [] } }, MD)
     render(<WriteApp services={s} />)
@@ -397,6 +416,55 @@ describe('chat: model, check and adjust', () => {
     await userEvent.type(screen.getByLabelText('What to adjust'), 'pacing')
     await userEvent.type(screen.getByLabelText('How'), 'slower in the middle{Enter}')
     expect(await screen.findByText(/pacing is: slower in the middle/)).toBeInTheDocument()
+  })
+
+  it('Delete all my data asks first, then removes the articles, the chat and the settings', async () => {
+    const s = await services({}, MD)
+    const onDeleted = vi.fn()
+    render(<WriteApp services={s} onDeleted={onDeleted} />)
+    await waitForText()
+    await userEvent.click(rail('Chat'))
+    await userEvent.type(screen.getByLabelText('Message'), 'hello{Enter}')
+    expect(await screen.findByText('Noted.')).toBeInTheDocument()
+    await userEvent.click(rail('Settings'))
+    const button = await within(panel('Settings')).findByRole('button', { name: 'Delete all my data' })
+    expect(button.className).toContain('write__dangerbtn') // red, at the bottom of Settings
+    await userEvent.click(button)
+    await declineDialog() // keeping the data is the way out
+    expect(await s.service.list()).toHaveLength(1)
+    expect(onDeleted).not.toHaveBeenCalled()
+    await userEvent.click(button)
+    await answerDialog()
+    await waitFor(() => expect(onDeleted).toHaveBeenCalled())
+    expect(await s.service.list()).toEqual([])
+    expect(await s.store.getSetting('chat-lines')).toBeUndefined()
+    expect(screen.queryByText('Noted.')).toBeNull()
+    expect(screen.getByText('Create an article, or import one, to begin.')).toBeInTheDocument()
+  })
+
+  it('the lines between the panes can be moved (arrow keys here, the mouse in a browser), are remembered, and double-click puts them back', async () => {
+    const width = vi.spyOn(HTMLElement.prototype, 'clientWidth', 'get').mockReturnValue(1400)
+    try {
+      const s = await services({}, MD)
+      const first = render(<WriteApp services={s} />)
+      await waitForText()
+      const main = document.querySelector('.write__main') as HTMLElement
+      const chatLine = screen.getByRole('separator', { name: 'Chat width' })
+      fireEvent.keyDown(chatLine, { key: 'ArrowLeft' }) // toward the text: the chat gets wider
+      expect(main.style.getPropertyValue('--chat-size')).toBe('336px')
+      const dockLine = screen.getByRole('separator', { name: 'Height of the box under the text' })
+      fireEvent.keyDown(dockLine, { key: 'ArrowUp' })
+      expect(JSON.parse(localStorage.getItem('aielia-write.layout') ?? '{}')).toMatchObject({ chat: 336 })
+      first.unmount()
+      render(<WriteApp services={s} />) // opened again: the size is where it was left
+      await waitForText()
+      expect((document.querySelector('.write__main') as HTMLElement).style.getPropertyValue('--chat-size')).toBe('336px')
+      fireEvent.doubleClick(screen.getByRole('separator', { name: 'Chat width' }))
+      expect((document.querySelector('.write__main') as HTMLElement).style.getPropertyValue('--chat-size')).toBe('')
+    } finally {
+      width.mockRestore()
+      localStorage.removeItem('aielia-write.layout')
+    }
   })
 
   it('warns in Settings when the automatic checks use the same model as the chat', async () => {
@@ -551,8 +619,13 @@ describe('comments and sources under the text', () => {
     const s = await services({}, MD)
     render(<WriteApp services={s} />)
     await waitForText()
-    expect(screen.getByText(/Click in the text, or highlight some/)).toBeInTheDocument()
-    expect(screen.getByLabelText('Comments on this text')).toBeDisabled()
+    const dock = screen.getByLabelText('Comments and sources for this text')
+    expect(within(dock).getByText(/to see the comments on it and to add one/)).toBeInTheDocument() // like Issues, Links and History: nothing to show or add until some text is picked
+    expect(screen.queryByLabelText('Comments on this text')).toBeNull()
+    await dockTab('Sources')
+    expect(within(dock).getByText(/to see the sources for it and to add one/)).toBeInTheDocument()
+    expect(within(dock).queryByLabelText('Add to this text')).toBeNull()
+    await dockTab('Comments')
     putCursor('18 ms')
     expect(screen.getByLabelText('Comments on this text')).toBeEnabled()
     expect(within(screen.getByLabelText('Comments and sources for this text')).getByText(/The p99 was 18 ms\./)).toBeInTheDocument()
@@ -631,6 +704,25 @@ describe('comments and sources under the text', () => {
     fireEvent.drop(screen.getByLabelText('Comments and sources for this text'), { dataTransfer: { files: [new File(['export const limit = 20'], 'limits.ts', { type: '' })] } })
     expect(await screen.findByText(/limits\.ts: added as code/)).toBeInTheDocument()
     expect((await s.service.get(id)).meta.sources[0]).toMatchObject({ kind: 'code', address: 'limits.ts', passage: 'export const limit = 20' })
+  })
+
+  it('the Sources button at the side lists every source of the article, with the claims each one backs, without picking any text', async () => {
+    const s = await services({ claims: { claims: [{ quote: 'The p99 was 18 ms.', kind: 'factual', matchesId: null, sure: true }] }, resolve: { affected: [] } }, MD)
+    const id = (await s.service.list())[0].id
+    await s.service.analyze(id)
+    const at = MD.indexOf('18 ms')
+    const backed = await s.service.addSource(id, { kind: 'upload', address: 'bench.txt', passage: 'p99 18 ms' })
+    await s.service.attachSourceToText(id, { start: at, end: at }, backed)
+    await s.service.addSource(id, { kind: 'upload', address: 'spare.txt', passage: 'unused' })
+    render(<WriteApp services={s} />)
+    await waitForText()
+    await userEvent.click(rail('Sources'))
+    const side = panel('Sources')
+    const list = await within(side).findByRole('list', { name: 'All sources of the article' })
+    expect(within(list).getByText('bench.txt')).toBeInTheDocument()
+    expect(within(list).getByText('spare.txt')).toBeInTheDocument()
+    expect(within(list).getByText('Not backing any claim yet.')).toBeInTheDocument()
+    expect(within(within(list).getByRole('list', { name: 'Claims this source backs' })).getByText(/The p99 was 18 ms\./)).toBeInTheDocument()
   })
 
   it('a file dropped into the chat is stored and Aielia proposes where it belongs, to confirm under the text with one icon', async () => {
@@ -1022,7 +1114,8 @@ describe('links, history', () => {
     const legend = within(history).getByLabelText('What the icons do')
     for (const word of [/View the text/, /Compare with now/, /Restore/]) expect(within(legend).getByText(word)).toBeInTheDocument()
     expect(await within(history).findByText('First version')).toBeInTheDocument()
-    expect(within(history).getByText(/Latency, Memory/)).toBeInTheDocument()
+    expect(within(history).getByText(/^\+\d+ −\d+ lines$/)).toBeInTheDocument() // the level of change, not which sections it touched
+    expect(within(history).queryByText(/Latency, Memory/)).toBeNull()
     await userEvent.click(within(history).getAllByRole('button', { name: 'Version name' })[0])
     const input = screen.getByRole('textbox', { name: 'Version name' })
     await userEvent.clear(input)
