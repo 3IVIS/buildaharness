@@ -50,6 +50,8 @@ interface Props {
   model: string
   /** How tall the writer dragged the box to, in pixels; undefined is its normal height. */
   height?: number
+  /** Hides the box; the button for it sits in the box's top corner so it takes no room of its own. */
+  onHide(): void
   onHeight(px: number | undefined): void
   /** Add what the writer typed, as a comment on the text or a source for it. A source that is a link is stored as a link; anything else as a passage. */
   onAdd(kind: NoteKind, text: string): void
@@ -100,7 +102,7 @@ const PANES: { id: DockPane; label: string }[] = [
  * paragraph or a section: its comments and sources show here. One line adds to it: type a comment, paste a link or passage, or state your own
  * word; drop a file anywhere in this box, or use the paperclip.
  */
-export function TextNotes({ issues, issuesCount, links, history, meta, markdown, selection, grownUnit, busy, model, height, onHeight, onAdd, onFiles, onSaveComments, onDetach, onConfirm, onRead, onAcceptNew, onLines, onVerify, folder, onPickFolder, onUseFolderFile, onCloseFolder, onCheck, canSearch, candidates, onFindSources, onUseCandidate, onDismissCandidates }: Props): React.JSX.Element {
+export function TextNotes({ issues, issuesCount, links, history, meta, markdown, selection, grownUnit, busy, model, height, onHide, onHeight, onAdd, onFiles, onSaveComments, onDetach, onConfirm, onRead, onAcceptNew, onLines, onVerify, folder, onPickFolder, onUseFolderFile, onCloseFolder, onCheck, canSearch, candidates, onFindSources, onUseCandidate, onDismissCandidates }: Props): React.JSX.Element {
   const [collapsed, setCollapsed] = useState(false)
   const [pane, setPane] = useState<DockPane>('comments')
   const [text, setText] = useState('')
@@ -141,6 +143,7 @@ export function TextNotes({ issues, issuesCount, links, history, meta, markdown,
       onDrop={(e) => { e.preventDefault(); setOver(false); const files = Array.from(e.dataTransfer.files); if (files.length > 0) onFiles(files) }}
     >
       <Splitter label="Height of the box under the text" axis="y" grow={-1} className="write__split--dock" measure={() => dockRef.current?.getBoundingClientRect().height ?? 200} limits={() => ({ min: 96, max: Math.round((dockRef.current?.parentElement?.clientHeight ?? 600) * 0.85) })} onSize={onHeight} onReset={() => onHeight(undefined)} />
+      <button type="button" className="write__dockchev" aria-label="Hide the box under the text" title="Hide the box under the text" onClick={onHide}>⌄</button>
       <button type="button" className="write__dockhead" onClick={() => setCollapsed((c) => !c)} aria-expanded={!collapsed} title={collapsed ? 'Show' : 'Hide'}>
         <strong>{unit ? unitLabel : 'This text'}</strong>
         <span className="write__dockfor">{unit ? <>“{clip(unit.quote, 90)}”</> : 'Click in the text, or highlight some, to comment or add a source'}</span>

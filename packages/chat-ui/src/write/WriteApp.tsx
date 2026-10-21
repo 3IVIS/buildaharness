@@ -4,7 +4,7 @@ import type { ChatAction } from './AdjustBar'
 import { ArticleSwitcher, type ArticleItem } from './ArticleSwitcher'
 import { ChatPane, type ChatLine } from './ChatPane'
 import { HistoryPanel, type VersionRow } from './HistoryPanel'
-import { VersionView, type Viewing } from './VersionView'
+import { VersionOutline, VersionView, type Viewing } from './VersionView'
 import { TextHistory } from './TextHistory'
 import { IdeasPanel } from './IdeasPanel'
 import { StylePanel } from './StylePanel'
@@ -889,20 +889,20 @@ function WriteAppBody({ services, connection, onDeleted }: WriteAppProps): React
                 <button type="button" aria-pressed={showHistory} className={showHistory ? 'is-on' : ''} onClick={() => setShowHistory(true)}>History</button>
               </div>
             )}
-            {viewing && showHistory && <VersionView viewing={viewing} statusLabel={STATUS_LABEL} onRestore={(i) => void restoreVersion(i)} />}
-            <div className="write__seg write__viewtoggle" role="group" aria-label="Show" hidden={Boolean(viewing && showHistory)}>
+            <div className="write__seg write__viewtoggle" role="group" aria-label="Show">
               <button type="button" aria-label="Article view" aria-pressed={view === 'text'} className={view === 'text' ? 'is-on' : ''} onClick={() => setView('text')}>Article</button>
               <button type="button" aria-label="Outline view" aria-pressed={view === 'outline'} className={view === 'outline' ? 'is-on' : ''} onClick={() => setView('outline')}>Outline</button>
             </div>
+            {viewing && showHistory && (view === 'outline' ? <VersionOutline viewing={viewing} onRestore={(i) => void restoreVersion(i)} /> : <VersionView viewing={viewing} statusLabel={STATUS_LABEL} onRestore={(i) => void restoreVersion(i)} />)}
             {view === 'outline' && !(viewing && showHistory) && (
               <div className="write__outlineview">
                 <OutlinePanel markdown={draft} onOpen={jumpTo} onChange={onType} onSelect={(start) => { setSelection({ start, end: start }); growth.current = []; grownTo.current = undefined; setGrownUnit(undefined) }} />
               </div>
             )}
             <div className={`write__textview ${view === 'outline' || (viewing && showHistory) ? 'is-hidden' : ''}`}>
-            <MarkedText textRef={textRef} value={draft} pieces={textPieces(meta, draft)} onChange={onType} onSelection={(r) => { setSelection(r); const g = grownTo.current; if (!g || g.start !== r.start || g.end !== r.end) { growth.current = []; grownTo.current = undefined; setGrownUnit(undefined) } }} onGrow={growSelection} onShrink={shrinkSelection} onPress={pressText} onDoubleClick={doubleClickText} unit={grownUnit} />
+            <MarkedText textRef={textRef} value={draft} pieces={textPieces(meta, draft)} onChange={onType} onSelection={(r) => { setSelection(r); const g = grownTo.current; if (!g || g.start !== r.start || g.end !== r.end) { growth.current = []; grownTo.current = undefined; setGrownUnit(undefined) } }} onGrow={growSelection} onShrink={shrinkSelection} onPress={pressText} onDoubleClick={doubleClickText} />
             </div>
-            <button type="button" className="write__dockchev" aria-pressed={dockOn} aria-label={dockOn ? 'Hide the box under the text' : 'Show the box under the text'} title={dockOn ? 'Hide the box under the text' : 'Show the box under the text'} onClick={toggleDock}>{dockOn ? '⌄' : '⌃'}</button>
+            {!dockOn && <button type="button" className="write__dockchev write__dockchev--show" aria-label="Show the box under the text" title="Show the box under the text" onClick={toggleDock}>⌃</button>}
             {dockOn && <TextNotes
               issues={unit && unitMeta ? issuesNode(unitMeta, selection ? textUnitAt(draft, selection.start, selection.end)?.quote : undefined) : <p className="write__muted">Click in the text, or highlight some, to see the issues in it. The Issues button at the side lists the whole article.</p>}
               issuesCount={unitIssues}
@@ -914,6 +914,7 @@ function WriteAppBody({ services, connection, onDeleted }: WriteAppProps): React
               grownUnit={grownUnit}
               busy={busy !== null}
               model={chatModel}
+              onHide={toggleDock}
               height={layout.dock}
               onHeight={(px) => resize('dock', px)}
               onAdd={addNote}

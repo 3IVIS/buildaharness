@@ -1,6 +1,5 @@
 import { useRef, useState, type RefObject } from 'react'
 import type { TextPiece } from '@buildaharness/aielia'
-import { IconButton } from './icons'
 
 interface Props {
   textRef: RefObject<HTMLTextAreaElement>
@@ -8,16 +7,14 @@ interface Props {
   pieces: TextPiece[]
   onChange(value: string): void
   onSelection(range: { start: number; end: number }): void
-  /** Selects the next larger unit (sentence, paragraph, section, article) around the selection. */
+  /** Alt+Shift+Up: selects the next larger unit (sentence, paragraph, section, article) around the selection. */
   onGrow(): void
-  /** Goes back to the smaller selection. */
+  /** Alt+Shift+Down: goes back to the smaller selection. */
   onShrink(): void
   /** A click is starting: the page notes what was selected by earlier double-clicks, because the click itself changes the selection. */
   onPress(): void
   /** A double-click at this place in the text: select the sentence, and on each further double-click the next larger unit, then start over. */
   onDoubleClick(at: number): void
-  /** What the current selection was grown to, when it was. */
-  unit?: string
 }
 
 const TINT_KEY = 'aielia-write.tint'
@@ -36,7 +33,7 @@ function loadTint(): boolean {
  * text area, laid out the same way and scrolled with it, so the writer types in a plain text area and the marks follow the words. Nothing changes
  * the layout of the text. The copy is hidden from screen readers; the line under the text and the box under that say the same in words.
  */
-export function MarkedText({ textRef, value, pieces, onChange, onSelection, onGrow, onShrink, onPress, onDoubleClick, unit }: Props): React.JSX.Element {
+export function MarkedText({ textRef, value, pieces, onChange, onSelection, onGrow, onShrink, onPress, onDoubleClick }: Props): React.JSX.Element {
   const back = useRef<HTMLDivElement | null>(null)
   const [tint, setTint] = useState(loadTint)
   const shown = tint ? pieces : []
@@ -69,11 +66,6 @@ export function MarkedText({ textRef, value, pieces, onChange, onSelection, onGr
         spellCheck
       />
       </div>
-      <div className="write__selbar" role="group" aria-label="Select text">
-        <IconButton label="Select more: sentence, then paragraph, then section (Alt+Shift+Up)" icon="grow" onClick={onGrow} disabled={value.length === 0} />
-        <IconButton label="Select less (Alt+Shift+Down)" icon="shrink" onClick={onShrink} disabled={value.length === 0} />
-        {unit && <span className="write__muted" aria-live="polite">Selected: {unit}</span>}
-      </div>
       {pieces.length > 0 && (
         <p className="write__marklegend">
           <label className="write__tintswitch" title="Show or hide the colours and underlines in the text">
@@ -81,13 +73,13 @@ export function MarkedText({ textRef, value, pieces, onChange, onSelection, onGr
           </label>
           {tint && (
             <>
-              {has((p) => p.tone === 'ok') && <span className="write__tone write__tone--ok">backed by a source</span>}
-              {has((p) => p.tone === 'tried') && <span className="write__tone write__tone--tried">looked for, none found</span>}
-              {has((p) => p.tone === 'look') && <span className="write__tone write__tone--look">not looked at yet</span>}
-              {has((p) => p.tone === 'bad') && <span className="write__tone write__tone--bad">against a source</span>}
-              {has((p) => p.commentIds.length > 0) && <span className="write__tone write__tone--comment">open comment</span>}
-              {has((p) => p.suggestionIds.length > 0) && <span className="write__tone write__tone--suggestion">suggested change</span>}
-              {has((p) => p.reviewSectionId !== undefined) && <span className="write__tone write__tone--review">needs review</span>}
+              {has((p) => p.tone === 'ok') && <span className="write__tone write__tone--ok" title="A source backs this claim">sourced</span>}
+              {has((p) => p.tone === 'tried') && <span className="write__tone write__tone--tried" title="A source was looked for and none was found">no source found</span>}
+              {has((p) => p.tone === 'look') && <span className="write__tone write__tone--look" title="A claim with no source yet, or a source that has not been checked against it">needs checking</span>}
+              {has((p) => p.tone === 'bad') && <span className="write__tone write__tone--bad" title="A source says the opposite">contradicted</span>}
+              {has((p) => p.commentIds.length > 0) && <span className="write__tone write__tone--comment" title="There is an open comment on this text">comment</span>}
+              {has((p) => p.suggestionIds.length > 0) && <span className="write__tone write__tone--suggestion" title="A change is suggested for this text">suggested edit</span>}
+              {has((p) => p.reviewSectionId !== undefined) && <span className="write__tone write__tone--review" title="This section is flagged because something it depends on changed">to review</span>}
             </>
           )}
         </p>

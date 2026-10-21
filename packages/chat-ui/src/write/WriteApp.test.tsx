@@ -384,7 +384,7 @@ describe('chat: model, check and adjust', () => {
     await screen.findByText(/I found 1 factual claim/)
     await waitFor(() => expect(container.querySelector('mark')?.textContent).toBe('The p99 was 18 ms.'))
     expect(container.querySelector('mark')).toHaveClass('write__mark--look')
-    expect(screen.getByText('not looked at yet')).toBeInTheDocument()
+    expect(screen.getByText('needs checking')).toBeInTheDocument()
     expect(container.querySelector('.write__backdrop')).toHaveAttribute('aria-hidden', 'true')
     putCursor('18 ms')
     expect(screen.queryByText(/Here:/)).toBeNull() // the box under the text says it
@@ -940,29 +940,29 @@ describe('bringing a page or file in to edit', () => {
 describe('selecting by sentence, paragraph and section', () => {
   const TEXT = '# Post\n\nFirst one. The p99 was 18 ms. Last one.\n\n## Latency\n\nIt is quick.\n'
   const selected = (): string => { const t = screen.getByLabelText('Article text') as HTMLTextAreaElement; return t.value.slice(t.selectionStart, t.selectionEnd) }
-  it('grows from the cursor to the sentence, paragraph and section with one button, shrinks back, and works from the keyboard', async () => {
+  it('grows from the cursor to the sentence, paragraph and section from the keyboard, and shrinks back; there are no select buttons under the text', async () => {
     const s = await services({}, TEXT)
     render(<WriteApp services={s} />)
     await waitForText()
     putCursor('18 ms')
-    const more = screen.getByRole('button', { name: /Select more/ })
-    await userEvent.click(more)
+    expect(screen.queryByRole('group', { name: 'Select text' })).toBeNull()
+    const box = screen.getByLabelText('Article text')
+    const more = (): void => { fireEvent.keyDown(box, { key: 'ArrowUp', altKey: true, shiftKey: true }) }
+    const less = (): void => { fireEvent.keyDown(box, { key: 'ArrowDown', altKey: true, shiftKey: true }) }
+    more()
     expect(selected()).toBe('The p99 was 18 ms.')
-    expect(await screen.findByText('Selected: sentence')).toBeInTheDocument()
     const dock = (): HTMLElement => screen.getByLabelText('Comments and sources for this text')
     expect(within(dock()).getByText('Sentence')).toBeInTheDocument()
     await dockTab('Links')
     expect(within(dock()).getByText('Sentence')).toBeInTheDocument() // the title names the selection, not the tab
-    await userEvent.click(more)
+    more()
     expect(selected()).toBe('First one. The p99 was 18 ms. Last one.')
     expect(within(dock()).getByText('Paragraph')).toBeInTheDocument()
-    await userEvent.click(more)
+    more()
     expect(selected()).toBe(TEXT.trim())
-    expect(await screen.findByText('Selected: section')).toBeInTheDocument()
-    await userEvent.click(screen.getByRole('button', { name: /Select less/ }))
+    expect(within(dock()).getByText('Section')).toBeInTheDocument()
+    less()
     expect(selected()).toBe('First one. The p99 was 18 ms. Last one.')
-    fireEvent.keyDown(screen.getByLabelText('Article text'), { key: 'ArrowUp', altKey: true, shiftKey: true })
-    expect(await screen.findByText('Selected: section')).toBeInTheDocument()
   })
 })
 
@@ -1151,6 +1151,14 @@ describe('links, history', () => {
     expect(detail.querySelector('ins')?.textContent).toBe('41') // the changed word is marked inside its line, not the whole line twice
     expect(detail.querySelector('del')?.textContent).toBe('18')
     expect(within(history).queryByLabelText('Version detail')).toBeNull() // shown in the main text window, not in the side panel
+    // the Article / Outline toggle stays at the top and works on the version too
+    const show = screen.getByRole('group', { name: 'Show' })
+    expect(screen.getByLabelText('Version detail').compareDocumentPosition(show) & Node.DOCUMENT_POSITION_PRECEDING).toBeTruthy() // above the version, not under it
+    await userEvent.click(within(show).getByRole('button', { name: 'Outline view' }))
+    expect(screen.queryByLabelText('Version detail')).toBeNull()
+    expect(within(screen.getByLabelText('Version outline')).getByText(/# Post/)).toBeInTheDocument()
+    await userEvent.click(within(show).getByRole('button', { name: 'Article view' }))
+    expect(await screen.findByLabelText('Version detail')).toBeInTheDocument()
     await userEvent.click(within(screen.getByRole('group', { name: 'Which text' })).getByRole('button', { name: 'Current' }))
     expect(screen.queryByLabelText('Version detail')).toBeNull()
     expect(screen.queryByRole('group', { name: 'Which text' })).toBeNull() // back to the article, nothing left to toggle

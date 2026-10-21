@@ -53,7 +53,6 @@
 .write__mark.has-suggestion { text-decoration: underline dashed #8b5cf6; text-decoration-thickness: 2px; text-underline-offset: 3px; }
 .write__mark.has-comment.has-suggestion { text-decoration-style: double; }
 .write__mark.has-review { box-shadow: inset 0 -3px 0 #d89a1c; }
-.write__selbar { display: flex; gap: 6px; align-items: center; margin-top: 4px; font-size: 0.82rem; }
 .write__marklegend { margin: 4px 0 0; font-size: 0.82rem; color: var(--muted); display: flex; flex-wrap: wrap; gap: 4px 10px; align-items: center; }
 .write__tintswitch { display: inline-flex; gap: 4px; align-items: center; }
 .write__tone { margin-left: 0; padding: 0 5px; border-radius: 3px; }
@@ -329,8 +328,12 @@
 .write__versionview .write__pre { max-height: none; }
 
 /* Shows or hides the box under the text. */
-.write .write__dockchev { align-self: center; border: none; background: transparent; padding: 0 14px; line-height: 1; font-size: 1.1rem; color: var(--muted); cursor: pointer; }
-.write .write__dockchev:hover { color: var(--accent); }
+.write .write__dockchev { position: absolute; top: 5px; right: 8px; z-index: 3; width: 24px; height: 24px; min-height: 0; padding: 0; border: none; border-radius: 6px; background: transparent; line-height: 1; font-size: 1.1rem; color: var(--muted); cursor: pointer; }
+.write .write__dockchev:hover { color: var(--accent); background: var(--accent-a08, rgba(80, 120, 255, 0.12)); }
+.write .write__dockchev--show { top: auto; bottom: 8px; right: 22px; background: var(--surface); border: 1px solid var(--border); }
+.write .write__dockhead { padding-right: 40px; }
+.write__dock { position: relative; }
+.write__pane--text { position: relative; }
 
 .write__danger { margin-top: 28px; padding-top: 14px; border-top: 1px solid var(--border); display: grid; gap: 6px; }
 .write .write__dangerbtn { justify-self: start; background: #c62828; border-color: #c62828; color: #fff; }

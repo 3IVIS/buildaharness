@@ -1,4 +1,4 @@
-import { diffForDisplay, type VersionComparison } from '@buildaharness/aielia'
+import { diffForDisplay, outlineToText, type VersionComparison } from '@buildaharness/aielia'
 
 export interface Viewing {
   mode: 'view' | 'compare'
@@ -38,6 +38,20 @@ export function VersionView({ viewing, statusLabel, onRestore }: Props): React.J
           {(viewing.diff?.sources.length ?? 0) > 0 && <ul className="write__rows">{viewing.diff?.sources.map((x) => <li key={x.id}><div className="write__rowmain">Source {x.address ?? x.id}: {x.change}</div></li>)}</ul>}
         </>
       )}
+    </div>
+  )
+}
+
+/** The outline of an earlier version, read only: one heading per line, the way the outline of the article is written. */
+export function VersionOutline({ viewing, onRestore }: { viewing: Viewing; onRestore(index: number): void }): React.JSX.Element {
+  const text = outlineToText(viewing.markdown)
+  return (
+    <div className="write__versionview" aria-label="Version outline">
+      <p className="write__muted">
+        The outline of an earlier version, read only.{' '}
+        <button type="button" className="write__link" onClick={() => onRestore(viewing.index)}>Restore this version</button>
+      </p>
+      {text ? <pre className="write__pre">{text}</pre> : <p className="write__muted">That version has no headings.</p>}
     </div>
   )
 }
