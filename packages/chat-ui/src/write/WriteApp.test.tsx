@@ -639,6 +639,25 @@ describe('double-click selects bigger and bigger pieces', () => {
   })
 })
 
+describe('a picked piece of text stays marked', () => {
+  it('stays drawn when the writer clicks in the box under the text, and goes when the text is clicked again', async () => {
+    const s = await services({}, MD2)
+    const { container } = render(<WriteApp services={s} />)
+    const box = await waitForText()
+    const at = box.value.indexOf('The p99')
+    box.focus()
+    box.setSelectionRange(at, at + 'The p99 was 18 ms.'.length)
+    fireEvent.select(box)
+    expect(container.querySelector('mark.write__sel')).toBeNull() // while the box is in use the browser draws it
+    fireEvent.blur(box)
+    expect(container.querySelector('mark.write__sel')?.textContent).toBe('The p99 was 18 ms.')
+    await dockTab('Sources')
+    expect(container.querySelector('mark.write__sel')?.textContent).toBe('The p99 was 18 ms.')
+    fireEvent.focus(box)
+    expect(container.querySelector('mark.write__sel')).toBeNull()
+  })
+})
+
 describe('comments and sources under the text', () => {
   it('asks you to click in the text first, and shows what is under the cursor', async () => {
     const s = await services({}, MD)

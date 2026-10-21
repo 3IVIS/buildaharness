@@ -7,6 +7,8 @@ interface Props {
   pieces: TextPiece[]
   onChange(value: string): void
   onSelection(range: { start: number; end: number }): void
+  /** Where the cursor or selection is in the text; a selection stays drawn while the box is not in use. */
+  selection: { start: number; end: number } | null
   /** Alt+Shift+Up: selects the next larger unit (sentence, paragraph, section, article) around the selection. */
   onGrow(): void
   /** Alt+Shift+Down: goes back to the smaller selection. */
@@ -33,19 +35,27 @@ function loadTint(): boolean {
  * text area, laid out the same way and scrolled with it, so the writer types in a plain text area and the marks follow the words. Nothing changes
  * the layout of the text. The copy is hidden from screen readers; the line under the text and the box under that say the same in words.
  */
-export function MarkedText({ textRef, value, pieces, onChange, onSelection, onGrow, onShrink, onPress, onDoubleClick }: Props): React.JSX.Element {
+export function MarkedText({ textRef, value, pieces, onChange, onSelection, onGrow, onShrink, onPress, onDoubleClick, selection }: Props): React.JSX.Element {
   const back = useRef<HTMLDivElement | null>(null)
   const [tint, setTint] = useState(loadTint)
   const shown = tint ? pieces : []
+  // While the text box is not the one in use (the writer clicked in the box under the text, say), the browser stops drawing the selection. It is
+  // drawn here instead, in the copy behind the text, so the picked text stays marked until the writer clicks in the text again.
+  const [focused, setFocused] = useState(false)
+  const kept = !focused && selection && selection.end > selection.start ? { start: Math.min(selection.start, value.length), end: Math.min(selection.end, value.length) } : undefined
+  const cuts = new Set<number>([0, value.length])
+  for (const p of shown) { cuts.add(p.start); cuts.add(p.end) }
+  if (kept) { cuts.add(kept.start); cuts.add(kept.end) }
+  const edges = [...cuts].filter((n) => n >= 0 && n <= value.length).sort((x, y) => x - y)
   const parts: React.ReactNode[] = []
-  let at = 0
-  for (const p of shown) {
-    if (p.start > at) parts.push(value.slice(at, p.start))
-    const cls = ['write__mark', p.tone && `write__mark--${p.tone}`, p.commentIds.length > 0 && 'has-comment', p.suggestionIds.length > 0 && 'has-suggestion', p.reviewSectionId && 'has-review'].filter(Boolean).join(' ')
-    parts.push(<mark key={`${p.start}-${p.end}`} className={cls}>{value.slice(p.start, p.end)}</mark>)
-    at = p.end
+  for (let i = 0; i + 1 < edges.length; i++) {
+    const [from, to] = [edges[i], edges[i + 1]]
+    const p = shown.find((x) => x.start <= from && x.end >= to)
+    const inSelection = kept !== undefined && from >= kept.start && to <= kept.end
+    if (!p && !inSelection) { parts.push(value.slice(from, to)); continue }
+    const cls = ['write__mark', p?.tone && `write__mark--${p.tone}`, p && p.commentIds.length > 0 && 'has-comment', p && p.suggestionIds.length > 0 && 'has-suggestion', p?.reviewSectionId && 'has-review', inSelection && 'write__sel'].filter(Boolean).join(' ')
+    parts.push(<mark key={`${from}-${to}`} className={cls}>{value.slice(from, to)}</mark>)
   }
-  parts.push(value.slice(at))
   const has = (f: (p: TextPiece) => boolean): boolean => pieces.some(f)
 
   return (
@@ -63,6 +73,8 @@ export function MarkedText({ textRef, value, pieces, onChange, onSelection, onGr
         onScroll={(e) => { if (back.current) back.current.scrollTop = e.currentTarget.scrollTop }}
         onSelect={(e) => onSelection({ start: e.currentTarget.selectionStart, end: e.currentTarget.selectionEnd })}
         onClick={(e) => onSelection({ start: e.currentTarget.selectionStart, end: e.currentTarget.selectionEnd })}
+        onFocus={() => setFocused(true)}
+        onBlur={() => setFocused(false)}
         spellCheck
       />
       </div>

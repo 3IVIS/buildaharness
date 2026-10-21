@@ -53,6 +53,9 @@ export function OutlinePanel({ markdown, onChange, onOpen, onSelect }: Props): R
     return Math.max(0, value.split('\n').slice(0, cursorLine + 1).filter((l) => l.trim()).length - 1)
   }
   // Double-click: the heading, then each larger group of headings, up to the one just below the whole outline, then the heading again.
+  // The picked text stays marked while the box is not in use (the writer clicked in the box under the text); the browser would stop drawing it.
+  const [picked, setPicked] = useState<{ start: number; end: number } | null>(null)
+  const [focused, setFocused] = useState(false)
   const grown = useRef<{ start: number; end: number } | null>(null)
   const pressed = useRef<{ start: number; end: number } | null>(null)
   function doubleClick(): void {
@@ -67,6 +70,7 @@ export function OutlinePanel({ markdown, onChange, onOpen, onSelect }: Props): R
     if (!next) return
     t.setSelectionRange(next.range.start, next.range.end)
     grown.current = next.range
+    setPicked(next.range)
     // the box under the text shows the heading the selection starts at
     const index = t.value.slice(0, next.range.start).split('\n').filter((l) => l.trim()).length
     const start = headingAt(index)
@@ -78,6 +82,8 @@ export function OutlinePanel({ markdown, onChange, onOpen, onSelect }: Props): R
   const [scroll, setScroll] = useState({ top: 0, left: 0 })
   const lines = text.split('\n')
   let headingNo = -1
+  let lineStart = 0
+  const shownRange = !focused && picked && picked.end > picked.start ? picked : null
 
   return (
     <div className="write__outlineedit">
@@ -97,11 +103,12 @@ export function OutlinePanel({ markdown, onChange, onOpen, onSelect }: Props): R
             timer.current = setTimeout(() => apply(value), SETTLE_MS)
           }}
           onScroll={(e) => setScroll({ top: e.currentTarget.scrollTop, left: e.currentTarget.scrollLeft })}
-          onBlur={(e) => apply(e.target.value)}
           onClick={selectHeading}
           onMouseDown={(e) => { if (e.detail <= 1) pressed.current = grown.current; else e.preventDefault() }}
           onDoubleClick={doubleClick}
-          onSelect={(e) => { const g = grown.current; if (g && (e.currentTarget.selectionStart !== g.start || e.currentTarget.selectionEnd !== g.end)) grown.current = null }}
+          onFocus={() => setFocused(true)}
+          onBlur={(e) => { setFocused(false); apply(e.target.value) }}
+          onSelect={(e) => { setPicked({ start: e.currentTarget.selectionStart, end: e.currentTarget.selectionEnd }); const g = grown.current; if (g && (e.currentTarget.selectionStart !== g.start || e.currentTarget.selectionEnd !== g.end)) grown.current = null }}
           onKeyUp={(e) => { if (e.key.startsWith('Arrow') || e.key === 'Home' || e.key === 'End' || e.key === 'PageUp' || e.key === 'PageDown') selectHeading() }}
         />
         <div className="write__outlinemarks">
@@ -111,9 +118,12 @@ export function OutlinePanel({ markdown, onChange, onOpen, onSelect }: Props): R
               if (isHeading) headingNo++
               const n = headingNo
               const name = line.replace(/^\s*#*\s*/, '').trim()
+              const [from, to] = [lineStart, lineStart + line.length]
+              lineStart = to + 1
+              const hl = shownRange ? { a: Math.max(shownRange.start, from) - from, b: Math.min(shownRange.end, to) - from } : null
               return (
                 <div key={i} className="write__outlinemarkline">
-                  <span className="write__outlineghost">{line || ' '}</span>
+                  <span className="write__outlineghost">{hl && hl.b > hl.a ? <>{line.slice(0, hl.a)}<span className="write__sel">{line.slice(hl.a, hl.b)}</span>{line.slice(hl.b)}</> : line || ' '}</span>
                   {isHeading && <button type="button" className="write__outlinego" aria-label={`Go to the section: ${name || line.trim()}`} title="Go to this section in the text" onClick={() => { const at = headingAt(n); if (at !== undefined) onOpen(at) }}>↗</button>}
                 </div>
               )

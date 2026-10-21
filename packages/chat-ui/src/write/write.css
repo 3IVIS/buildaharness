@@ -362,3 +362,6 @@ body.write--resizing { user-select: none; -webkit-user-select: none; cursor: col
   .write__main { --chat-w: var(--chat-size, 400px); grid-template-columns: 76px var(--panel-w) minmax(0, 1fr) var(--chat-w); }
   .write__split--panel { left: calc(76px + var(--panel-w) - 4px); }
 }
+
+/* A selection kept visible while the text box is not in use. */
+.write__mark.write__sel, .write__outlineghost .write__sel { background: color-mix(in srgb, var(--accent, #3b6fd4) 30%, transparent); }
