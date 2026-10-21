@@ -742,7 +742,20 @@ function WriteAppBody({ services, connection, onDeleted }: WriteAppProps): React
     })
   }
 
+  // Files dropped with no article open: the article is made first, named after the first file, and the files are added once it is open.
+  const pendingDrop = useRef<{ files: File[]; say: boolean } | null>(null)
   const dropFiles = (files: File[], attach: boolean, say = false): void => {
+    if (!activeId) {
+      if (files.length === 0) return
+      pendingDrop.current = { files, say }
+      const name = files[0].name.replace(/\.[^.]+$/, '').trim() || 'New article'
+      void run('Creating', async () => {
+        const id = await service.create(name, `# ${name}\n\n`)
+        await refreshList()
+        await select(id)
+      })
+      return
+    }
     change('Adding the files', async () => {
       const lines: string[] = []
       for (const f of files) {
@@ -763,6 +776,14 @@ function WriteAppBody({ services, connection, onDeleted }: WriteAppProps): React
       else setNotice(lines.join(' '))
     })
   }
+
+  useEffect(() => {
+    if (!activeId || !pendingDrop.current) return
+    const { files, say } = pendingDrop.current
+    pendingDrop.current = null
+    dropFiles(files, false, say)
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- runs when an article opens; dropFiles is the current render's
+  }, [activeId])
 
   // ---- issues in batches
   const resolveCategory = (category: IssueCategory): void => change('Working on it', async (id) => {

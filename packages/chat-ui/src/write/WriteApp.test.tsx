@@ -897,6 +897,19 @@ describe('comments and sources under the text', () => {
     expect(page.className).not.toContain('is-dropping')
   })
 
+  it('a file dropped with no article open creates an article named after it and is added as its source', async () => {
+    const s = await services({ sourceLinks: { claims: [] } })
+    render(<WriteApp services={s} />)
+    const page = document.querySelector('.write') as HTMLElement
+    fireEvent.drop(page, { dataTransfer: { types: ['Files'], files: [new File(['p99: 18 ms measured on 8 cores'], 'bench notes.txt', { type: 'text/plain' })] } })
+    await waitFor(async () => {
+      const list = await s.service.list()
+      expect(list).toHaveLength(1)
+      expect((await s.service.get(list[0].id)).meta.sources.map((x) => x.address)).toEqual(['bench notes.txt'])
+    })
+    expect((await s.service.list())[0].name).toBe('bench notes')
+  })
+
   it('stores a dropped code file as a code source', async () => {
     const s = await services({ sourceLinks: { claims: [] } }, MD)
     const id = (await s.service.list())[0].id
