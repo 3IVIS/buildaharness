@@ -384,3 +384,8 @@ body.write--resizing { user-select: none; -webkit-user-select: none; cursor: col
 .write__working { flex-wrap: wrap; }
 .write__form .write__model input { width: auto; flex: 1 1 auto; }
 .write__form .write__model .write__chev { width: auto; flex: none; }
+
+/* A source's name: the file name first, its path after it as far as there is room (the full address is the hover text). */
+.write__srcname { display: flex; flex: 1 1 100%; min-width: 0; gap: 6px; align-items: baseline; }
+.write__srcfile { flex: none; white-space: nowrap; max-width: 100%; overflow: hidden; text-overflow: ellipsis; }
+.write__srcdir { flex: 1 1 0; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--muted, inherit); opacity: 0.7; font-size: 0.85em; }

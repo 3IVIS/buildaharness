@@ -16,6 +16,14 @@ const FRESHNESS_LABEL: Record<Source['freshness'], string> = { unchecked: 'not r
 
 const nameOf = (s: Source): string => (s.kind === 'say_so' ? 'Your word' : s.address ?? (s.passage ? clip(s.passage.trim().replace(/\s+/g, ' '), 60) : KIND_LABEL[s.kind]))
 
+/** An address split into its last segment (the name) and what comes before it (the path, shown only as far as there is room). */
+export function splitAddress(address: string): { name: string; dir: string } {
+  const bare = address.replace(/[?#].*$/, '').replace(/\/+$/, '')
+  const i = bare.lastIndexOf('/')
+  const name = i === -1 || i === bare.length - 1 ? bare : bare.slice(i + 1)
+  return { name: name || address, dir: i > 0 ? bare.slice(0, i + 1) : '' }
+}
+
 /** Every source of the article, and the claims each one backs. The box under the text shows the sources of the selected text only. */
 export function SourcesPanel({ meta, busy, onJump, onRead, onAcceptNew }: Props): React.JSX.Element {
   if (meta.sources.length === 0) return <p className="write__muted">No sources yet. Click in the text and add one under it, or drop a file in the chat.</p>
@@ -31,7 +39,14 @@ export function SourcesPanel({ meta, busy, onJump, onRead, onAcceptNew }: Props)
           <li key={s.id}>
             <div className="write__rowmain">
               <div className="write__hline">
-                <strong>{nameOf(s)}</strong>
+                {s.kind !== 'say_so' && s.address !== undefined ? (
+                  <span className="write__srcname" title={s.address}>
+                    <span className="write__srcfile">{splitAddress(s.address).name}</span>
+                    <span className="write__srcdir">{splitAddress(s.address).dir}</span>
+                  </span>
+                ) : (
+                  <span className="write__srcfile" title={nameOf(s)}>{nameOf(s)}</span>
+                )}
                 <span className="write__badge">{KIND_LABEL[s.kind]}</span>
                 {s.kind !== 'say_so' && <span className="write__badge">{FRESHNESS_LABEL[s.freshness]}</span>}
                 {s.lines && <span className="write__badge">lines {s.lines.from}–{s.lines.to}</span>}
