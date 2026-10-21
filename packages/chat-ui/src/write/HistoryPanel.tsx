@@ -22,15 +22,11 @@ interface Props {
   onRename(index: number, label: string): void
 }
 
-/** One line saying what a version changed: lines, then the sections, claims and sources it touched. */
+/** How much a version changed, in one short phrase: the lines added and removed, nothing about which sections or claims. */
 export function describeChange(c: ChangeSummary | undefined): string {
   if (!c) return 'Nothing saved yet'
   if (c.first) return 'First version'
-  const parts: string[] = [c.added === 0 && c.removed === 0 ? 'No text changes' : `+${c.added} −${c.removed} lines`]
-  if (c.sections.length > 0) parts.push(c.sections.length <= 3 ? c.sections.join(', ') : `${c.sections.slice(0, 3).join(', ')} and ${c.sections.length - 3} more`)
-  if (c.claims > 0) parts.push(`${c.claims} claim${c.claims === 1 ? '' : 's'}`)
-  if (c.sources > 0) parts.push(`${c.sources} source${c.sources === 1 ? '' : 's'}`)
-  return parts.join(' · ')
+  return c.added === 0 && c.removed === 0 ? 'No text changes' : `+${c.added} −${c.removed} lines`
 }
 
 export function HistoryPanel({ versions, working, busy, onSave, onView, onCompare, onRestore, onRename }: Props): React.JSX.Element {
@@ -45,7 +41,7 @@ export function HistoryPanel({ versions, working, busy, onSave, onView, onCompar
       <div className="write__working">
         <div>
           <strong>Now</strong>
-          <div className="write__hchange">{working ? (working.added === 0 && working.removed === 0 ? 'No text changes since the last version' : `${describeChange(working)} since the last version`) : 'Nothing saved yet'}</div>
+          <div className="write__hchange">{working && !working.first ? `${describeChange(working)} since the last version` : 'Nothing saved yet'}</div>
         </div>
         <button type="button" onClick={onSave} disabled={busy}><Icon d={ICON_PATHS.save} /> Save version</button>
       </div>
@@ -55,10 +51,11 @@ export function HistoryPanel({ versions, working, busy, onSave, onView, onCompar
             <span className="write__hkind" title={v.kind === 'published' ? 'Published (frozen)' : 'Saved'}><Icon d={v.kind === 'published' ? ICON_PATHS.published : ICON_PATHS.saved} /></span>
             <div className="write__hmain">
               <div className="write__hline">
-                {v.kind === 'published' ? <><strong>{v.label ?? 'Published'}</strong> <span className="write__badge">published</span></> : <strong><EditableText label="Version name" value={v.label ?? 'Saved'} onSave={(t) => onRename(v.index, t)} /></strong>}
                 <time dateTime={v.at}>{new Date(v.at).toLocaleString(undefined, { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' })}</time>
+                {v.kind === 'published' && <span className="write__badge">published</span>}
+                <span className="write__hchange">{describeChange(v.change)}</span>
               </div>
-              <div className="write__hchange">{describeChange(v.change)}</div>
+              {v.label && <div className="write__hname"><EditableText label="Version name" value={v.label} onSave={(t) => onRename(v.index, t)} /></div>}
             </div>
             <div className="write__hactions">
               <IconButton label="View" icon="view" onClick={() => onView(v.index)} />

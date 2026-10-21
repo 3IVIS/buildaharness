@@ -1022,7 +1022,8 @@ describe('links, history', () => {
     const legend = within(history).getByLabelText('What the icons do')
     for (const word of [/View the text/, /Compare with now/, /Restore/]) expect(within(legend).getByText(word)).toBeInTheDocument()
     expect(await within(history).findByText('First version')).toBeInTheDocument()
-    expect(within(history).getByText(/Latency, Memory/)).toBeInTheDocument()
+    expect(within(history).getByText(/^\+\d+ −\d+ lines$/)).toBeInTheDocument() // the level of change, not which sections it touched
+    expect(within(history).queryByText(/Latency, Memory/)).toBeNull()
     await userEvent.click(within(history).getAllByRole('button', { name: 'Version name' })[0])
     const input = screen.getByRole('textbox', { name: 'Version name' })
     await userEvent.clear(input)

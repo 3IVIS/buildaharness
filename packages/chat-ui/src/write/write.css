@@ -94,7 +94,8 @@
 .write .write__history li { display: grid; grid-template-columns: 22px minmax(0, 1fr) auto; gap: 8px; align-items: center; padding: 8px 0; border: none; border-bottom: 1px solid var(--border); border-radius: 0; background: transparent; }
 .write__hkind { color: var(--muted); display: inline-flex; }
 .write__hline { display: flex; flex-wrap: wrap; gap: 2px 8px; align-items: baseline; }
-.write__hline time { color: var(--muted); font-size: 0.8rem; }
+.write__hline time { font-weight: 600; font-size: 0.9rem; }
+.write__hname { font-size: 0.85rem; color: var(--muted); }
 .write__hactions { display: inline-flex; gap: 4px; }
 .write .write__iconbtn { display: inline-flex; align-items: center; justify-content: center; min-width: 34px; min-height: 34px; padding: 4px; margin: 0; }
 @media (max-width: 959px) { .write .write__iconbtn { min-width: 44px; min-height: 44px; } }
