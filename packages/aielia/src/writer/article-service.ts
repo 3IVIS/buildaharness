@@ -601,8 +601,8 @@ export class ArticleService {
       let results: LoopResult[]
       try {
         results = await verifyBatchWithTools({ claims, articleText: b.markdown }, idx, this.opts.llm, loop)
-      } catch {
-        for (const c of claims) entries.push({ claimId: c.id, quote: c.quote, outcome: 'could_not_check', found: [], reason: 'The repository search could not run.' })
+      } catch (e) {
+        for (const c of claims) entries.push({ claimId: c.id, quote: c.quote, outcome: 'could_not_check', found: [], reason: `The repository search could not run: ${e instanceof Error ? e.message : String(e)}` })
         continue
       }
       for (const r of results) entries.push(await this.recordSearchResult(id, reader, idx, r, claims.find((c) => c.id === r.id)?.quote ?? '', model))

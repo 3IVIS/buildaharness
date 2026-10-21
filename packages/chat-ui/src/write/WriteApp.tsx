@@ -69,6 +69,12 @@ function topOfPosition(ta: HTMLTextAreaElement, at: number): number {
 }
 
 /** What the chat says when a model call fails: the reason, and what to try. Never an empty answer. */
+/** One lookup the repository search makes, in words. */
+export const stepText = (step: { tool: string; input: Record<string, unknown> }): string => {
+  const arg = (k: string): string => (typeof step.input[k] === 'string' ? (step.input[k] as string) : '')
+  const what = step.tool === 'search' ? `searching for “${arg('pattern') || arg('query')}”` : step.tool === 'read' ? `reading ${arg('path') || arg('file')}` : step.tool === 'list' ? 'listing files' : `using ${step.tool}`
+  return what
+}
 export const failureText = (what: string, err: unknown): string => `${what}: ${err instanceof Error ? err.message : String(err)}. Check your key and the model in Settings, or pick another model next to the chat, then try again.`
 
 const isDesktop = (): boolean => typeof window !== 'undefined' && window.matchMedia?.('(min-width: 960px)').matches === true
@@ -169,6 +175,8 @@ function WriteAppBody({ services, connection, onDeleted }: WriteAppProps): React
   /** On a tablet the side panel floats over the text, so it takes no room from it (and the chat may use all but the text's minimum). */
   const panelTakesRoom = (): boolean => railOpen && isDesktop()
   const [notice, setNotice] = useState<string | null>(null)
+  /** What a command sent through the chat is doing right now, shown as the last line of the chat until the result or the error replaces it. */
+  const [progress, setProgress] = useState<string | null>(null)
   const [busy, setBusy] = useState<string | null>(null)
   const [chat, setChat] = useState<ChatLine[]>([])
   const [chatInput, setChatInput] = useState('')
@@ -244,6 +252,24 @@ function WriteAppBody({ services, connection, onDeleted }: WriteAppProps): React
       setBusy(null)
     }
   }
+
+  /**
+   * A command sent through the chat. Its progress is a line in the chat, and whatever happens (result, error, or an early return) the chat
+   * gets a line saying so: the interface never ends a command without telling the writer.
+   */
+  async function chatRun(label: string, work: (step: (text: string) => void) => Promise<void>): Promise<void> {
+    setProgress(`${label}…`)
+    await run(label, async () => {
+      try {
+        await work((text) => setProgress(`${label}: ${text}`))
+      } catch (e) {
+        setChat((c) => [...c, { id: ++lineId, from: 'aielia', text: failureText('That did not finish', e) }])
+      } finally {
+        setProgress(null)
+      }
+    })
+  }
+  const sayInChat = (text: string): void => setChat((c) => [...c, { id: ++lineId, from: 'aielia', text }])
 
   /** Saves what is in the text box now, so a comparison, a restore or a batch starts from what the writer sees, not from the last autosave. */
   async function flushDraft(): Promise<void> {
@@ -495,11 +521,11 @@ function WriteAppBody({ services, connection, onDeleted }: WriteAppProps): React
     return `I ${s} and ${l}. ${failed ? 'Check your key and the model in Settings, or pick another model next to the chat, then try again.' : 'Edit anything that is off.'}`
   }
   const prepareFromChat = (): void => {
-    if (!activeId) return
+    if (!activeId) { sayInChat('Open or create an article first.'); return }
     const id = activeId
     const used = services.models.chat() // started from the chat, so it runs on the model chosen there
     setChat((c) => [...c, { id: ++lineId, from: 'you', text: 'Fill in the style and links from the article' }])
-    void run('Filling in the style and links', async () => {
+    void chatRun('Filling in the style and links', async () => {
       try {
         await flushDraft()
         const text = await prepareFromText(id, used)
@@ -591,6 +617,7 @@ function WriteAppBody({ services, connection, onDeleted }: WriteAppProps): React
       if (spec) {
         let listed = false
         setBusy('Listing the repository')
+        setProgress(`Listing ${typed}…`)
         setNotice(null)
         try {
           const reader = githubRepoReader(spec, { token: services.githubToken, fetchImpl: services.githubFetch })
@@ -602,6 +629,7 @@ function WriteAppBody({ services, connection, onDeleted }: WriteAppProps): React
           say(`I could not list ${typed}: ${e instanceof Error ? e.message : String(e)}`)
         } finally {
           setBusy(null)
+          setProgress(null)
         }
         if (!listed) return
       }
@@ -610,14 +638,15 @@ function WriteAppBody({ services, connection, onDeleted }: WriteAppProps): React
   }
   /** Chooses a repository folder on this computer, attaches it and checks the claims against it. */
   const pickRepoFolderAndVerify = (): void => {
-    if (!activeId) return
     setChat((c) => [...c, { id: ++lineId, from: 'you', text: 'Verify the claims against a folder on this computer' }])
+    if (!activeId) { sayInChat('Open or create an article first, then choose the folder.'); return }
     const id = activeId
     void (async () => {
       try {
         const reader = await services.pickFolder?.()
-        if (!reader) return
+        if (!reader) { sayInChat('No folder was chosen, so nothing was checked.'); return }
         setBusy('Listing the folder')
+        setProgress('Listing the folder…')
         await reader.files()
         service.attachRepo(id, reader)
         setRepoTick((n) => n + 1)
@@ -626,6 +655,7 @@ function WriteAppBody({ services, connection, onDeleted }: WriteAppProps): React
         return
       } finally {
         setBusy(null)
+        setProgress(null)
       }
       verifyFromChat(true, null)
     })()
@@ -710,17 +740,20 @@ function WriteAppBody({ services, connection, onDeleted }: WriteAppProps): React
 
   // ---- chat
   const verifyText = (r: VerifyReport): string => {
-    const lines = r.entries.filter((e) => e.outcome === 'no_source_found' || e.outcome === 'contradicted').map((e) => `• ${e.outcome === 'contradicted' ? 'Contradicted' : 'No source found'}: ${e.quote.slice(0, 100)}`)
+    const label = (o: string): string => (o === 'contradicted' ? 'Contradicted' : o === 'no_source_found' ? 'No source found' : o === 'search_failed' ? 'Search failed' : 'Could not check')
+    const lines = r.entries.filter((e) => ['no_source_found', 'contradicted', 'could_not_check', 'search_failed'].includes(e.outcome)).slice(0, 12).map((e) => `• ${label(e.outcome)}: ${e.quote.slice(0, 100)}${e.outcome !== 'no_source_found' && e.reason ? ` (${e.reason.slice(0, 160)})` : ''}`)
     return [summarizeVerify(r), ...lines, r.entries.some((e) => e.found.length > 0) ? 'Pages that were found are kept as suggested sources under the text: confirm the ones that are right.' : ''].filter(Boolean).join('\n')
   }
   const verifyFromChat = (repoOnly = false, said?: string | null): void => {
-    if (!activeId) return
     const used = services.models.chat()
     if (said !== null) setChat((c) => [...c, { id: ++lineId, from: 'you', text: said ?? (repoOnly ? 'Verify the claims against the repository' : 'Search the web for sources and verify the claims') }])
-    void run(`Verifying with ${used}`, async () => {
+    if (!activeId) { sayInChat('Open or create an article first.'); return }
+    void chatRun(`Verifying with ${used}`, async (step) => {
       try {
         await flushDraft()
-        const r = await service.verifyClaims(activeId, { model: used, repoOnly })
+        step('finding the claims to check')
+        let calls = 0
+        const r = await service.verifyClaims(activeId, { model: used, repoOnly, onStep: (st) => step(`${stepText(st)} (lookup ${++calls})`) })
         setBundle(await service.get(activeId))
         setChat((c) => [...c, { id: ++lineId, from: 'aielia', text: verifyText(r), model: used }])
       } catch (e) {
@@ -730,10 +763,10 @@ function WriteAppBody({ services, connection, onDeleted }: WriteAppProps): React
   }
   /** A check started from the chat, with the model chosen there. The result is said in the chat, with the model's name. */
   const checkFromChat = (): void => {
-    if (!activeId) return
     const used = services.models.chat()
     setChat((c) => [...c, { id: ++lineId, from: 'you', text: 'Find the factual claims and check them against their sources' }])
-    void run(`Checking with ${used}`, async () => {
+    if (!activeId) { sayInChat('Open or create an article first.'); return }
+    void chatRun(`Checking with ${used}`, async () => {
       try {
       if (saveTimer.current) clearTimeout(saveTimer.current)
       const o = await service.updateText(activeId, draft, { model: used })
@@ -766,7 +799,7 @@ function WriteAppBody({ services, connection, onDeleted }: WriteAppProps): React
     const wantEdits = how === 'suggest'
     if (override === undefined) setChatInput('')
     setChat((c) => [...c, { id: ++lineId, from: 'you', text }])
-    await run(how === 'edit' ? 'Editing' : wantEdits ? 'Asking for edits' : 'Thinking', async () => {
+    await chatRun(how === 'edit' ? 'Editing' : wantEdits ? 'Asking for edits' : 'Thinking', async () => {
      try {
       if (activeId) await service.updateText(activeId, draft, { analyze: false })
       if (how === 'edit' && activeId) {
@@ -1001,6 +1034,7 @@ function WriteAppBody({ services, connection, onDeleted }: WriteAppProps): React
           onAdjust={(m) => { const mode = chatMode === 'answer' ? 'suggest' : chatMode; setChatMode(mode); void sendChat(m, mode) }}
           onAction={(a: ChatAction) => { if (a === 'check') checkFromChat(); else if (a === 'prepare') prepareFromChat(); else verifyFromChat() }}
           repos={activeId ? (void repoTick, service.attachedRepos(activeId)) : []}
+          progress={progress}
           onRepoVerify={verifyInRepo}
           onPickRepoFolder={services.pickFolder ? pickRepoFolderAndVerify : undefined}
           onRemoveRepo={removeRepo}

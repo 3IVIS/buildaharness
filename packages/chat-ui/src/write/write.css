@@ -139,6 +139,7 @@
 .write__chat { list-style: none; margin: 0 0 12px; padding: 0; display: grid; gap: 8px; align-content: start; }
 .write__line { padding: 8px 12px; border-radius: 8px; white-space: pre-wrap; }
 .write__line--you { background: var(--accent-a18); justify-self: end; }
+.write__line--progress { color: var(--muted); font-style: italic; }
 .write__line--aielia { background: var(--surface); border: 1px solid var(--border); }
 .write__toggle { display: block; margin-bottom: 8px; color: var(--muted); }
 .write__compose { display: grid; gap: 8px; }

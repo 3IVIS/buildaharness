@@ -907,6 +907,22 @@ describe('finding sources', () => {
     await dockTab('Sources')
     expect(await within(screen.getByLabelText('Comments and sources for this text')).findByText(/No source found: searched the web/)).toBeInTheDocument()
   })
+  it('shows a progress line in the chat while a command runs, and replaces it with the result', async () => {
+    const claims = { claims: [{ quote: 'The p99 was 18 ms.', kind: 'factual', matchesId: null, sure: true }] }
+    let release: () => void = () => undefined
+    const gate = new Promise<void>((r) => { release = r })
+    const s = await services({ claims, resolve: { affected: [] } }, MD, async () => 'x', async () => { await gate; return [] })
+    const id = (await s.service.list())[0].id
+    await s.service.analyze(id)
+    render(<WriteApp services={s} />)
+    await waitForText()
+    await userEvent.selectOptions(screen.getByLabelText('Adjust', { selector: 'select' }), 'action:verify')
+    const chatList = (): HTMLElement => document.querySelector('.write__chat') as HTMLElement
+    expect(await within(chatList()).findByText(/^Verifying with /)).toBeInTheDocument()
+    release()
+    expect(await screen.findByText(/Looked at 1 claim/)).toBeInTheDocument()
+    await waitFor(() => expect(within(chatList()).queryByText(/^Verifying with /)).toBeNull())
+  })
   it('offers no search button when no search is set up', async () => {
     const s = await services({ claims: { claims: [{ quote: 'The p99 was 18 ms.', kind: 'factual', matchesId: null, sure: true }] }, resolve: { affected: [] } }, MD)
     await s.service.analyze((await s.service.list())[0].id)
