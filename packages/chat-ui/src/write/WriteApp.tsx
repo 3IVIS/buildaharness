@@ -174,7 +174,10 @@ function WriteAppBody({ services, connection, onDeleted }: WriteAppProps): React
   const roomFor = (other: number): number => Math.max(0, (mainRef.current?.clientWidth ?? 1200) - RAIL_WIDTH - other - MIN_TEXT)
   /** On a tablet the side panel floats over the text, so it takes no room from it (and the chat may use all but the text's minimum). */
   const panelTakesRoom = (): boolean => railOpen && isDesktop()
-  const [notice, setNotice] = useState<string | null>(null)
+  // Every message the app has for the writer goes into the chat; the banner only repeats the latest one where the chat is not on screen.
+  const [banner, setBanner] = useState<string | null>(null)
+  const sayInChat = useCallback((text: string): void => setChat((c) => [...c, { id: ++lineId, from: 'aielia', text }]), [])
+  const setNotice = useCallback((text: string | null): void => { setBanner(text); if (text) sayInChat(text) }, [sayInChat])
   /** What a command sent through the chat is doing right now, shown as the last line of the chat until the result or the error replaces it. */
   const [progress, setProgress] = useState<string | null>(null)
   const [busy, setBusy] = useState<string | null>(null)
@@ -231,7 +234,9 @@ function WriteAppBody({ services, connection, onDeleted }: WriteAppProps): React
   }, [services.store])
   useEffect(() => {
     if (!chatRead.current) return
-    void services.store.setSetting(CHAT_LINES_KEY, chat.slice(-MAX_SAVED_LINES)).catch(() => undefined)
+    const kept = chat.filter((l) => !l.transient)
+    if (kept.length === 0 && chat.length > 0) return
+    void services.store.setSetting(CHAT_LINES_KEY, kept.slice(-MAX_SAVED_LINES)).catch(() => undefined)
   }, [chat, services.store])
 
   useEffect(() => {
@@ -241,35 +246,29 @@ function WriteAppBody({ services, connection, onDeleted }: WriteAppProps): React
     setViewing(null)
   }, [service, activeId, bundle, versionsTick])
 
-  async function run(label: string, work: () => Promise<void>): Promise<void> {
+  /**
+   * Every action is a short conversation in the chat: the writer's action as a line, the progress as the last line while it runs, then
+   * what came of it, or what went wrong. `announce` is false when the writer's own words already opened the exchange (a typed message).
+   */
+  async function run(label: string, work: (step: (text: string) => void) => Promise<void>, announce = true): Promise<void> {
+    if (announce) setChat((c) => [...c, { id: ++lineId, from: 'you', text: label }])
+    const mark = lineId
     setBusy(label)
-    setNotice(null)
+    setBanner(null)
+    setProgress(`${label}…`)
     try {
-      await work()
+      await work((text) => setProgress(`${label}: ${text}`))
+      // An action that had nothing to say still says it is done.
+      if (lineId === mark) sayInChat(`${label}: done.`)
     } catch (err) {
-      setNotice(err instanceof Error ? err.message : String(err))
+      sayInChat(`${label} did not finish: ${err instanceof Error ? err.message : String(err)}`)
     } finally {
       setBusy(null)
+      setProgress(null)
     }
   }
-
-  /**
-   * A command sent through the chat. Its progress is a line in the chat, and whatever happens (result, error, or an early return) the chat
-   * gets a line saying so: the interface never ends a command without telling the writer.
-   */
-  async function chatRun(label: string, work: (step: (text: string) => void) => Promise<void>): Promise<void> {
-    setProgress(`${label}…`)
-    await run(label, async () => {
-      try {
-        await work((text) => setProgress(`${label}: ${text}`))
-      } catch (e) {
-        setChat((c) => [...c, { id: ++lineId, from: 'aielia', text: failureText('That did not finish', e) }])
-      } finally {
-        setProgress(null)
-      }
-    })
-  }
-  const sayInChat = (text: string): void => setChat((c) => [...c, { id: ++lineId, from: 'aielia', text }])
+  /** A command the writer sent through the chat: the writer's line is already there, so it is not repeated. */
+  const chatRun = (label: string, work: (step: (text: string) => void) => Promise<void>): Promise<void> => run(label, work, false)
 
   /** Saves what is in the text box now, so a comparison, a restore or a batch starts from what the writer sees, not from the last autosave. */
   async function flushDraft(): Promise<void> {
@@ -418,7 +417,8 @@ function WriteAppBody({ services, connection, onDeleted }: WriteAppProps): React
       setPerms(await services.permissions.get()); permsRef.current = undefined
       chatRead.current = true
       setModelTick((n) => n + 1)
-      setNotice('All your data was deleted.')
+      // Said in the chat but not stored: the chat was just deleted with everything else.
+      setChat([{ id: ++lineId, from: 'aielia', text: 'All your data was deleted.', transient: true }])
       onDeleted?.()
     })
   }
@@ -884,7 +884,7 @@ function WriteAppBody({ services, connection, onDeleted }: WriteAppProps): React
           <button type="button" className="write__primary" onClick={() => void publish()} disabled={!activeId || busy !== null}>Publish</button>
         </div>
       </header>
-      {(busy || notice) && <p className="write__notice" role="status">{busy ? `${busy}…` : notice}</p>}
+      {(busy || banner) && !(isWide() || tab === 'chat') && <p className="write__notice" role="status">{busy ? `${busy}…` : banner}</p>}
 
       {readiness && (
         <p className="write__status" aria-label="How close the article is to publishable">
