@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, afterEach } from 'vitest'
-import { render, screen, waitFor, fireEvent, within, cleanup } from '@testing-library/react'
+import { act, render, screen, waitFor, fireEvent, within, cleanup } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { ArticleService, createMemoryArticleStore, type PersonalAssistant } from '@buildaharness/aielia'
 import type { ILLMClient } from '@buildaharness/runtime'
@@ -353,7 +353,7 @@ describe('chat: model, check and adjust', () => {
     await waitFor(async () => expect(await s.store.getSetting('chat-lines')).toHaveLength(4))
   })
 
-  it('"Check the article" is an action in the Adjust list, runs as soon as it is picked, and says which model checked', async () => {
+  it('"Find the factual claims and check them" is an action in the Adjust list, without a model name in its label, runs as soon as it is picked, and says which model checked', async () => {
     const s = await services({ capture: { articleId: null, ops: [] }, claims: { claims: [{ quote: 'The p99 was 18 ms.', kind: 'factual', matchesId: null, sure: true }] }, resolve: { affected: [] } }, MD)
     render(<WriteApp services={s} />)
     await waitForText()
@@ -645,15 +645,17 @@ describe('a picked piece of text stays marked', () => {
     const { container } = render(<WriteApp services={s} />)
     const box = await waitForText()
     const at = box.value.indexOf('The p99')
-    box.focus()
-    box.setSelectionRange(at, at + 'The p99 was 18 ms.'.length)
-    fireEvent.select(box)
-    expect(container.querySelector('mark.write__sel')).toBeNull() // while the box is in use the browser draws it
-    fireEvent.blur(box)
-    expect(container.querySelector('mark.write__sel')?.textContent).toBe('The p99 was 18 ms.')
+    await waitFor(() => {
+      box.focus()
+      box.setSelectionRange(at + 4, at + 17)
+      fireEvent.click(box) // the page reads the selection on a click (React drops a repeated select event for a range it has already seen)
+      expect(container.querySelector('mark.write__sel')).toBeNull() // while the box is in use the browser draws it
+      act(() => box.blur()) // a real blur, as when the writer clicks elsewhere
+      expect(container.querySelector('mark.write__sel')?.textContent).toBe('p99 was 18 ms')
+    })
     await dockTab('Sources')
-    expect(container.querySelector('mark.write__sel')?.textContent).toBe('The p99 was 18 ms.')
-    fireEvent.focus(box)
+    expect(container.querySelector('mark.write__sel')?.textContent).toBe('p99 was 18 ms')
+    act(() => box.focus())
     expect(container.querySelector('mark.write__sel')).toBeNull()
   })
 })

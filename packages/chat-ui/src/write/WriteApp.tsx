@@ -712,7 +712,7 @@ function WriteAppBody({ services, connection, onDeleted }: WriteAppProps): React
   const verifyFromChat = (repoOnly = false, said?: string | null): void => {
     if (!activeId) return
     const used = services.models.chat()
-    if (said !== null) setChat((c) => [...c, { id: ++lineId, from: 'you', text: said ?? (repoOnly ? 'Verify the claims against the repository' : 'Verify the claims and look for sources') }])
+    if (said !== null) setChat((c) => [...c, { id: ++lineId, from: 'you', text: said ?? (repoOnly ? 'Verify the claims against the repository' : 'Search the web for sources and verify the claims') }])
     void run(`Verifying with ${used}`, async () => {
       try {
         await flushDraft()
@@ -728,7 +728,7 @@ function WriteAppBody({ services, connection, onDeleted }: WriteAppProps): React
   const checkFromChat = (): void => {
     if (!activeId) return
     const used = services.models.chat()
-    setChat((c) => [...c, { id: ++lineId, from: 'you', text: 'Check the article' }])
+    setChat((c) => [...c, { id: ++lineId, from: 'you', text: 'Find the factual claims and check them against their sources' }])
     void run(`Checking with ${used}`, async () => {
       try {
       if (saveTimer.current) clearTimeout(saveTimer.current)
