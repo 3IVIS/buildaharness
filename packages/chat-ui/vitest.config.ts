@@ -4,6 +4,8 @@ import { planVizVendorPlugin } from './plan-viz-aliases'
 
 export default defineConfig({
   plugins: [planVizVendorPlugin(), react()],
+  // The page gets mammoth's browser build (its package.json "browser" field); the tests run in Node, so they are pointed at the same build.
+  resolve: { alias: { mammoth: 'mammoth/mammoth.browser.js' } },
   test: {
     environment: 'jsdom',
     globals: true,

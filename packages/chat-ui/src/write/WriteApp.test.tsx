@@ -879,9 +879,35 @@ describe('comments and sources under the text', () => {
     putCursor('18 ms')
     await dockTab('Sources')
     const dock = screen.getByLabelText('Comments and sources for this text')
-    fireEvent.drop(dock, { dataTransfer: { files: [new File(['p99: 18 ms measured on 8 cores'], 'bench.txt', { type: 'text/plain' }), new File(['%PDF'], 'paper.pdf', { type: 'application/pdf' })] } })
+    fireEvent.drop(dock, { dataTransfer: { files: [new File(['p99: 18 ms measured on 8 cores'], 'bench.txt', { type: 'text/plain' }), new File(['x'], 'photo.png', { type: 'image/png' })] } })
     expect(await within(dock).findByText('bench.txt')).toBeInTheDocument()
-    expect((await screen.findAllByText(/paper\.pdf: only text and code files can be read/)).length).toBeGreaterThan(0)
+    expect((await screen.findAllByText(/photo\.png: only text, code, PDF and Word \(\.docx\) files can be read/)).length).toBeGreaterThan(0)
+  })
+
+  it('a file dropped anywhere in the window, not only on a pane, is added to the sources', async () => {
+    const s = await services({ sourceLinks: { claims: [] } }, MD)
+    const id = (await s.service.list())[0].id
+    render(<WriteApp services={s} />)
+    await waitForText()
+    const page = document.querySelector('.write') as HTMLElement
+    fireEvent.dragOver(page, { dataTransfer: { types: ['Files'], files: [] } })
+    expect(page.className).toContain('is-dropping')
+    fireEvent.drop(page, { dataTransfer: { types: ['Files'], files: [new File(['p99: 18 ms measured on 8 cores'], 'bench.txt', { type: 'text/plain' })] } })
+    await waitFor(async () => expect((await s.service.get(id)).meta.sources.map((x) => x.address)).toEqual(['bench.txt']))
+    expect(page.className).not.toContain('is-dropping')
+  })
+
+  it('a file dropped with no article open creates an article named after it and is added as its source', async () => {
+    const s = await services({ sourceLinks: { claims: [] } })
+    render(<WriteApp services={s} />)
+    const page = document.querySelector('.write') as HTMLElement
+    fireEvent.drop(page, { dataTransfer: { types: ['Files'], files: [new File(['p99: 18 ms measured on 8 cores'], 'bench notes.txt', { type: 'text/plain' })] } })
+    await waitFor(async () => {
+      const list = await s.service.list()
+      expect(list).toHaveLength(1)
+      expect((await s.service.get(list[0].id)).meta.sources.map((x) => x.address)).toEqual(['bench notes.txt'])
+    })
+    expect((await s.service.list())[0].name).toBe('bench notes')
   })
 
   it('stores a dropped code file as a code source', async () => {

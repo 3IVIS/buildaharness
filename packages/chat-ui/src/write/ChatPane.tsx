@@ -50,7 +50,7 @@ export function ChatPane(p: Props): React.JSX.Element {
       className={`write__pane write__pane--chat ${p.shown ? 'is-shown' : ''}`}
       aria-label="Chat"
       onDragOver={(e) => e.preventDefault()}
-      onDrop={(e) => { e.preventDefault(); const files = Array.from(e.dataTransfer.files); if (files.length > 0) p.onDropFiles(files) }}
+      onDrop={(e) => { e.preventDefault(); e.stopPropagation(); const files = Array.from(e.dataTransfer.files); if (files.length > 0) p.onDropFiles(files) }}
     >
       <header className="write__chathead">
         <h2 className="write__panehead">Chat</h2>

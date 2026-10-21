@@ -626,6 +626,17 @@ describe('the chat edits the article itself', () => {
     expect(b.markdown).toBe('# Post\n## Intro\nIt is quick.\n')
     expect(b.snapshots.some((x) => x.label === r.savedAs)).toBe(true)
   })
+  it('the draft, the edit suggestions and the chat all get the text of the stored sources', async () => {
+    const seen: string[] = []
+    const { svc: s, store } = svc({ draft: (u: string) => { seen.push(u); return { name: 'N', markdown: '# N\n' } }, edits: (u: string) => { seen.push(u); return { suggestions: [] } } })
+    const id = await s.create('Post', MD)
+    await s.addSource(id, { kind: 'upload', address: 'brief.pdf', passage: 'The brief says latency matters most.' })
+    await s.draftFromChat(id, 'Write it')
+    await s.suggest(id, 'Tighten')
+    expect(seen).toHaveLength(2)
+    for (const u of seen) expect(u).toContain('The brief says latency matters most.')
+    expect(await createArticleChatPort(store).sourcesText?.(id)).toContain('brief.pdf')
+  })
   it('a draft that fails leaves the text as it was', async () => {
     const { svc: s } = svc({})
     const id = await s.create('Post', '')
