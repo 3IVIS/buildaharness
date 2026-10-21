@@ -389,3 +389,14 @@ body.write--resizing { user-select: none; -webkit-user-select: none; cursor: col
 .write__srcname { display: flex; flex: 1 1 100%; min-width: 0; gap: 6px; align-items: baseline; }
 .write__srcfile { flex: none; white-space: nowrap; max-width: 100%; overflow: hidden; text-overflow: ellipsis; }
 .write__srcdir { flex: 1 1 0; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--muted, inherit); opacity: 0.7; font-size: 0.85em; }
+
+/* A file's mappings: the code line and, under it, the claim it backs; each is one line, cut with … when there is no room (the full text is the hover text). */
+.write__srccount { cursor: pointer; font: inherit; font-size: inherit; }
+.write__srccount:disabled { cursor: default; opacity: 0.7; }
+.write__srcmap { list-style: none; margin: 6px 0 0; padding: 0; display: grid; gap: 6px; }
+.write__srcmap > li { min-width: 0; }
+.write__srcline, .write__srcclaim { display: flex; gap: 6px; align-items: baseline; min-width: 0; }
+.write__srcline code { flex: 1 1 0; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 0.85em; }
+.write__srclines { flex: none; color: var(--muted); font-size: 0.8em; font-variant-numeric: tabular-nums; }
+.write__srcclaim { padding-left: 8px; }
+.write__srcclaim .write__link { flex: 1 1 0; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; text-align: left; }
