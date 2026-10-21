@@ -9,8 +9,6 @@ export interface ChatLine {
   from: 'you' | 'aielia'
   text: string
   model?: string
-  /** Shown but never stored (said after everything stored was deleted). */
-  transient?: boolean
 }
 
 interface Props {

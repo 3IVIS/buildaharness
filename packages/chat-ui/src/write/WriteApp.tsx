@@ -103,7 +103,10 @@ let lineId = 0
 
 /** Where the chat lines are kept, so a reload does not erase the conversation. */
 const CHAT_LINES_KEY = 'chat-lines'
-const MAX_SAVED_LINES = 200
+/** Everything the chat shows is stored; the cap only keeps a years-long chat from growing without end. */
+const MAX_SAVED_LINES = 5000
+/** The action running now, stored so that a page closed in the middle of it is told about it on the next start. */
+const PENDING_KEY = 'chat-pending'
 /** Sizes the writer dragged the panes to, in pixels; a missing one is the pane's normal size. */
 interface Layout { panel?: number; chat?: number; dock?: number }
 const LAYOUT_KEY = 'aielia-write.layout'
@@ -222,6 +225,7 @@ function WriteAppBody({ services, connection, onDeleted }: WriteAppProps): React
 
   // The chat comes back after a reload. It is saved only once the saved one has been read, so the empty start never overwrites it.
   const chatRead = useRef(false)
+  const saveFailed = useRef(false)
   useEffect(() => {
     let live = true
     void services.store.getSetting(CHAT_LINES_KEY).then((raw) => {
@@ -229,14 +233,20 @@ function WriteAppBody({ services, connection, onDeleted }: WriteAppProps): React
       const saved = Array.isArray(raw) ? raw.filter(isChatLine) : []
       lineId = Math.max(lineId, ...saved.map((l) => l.id))
       setChat((now) => [...saved, ...now])
-    }, () => undefined).finally(() => { if (live) chatRead.current = true })
+      return services.store.getSetting(PENDING_KEY).then((p) => {
+        if (live && typeof p === 'string' && p) setChat((now) => [...now, { id: ++lineId, from: 'aielia', text: `“${p}” was still running when this page was closed, so it may not have finished. Check the article and run it again if needed.` }])
+      })
+    }).catch(() => { if (live) setChat((now) => [...now, { id: ++lineId, from: 'aielia', text: 'The earlier chat could not be read from storage, so it is not shown here.' }]) }).finally(() => { if (live) chatRead.current = true })
     return () => { live = false }
   }, [services.store])
   useEffect(() => {
     if (!chatRead.current) return
-    const kept = chat.filter((l) => !l.transient)
-    if (kept.length === 0 && chat.length > 0) return
-    void services.store.setSetting(CHAT_LINES_KEY, kept.slice(-MAX_SAVED_LINES)).catch(() => undefined)
+    void services.store.setSetting(CHAT_LINES_KEY, chat.slice(-MAX_SAVED_LINES)).then(() => { saveFailed.current = false }, (e) => {
+      // Said once, in the chat itself; the failing save is not retried by this line, or it would loop.
+      if (saveFailed.current) return
+      saveFailed.current = true
+      setChat((now) => [...now, { id: ++lineId, from: 'aielia', text: `The chat could not be stored, so it will not be here next time: ${e instanceof Error ? e.message : String(e)}` }])
+    })
   }, [chat, services.store])
 
   useEffect(() => {
@@ -256,6 +266,7 @@ function WriteAppBody({ services, connection, onDeleted }: WriteAppProps): React
     setBusy(label)
     setBanner(null)
     setProgress(`${label}…`)
+    void services.store.setSetting(PENDING_KEY, label).catch(() => undefined)
     try {
       await work((text) => setProgress(`${label}: ${text}`))
       // An action that had nothing to say still says it is done.
@@ -265,6 +276,7 @@ function WriteAppBody({ services, connection, onDeleted }: WriteAppProps): React
     } finally {
       setBusy(null)
       setProgress(null)
+      void services.store.setSetting(PENDING_KEY, '').catch(() => undefined)
     }
   }
   /** A command the writer sent through the chat: the writer's line is already there, so it is not repeated. */
@@ -417,8 +429,7 @@ function WriteAppBody({ services, connection, onDeleted }: WriteAppProps): React
       setPerms(await services.permissions.get()); permsRef.current = undefined
       chatRead.current = true
       setModelTick((n) => n + 1)
-      // Said in the chat but not stored: the chat was just deleted with everything else.
-      setChat([{ id: ++lineId, from: 'aielia', text: 'All your data was deleted.', transient: true }])
+      setChat([{ id: ++lineId, from: 'aielia', text: 'All your data was deleted.' }])
       onDeleted?.()
     })
   }

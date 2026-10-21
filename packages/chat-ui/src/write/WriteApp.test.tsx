@@ -191,6 +191,25 @@ describe('every action is told in the chat', () => {
   })
 })
 
+describe('the chat is stored as shown', () => {
+  it('keeps the action, the result and the notices, and tells about an action cut short by closing the page', async () => {
+    const s = await services({}, MD)
+    await s.store.setSetting('chat-pending', 'Publishing')
+    render(<WriteApp services={s} />)
+    await waitForText()
+    expect((await screen.findAllByText(/“Publishing” was still running when this page was closed/)).length).toBeGreaterThan(0)
+    await userEvent.click(rail('History'))
+    await userEvent.click(await within(panel('History')).findByRole('button', { name: /Save version/i }))
+    await answerDialog('mine')
+    await waitFor(async () => {
+      const texts = ((await s.store.getSetting('chat-lines')) as { text: string }[]).map((l) => l.text)
+      expect(texts).toContain('Saving the version')
+      expect(texts).toContain('Saving the version: done. The article is updated.')
+    })
+    expect(await s.store.getSetting('chat-pending')).toBe('')
+  })
+})
+
 describe('rail and panels', () => {
   it('has a rail of buttons; on desktop the panel opens from the rail and closes when the same button is clicked again', () =>
     wide(async () => {
@@ -504,7 +523,7 @@ describe('chat: model, check and adjust', () => {
     await answerDialog()
     await waitFor(() => expect(onDeleted).toHaveBeenCalled())
     expect(await s.service.list()).toEqual([])
-    expect(await s.store.getSetting('chat-lines')).toBeUndefined()
+    await waitFor(async () => expect(((await s.store.getSetting('chat-lines')) as { text: string }[]).map((l) => l.text)).toEqual(['All your data was deleted.'])) // only the line saying so, nothing from before
     expect(screen.queryByText('Noted.')).toBeNull()
     expect(screen.getByText('Create an article, or import one, to begin.')).toBeInTheDocument()
   })
