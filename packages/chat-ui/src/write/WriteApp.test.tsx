@@ -57,9 +57,10 @@ const putCursor = (needle: string): void => {
   box.setSelectionRange(at, at)
   fireEvent.select(box)
 }
-const wide = <T,>(fn: () => Promise<T>): Promise<T> => {
+const wide = <T,>(fn: () => Promise<T>, minWidth = 960): Promise<T> => {
   const original = window.matchMedia
-  window.matchMedia = ((q: string) => ({ matches: q.includes('min-width: 640px'), media: q, addEventListener: () => undefined, removeEventListener: () => undefined })) as unknown as typeof window.matchMedia
+  // a screen at least `minWidth` wide: 960 is a desktop, 640 a tablet
+  window.matchMedia = ((q: string) => ({ matches: Number(/min-width: (\d+)px/.exec(q)?.[1] ?? Infinity) <= minWidth, media: q, addEventListener: () => undefined, removeEventListener: () => undefined })) as unknown as typeof window.matchMedia
   return fn().finally(() => { window.matchMedia = original })
 }
 
@@ -184,6 +185,17 @@ describe('rail and panels', () => {
       expect(panel('History').className).toContain('is-shown')
       expect(panel('Style').className).not.toContain('is-shown')
     }))
+
+  it('on a tablet the panel starts closed (it would float over the text) and opens from the rail', () =>
+    wide(async () => {
+      const s = await services({}, MD)
+      const { container } = render(<WriteApp services={s} />)
+      await waitForText()
+      const main = container.querySelector('.write__main') as HTMLElement
+      expect(main.dataset.open).toBe('false')
+      await userEvent.click(rail('History'))
+      expect(main.dataset.open).toBe('true')
+    }, 820))
 
   it('counts what needs attention on the Issues button, and the box under the text lists only the issues of the selected text', async () => {
     const s = await services({}, MD2)
