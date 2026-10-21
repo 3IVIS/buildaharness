@@ -65,7 +65,11 @@ export function IssuesPanel(p: Props): React.JSX.Element {
   const isScope = (quote: string | undefined): boolean => Boolean(p.scope && quote && quote.trim() === p.scope.trim())
   const claimItem = (i: { id: string; label: string; detail?: string }): React.JSX.Element => (
     <li key={i.id}>
-      <div className="write__rowmain"><button type="button" className="write__link" onClick={() => p.onJump(claimStart(i.id))}>{isScope(meta.claims.find((c) => c.id === i.id)?.quote) ? 'This text' : i.label}</button></div>
+      <div className="write__rowmain write__rowmain--line">{(() => {
+        const quote = meta.claims.find((c) => c.id === i.id)?.quote
+        const text = isScope(quote) ? 'This text' : (quote ?? i.label).replace(/\s+/g, ' ')
+        return <button type="button" className="write__link write__linkline" title={text} onClick={() => p.onJump(claimStart(i.id))}>{text}</button>
+      })()}</div>
     </li>
   )
 

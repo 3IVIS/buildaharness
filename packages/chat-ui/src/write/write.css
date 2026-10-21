@@ -401,3 +401,7 @@ body.write--resizing { user-select: none; -webkit-user-select: none; cursor: col
 .write__srcclaim { padding-left: 8px; }
 .write__srcclaim .write__link { flex: 1 1 0; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; text-align: left; }
 .write__rows strong { font-weight: 500; }
+
+/* A claim in the issues list is one line, cut with … when there is no room; the full claim is the hover text. */
+.write__rowmain--line { overflow: hidden; overflow-wrap: normal; }
+.write .write__linkline { display: block; max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
