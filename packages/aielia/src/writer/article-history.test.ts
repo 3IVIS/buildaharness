@@ -94,4 +94,13 @@ describe('diffForDisplay', () => {
     expect(diffForDisplay(diffLines('a\nb', 'a\nb\nnew line here'))).toEqual([{ type: 'add', text: 'new line here' }])
     expect(diffForDisplay(diffLines('one two three', 'completely different words'))).toEqual([{ type: 'del', text: 'one two three' }, { type: 'add', text: 'completely different words' }])
   })
+  it('compares a line with its own old self when a new line appears beside it, so words that stayed are not shown removed and added', () => {
+    const before = 'Intro.\nThe rewrite made checkout faster, and it needs no extra hardware.'
+    const after = 'Intro.\nWe are proud of this.\nThe rewrite made checkout faster, and it needs no extra hardware today.'
+    const shown = diffForDisplay(diffLines(before, after))
+    expect(shown).toEqual([
+      { type: 'add', text: 'We are proud of this.' },
+      { type: 'change', parts: [{ type: 'same', text: 'The rewrite made checkout faster, and it needs no extra hardware' }, { type: 'add', text: ' today' }, { type: 'same', text: '.' }] },
+    ])
+  })
 })

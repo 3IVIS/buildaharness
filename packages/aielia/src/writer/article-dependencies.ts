@@ -57,7 +57,13 @@ export type AddLinkResult = { ok: true; meta: ArticleMeta; link: Link } | { ok: 
 export function addDrawnLink(meta: ArticleMeta, from: string, to: string, kind: DependencyKind, now: string): AddLinkResult {
   if (from === to) return { ok: false, reason: 'A section cannot depend on itself.' }
   if (!meta.sections.some((s) => s.id === from) || !meta.sections.some((s) => s.id === to)) return { ok: false, reason: 'Both ends must be sections of this article.' }
-  if (meta.links.some((l) => l.kind === kind && l.from.id === from && l.to.id === to)) return { ok: false, reason: 'That link already exists.' }
+  const same = meta.links.find((l) => l.kind === kind && l.from.id === from && l.to.id === to)
+  // Drawing a link Aielia only suggested is the writer agreeing with it: the suggestion becomes a confirmed link.
+  if (same?.origin === 'proposed') {
+    const link: Link = { ...same, origin: 'confirmed', at: now }
+    return { ok: true, link, meta: { ...meta, links: meta.links.map((l) => (l.id === same.id ? link : l)) } }
+  }
+  if (same) return { ok: false, reason: 'That link already exists.' }
   if (kind === 'rests_on' && wouldCycle(meta, from, to)) return { ok: false, reason: 'That would make a circle: the other section already rests on this one, directly or through others.' }
   const link: Link = { id: nextLinkId(meta), from: { type: 'section', id: from }, to: { type: 'section', id: to }, kind, origin: 'drawn', at: now }
   return { ok: true, link, meta: { ...meta, links: [...meta.links, link] } }

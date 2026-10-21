@@ -384,25 +384,27 @@ function WriteAppBody({ services, connection }: WriteAppProps): React.JSX.Elemen
 
   // ---- style sheet and links drawn from the text
   /** A first style sheet and the links between sections, drawn from the article's own text with the model for automatic checks; says in one sentence what it found. */
-  async function prepareFromText(id: string): Promise<string> {
-    const model = services.models.auto()
+  async function prepareFromText(id: string, model: string = services.models.auto()): Promise<string> {
+    const before = await service.get(id)
     const style = await service.deriveStyleFromText(id, model)
     const links = await service.findDependencies(id, model)
     setBundle(await service.get(id))
-    const s = style.filled.length > 0 ? `drafted the style sheet (${style.filled.join(', ')})` : style.reason ? `could not read a style from the text (${style.reason})` : 'found nothing to add to the style sheet'
-    const l = links.status === 'failed' ? `the search for links could not run${links.reason ? ` (${links.reason})` : ''}` : links.added.length > 0 ? `found ${links.added.length} possible link${links.added.length === 1 ? '' : 's'} between sections to confirm` : 'found no links between sections'
+    const hadBrief = Object.values(before.meta.brief ?? {}).some((v) => typeof v === 'string' && v.trim())
+    const hadLinks = before.meta.links.filter((x) => x.kind === 'rests_on' || x.kind === 'repeats').length
+    const s = style.filled.length > 0 ? `drafted the style sheet (${style.filled.join(', ')})` : style.reason ? `could not read a style from the text (${style.reason})` : hadBrief ? 'left the style sheet as it is, since it is already filled in' : 'found nothing to add to the style sheet'
+    const l = links.status === 'failed' ? `the search for links could not run${links.reason ? ` (${links.reason})` : ''}` : links.added.length > 0 ? `found ${links.added.length} possible link${links.added.length === 1 ? '' : 's'} between sections to confirm` : hadLinks > 0 ? `found no new links between sections (${hadLinks} already ${hadLinks === 1 ? 'is' : 'are'} listed in the Links tab)` : 'found no links between sections'
     const failed = Boolean(style.reason) || links.status === 'failed'
     return `I ${s} and ${l}. ${failed ? 'Check your key and the model in Settings, or pick another model next to the chat, then try again.' : 'Edit anything that is off.'}`
   }
   const prepareFromChat = (): void => {
     if (!activeId) return
     const id = activeId
-    const used = services.models.auto()
-    setChat((c) => [...c, { id: ++lineId, from: 'you', text: 'Draw the style sheet and the links from the text' }])
-    void run('Drawing the style sheet and the links from the text', async () => {
+    const used = services.models.chat() // started from the chat, so it runs on the model chosen there
+    setChat((c) => [...c, { id: ++lineId, from: 'you', text: 'Fill in the style and links from the article' }])
+    void run('Filling in the style and links', async () => {
       try {
         await flushDraft()
-        const text = await prepareFromText(id)
+        const text = await prepareFromText(id, used)
         setChat((c) => [...c, { id: ++lineId, from: 'aielia', text, model: used }])
       } catch (e) {
         setChat((c) => [...c, { id: ++lineId, from: 'aielia', text: failureText('I could not do that', e) }])
@@ -417,17 +419,23 @@ function WriteAppBody({ services, connection }: WriteAppProps): React.JSX.Elemen
     void run('Reading the style from the text', async () => {
       await flushDraft()
       const r = await service.deriveStyleFromText(id, services.models.auto())
+      setStyleReading({ id, state: r.reason ? 'failed' : 'idle', error: r.reason })
       setBundle(await service.get(id))
       setNotice(r.filled.length > 0 ? `Filled in: ${r.filled.join(', ')}. Edit anything that is off.` : 'I found nothing to add to the style.')
     })
   }
   // The style fills in by itself once there is about a page of text (typed, pasted or imported), once for each article.
   const styleTried = useRef<Set<string>>(new Set())
+  const [styleReading, setStyleReading] = useState<{ id: string; state: 'reading' | 'failed' | 'idle'; error?: string } | null>(null)
   useEffect(() => {
     if (!activeId || !bundle || styleTried.current.has(activeId) || !shouldDeriveStyle(bundle.meta, bundle.markdown)) return
     styleTried.current.add(activeId)
     const id = activeId
-    void service.deriveStyleFromText(id, services.models.auto()).then(async () => { if (id === activeIdRef.current) setBundle(await service.get(id)) }, () => undefined)
+    setStyleReading({ id, state: 'reading' })
+    void service.deriveStyleFromText(id, services.models.auto()).then(async (r) => {
+      setStyleReading({ id, state: r.reason ? 'failed' : 'idle', error: r.reason })
+      if (id === activeIdRef.current) setBundle(await service.get(id))
+    }, (e) => setStyleReading({ id, state: 'failed', error: e instanceof Error ? e.message : String(e) }))
   }, [service, services.models, activeId, bundle])
   const activeIdRef = useRef(activeId)
   activeIdRef.current = activeId
@@ -661,9 +669,16 @@ function WriteAppBody({ services, connection }: WriteAppProps): React.JSX.Elemen
         // Record what the writer said (comments, corrections) the same way a chat turn does, then turn the request into suggestions.
         const { reply, model: said } = await services.chat(text, activeId)
         const r = await service.suggest(activeId, text, said)
-        setBundle(await service.get(activeId))
-        const summary = r.status === 'failed' ? 'I could not turn that into edits.' : r.added.length === 0 ? 'I found nothing to change in the text for that.' : `I added ${r.added.length} suggested change${r.added.length === 1 ? '' : 's'}. Open Issues to accept or reject them.`
-        setChat((c) => [...c, { id: ++lineId, from: 'aielia', text: `${reply}\n\n${summary}`, model: said }])
+        const now = await service.get(activeId)
+        setBundle(now)
+        const added = now.meta.suggestions.filter((x) => r.added.includes(x.id))
+        const short = (t: string): string => (t.length > 140 ? `${t.slice(0, 140)}…` : t)
+        // The reply is a separate model answer and can word an edit differently from the suggestion that was stored, so when suggestions were
+        // made the chat states what was stored, and not the reply.
+        const body = r.status === 'failed' ? `${reply}\n\nI could not turn that into edits.`
+          : added.length === 0 ? `${reply}\n\nI found nothing to change in the text for that.`
+          : `I added ${added.length} suggested change${added.length === 1 ? '' : 's'}. Open Issues to accept or reject ${added.length === 1 ? 'it' : 'them'}:\n${added.slice(0, 4).map((x) => `• “${short(x.span.quote)}” → “${short(x.replacement)}”`).join('\n')}${added.length > 4 ? `\n…and ${added.length - 4} more.` : ''}`
+        setChat((c) => [...c, { id: ++lineId, from: 'aielia', text: body, model: said }])
       } else {
         const { reply, model: said } = await services.chat(text, activeId)
         if (activeId) setBundle(await service.get(activeId))
@@ -735,7 +750,7 @@ function WriteAppBody({ services, connection }: WriteAppProps): React.JSX.Elemen
           {ready && meta ? (
             <>
               <section className={`write__pane write__panel-pane ${tab === 'style' ? 'is-shown' : ''}`} aria-label="Style">
-                <StylePanel meta={meta} hasText={bundle.markdown.trim().length > 0} busy={busy !== null} onBrief={(b) => change('Saving the brief', async (id) => { await service.setBrief(id, b) })} onDerive={deriveStyle} />
+                <StylePanel meta={meta} hasText={bundle.markdown.trim().length > 0} reading={styleReading && styleReading.id === activeId ? styleReading : undefined} busy={busy !== null} onBrief={(b) => change('Saving the brief', async (id) => { await service.setBrief(id, b) })} onDerive={deriveStyle} />
               </section>
               <section className={`write__pane write__panel-pane ${tab === 'ideas' ? 'is-shown' : ''}`} aria-label="Ideas">
                 <IdeasPanel meta={meta} onSave={saveScratchpad} />

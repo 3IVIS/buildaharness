@@ -47,3 +47,13 @@ describe('a host where Write keeps the GitHub token itself', () => {
     expect(services.setGithubToken).toBeUndefined()
   })
 })
+
+describe('a chat turn the model could not finish', () => {
+  it('says the model\'s own error and what to try, not the harness\'s wrapped text and not an empty reply', async () => {
+    const failing = { callChatStructured: async () => { throw new Error('401 invalid x-api-key') }, callChatSync: async () => { throw new Error('401 invalid x-api-key') }, callChat: async function* () { throw new Error('401 invalid x-api-key') } } as unknown as ILLMClient
+    const services = await createWriteServicesFor(config, { store: createMemoryArticleStore(), llm: failing })
+    const { reply, model } = await services.chat('Tighten the intro', undefined)
+    expect(model).toBe(services.models.chat())
+    expect(reply).toMatch(/^I could not answer: 401 invalid x-api-key\. Check your key and the model in Settings/)
+  })
+})
