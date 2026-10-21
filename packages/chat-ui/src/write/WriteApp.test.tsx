@@ -174,7 +174,7 @@ describe('rail and panels', () => {
       const { container } = render(<WriteApp services={s} />)
       await waitForText()
       const main = container.querySelector('.write__main') as HTMLElement
-      expect(within(screen.getByRole('navigation', { name: 'Panels' })).getAllByRole('button').map((b) => b.getAttribute('aria-label'))).toEqual(['Text', 'Style', 'Ideas', 'Issues', 'History', 'Chat', 'Settings'])
+      expect(within(screen.getByRole('navigation', { name: 'Panels' })).getAllByRole('button').map((b) => b.getAttribute('aria-label'))).toEqual(['Text', 'Style', 'Ideas', 'Issues', 'Sources', 'History', 'Chat', 'Settings'])
       expect(main.dataset.open).toBe('true')
       await userEvent.click(rail('Style'))
       expect(main.dataset.open).toBe('false')
@@ -636,6 +636,25 @@ describe('comments and sources under the text', () => {
     fireEvent.drop(screen.getByLabelText('Comments and sources for this text'), { dataTransfer: { files: [new File(['export const limit = 20'], 'limits.ts', { type: '' })] } })
     expect(await screen.findByText(/limits\.ts: added as code/)).toBeInTheDocument()
     expect((await s.service.get(id)).meta.sources[0]).toMatchObject({ kind: 'code', address: 'limits.ts', passage: 'export const limit = 20' })
+  })
+
+  it('the Sources button at the side lists every source of the article, with the claims each one backs, without picking any text', async () => {
+    const s = await services({ claims: { claims: [{ quote: 'The p99 was 18 ms.', kind: 'factual', matchesId: null, sure: true }] }, resolve: { affected: [] } }, MD)
+    const id = (await s.service.list())[0].id
+    await s.service.analyze(id)
+    const at = MD.indexOf('18 ms')
+    const backed = await s.service.addSource(id, { kind: 'upload', address: 'bench.txt', passage: 'p99 18 ms' })
+    await s.service.attachSourceToText(id, { start: at, end: at }, backed)
+    await s.service.addSource(id, { kind: 'upload', address: 'spare.txt', passage: 'unused' })
+    render(<WriteApp services={s} />)
+    await waitForText()
+    await userEvent.click(rail('Sources'))
+    const side = panel('Sources')
+    const list = await within(side).findByRole('list', { name: 'All sources of the article' })
+    expect(within(list).getByText('bench.txt')).toBeInTheDocument()
+    expect(within(list).getByText('spare.txt')).toBeInTheDocument()
+    expect(within(list).getByText('Not backing any claim yet.')).toBeInTheDocument()
+    expect(within(within(list).getByRole('list', { name: 'Claims this source backs' })).getByText(/The p99 was 18 ms\./)).toBeInTheDocument()
   })
 
   it('a file dropped into the chat is stored and Aielia proposes where it belongs, to confirm under the text with one icon', async () => {

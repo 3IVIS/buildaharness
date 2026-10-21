@@ -11,6 +11,7 @@ import { StylePanel } from './StylePanel'
 import { MarkedText } from './MarkedText'
 import { IssuesPanel, type ResolveNote } from './IssuesPanel'
 import { LinksPanel } from './LinksPanel'
+import { SourcesPanel } from './SourcesPanel'
 import { OutlinePanel } from './OutlinePanel'
 import { SettingsPane } from './SettingsPane'
 import type { WriteConnection } from './write-config'
@@ -20,7 +21,7 @@ import { DialogProvider, useDialogs } from './dialogs'
 import type { WriteServices } from './write-services'
 import './write.css'
 
-type Tab = 'text' | 'style' | 'ideas' | 'issues' | 'history' | 'chat' | 'settings'
+type Tab = 'text' | 'style' | 'ideas' | 'issues' | 'sources' | 'history' | 'chat' | 'settings'
 
 /** What the text pane shows: the article, or its outline. */
 type TextView = 'text' | 'outline'
@@ -30,6 +31,7 @@ const TABS: { id: Tab; label: string }[] = [
   { id: 'style', label: 'Style' },
   { id: 'ideas', label: 'Ideas' },
   { id: 'issues', label: 'Issues' },
+  { id: 'sources', label: 'Sources' },
   { id: 'history', label: 'History' },
   { id: 'chat', label: 'Chat' },
   { id: 'settings', label: 'Settings' },
@@ -40,6 +42,7 @@ const RAIL_ICONS: Record<Tab, string> = {
   style: 'M12 20h9M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4z',
   ideas: 'M9 18h6M10 21h4M12 3a6 6 0 0 0-3.5 10.9c.6.5 1 1.2 1 2.1h5c0-.9.4-1.6 1-2.1A6 6 0 0 0 12 3z',
   issues: 'M12 3 2.5 20h19L12 3zM12 10v4M12 17h.01',
+  sources: 'M6 3h9l4 4v14H6zM15 3v4h4M9 12h6M9 16h6',
   history: 'M3 12a9 9 0 1 0 3-6.7M3 4v5h5M12 7v5l3 2',
   chat: 'M4 5h16v11H9l-5 4z',
   settings: 'M12 9a3 3 0 1 0 0 6 3 3 0 0 0 0-6zM12 3v3M12 18v3M3 12h3M18 12h3M5.6 5.6l2.1 2.1M16.3 16.3l2.1 2.1M18.4 5.6l-2.1 2.1M7.7 16.3l-2.1 2.1',
@@ -565,6 +568,11 @@ function WriteAppBody({ services, connection }: WriteAppProps): React.JSX.Elemen
     })
   }
 
+  const readSourceNow = (sourceId: string): void => change('Reading the page', async (id) => {
+    const r = await service.readSource(id, sourceId, services.models.auto())
+    setNotice(r.status === 'read' ? 'I read the page and stored its text.' : r.status === 'unchanged' ? 'The page has not changed.' : r.status === 'changed' ? `The page has changed. ${r.impacts.filter((i) => i.impact !== 'none').length} claim${r.impacts.filter((i) => i.impact !== 'none').length === 1 ? '' : 's'} may be affected. Accept the new text to use it.` : r.reason ?? 'The page could not be read.')
+  })
+
   const addNote = (kind: NoteKind, text: string): void => {
     if (!selection) return
     change(kind === 'comment' ? 'Adding the comment' : 'Adding the source', async (id) => {
@@ -759,6 +767,16 @@ function WriteAppBody({ services, connection }: WriteAppProps): React.JSX.Elemen
                 <h2 className="write__panehead">Issues</h2>
                 {issuesNode(meta)}
               </section>
+              <section className={`write__pane write__panel-pane ${tab === 'sources' ? 'is-shown' : ''}`} aria-label="Sources">
+                <h2 className="write__panehead">Sources</h2>
+                <SourcesPanel
+                  meta={meta}
+                  busy={busy !== null}
+                  onJump={jumpTo}
+                  onRead={(sourceId) => readSourceNow(sourceId)}
+                  onAcceptNew={(sourceId) => change('Saving', async (id) => { const r = await service.acceptSourceChange(id, sourceId); if (!r.ok && r.reason) setNotice(r.reason) })}
+                />
+              </section>
               <section className={`write__pane write__panel-pane ${tab === 'history' ? 'is-shown' : ''}`} aria-label="History">
                 <HistoryPanel versions={versions} working={working} busy={busy !== null} onSave={saveVersion} onView={(i) => openVersion(i, 'view')} onCompare={(i) => openVersion(i, 'compare')} onRestore={restoreVersion} onRename={(i, l) => change('Saving', async (id) => { await service.renameVersion(id, i, l) })} />
               </section>
@@ -812,10 +830,7 @@ function WriteAppBody({ services, connection }: WriteAppProps): React.JSX.Elemen
               })}
               onDetach={(claimId, sourceId) => change('Saving', async (id) => { await service.detachSource(id, claimId, sourceId) })}
               onConfirm={(claimId, sourceId) => change('Saving', async (id) => { const link = meta.links.find((l) => l.kind === 'supported_by' && l.from.id === claimId && l.to.id === sourceId); if (link) await service.confirmDependency(id, link.id) })}
-              onRead={(sourceId) => change('Reading the page', async (id) => {
-                const r = await service.readSource(id, sourceId, services.models.auto())
-                setNotice(r.status === 'read' ? 'I read the page and stored its text.' : r.status === 'unchanged' ? 'The page has not changed.' : r.status === 'changed' ? `The page has changed. ${r.impacts.filter((i) => i.impact !== 'none').length} claim${r.impacts.filter((i) => i.impact !== 'none').length === 1 ? '' : 's'} may be affected. Accept the new text to use it.` : r.reason ?? 'The page could not be read.')
-              })}
+              onRead={readSourceNow}
               canSearch={services.canSearch}
               candidates={candidates}
               onFindSources={(claimId) => change('Searching the web', async (id) => {
