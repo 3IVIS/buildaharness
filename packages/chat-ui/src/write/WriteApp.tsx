@@ -218,7 +218,7 @@ function WriteAppBody({ services, connection, onDeleted }: WriteAppProps): React
         await reload(first.id)
       }
     })().catch((err) => setNotice(String(err)))
-  }, [service, port, refreshList, reload, services.permissions])
+  }, [service, port, refreshList, reload, services.permissions, setNotice])
 
   // The chat comes back after a reload. It is saved only once the saved one has been read, so the empty start never overwrites it.
   const chatRead = useRef(false)
