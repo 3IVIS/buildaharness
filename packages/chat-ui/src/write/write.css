@@ -80,7 +80,7 @@
 .write__badge { display: inline-block; margin-left: 8px; padding: 1px 8px; border-radius: 999px; font-size: 0.8rem; background: var(--tint-2); border: 1px solid var(--border); }
 .write__badge--needs_review, .write__badge--stale, .write__badge--contradicted, .write__badge--not_supported { background: var(--red-a18); border-color: var(--red); }
 .write__badge--supported { background: var(--accent-a18); border-color: var(--green); }
-.write .write__link { background: none; border: none; padding: 2px 0; min-height: 0; margin: 0; text-align: left; font-weight: 600; text-decoration: underline; text-decoration-color: var(--border); }
+.write .write__link { background: none; border: none; padding: 2px 0; min-height: 0; margin: 0; text-align: left; text-decoration: underline; text-decoration-color: var(--border); }
 .write .write__link:hover { text-decoration-color: var(--accent); }
 .write .write__outline { list-style: none; margin: 0; padding: 0; }
 .write .write__outline li { display: flex; gap: 8px; align-items: baseline; background: transparent; border: none; border-radius: 0; padding: 5px 0; }
@@ -303,7 +303,7 @@
 .write .write__issuechip .write__badge { margin-left: 2px; }
 .write .write__issuechip.is-on { background: var(--accent-solid); border-color: var(--accent-solid); color: var(--on-accent); }
 .write__batchhead { display: flex; align-items: center; gap: 8px; }
-.write__reasonhead { font-size: 0.9rem; margin: 8px 0 0; color: var(--muted); }
+.write__reasonhead { font-weight: 500; font-size: 0.9rem; margin: 8px 0 0; color: var(--muted); }
 .write__revtext { white-space: pre-wrap; overflow-wrap: anywhere; margin-top: 2px; }
 
 /* The box under the text: its panes are chosen with tabs that wrap instead of running off the edge. */
@@ -384,3 +384,24 @@ body.write--resizing { user-select: none; -webkit-user-select: none; cursor: col
 .write__working { flex-wrap: wrap; }
 .write__form .write__model input { width: auto; flex: 1 1 auto; }
 .write__form .write__model .write__chev { width: auto; flex: none; }
+
+/* A source's name: the file name first, its path after it as far as there is room (the full address is the hover text). */
+.write__srcname { display: flex; flex: 1 1 100%; min-width: 0; gap: 6px; align-items: baseline; }
+.write__srcfile { flex: none; white-space: nowrap; max-width: 100%; overflow: hidden; text-overflow: ellipsis; }
+.write__srcdir { flex: 1 1 0; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--muted, inherit); opacity: 0.7; font-size: 0.85em; }
+
+/* A file's mappings: the code line and, under it, the claim it backs; each is one line, cut with … when there is no room (the full text is the hover text). */
+.write__srccount { cursor: pointer; font: inherit; font-size: inherit; }
+.write__srccount:disabled { cursor: default; opacity: 0.7; }
+.write__srcmap { list-style: none; margin: 6px 0 0; padding: 0; display: grid; gap: 6px; }
+.write__srcmap > li { min-width: 0; }
+.write__srcline, .write__srcclaim { display: flex; gap: 6px; align-items: baseline; min-width: 0; }
+.write__srcline code { flex: 1 1 0; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 0.85em; }
+.write__srclines { flex: none; color: var(--muted); font-size: 0.8em; font-variant-numeric: tabular-nums; }
+.write__srcclaim { padding-left: 8px; }
+.write__srcclaim .write__link { flex: 1 1 0; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; text-align: left; }
+.write__rows strong { font-weight: 500; }
+
+/* A claim in the issues list is one line, cut with … when there is no room; the full claim is the hover text. */
+.write__rowmain--line { overflow: hidden; overflow-wrap: normal; }
+.write .write__linkline { display: block; max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }

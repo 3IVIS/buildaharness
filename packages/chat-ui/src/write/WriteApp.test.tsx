@@ -885,8 +885,10 @@ describe('comments and sources under the text', () => {
     const list = await within(side).findByRole('list', { name: 'All sources of the article' })
     expect(within(list).getByText('bench.txt')).toBeInTheDocument()
     expect(within(list).getByText('spare.txt')).toBeInTheDocument()
-    expect(within(list).getByText('Not backing any claim yet.')).toBeInTheDocument()
-    expect(within(within(list).getByRole('list', { name: 'Claims this source backs' })).getByText(/The p99 was 18 ms\./)).toBeInTheDocument()
+    expect(within(list).getByRole('button', { name: 'no claims yet' })).toBeInTheDocument()
+    expect(within(list).queryByText(/The p99 was 18 ms\./)).toBeNull()
+    await userEvent.click(within(list).getByRole('button', { name: '1 claim' }))
+    expect(within(within(list).getByRole('list', { name: 'Lines of this file and the claims they back' })).getByText(/The p99 was 18 ms\./)).toBeInTheDocument()
   })
 
   it('a file dropped into the chat is stored and Aielia proposes where it belongs, to confirm under the text with one icon', async () => {

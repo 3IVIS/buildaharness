@@ -1,7 +1,7 @@
 import { describe, it, expect } from 'vitest'
 import type { ILLMClient } from '@buildaharness/runtime'
 import { ArticleService, createMemoryArticleStore } from './article-service.js'
-import { lookupNote, summarizeVerify, verifyTargets } from './article-verify.js'
+import { lookupNote, summarizeArticleSources, summarizeVerify, verifyTargets } from './article-verify.js'
 import type { Claim } from './article-model.js'
 
 const NOW = '2026-10-17T10:00:00.000Z'
@@ -113,5 +113,13 @@ describe('verifying claims', () => {
     await svc.verifyClaims(id, { claimIds: ['c1'] })
     const c = (await svc.get(id)).meta.claims[0]
     expect(lookupNote({ ...c, quote: 'The p99 was 30 ms.' }, false)).toBeUndefined()
+  })
+})
+
+describe('summarizeArticleSources', () => {
+  it('counts every factual claim of the article, not just the ones a run looked at', () => {
+    const meta = { claims: [claim('k1', 'The p99 was 18 ms.', { sourceStatus: 'none' }), claim('k2', 'The cache holds 100 items.', { kind: 'opinion' }), claim('k3', 'x', { sourceStatus: 'none' })], sources: [] } as never
+    expect(summarizeArticleSources(meta)).toBe('The whole article, 2 factual claims: 2 with no source.')
+    expect(summarizeArticleSources({ claims: [], sources: [] } as never)).toBe('')
   })
 })

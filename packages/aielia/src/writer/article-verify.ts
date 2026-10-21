@@ -83,3 +83,22 @@ export function summarizeVerify(report: VerifyReport): string {
   const why = count('cannot_search') > 0 ? ' Nothing could look anything up here: attach a repository in the chat pane, or add a search key and a page proxy in Settings.' : ''
   return `${head}: ${parts.join(', ')}.${why}${report.leftOver > 0 ? ` ${report.leftOver} more claims are left; each run takes ${n}, so run it again for the rest.` : ''}`
 }
+
+/**
+ * Where the whole article stands, from its records: a run only looks at some claims (a limit, or the ones already backed are skipped), so a later
+ * run's summary alone would read as if it were the result for the whole article. Empty when the article has no factual claims.
+ */
+export function summarizeArticleSources(meta: ArticleMeta): string {
+  const factual = meta.claims.filter((c) => c.kind === 'factual')
+  if (factual.length === 0) return ''
+  const n = (pred: (s: ReturnType<typeof effectiveSourceStatus>) => boolean): number => factual.filter((c) => pred(effectiveSourceStatus(c, meta.sources))).length
+  const parts = [
+    n((s) => s === 'supported') && `${n((s) => s === 'supported')} backed`,
+    n((s) => s === 'partly_supported') && `${n((s) => s === 'partly_supported')} partly backed`,
+    n((s) => s === 'contradicted') && `${n((s) => s === 'contradicted')} contradicted`,
+    n((s) => s === 'not_supported') && `${n((s) => s === 'not_supported')} not backed by their sources`,
+    n((s) => s === 'none') && `${n((s) => s === 'none')} with no source`,
+    n((s) => s === 'attached' || s === 'not_checked' || s === 'stale') && `${n((s) => s === 'attached' || s === 'not_checked' || s === 'stale')} with a source not checked yet`,
+  ].filter(Boolean)
+  return `The whole article, ${factual.length} factual claim${factual.length === 1 ? '' : 's'}: ${parts.join(', ')}.`
+}

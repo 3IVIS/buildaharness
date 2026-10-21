@@ -40,6 +40,14 @@ describe('extractClaims', () => {
     expect(r.claims.every((c) => !c.confirmed && c.author === 'model' && c.sourceStatus === 'none')).toBe(true)
   })
 
+  it('keeps one claim when the model lists a sentence twice, or again inside a longer claim', async () => {
+    const both = 'The limiter handled 120,000 requests per second. It feels quick.'
+    const reply = { claims: [{ quote: 'The limiter handled 120,000 requests per second.', kind: 'factual', matchesId: null, sure: true }, { quote: 'The limiter handled 120,000 requests per second.', kind: 'factual', matchesId: null, sure: true }, { quote: both, kind: 'factual', matchesId: null, sure: true }] }
+    const r = await extractClaims({ ...base, claims: [] }, client(reply))
+    expect(r.claims.map((c) => c.quote)).toEqual([both])
+    expect(r.added).toHaveLength(1)
+  })
+
   it('keeps the id on a sure match, and resets the check when the wording changed', async () => {
     const prev = claim({ sourceStatus: 'supported', check: { ranAt: NOW, model: 'm', reason: 'ok', claimText: 'The limiter handled 120,000 requests per second.', sourceFingerprints: {} } })
     const edited = MD.replace('The limiter handled', 'Our limiter handled')
