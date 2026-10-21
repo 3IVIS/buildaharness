@@ -16,6 +16,11 @@
 .write__menu-sep { border-top: 1px solid var(--border); margin-top: 4px; padding-top: 4px; }
 .write__model input { width: 100%; min-width: 0; font-size: 0.85rem; padding: 4px 8px; }
 .write__model { display: inline-block; min-width: 0; flex: 1 1 140px; }
+.write__lineusage { margin-top: 4px; font-size: 0.68rem; line-height: 1.2; color: var(--muted); font-variant-numeric: tabular-nums; }
+.write__spend { position: relative; }
+.write__spend > summary { list-style: none; cursor: pointer; font: 0.85rem ui-monospace, Menlo, monospace; color: var(--muted); border: 1px solid var(--border); border-radius: 999px; padding: 2px 10px; }
+.write__spend > summary::-webkit-details-marker { display: none; }
+.write__spendpop { position: absolute; right: 0; top: calc(100% + 6px); z-index: 6; min-width: 240px; max-width: 90vw; padding: 10px 12px; background: var(--surface); border: 1px solid var(--border); border-radius: 8px; box-shadow: 0 8px 24px rgba(0, 0, 0, 0.18); }
 .write__actions { display: flex; flex-wrap: wrap; gap: 8px; }
 .write button, .write select, .write input, .write textarea, .write__import { font: inherit; color: var(--text); border-radius: 6px; padding: 6px 10px; }
 .write button, .write__import { background: var(--tint-2); border: 1px solid var(--border); }

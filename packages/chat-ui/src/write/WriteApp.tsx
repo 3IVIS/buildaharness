@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
+import { SpendBadge } from './SpendBadge'
 import { githubRepoReader, parseGithubRepoAddress, type FolderReader, expandSelection, summarizeVerify, type VerifyReport, textPieces, collectIssues, parseLineRange, sourceKindForFile, computeReadiness, effectiveSourceStatus, issueCount, textUnitAt, autosaveStep, outlineOf, issuesInRange, unitOfSelection, shouldDeriveStyle, type ArticleBundle, type ChangeSummary, type DependencyKind, type IssueCategory, type Section, type WritePermissions } from '@buildaharness/aielia'
 import type { ChatAction } from './AdjustBar'
 import { ArticleSwitcher, type ArticleItem } from './ArticleSwitcher'
@@ -69,6 +70,13 @@ function topOfPosition(ta: HTMLTextAreaElement, at: number): number {
 }
 
 /** What the chat says when a model call fails: the reason, and what to try. Never an empty answer. */
+/** What one request used, for the small line after its last message. */
+export const usageText = (ms: number, d: { usd: number; inputTokens: number; outputTokens: number; calls: number }): string => {
+  const time = ms < 1000 ? `${Math.max(0, Math.round(ms))} ms` : ms < 60000 ? `${(ms / 1000).toFixed(1)} s` : `${Math.floor(ms / 60000)} min ${Math.round((ms % 60000) / 1000)} s`
+  if (d.calls === 0) return `no model call · ${time}`
+  const total = d.inputTokens + d.outputTokens
+  return `${total.toLocaleString('en-US')} tokens (${d.inputTokens.toLocaleString('en-US')} in, ${d.outputTokens.toLocaleString('en-US')} out) · ${d.calls} call${d.calls === 1 ? '' : 's'} · ${time} · $${d.usd < 0.01 ? d.usd.toFixed(4) : d.usd.toFixed(2)}`
+}
 /** One lookup the repository search makes, in words. */
 export const stepText = (step: { tool: string; input: Record<string, unknown> }): string => {
   const arg = (k: string): string => (typeof step.input[k] === 'string' ? (step.input[k] as string) : '')
@@ -184,6 +192,9 @@ function WriteAppBody({ services, connection, onDeleted }: WriteAppProps): React
   /** What a command sent through the chat is doing right now, shown as the last line of the chat until the result or the error replaces it. */
   const [progress, setProgress] = useState<string | null>(null)
   const [busy, setBusy] = useState<string | null>(null)
+  // What has been spent follows every model call, so the header is right while a command is still running.
+  const [spendTick, setSpendTick] = useState(0)
+  useEffect(() => services.spend.subscribe(() => setSpendTick((n) => n + 1)), [services.spend])
   const [chat, setChat] = useState<ChatLine[]>([])
   const [chatInput, setChatInput] = useState('')
   const [chatMode, setChatMode] = useState<ChatMode>('answer')
@@ -263,6 +274,8 @@ function WriteAppBody({ services, connection, onDeleted }: WriteAppProps): React
   async function run(label: string, work: (step: (text: string) => void) => Promise<void>, announce = true, doneNote = ''): Promise<void> {
     if (announce) setChat((c) => [...c, { id: ++lineId, from: 'you', text: label }])
     const mark = lineId
+    const before = services.spend.snapshot()
+    const started = Date.now()
     setBusy(label)
     setBanner(null)
     setProgress(`${label}…`)
@@ -274,6 +287,10 @@ function WriteAppBody({ services, connection, onDeleted }: WriteAppProps): React
     } catch (err) {
       sayInChat(`${label} did not finish: ${err instanceof Error ? err.message : String(err)}`)
     } finally {
+      // The last thing said in this turn carries what the whole request used, in small type.
+      const after = services.spend.snapshot()
+      const usage = usageText(Date.now() - started, { usd: after.usd - before.usd, inputTokens: after.inputTokens - before.inputTokens, outputTokens: after.outputTokens - before.outputTokens, calls: after.calls - before.calls })
+      setChat((c) => { let i = -1; c.forEach((l, k) => { if (l.from === 'aielia' && l.id > mark) i = k }); return i < 0 ? c : c.map((l, k) => (k === i ? { ...l, usage } : l)) })
       setBusy(null)
       setProgress(null)
       void services.store.setSetting(PENDING_KEY, '').catch(() => undefined)
@@ -893,6 +910,7 @@ function WriteAppBody({ services, connection, onDeleted }: WriteAppProps): React
         <h1 className="write__title">Aielia Write</h1>
         <ArticleSwitcher articles={articles} activeId={activeId} onSelect={(id) => void run('Opening the article', async () => { await select(id) }, true, ' It is open.')} onRename={() => void renameArticle()} onNew={() => void createArticle()} onExport={() => void exportArticle()} onImport={(f) => void importArticle(f)} onOpenPage={services.canReadPages ? () => void openPage() : undefined} />
         <div className="write__actions">
+          <SpendBadge usd={(void spendTick, services.spentUsd())} byType={(void spendTick, services.spendByType())} hostName={services.hostName} />
           <button type="button" className="write__primary" onClick={() => void publish()} disabled={!activeId || busy !== null}>Publish</button>
         </div>
       </header>
@@ -947,7 +965,7 @@ function WriteAppBody({ services, connection, onDeleted }: WriteAppProps): React
             <p className="write__muted">Create or import an article to use the panels.</p>
           )}
           <section className={`write__pane write__panel-pane ${tab === 'settings' ? 'is-shown' : ''}`} aria-label="Settings">
-            <SettingsPane hostName={services.hostName} connection={connection && { value: connection.value, onSave: (c) => { try { connection.onSave(c); sayInChat('The connection is saved.') } catch (e) { sayInChat(`The connection could not be saved: ${e instanceof Error ? e.message : String(e)}`) } }, onForget: () => { try { connection.onForget(); sayInChat('The connection was forgotten.') } catch (e) { sayInChat(`The connection could not be forgotten: ${e instanceof Error ? e.message : String(e)}`) } } }} github={services.setGithubToken ? { token: services.githubToken, onSave: (t) => run('Saving the GitHub token', async () => { await services.setGithubToken?.(t); setModelTick((n) => n + 1); sayInChat(t?.trim() ? 'The GitHub token is saved.' : 'The GitHub token is removed.') }) } : undefined} perms={perms} busy={busy !== null} onDeleteAll={() => void deleteAllData()} spent={services.spentUsd()} spentByType={services.spendByType()} autoModel={services.models.auto()} chatModel={chatModel} suggestions={services.models.suggestions} onAutoModel={(m) => void run(`Switching the automatic checks to ${m}`, async () => { await services.models.setAuto(m); setModelTick((t) => t + 1); sayInChat(`Automatic checks now use ${m}.`) })} onSave={(p) => run('Saving the settings', async () => { await services.permissions.set(p); permsRef.current = p; setPerms(p); sayInChat('Settings saved.') })} />
+            <SettingsPane hostName={services.hostName} connection={connection && { value: connection.value, onSave: (c) => { try { connection.onSave(c); sayInChat('The connection is saved.') } catch (e) { sayInChat(`The connection could not be saved: ${e instanceof Error ? e.message : String(e)}`) } }, onForget: () => { try { connection.onForget(); sayInChat('The connection was forgotten.') } catch (e) { sayInChat(`The connection could not be forgotten: ${e instanceof Error ? e.message : String(e)}`) } } }} github={services.setGithubToken ? { token: services.githubToken, onSave: (t) => run('Saving the GitHub token', async () => { await services.setGithubToken?.(t); setModelTick((n) => n + 1); sayInChat(t?.trim() ? 'The GitHub token is saved.' : 'The GitHub token is removed.') }) } : undefined} perms={perms} busy={busy !== null} onDeleteAll={() => void deleteAllData()} autoModel={services.models.auto()} chatModel={chatModel} suggestions={services.models.suggestions} onAutoModel={(m) => void run(`Switching the automatic checks to ${m}`, async () => { await services.models.setAuto(m); setModelTick((t) => t + 1); sayInChat(`Automatic checks now use ${m}.`) })} onSave={(p) => run('Saving the settings', async () => { await services.permissions.set(p); permsRef.current = p; setPerms(p); sayInChat('Settings saved.') })} />
           </section>
         </aside>
         {ready && meta ? (

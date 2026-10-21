@@ -46,6 +46,26 @@ describe('spend cap', () => {
     expect(again.spentUsd()).toBeCloseTo(1.2)
   })
 
+  it('tells listeners after every call and keeps token and call totals for per-request figures', async () => {
+    const meter = await createSpendMeter(createMemoryArticleStore(), {})
+    let heard = 0
+    const stop = meter.subscribe(() => { heard += 1 })
+    const llm = withSpendCap(client(0.5), meter, () => undefined)
+    const before = meter.snapshot()
+    await llm.callChatStructured([])
+    await llm.callChatStructured([])
+    expect(heard).toBe(2)
+    const after = meter.snapshot()
+    expect(after.calls - before.calls).toBe(2)
+    expect(after.usd - before.usd).toBeCloseTo(1)
+    expect(after.inputTokens + after.outputTokens).toBeGreaterThan(0)
+    stop()
+    await llm.callChatStructured([])
+    expect(heard).toBe(2)
+    meter.reset()
+    expect(meter.snapshot()).toEqual({ usd: 0, inputTokens: 0, outputTokens: 0, calls: 0 })
+  })
+
   it('does not stop anything without a cap, and a raised cap lets calls through again', async () => {
     const meter = await createSpendMeter(createMemoryArticleStore(), {})
     let cap: number | undefined

@@ -9,6 +9,8 @@ export interface ChatLine {
   from: 'you' | 'aielia'
   text: string
   model?: string
+  /** What the request that ended with this line used: tokens, time and cost, in small type. */
+  usage?: string
 }
 
 interface Props {
@@ -59,6 +61,7 @@ export function ChatPane(p: Props): React.JSX.Element {
         {p.lines.map((l) => (
           <li key={l.id} className={`write__line write__line--${l.from}`}>
             <div>{l.text}</div>
+            {l.usage && <div className="write__lineusage" title="Tokens, time and cost of this request">{l.usage}</div>}
             {l.from === 'aielia' && l.model && (
               <div className="write__linemeta">
                 <span className="write__linemodel" title="The model that wrote this">{l.model}</span>

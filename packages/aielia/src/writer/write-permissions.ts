@@ -57,7 +57,13 @@ export interface SpendMeter {
   assertWithinCap(capUsd: number | undefined): void
   /** Back to nothing spent, after the stored totals were deleted. */
   reset(): void
+  /** Dollars, tokens and calls counted since the page was opened (the dollars include what earlier visits spent). A caller takes one before and one after a request to know what that request cost. */
+  snapshot(): SpendSnapshot
+  /** Called after every counted call and after a reset, so what is shown follows the real total. Returns the way to stop listening. */
+  subscribe(listener: () => void): () => void
 }
+
+export interface SpendSnapshot { usd: number; inputTokens: number; outputTokens: number; calls: number }
 
 const SPEND_KEY = 'writer:spent-usd'
 const SPEND_BY_TYPE_KEY = 'writer:spent-by-type'
@@ -72,13 +78,24 @@ export async function createSpendMeter(store: SettingsStore, pricing: { backend?
       if (typeof v?.usd === 'number' && Number.isFinite(v.usd) && typeof v.calls === 'number') types[k] = { usd: v.usd, calls: v.calls }
     }
   }
+  let inputTokens = 0
+  let outputTokens = 0
+  let calls = 0
+  const listeners = new Set<() => void>()
+  const notify = (): void => { for (const l of listeners) { try { l() } catch { /* a listener's failure must not stop the count */ } } }
   return {
     spentUsd: () => total,
+    snapshot: () => ({ usd: total, inputTokens, outputTokens, calls }),
+    subscribe(listener) { listeners.add(listener); return () => { listeners.delete(listener) } },
     byType: () => ({ ...types }),
     async record(usage, callType, model) {
       // A model missing from the price table is priced as the default model, so an unknown model cannot spend past the cap for free.
       const cost = (withCostEstimate(usage, { ...pricing, model: model ?? pricing.model }).costUsd ?? withCostEstimate(usage, pricing).costUsd) ?? 0
       total += cost
+      inputTokens += usage.inputTokens
+      outputTokens += usage.outputTokens
+      calls += 1
+      notify()
       if (callType) types[callType] = { usd: (types[callType]?.usd ?? 0) + cost, calls: (types[callType]?.calls ?? 0) + 1 }
       await store.setSetting(SPEND_KEY, total)
       if (callType) await store.setSetting(SPEND_BY_TYPE_KEY, types)
@@ -89,6 +106,10 @@ export async function createSpendMeter(store: SettingsStore, pricing: { backend?
     reset() {
       total = 0
       for (const k of Object.keys(types)) delete types[k]
+      inputTokens = 0
+      outputTokens = 0
+      calls = 0
+      notify()
     },
   }
 }

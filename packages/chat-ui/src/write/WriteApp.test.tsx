@@ -21,7 +21,8 @@ const MARK = {
 }
 function llm(replies: Partial<Record<keyof typeof MARK, unknown>>): ILLMClient {
   return {
-    callChatStructured: async (messages: { role: string; content: string }[]) => {
+    callChatStructured: async (messages: { role: string; content: string }[], _tools?: unknown, options?: { onUsage?: (u: { inputTokens: number; outputTokens: number; costUsd: number }) => void }) => {
+      options?.onUsage?.({ inputTokens: 100, outputTokens: 20, costUsd: 0.01 })
       const sys = messages.find((m) => m.role === 'system')!.content
       const key = (Object.keys(MARK) as (keyof typeof MARK)[]).find((k) => sys.includes(MARK[k]))
       const out = key ? replies[key] : undefined
@@ -188,6 +189,37 @@ describe('every action is told in the chat', () => {
     await userEvent.click(screen.getByRole('button', { name: /Rename this article/ }))
     await answerDialog('New name')
     await waitFor(() => expect(chatText()).toMatch(/Renaming did not finish: disk gone/))
+  })
+})
+
+describe('spending is shown in the header, and each request says what it used', () => {
+  it('counts every model call in the header as it happens, and puts tokens, time and cost under the last message of the turn', async () => {
+    const claims = { claims: [{ quote: 'The p99 was 18 ms.', kind: 'factual', matchesId: null, sure: true }] }
+    const s = await services({ claims, resolve: { affected: [] } }, MD, async () => 'x', async () => [])
+    const id = (await s.service.list())[0].id
+    await s.service.analyze(id)
+    const before = s.spentUsd()
+    render(<WriteApp services={s} />)
+    await waitForText()
+    expect(screen.getByLabelText(/Spent so far in this browser/)).toBeInTheDocument()
+    expect(screen.queryByText(/Spent so far in this browser: \$/, { selector: 'p' })).toBeNull() // no longer in Settings
+    await userEvent.selectOptions(screen.getByLabelText('Adjust', { selector: 'select' }), 'action:check')
+    const chat = (): HTMLElement => document.querySelector('.write__chat') as HTMLElement
+    expect(await within(chat()).findByText(/I found 1 factual claim/)).toBeInTheDocument()
+    const usage = await within(chat()).findByTitle('Tokens, time and cost of this request')
+    expect(usage.textContent).toMatch(/\d+ tokens \(\d+ in, \d+ out\) · \d+ calls? · .+ · \$/)
+    expect(s.spentUsd()).toBeGreaterThan(before)
+    expect(screen.getByLabelText(/Spent so far in this browser/).getAttribute('aria-label')).toContain(s.spentUsd().toFixed(2))
+  })
+  it('says when a request made no model call', async () => {
+    const s = await services({}, MD)
+    render(<WriteApp services={s} />)
+    await waitForText()
+    await userEvent.click(screen.getByRole('button', { name: 'Article' }))
+    await userEvent.click(screen.getByRole('button', { name: /Rename this article/ }))
+    await answerDialog('Other')
+    const chat = document.querySelector('.write__chat') as HTMLElement
+    expect((await within(chat).findByTitle('Tokens, time and cost of this request')).textContent).toMatch(/^no model call · /)
   })
 })
 

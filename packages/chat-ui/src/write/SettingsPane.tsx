@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { callTypeLabel, type WritePermissions } from '@buildaharness/aielia'
+import { type WritePermissions } from '@buildaharness/aielia'
 import { ModelPicker } from './ModelPicker'
 import { ConnectionSettings } from './ConnectionSettings'
 import { Hint } from './Hint'
@@ -7,8 +7,6 @@ import type { WriteConnection } from './write-config'
 
 interface Props {
   perms: WritePermissions | undefined
-  spent: number
-  spentByType: { id: string; usd: number; calls: number }[]
   autoModel: string
   chatModel: string
   suggestions: string[]
@@ -25,7 +23,7 @@ interface Props {
   busy?: boolean
 }
 
-export function SettingsPane({ perms, spent, spentByType, autoModel, chatModel, suggestions, onAutoModel, onSave, connection, github, hostName = 'browser', onDeleteAll, busy }: Props): React.JSX.Element {
+export function SettingsPane({ perms, autoModel, chatModel, suggestions, onAutoModel, onSave, connection, github, hostName = 'browser', onDeleteAll, busy }: Props): React.JSX.Element {
   const [cap, setCap] = useState<string>('')
   const [ghToken, setGhToken] = useState<string>(github?.token ?? '')
   useEffect(() => setCap(perms?.spendCapUsd !== undefined ? String(perms.spendCapUsd) : ''), [perms])
@@ -50,17 +48,6 @@ export function SettingsPane({ perms, spent, spentByType, autoModel, chatModel, 
       <label>Spending cap, US$<Hint text="Stops using your key after this much. Leave blank for no limit." />
         <input aria-label="Spending cap" inputMode="decimal" value={cap} onChange={(e) => setCap(e.target.value)} onBlur={() => { const n = Number(cap); void save({ spendCapUsd: cap.trim() !== '' && Number.isFinite(n) && n > 0 ? n : undefined }) }} />
       </label>
-      <p className="write__muted">Spent so far in this {hostName}: ${spent.toFixed(2)}</p>
-      {spentByType.length > 0 && (
-        <details className="write__allsrc">
-          <summary>Where it went</summary>
-          <ul className="write__rows" aria-label="Spending by kind of call">
-            {spentByType.map((t) => (
-              <li key={t.id}><div className="write__rowmain">{callTypeLabel(t.id)}<div className="write__reason">${t.usd.toFixed(2)} · {t.calls} call{t.calls === 1 ? '' : 's'}</div></div></li>
-            ))}
-          </ul>
-        </details>
-      )}
       {onDeleteAll && (
         <div className="write__danger">
           <button type="button" className="write__dangerbtn" onClick={onDeleteAll} disabled={busy}>Delete all my data</button>
