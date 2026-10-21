@@ -93,6 +93,11 @@ function sectionAt(sections: Section[], markdown: string, selection: { start: nu
 
 let lineId = 0
 
+/** Where the chat lines are kept, so a reload does not erase the conversation. */
+const CHAT_LINES_KEY = 'chat-lines'
+const MAX_SAVED_LINES = 200
+const isChatLine = (x: unknown): x is ChatLine => typeof x === 'object' && x !== null && typeof (x as ChatLine).id === 'number' && ((x as ChatLine).from === 'you' || (x as ChatLine).from === 'aielia') && typeof (x as ChatLine).text === 'string'
+
 type WriteAppProps = { services: WriteServices; connection?: { value: WriteConnection; onSave: (c: WriteConnection) => void; onForget: () => void } }
 
 export function WriteApp(props: WriteAppProps): React.JSX.Element {
@@ -167,6 +172,23 @@ function WriteAppBody({ services, connection }: WriteAppProps): React.JSX.Elemen
       }
     })().catch((err) => setNotice(String(err)))
   }, [service, port, refreshList, reload, services.permissions])
+
+  // The chat comes back after a reload. It is saved only once the saved one has been read, so the empty start never overwrites it.
+  const chatRead = useRef(false)
+  useEffect(() => {
+    let live = true
+    void services.store.getSetting(CHAT_LINES_KEY).then((raw) => {
+      if (!live) return
+      const saved = Array.isArray(raw) ? raw.filter(isChatLine) : []
+      lineId = Math.max(lineId, ...saved.map((l) => l.id))
+      setChat((now) => [...saved, ...now])
+    }, () => undefined).finally(() => { if (live) chatRead.current = true })
+    return () => { live = false }
+  }, [services.store])
+  useEffect(() => {
+    if (!chatRead.current) return
+    void services.store.setSetting(CHAT_LINES_KEY, chat.slice(-MAX_SAVED_LINES)).catch(() => undefined)
+  }, [chat, services.store])
 
   useEffect(() => {
     if (!activeId) { setVersions([]); setWorking(undefined); return }

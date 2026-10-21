@@ -334,6 +334,25 @@ describe('chat: model, check and adjust', () => {
     expect(screen.getAllByTitle('The model that wrote this')[0]).toHaveTextContent('my-own-model')
   })
 
+  it('the conversation is still there after the page is opened again', async () => {
+    const s = await services({}, MD)
+    const first = render(<WriteApp services={s} />)
+    await waitForText()
+    await userEvent.click(rail('Chat'))
+    await userEvent.type(screen.getByLabelText('Message'), 'hello{Enter}')
+    expect(await screen.findByText('Noted.')).toBeInTheDocument()
+    await waitFor(async () => expect(await s.store.getSetting('chat-lines')).toHaveLength(2))
+    first.unmount()
+    render(<WriteApp services={s} />)
+    await waitForText()
+    expect(await screen.findByText('hello')).toBeInTheDocument()
+    expect(screen.getByText('Noted.')).toBeInTheDocument()
+    // a new message continues after the old ones
+    await userEvent.click(rail('Chat'))
+    await userEvent.type(screen.getByLabelText('Message'), 'again{Enter}')
+    await waitFor(async () => expect(await s.store.getSetting('chat-lines')).toHaveLength(4))
+  })
+
   it('"Check the article" is an action in the Adjust list, runs as soon as it is picked, and says which model checked', async () => {
     const s = await services({ capture: { articleId: null, ops: [] }, claims: { claims: [{ quote: 'The p99 was 18 ms.', kind: 'factual', matchesId: null, sure: true }] }, resolve: { affected: [] } }, MD)
     render(<WriteApp services={s} />)
