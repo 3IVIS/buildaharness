@@ -71,10 +71,12 @@ export function ChatPane(p: Props): React.JSX.Element {
   const list = useRef<HTMLUListElement | null>(null)
   const atBottom = useRef(true)
   const lastFrom = p.lines.at(-1)?.from
+  const working = Boolean(p.progress)
+  const { stage, detail, streamed, finishing } = p.progress ?? {}
   useLayoutEffect(() => {
     const el = list.current
     if (el && (atBottom.current || lastFrom === 'you')) { el.scrollTop = el.scrollHeight; atBottom.current = true }
-  }, [p.lines.length, lastFrom, Boolean(p.progress), p.progress?.stage, p.progress?.detail, p.progress?.streamed, p.progress?.finishing])
+  }, [p.lines.length, lastFrom, working, stage, detail, streamed, finishing])
   return (
     <section
       className={`write__pane write__pane--chat ${p.shown ? 'is-shown' : ''}`}
