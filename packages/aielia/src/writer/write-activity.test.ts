@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { ACTIVITY_KEY, MAX_ACTIVITY_RECORDS, activityReport, addRecord, createActivityLog, summarizeActivity, type JobRecord } from './write-activity.js'
+import { typicalMs, usuallyText, ACTIVITY_KEY, MAX_ACTIVITY_RECORDS, activityReport, addRecord, createActivityLog, summarizeActivity, type JobRecord } from './write-activity.js'
 
 const job = (kind: string, outcome: JobRecord['outcome'], ms: number, usd = 0.01, at = '2026-10-22T10:00:00.000Z'): JobRecord => ({ at, kind, outcome, ms, usd, calls: 1 })
 
@@ -27,5 +27,20 @@ describe('write activity', () => {
     expect((await log.read()).map((r) => r.kind)).toEqual(['edit', 'draft', 'verify'])
     const broken = createActivityLog({ getSetting: async () => undefined, setSetting: async () => { throw new Error('full') } })
     await expect(broken.record(job('edit', 'done', 1))).resolves.toBeUndefined()
+  })
+})
+
+describe('typical time', () => {
+  it('is the median of finished runs of that kind, and only once there are enough', () => {
+    const r = [job('edit', 'done', 10000), job('edit', 'done', 30000), job('edit', 'stopped', 1), job('verify', 'done', 99999)]
+    expect(typicalMs(r, 'edit')).toBeUndefined()
+    expect(typicalMs([...r, job('edit', 'done', 20000)], 'edit')).toBe(20000)
+  })
+  it('is said as an expectation, rounded, and not for quick jobs', () => {
+    expect(usuallyText(undefined)).toBeUndefined()
+    expect(usuallyText(3000)).toBeUndefined()
+    expect(usuallyText(21800)).toBe('Usually about 20 s')
+    expect(usuallyText(95000)).toBe('Usually about 1 min 30 s')
+    expect(usuallyText(125000)).toBe('Usually about 2 min')
   })
 })

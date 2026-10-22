@@ -506,3 +506,12 @@ body.write--resizing { user-select: none; -webkit-user-select: none; cursor: col
 
 .write__activity summary { cursor: pointer; }
 .write__activity pre { white-space: pre-wrap; font: inherit; font-size: 0.85rem; color: var(--muted); margin: 6px 0; }
+
+/* Claims settle one by one under the bar of a check. */
+.write__results { list-style: none; margin: 6px 0 0; padding: 0; display: grid; gap: 2px; font-size: 0.8rem; line-height: 1.4; }
+.write__results li { padding-left: 14px; position: relative; color: var(--muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; animation: write-result-in 0.25s ease-out; }
+.write__results li::before { content: '•'; position: absolute; left: 2px; }
+.write__results li.is-good::before { color: var(--accent); }
+.write__results li.is-bad { color: var(--text); }
+@keyframes write-result-in { from { opacity: 0; transform: translateY(2px); } }
+@media (prefers-reduced-motion: reduce) { .write__results li { animation: none; } }

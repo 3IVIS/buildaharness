@@ -11,7 +11,7 @@ describe('ChatPane work ticker', () => {
     expect(screen.getByText('Noting what you said…')).toBeInTheDocument()
     expect(screen.getByText('one more moment')).toBeInTheDocument()
     const steps = screen.getByLabelText('Steps').querySelectorAll('li')
-    expect([...steps].map((l) => l.className)).toEqual(['is-done', 'is-current', 'is-waiting'])
+    expect([...steps].map((l) => l.className)).toEqual(['is-done', 'is-current', 'is-waiting', 'is-waiting', 'is-waiting'])
   })
   it('is gone when the work is over', () => {
     render(<ChatPane {...base} progress={null} />)
@@ -46,5 +46,23 @@ describe('ChatPane: records of interface actions', () => {
       expect(li).not.toHaveClass('write__line--record')
       expect(li).not.toHaveAttribute('title')
     }
+  })
+})
+
+describe('ChatPane: claims settling during a check', () => {
+  it('lists the newest results under the bar', () => {
+    render(<ChatPane {...base} progress={{ kind: 'verify', label: 'Verifying', stage: 2, startedAt: Date.now(), count: [2, 5], results: [{ text: 'Backed: The p99 was 18 ms.', tone: 'good' }, { text: 'No source found: Latency halved.', tone: 'warn' }] }} />)
+    const list = screen.getByLabelText('Checked so far')
+    expect([...list.querySelectorAll('li')].map((l) => [l.textContent, l.className])).toEqual([['Backed: The p99 was 18 ms.', 'is-good'], ['No source found: Latency halved.', 'is-warn']])
+  })
+})
+
+describe('ChatPane: the usual time', () => {
+  it('says how long this kind of job usually takes, and not once it is finishing', () => {
+    const p = { kind: 'edit' as const, label: 'Editing', stage: 2, startedAt: Date.now(), usually: 'Usually about 20 s' }
+    const { rerender } = render(<ChatPane {...base} progress={p} />)
+    expect(screen.getByText('Usually about 20 s')).toBeInTheDocument()
+    rerender(<ChatPane {...base} progress={{ ...p, finishing: true }} />)
+    expect(screen.queryByText('Usually about 20 s')).toBeNull()
   })
 })

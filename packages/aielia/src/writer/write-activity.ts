@@ -89,6 +89,24 @@ export function activityReport(s: ActivitySummary): string {
   return [head, ...rows].join('\n')
 }
 
+/** Finished runs of a kind needed before a typical time is worth saying. */
+export const MIN_RUNS_FOR_TYPICAL = 3
+
+/** How long a kind of job usually takes: the median of its finished runs, or undefined until there are enough of them. */
+export function typicalMs(records: readonly JobRecord[], kind: string): number | undefined {
+  const times = records.filter((r) => r.kind === kind && r.outcome === 'done').map((r) => r.ms)
+  return times.length >= MIN_RUNS_FOR_TYPICAL ? Math.round(median(times)) : undefined
+}
+
+/** "Usually about 20 s": rounded so it reads as an expectation, not a measurement (to 5 s under a minute, to 15 s above). Nothing for a job that is quick anyway. */
+export function usuallyText(ms: number | undefined): string | undefined {
+  if (ms === undefined || ms < 8000) return undefined
+  const s = ms / 1000
+  if (s < 60) return `Usually about ${Math.round(s / 5) * 5} s`
+  const q = Math.round(s / 15) * 15
+  return q % 60 === 0 ? `Usually about ${q / 60} min` : `Usually about ${Math.floor(q / 60)} min ${q % 60} s`
+}
+
 export interface ActivityStore {
   getSetting(key: string): Promise<unknown>
   setSetting(key: string, value: unknown): Promise<void>

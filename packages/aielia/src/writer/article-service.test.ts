@@ -660,6 +660,17 @@ describe('the chat edits the article itself', () => {
     await new Promise((r) => setTimeout(r, 0))
     expect((await s.get(id)).markdown).toBe('')
   })
+  it('an edit and a draft say when the version is saved, the model is asked and the result is applied', async () => {
+    const seen: string[] = []
+    const { svc: s } = svc({ edits: { suggestions: [{ quote: 'The p99 was 18 ms.', replacement: 'The p99 was 17 ms.', reason: 'x' }] }, draft: { name: 'N', markdown: '# N\nText.' } })
+    const id = await s.create('Post', MD)
+    await s.editFromChat(id, 'Fix the figure', undefined, undefined, (stage, detail) => seen.push(detail ? `${stage}: ${detail}` : stage))
+    const empty = await s.create('Empty', '')
+    await s.draftFromChat(empty, 'Write it', undefined, false, undefined, undefined, (stage) => seen.push(`draft ${stage}`))
+    expect(seen[0]).toBe('asking')
+    expect(seen[1]).toMatch(/^applying: \d+ changes? to apply$/)
+    expect(seen.slice(2)).toEqual(['draft asking', 'draft applying'])
+  })
   it('Stop during an edit leaves the article and its suggestions as they were', async () => {
     const { svc: s } = svc({ edits: () => ({ suggestions: [] }) })
     const id = await s.create('Post', MD)

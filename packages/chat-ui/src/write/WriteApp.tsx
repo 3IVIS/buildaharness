@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { SpendBadge } from './SpendBadge'
-import { type WorkKind, workPlan, litRange, modelFailureHint, modelLabel, githubRepoReader, parseGithubRepoAddress, type FolderReader, expandSelection, summarizeVerify, summarizeArticleSources, type VerifyReport, textPieces, collectIssues, parseLineRange, sourceKindForFile, computeReadiness, effectiveSourceStatus, issueCount, textUnitAt, autosaveStep, outlineOf, issuesInRange, unitOfSelection, shouldDeriveStyle, type ArticleBundle, type ChangeSummary, type DependencyKind, type IssueCategory, type Section, type WritePermissions, type JobOutcome } from '@buildaharness/aielia'
+import { type WorkKind, workPlan, litRange, modelFailureHint, modelLabel, githubRepoReader, parseGithubRepoAddress, type FolderReader, expandSelection, summarizeVerify, summarizeArticleSources, type VerifyReport, textPieces, collectIssues, parseLineRange, sourceKindForFile, computeReadiness, effectiveSourceStatus, issueCount, textUnitAt, autosaveStep, outlineOf, issuesInRange, unitOfSelection, shouldDeriveStyle, type ArticleBundle, type ChangeSummary, type DependencyKind, type IssueCategory, type Section, type WritePermissions, type JobOutcome, type ResultLine, type ChatStageListener, claimResultLine, recentResults, typicalMs, usuallyText } from '@buildaharness/aielia'
 import type { ChatAction } from './AdjustBar'
 import { ArticleSwitcher, type ArticleItem } from './ArticleSwitcher'
 import { readFileText } from './file-text'
@@ -296,12 +296,14 @@ function WriteAppBody({ services, connection, onDeleted }: WriteAppProps): React
     setBusy(label)
     setBanner(null)
     setProgress({ kind, label, stage: 0, startedAt: started })
+    // How long this kind of job usually takes for this writer, once there is enough history to say.
+    void services.activity.read().then((r) => { const usually = usuallyText(typicalMs(r, kind)); if (usually) setProgress((p) => (p && p.startedAt === started ? { ...p, usually } : p)) }, () => undefined)
     if (CHANGES_TEXT.has(kind)) flashFrom.current = draftRef.current
     void services.store.setSetting(PENDING_KEY, label).catch(() => undefined)
     const quiet = (text: string, stage?: number, count?: readonly [number, number]): void => setProgress((p) => (p ? { ...p, detail: text || undefined, stage: stage ?? p.stage, count } : p))
     const step = Object.assign(
       (text: string, stage?: number, count?: readonly [number, number]): void => { if (ctl.signal.aborted) throw new StoppedError(); quiet(text, stage, count) },
-      { quiet, stopped: () => ctl.signal.aborted, signal: ctl.signal },
+      { quiet, note: (line: ResultLine): void => setProgress((p) => (p ? { ...p, results: recentResults(p.results ?? [], line) } : p)), stopped: () => ctl.signal.aborted, signal: ctl.signal },
     ) as Step
     let ok = false
     let outcome: JobOutcome = 'done'
@@ -906,6 +908,7 @@ function WriteAppBody({ services, connection, onDeleted }: WriteAppProps): React
           repoOnly,
           onStep: (st) => { detail = `${stepText(st)} (lookup ${++calls})`; step.quiet(detail, 2, latest) },
           onProgress: (done, total) => { latest = [done, total]; step.quiet(detail, 2, latest) },
+          onEntry: (e) => step.note(claimResultLine(e.outcome, e.quote)),
           shouldStop: step.stopped,
         })
         step.quiet('', 3)
@@ -1014,13 +1017,15 @@ function WriteAppBody({ services, connection, onDeleted }: WriteAppProps): React
         }
         const { model: said, tail } = await noteIt(id)
         step('', 2)
+        // After the version is saved, the service says when it is asking the model and when it is applying the result.
+        const chatStage: ChatStageListener = (stage, detail) => step.quiet(detail ?? '', stage === 'asking' ? 3 : 4)
         const outline = view === 'outline'
         if (!outline && (fresh || !draft.trim())) {
           // An empty article has no text to quote, so the chat writes the first draft instead of editing.
           // The draft is typed into the article as the model writes it; if it ends any other way than a finished draft, the stored text comes back below.
           const typed = typeInto()
           let d: Awaited<ReturnType<typeof service.draftFromChat>>
-          try { d = await service.draftFromChat(id, text, said, fresh, step.signal, typed.push) } catch (e) { typed.end(); await reload(id); throw e } finally { typed.end() }
+          try { d = await service.draftFromChat(id, text, said, fresh, step.signal, typed.push, chatStage) } catch (e) { typed.end(); await reload(id); throw e } finally { typed.end() }
           await reload(id)
           setViewing(null)
           setShowHistory(false)
@@ -1029,7 +1034,7 @@ function WriteAppBody({ services, connection, onDeleted }: WriteAppProps): React
           setChat((c) => [...c, { id: ++lineId, from: 'aielia', text: (d.status === 'drafted' ? `I wrote the first draft${d.name ? ` and named the article “${d.name}”` : ''}, and the article now shows it. To go back, restore the earlier version in History.` : `I could not write the draft${d.reason ? `: ${d.reason}` : ''}, so the article is unchanged.`) + tail, model: said }])
           return
         }
-        const r = outline ? await service.editOutlineFromChat(id, text, said, step.signal) : await service.editFromChat(id, text, said, step.signal)
+        const r = outline ? await service.editOutlineFromChat(id, text, said, step.signal, chatStage) : await service.editFromChat(id, text, said, step.signal, chatStage)
         await reload(id)
         setViewing(null)
         setShowHistory(false)

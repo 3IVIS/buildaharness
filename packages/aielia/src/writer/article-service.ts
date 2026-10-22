@@ -80,6 +80,9 @@ export function createMemoryArticleStore(): ArticleStore {
   }
 }
 
+/** The phases of a chat edit or draft after the version is saved: the model is asked, then the result is applied (with a short note of how much). */
+export type ChatStageListener = (stage: 'asking' | 'applying', detail?: string) => void
+
 export interface ArticleServiceOptions {
   store: ArticleStore
   llm: ILLMClient
@@ -560,7 +563,7 @@ export class ArticleService {
     return (this.repos.get(id) ?? []).map((r) => r.name)
   }
 
-  async verifyClaims(id: string, opts: { claimIds?: string[]; limit?: number; pages?: number; model?: string; repoOnly?: boolean; batchSize?: number; maxToolCalls?: number; onStep?: (step: LoopStep) => void; onProgress?: (done: number, total: number) => void; shouldStop?: () => boolean } = {}): Promise<VerifyReport> {
+  async verifyClaims(id: string, opts: { claimIds?: string[]; limit?: number; pages?: number; model?: string; repoOnly?: boolean; batchSize?: number; maxToolCalls?: number; onStep?: (step: LoopStep) => void; onProgress?: (done: number, total: number) => void; onEntry?: (entry: VerifyEntry) => void; shouldStop?: () => boolean } = {}): Promise<VerifyReport> {
     let b = await this.get(id)
     if (b.meta.claims.length === 0) b = (await this.analyze(id, opts.model)).bundle
     const { ids, leftOver } = verifyTargets(b.meta, opts.claimIds, opts.limit ?? DEFAULT_VERIFY_LIMIT)
@@ -571,6 +574,7 @@ export class ArticleService {
       for (const e of found) {
         // A claim the repository does not settle goes on to the web, unless the writer asked for the repository only (or has stopped the run).
         entries.push(e.outcome === 'no_source_found' && !opts.repoOnly && this.opts.searchWeb && this.opts.fetchWeb && !opts.shouldStop?.() ? await this.verifyOne(id, e.claimId, opts.pages ?? DEFAULT_VERIFY_PAGES, opts.model) : e)
+        opts.onEntry?.(entries[entries.length - 1])
         opts.onProgress?.(entries.length, ids.length)
       }
       const stopped = opts.shouldStop?.() === true
@@ -581,6 +585,7 @@ export class ArticleService {
       if (opts.shouldStop?.()) return { entries, leftOver: leftOver + ids.length - entries.length, stopped: true }
       opts.onProgress?.(entries.length, ids.length)
       entries.push(await this.verifyOne(id, claimId, opts.pages ?? DEFAULT_VERIFY_PAGES, opts.model, opts.repoOnly === true))
+      opts.onEntry?.(entries[entries.length - 1])
     }
     opts.onProgress?.(entries.length, ids.length)
     return { entries, leftOver }
@@ -750,11 +755,13 @@ export class ArticleService {
    * The chat edits the article itself. The text as it is now is saved as a version first, always, so the edit can be undone from History; then
    * the edit is made, and only the changes this request produced are applied (suggestions waiting from before stay as they are).
    */
-  async editFromChat(id: string, instruction: string, modelOverride?: string, signal?: AbortSignal): Promise<ChatEditResult> {
+  async editFromChat(id: string, instruction: string, modelOverride?: string, signal?: AbortSignal, onStage?: ChatStageListener): Promise<ChatEditResult> {
     const savedAs = `Before a chat edit: ${clipLabel(instruction)}`
     await this.saveVersion(id, savedAs)
+    onStage?.('asking')
     const r = await this.suggest(id, instruction, modelOverride, {}, signal)
     if (r.status === 'failed') return { status: 'failed', savedAs, applied: [], skipped: 0 }
+    onStage?.('applying', `${r.added.length} change${r.added.length === 1 ? '' : 's'} to apply`)
     const b = await this.get(id)
     const mine = b.meta.suggestions.filter((x) => r.added.includes(x.id)).sort((x, y) => y.span.start - x.span.start)
     let meta = b.meta
@@ -775,29 +782,33 @@ export class ArticleService {
    * The chat writes the text of an article that has none: a version is saved first (as for any chat edit), then the draft becomes the text.
    * With `nameIt`, the article is also given the name the draft came with (for an article the chat has just made, which has no name of its own yet).
    */
-  async draftFromChat(id: string, instruction: string, modelOverride?: string, nameIt = false, signal?: AbortSignal, onText?: (markdownSoFar: string) => void): Promise<{ status: 'drafted' | 'failed'; savedAs: string; name?: string; reason?: string }> {
+  async draftFromChat(id: string, instruction: string, modelOverride?: string, nameIt = false, signal?: AbortSignal, onText?: (markdownSoFar: string) => void, onStage?: ChatStageListener): Promise<{ status: 'drafted' | 'failed'; savedAs: string; name?: string; reason?: string }> {
     const savedAs = `Before a chat draft: ${clipLabel(instruction)}`
     await this.saveVersion(id, savedAs)
+    onStage?.('asking')
     const b = await this.get(id)
     const { onUsage } = this.opts
     const r = await draftArticle({ meta: b.meta, instruction }, stoppableLlmClient(this.opts.llm, signal), modelOverride ?? this.writer(), onUsage, onText)
     if (signal?.aborted) throw new TurnAbortedError()
     if (r.status === 'failed') return { status: 'failed', savedAs, reason: r.reason }
+    onStage?.('applying')
     await this.updateText(id, r.markdown, { analyze: false })
     if (nameIt && r.name) await this.rename(id, r.name)
     return { status: 'drafted', savedAs, name: nameIt && r.name ? r.name : undefined }
   }
 
   /** The same for the outline: saved first, then the headings are reworked (reworded, added, removed, moved) and each section's text follows its heading. */
-  async editOutlineFromChat(id: string, instruction: string, modelOverride?: string, signal?: AbortSignal): Promise<OutlineEditResult> {
+  async editOutlineFromChat(id: string, instruction: string, modelOverride?: string, signal?: AbortSignal, onStage?: ChatStageListener): Promise<OutlineEditResult> {
     const savedAs = `Before a chat edit of the outline: ${clipLabel(instruction)}`
     await this.saveVersion(id, savedAs)
+    onStage?.('asking')
     const b = await this.get(id)
     const before = outlineToText(b.markdown)
     const { onUsage } = this.opts
     const r = await editOutline({ meta: b.meta, outline: before, instruction }, stoppableLlmClient(this.opts.llm, signal), modelOverride ?? this.writer(), onUsage)
     if (signal?.aborted) throw new TurnAbortedError()
     if (r.status === 'failed') return { status: 'failed', savedAs, reason: r.reason }
+    onStage?.('applying')
     const next = applyOutlineText(b.markdown, r.outline)
     if (next === b.markdown) return { status: 'nothing', savedAs, before, after: before }
     await this.updateText(id, next, { analyze: false })

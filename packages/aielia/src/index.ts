@@ -157,7 +157,7 @@ export type { KeyedBackend, ProviderSetupInfo, KeyTestResult } from './provider-
 // Aielia Write: state the writer gives in chat (plans/aielia_write_article_model_plan.html, section 8)
 export { WriterChatStateSchema, WriterCommentSchema, WriterCorrectionSchema, WRITER_CHAT_STATE_VERSION, createEmptyWriterChatState, applyCaptureOps, renderWriterChatBlock } from './writer/writer-chat-state.js'
 export type { WriterChatState, WriterComment, WriterCorrection, ArticleRef, CaptureOp, ApplyResult } from './writer/writer-chat-state.js'
-export { ACTIVITY_KEY, MAX_ACTIVITY_RECORDS, addRecord, activityReport, createActivityLog, summarizeActivity, isJobRecord } from './writer/write-activity.js'
+export { ACTIVITY_KEY, MAX_ACTIVITY_RECORDS, addRecord, activityReport, createActivityLog, summarizeActivity, isJobRecord, typicalMs, usuallyText, MIN_RUNS_FOR_TYPICAL } from './writer/write-activity.js'
 export type { ActivityLog, ActivitySummary, JobOutcome, JobRecord, KindSummary } from './writer/write-activity.js'
 export { captureChatState } from './writer/writer-chat-capture.js'
 export type { CaptureResult, CaptureStatus } from './writer/writer-chat-capture.js'
@@ -184,6 +184,7 @@ export type { SuggestionResult } from './writer/article-suggestions.js'
 export type { SourceCandidate, SourceRecheckReport } from './writer/article-service.js'
 export { githubRepoReader, parseGithubRepoAddress } from './writer/repo-reader.js'
 export type { RepoReader, GithubRepoSpec } from './writer/repo-reader.js'
+export type { ChatStageListener } from './writer/article-service.js'
 export { ArticleService, createArticleChatPort, createMemoryArticleStore, serializeByArticle } from './writer/article-service.js'
 export type { ArticleStore, ArticleServiceOptions, UpdateOutcome, ChatEditResult, OutlineEditResult } from './writer/article-service.js'
 export { createMemoryAdapterArticleStore } from './writer/article-memory-store.js'
@@ -226,6 +227,6 @@ export { collectIssues, issuesInRange, issueCount, checkableClaims, unsupportedC
 export type { IssueBatch, IssueItem, IssueCategory } from './writer/article-issues.js'
 
 // Aielia Write: the checklist and sentences shown while a background model call runs
-export { workPlan, checklistAt, stageSentence, elapsedText, changedRange, litRange } from './writer/work-progress.js'
-export type { WorkKind, WorkPlan, StepState, ChecklistItem } from './writer/work-progress.js'
+export { workPlan, checklistAt, stageSentence, elapsedText, changedRange, litRange, claimResultLine, recentResults } from './writer/work-progress.js'
+export type { WorkKind, WorkPlan, StepState, ChecklistItem, ResultLine, ResultTone } from './writer/work-progress.js'
 export { modelFailureHint, DEFAULT_MODEL_HINT, CLAUDE_SIGN_IN_HINT } from './writer/model-failure-hint.js'
