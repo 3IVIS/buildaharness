@@ -141,7 +141,7 @@ function WorkTicker({ progress, onStop }: { progress: WorkProgress; onStop?: () 
       <div className="write__workhead">
         <span className="write__pulse" aria-hidden="true"><i /><i /><i /></span>
         <span key={sentence} className="write__worksentence">{sentence}</span>
-        {elapsed && <span className="write__workelapsed" title="How long this has been running">{elapsed}</span>}
+        {elapsed && <span className="write__workelapsed" aria-hidden="true" title="How long this has been running">{elapsed}</span>}
         {onStop && !progress.finishing && !progress.stopping && <button type="button" className="write__stop" title="Stop after the step it is on (Esc)" onClick={onStop}>Stop</button>}
       </div>
       {progress.detail && <div className="write__workdetail" key={progress.detail}>{progress.detail}</div>}
@@ -156,7 +156,7 @@ function WorkTicker({ progress, onStop }: { progress: WorkProgress; onStop?: () 
           {items.map((it) => <li key={it.text} className={`is-${it.state}`}><span className="write__tick" aria-hidden="true">{it.state === 'done' ? '✓' : ''}</span>{it.text}</li>)}
         </ol>
       )}
-      {progress.streamed && <div className="write__stream">{progress.streamed}</div>}
+      {progress.streamed && <div className="write__stream" aria-hidden="true">{progress.streamed}</div>}
       {long && <div className="write__workdetail">This one takes a while. You can keep reading the article.</div>}
     </li>
   )
