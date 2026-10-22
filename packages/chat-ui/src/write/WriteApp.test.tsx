@@ -44,6 +44,45 @@ afterEach(() => {
   vi.restoreAllMocks()
 })
 
+describe('the chat turn: words as they come, and stopping', () => {
+  it('hands the turn the signal and a token callback, and says stopped when the turn was cancelled', async () => {
+    const seen: { signal?: AbortSignal; tokens: string[] } = { tokens: [] }
+    let cancel = false
+    const s = await assembleWriteServices({
+      store: createMemoryArticleStore(),
+      llm: llm({}),
+      buildAssistant: async () => ({
+        turn: async (_m: string, o: { signal?: AbortSignal; onToken?: (t: string) => void }) => {
+          seen.signal = o.signal
+          o.onToken?.('Hel'); o.onToken?.('lo')
+          return cancel ? { status: 'cancelled', reply: null, reason: 'Stopped by user' } : { status: 'ok', reply: 'Hello' }
+        },
+        setModel: () => undefined,
+      }) as unknown as PersonalAssistant,
+    })
+    const ctl = new AbortController()
+    const ok = await s.chat('hi', undefined, { signal: ctl.signal, onToken: (t) => seen.tokens.push(t) })
+    expect(ok).toMatchObject({ reply: 'Hello' })
+    expect(ok.stopped).toBeUndefined()
+    expect(seen.signal).toBe(ctl.signal)
+    expect(seen.tokens.join('')).toBe('Hello')
+    cancel = true
+    expect(await s.chat('hi', undefined, { signal: ctl.signal })).toMatchObject({ reply: 'Stopped.', stopped: true })
+  })
+  it('tells a logged-out Claude session to sign in, not to check a key', async () => {
+    const s = await assembleWriteServices({
+      backend: 'claude-cli',
+      store: createMemoryArticleStore(),
+      llm: llm({}),
+      buildAssistant: async () => ({ turn: async () => ({ status: 'escalated', reply: null, reason: 'Not logged in · Please run /login' }), setModel: () => undefined }) as unknown as PersonalAssistant,
+    })
+    const r = await s.chat('hi', undefined)
+    expect(r.reply).toContain('Not logged in · Please run /login')
+    expect(r.reply).toContain('Sign in to Claude')
+    expect(r.reply).not.toContain('Check your key')
+  })
+})
+
 const MD = '# Post\n\n## Latency\n\nThe p99 was 18 ms.\n'
 const MD2 = '# Post\n\n## Latency\n\nThe p99 was 18 ms. It is quick.\n\n## Conclusion\n\nSo p99 stays under 20 ms.\n'
 const openMenu = (): Promise<void> => userEvent.click(screen.getByRole('button', { name: 'Article' }))
@@ -419,6 +458,43 @@ describe('chat: model, check and adjust', () => {
     await userEvent.type(screen.getByLabelText('Message'), 'hello{Enter}')
     expect(await screen.findByText('Noted.')).toBeInTheDocument()
     expect(screen.getAllByTitle('The model that wrote this')[0]).toHaveTextContent('my-own-model')
+  })
+
+  it('an edit keeps what the writer said in the record without running the whole chat turn, and says when it could not', async () => {
+    let turns = 0
+    const store = createMemoryArticleStore()
+    const id = await new ArticleService({ store, llm: llm({}) }).create('Post', MD2)
+    const s = await assembleWriteServices({
+      store,
+      llm: llm({ capture: { articleId: id, ops: [{ op: 'add_correction', note: 'The p99 is 41 ms.' }] }, edits: { suggestions: [{ quote: 'It is quick.', replacement: 'It is very quick.', reason: 'stronger' }] } }),
+      buildAssistant: async () => ({ turn: async () => { turns++; return { reply: 'Noted.' } }, setModel: () => undefined }) as unknown as PersonalAssistant,
+    })
+    // The record is made (the correction in the message is kept in the article) and the assistant's own turn is not run.
+    const ok = await s.record('The p99 is 41 ms. Make it stronger.', id)
+    expect(ok.recorded).toBe(true)
+    expect(turns).toBe(0)
+    expect((await s.service.get(id)).meta.corrections.map((c) => c.note)).toContain('The p99 is 41 ms.')
+    // Through the page: no turn either, and no "not added" note when the record was made.
+    render(<WriteApp services={s} />)
+    const box = await waitForText()
+    await userEvent.click(rail('Chat'))
+    await userEvent.selectOptions(screen.getByLabelText('When I ask for a change'), 'edit')
+    await userEvent.type(screen.getByLabelText('Message'), 'Make it stronger{Enter}')
+    expect(await screen.findByText(/I saved a version first/)).toBeInTheDocument()
+    await waitFor(() => expect(box.value).toContain('It is very quick.'))
+    expect(turns).toBe(0)
+    expect(screen.queryByText(/were not added to the article/)).toBeNull()
+  })
+  it('says so when what the writer said could not be recorded, and still makes the edit', async () => {
+    // No scripted reply for the record call: it fails, and the edit goes ahead with a note.
+    const s = await services({ edits: { suggestions: [{ quote: 'It is quick.', replacement: 'It is very quick.', reason: 'stronger' }] } }, MD2)
+    render(<WriteApp services={s} />)
+    await waitForText()
+    await userEvent.click(rail('Chat'))
+    await userEvent.selectOptions(screen.getByLabelText('When I ask for a change'), 'edit')
+    await userEvent.type(screen.getByLabelText('Message'), 'Make it stronger{Enter}')
+    expect(await screen.findByText(/were not added to the article's notes/)).toBeInTheDocument()
+    expect(await screen.findByText(/I saved a version first/)).toBeInTheDocument()
   })
 
   it('"Edit the article" saves a version first, then edits, and the page shows the edited text', async () => {
@@ -1048,6 +1124,44 @@ describe('finding sources', () => {
     release()
     expect(await screen.findByText(/Looked at 1 claim/)).toBeInTheDocument()
     await waitFor(() => expect(within(chatList()).queryByText(/^Verifying with /)).toBeNull())
+  })
+  it('counts the claims done, and Stop ends a check between claims, keeping the ones already checked', async () => {
+    const claims = { claims: [{ quote: 'The p99 was 18 ms.', kind: 'factual', matchesId: null, sure: true }, { quote: 'So p99 stays under 20 ms.', kind: 'factual', matchesId: null, sure: true }] }
+    let release: () => void = () => undefined
+    const gate = new Promise<void>((r) => { release = r })
+    let searches = 0
+    const s = await services({ claims, resolve: { affected: [] } }, MD2, async () => 'x', async () => { searches++; await gate; return [] })
+    const id = (await s.service.list())[0].id
+    await s.service.analyze(id)
+    render(<WriteApp services={s} />)
+    await waitForText()
+    await userEvent.selectOptions(screen.getByLabelText('Adjust', { selector: 'select' }), 'action:verify')
+    const stop = await screen.findByRole('button', { name: 'Stop' })
+    await waitFor(() => expect(searches).toBe(1))
+    await userEvent.click(stop)
+    expect(await screen.findByText('Stopping after this step…')).toBeInTheDocument()
+    release()
+    expect(await screen.findByText(/Stopped early: 1 claim was checked and 1 is left/)).toBeInTheDocument()
+    expect(searches).toBe(1)
+    expect(screen.queryByText(/each run takes/)).toBeNull()
+  })
+  it('says so when Stop came while the last step was already running and the work finished', async () => {
+    const claims = { claims: [{ quote: 'The p99 was 18 ms.', kind: 'factual', matchesId: null, sure: true }] }
+    let release: () => void = () => undefined
+    const gate = new Promise<void>((r) => { release = r })
+    let searches = 0
+    const s = await services({ claims, resolve: { affected: [] } }, MD, async () => 'x', async () => { searches++; await gate; return [] })
+    const id = (await s.service.list())[0].id
+    await s.service.analyze(id)
+    render(<WriteApp services={s} />)
+    await waitForText()
+    await userEvent.selectOptions(screen.getByLabelText('Adjust', { selector: 'select' }), 'action:verify')
+    const stop = await screen.findByRole('button', { name: 'Stop' })
+    await waitFor(() => expect(searches).toBe(1))
+    await userEvent.click(stop) // the only claim is already being searched: nothing is left to skip
+    release()
+    expect(await screen.findByText(/Looked at 1 claim/)).toBeInTheDocument()
+    expect(await screen.findByText(/Stop came while the last step was already running, so it finished/)).toBeInTheDocument()
   })
   it('offers no search button when no search is set up', async () => {
     const s = await services({ claims: { claims: [{ quote: 'The p99 was 18 ms.', kind: 'factual', matchesId: null, sure: true }] }, resolve: { affected: [] } }, MD)

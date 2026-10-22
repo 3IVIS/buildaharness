@@ -11,7 +11,7 @@ import { tmpdir } from 'node:os'
 import { createServer, type Server } from 'node:net'
 import type { ILLMClient, ChatMessage, ChatOptions, ToolDefinition, LLMStructuredResponse, ToolStepEvent, ToolProposalDecision } from '@buildaharness/runtime'
 import type { PendingActionRecord } from './file-tools.js'
-import { buildClaudePrompt, parseClaudeCliOutput, stripJsonCodeFence, ALREADY_STAGED_ACTION_TOOL, stagedActionInput, type ParsedClaudeCliOutput } from './claude-cli-prompt.js'
+import { buildClaudePrompt, claudeFailureMessage, parseClaudeCliOutput, stripJsonCodeFence, ALREADY_STAGED_ACTION_TOOL, stagedActionInput, type ParsedClaudeCliOutput } from './claude-cli-prompt.js'
 import { stripMcpToolPrefix } from './tool-step.js'
 import { resolveMcpServerPath } from './mcp-server-asset.js'
 import { lexicalOffEnvValue } from './lexical/lexical-mode.js'
@@ -108,7 +108,7 @@ function invokeClaude(claudePath: string, args: string[]): Promise<ParsedClaudeC
     proc.on('error', reject)
     proc.on('close', (code) => {
       if (code !== 0) {
-        reject(new Error(stderr.trim() || `claude exited with code ${code}`))
+        reject(new Error(claudeFailureMessage(stdout, stderr, code)))
         return
       }
       resolvePromise(parseClaudeCliOutput(stdout))
@@ -169,7 +169,7 @@ function invokeClaudeStreaming(claudePath: string, args: string[], onToolStep?: 
     proc.on('error', reject)
     proc.on('close', (code) => {
       if (code !== 0) {
-        reject(new Error(stderr.trim() || `claude exited with code ${code}`))
+        reject(new Error(claudeFailureMessage(finalResultLine ?? '', stderr, code)))
         return
       }
       handleLine(buffer) // a final line with no trailing newline is still a complete event

@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest'
 import { InMemoryAdapter, type ILLMClient } from '@buildaharness/runtime'
-import { createMemoryWriterChatPort, processWriterMessage } from './writer-chat-turn.js'
+import { createMemoryWriterChatPort, processWriterMessage, recordWriterMessage } from './writer-chat-turn.js'
 
 const ARTICLES = [{ id: 'bakery', title: 'Bakery post' }, { id: 'garden', title: 'Seed swap' }]
 const mem = () => new InMemoryAdapter({ scope: 'thread', namespace: 'writer-test' })
@@ -77,5 +77,32 @@ describe('processWriterMessage', () => {
   it('never throws, even when the port does', async () => {
     const broken = { ...port(), load: async () => { throw new Error('disk') } }
     expect(await processWriterMessage({ message: 'a', port: broken }, client(['{}']))).toContain('could not record')
+  })
+})
+
+describe('recordWriterMessage', () => {
+  it('records what the message adds exactly as a full turn does, with one model call and no reply', async () => {
+    const p = port()
+    let calls = 0
+    const llm = { callChatStructured: async () => { calls++; return { content: JSON.stringify({ articleId: 'bakery', ops: [add('C1', 'Check the figure'), { op: 'add_correction', note: 'p99 is 41 ms' }] }) } } } as unknown as ILLMClient
+    const r = await recordWriterMessage({ message: 'The p99 is 41 ms. Make it shorter.', port: p }, llm)
+    expect(r.status).toBe('captured')
+    expect(calls).toBe(1)
+    const state = await p.load()
+    expect(state.comments).toHaveLength(1)
+    expect(state.corrections).toHaveLength(1)
+    expect(await p.getActive()).toBe('bakery')
+  })
+  it('holds the items when the article is unclear, and says so instead of claiming they were kept', async () => {
+    const p = port()
+    const r = await recordWriterMessage({ message: 'it is 41 ms', port: p }, client([JSON.stringify({ articleId: null, ops: [{ op: 'add_correction', note: 'p99 is 41 ms' }] })]))
+    expect(r.status).toBe('needs_article')
+    expect(await p.getPending()).toHaveLength(1)
+  })
+  it('reports a failed capture and never throws', async () => {
+    const r = await recordWriterMessage({ message: 'x', port: port() }, client([new Error('model down')]))
+    expect(r.status).toBe('not_captured')
+    const broken = { ...port(), articles: () => { throw new Error('store down') } }
+    expect((await recordWriterMessage({ message: 'x', port: broken }, client(['{}']))).status).toBe('not_captured')
   })
 })

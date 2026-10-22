@@ -1,5 +1,5 @@
 import type { ILLMClient, MemoryAdapter, TokenUsage } from '@buildaharness/runtime'
-import { captureChatState } from './writer-chat-capture.js'
+import { captureChatState, type CaptureStatus } from './writer-chat-capture.js'
 import {
   applyCaptureOps,
   createEmptyWriterChatState,
@@ -80,6 +80,73 @@ const NEEDS_ARTICLE_NOTE =
 const NOT_CAPTURED_NOTE =
   '\n\n[The system could not record what the writer just said in the article record. Do not tell the writer it was saved; suggest they say it again or check their connection.]'
 
+/** What capturing a writer's message did: the text for the answering model's prompt, and how it went. */
+interface CapturedMessage {
+  state: WriterChatState
+  active: string | undefined
+  articles: ArticleRef[]
+  /** Text for the answering model when capture could not finish ('' when it did). */
+  note: string
+  status: CaptureStatus | 'off'
+}
+
+/**
+ * Reads the writer's message for comments, decisions and corrections and stores what it adds (one model call). Shared by the full turn and by
+ * `recordWriterMessage`, so the record is made the same way whichever path the message takes. Throws only on a failure of the port itself.
+ */
+async function captureAndStore(
+  input: { message: string; port: WriterChatPort; now?: string },
+  llmClient: ILLMClient,
+  model?: string,
+  onUsage?: (usage: TokenUsage) => void,
+): Promise<CapturedMessage> {
+  const { port } = input
+  const articles = await port.articles()
+  let state = await port.load()
+  let active = await port.getActive()
+  const pending = await port.getPending()
+
+  const capturing = port.captureEnabled ? await port.captureEnabled() : true
+  const result = capturing ? await captureChatState({ message: input.message, state, articles, now: input.now }, llmClient, model, onUsage) : { status: 'captured' as const, state, applied: [] as string[], skipped: [] as string[], articleId: undefined }
+  let note = ''
+  if (result.status === 'not_captured') {
+    note = NOT_CAPTURED_NOTE
+  } else if (result.status === 'needs_article') {
+    await port.setPending([...(pending ?? []), ...(result.pendingOps ?? [])])
+    note = NEEDS_ARTICLE_NOTE
+  } else {
+    state = result.state
+    if (result.articleId) active = result.articleId
+    // The writer answered "which article" earlier: the held items now go to the article this message names.
+    if (pending && pending.length > 0 && result.articleId) {
+      const applied = applyCaptureOps(state, result.articleId, pending, input.now ?? new Date().toISOString())
+      state = applied.state
+      await port.setPending(undefined)
+    }
+    if (result.applied.length > 0 || state !== result.state || (pending && pending.length > 0 && result.articleId)) await port.save(state)
+    await port.setActive(active)
+  }
+  return { state, active, articles, note, status: capturing ? result.status : 'off' }
+}
+
+/**
+ * Only the recording half of a turn, for a message that asks for an edit, a draft or suggestions: what the writer says is read and kept in the
+ * article's record exactly as in a full turn (the edit reads that record), but no reply is written, so it is one model call instead of the
+ * whole turn. Never throws: a failure is reported as `not_captured`.
+ */
+export async function recordWriterMessage(
+  input: { message: string; port: WriterChatPort; now?: string },
+  llmClient: ILLMClient,
+  model?: string,
+  onUsage?: (usage: TokenUsage) => void,
+): Promise<{ status: CaptureStatus | 'off' }> {
+  try {
+    return { status: (await captureAndStore(input, llmClient, model, onUsage)).status }
+  } catch {
+    return { status: 'not_captured' }
+  }
+}
+
 /**
  * Returns the text to append to the system prompt for this turn (empty when there is nothing to say). Never throws:
  * a failure of any kind returns the not-captured note, so the assistant cannot claim something was saved that was not.
@@ -92,31 +159,7 @@ export async function processWriterMessage(
 ): Promise<string> {
   try {
     const { port } = input
-    const articles = await port.articles()
-    let state = await port.load()
-    let active = await port.getActive()
-    const pending = await port.getPending()
-
-    const capturing = port.captureEnabled ? await port.captureEnabled() : true
-    const result = capturing ? await captureChatState({ message: input.message, state, articles, now: input.now }, llmClient, model, onUsage) : { status: 'captured' as const, state, applied: [] as string[], skipped: [] as string[], articleId: undefined }
-    let note = ''
-    if (result.status === 'not_captured') {
-      note = NOT_CAPTURED_NOTE
-    } else if (result.status === 'needs_article') {
-      await port.setPending([...(pending ?? []), ...(result.pendingOps ?? [])])
-      note = NEEDS_ARTICLE_NOTE
-    } else {
-      state = result.state
-      if (result.articleId) active = result.articleId
-      // The writer answered "which article" earlier: the held items now go to the article this message names.
-      if (pending && pending.length > 0 && result.articleId) {
-        const applied = applyCaptureOps(state, result.articleId, pending, input.now ?? new Date().toISOString())
-        state = applied.state
-        await port.setPending(undefined)
-      }
-      if (result.applied.length > 0 || state !== result.state || (pending && pending.length > 0 && result.articleId)) await port.save(state)
-      await port.setActive(active)
-    }
+    const { state, active, articles, note } = await captureAndStore(input, llmClient, model, onUsage)
     let articleBlock = ''
     if (active && port.articleText) {
       const text = await port.articleText(active)

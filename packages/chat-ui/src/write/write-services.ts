@@ -5,6 +5,8 @@ import {
   PersonalAssistant,
   WEB_FEATURES,
   buildAssistantOptions,
+  modelFailureHint,
+  recordWriterMessage,
   createArticleChatPort,
   createLlmClient,
   createMemoryAdapterArticleStore,
@@ -37,11 +39,19 @@ export interface WriteModels {
 
 /** What the Write page needs from the outside: the article service, the chat, and the articles' chat port. */
 export interface WriteServices {
+  /** The model backend in use ("anthropic", "claude-cli" and so on), which decides what a failed call tells the writer to try. */
+  backend: string
   service: ArticleService
   store: ArticleStore
   port: WriterChatPort
   /** One chat turn about the article currently open. `model` is the model that answered. */
-  chat(message: string, activeArticleId: string | undefined): Promise<{ reply: string; model: string }>
+  chat(message: string, activeArticleId: string | undefined, live?: { onToken?: (token: string) => void; signal?: AbortSignal }): Promise<{ reply: string; model: string; stopped?: boolean }>
+  /**
+   * Only the recording half of a chat turn, for a message that asks for an edit, a draft or suggestions: what the writer says (comments, decisions,
+   * corrections) is kept in the article's record as in any turn, but no reply is written. One model call instead of the whole turn.
+   * `recorded` is false when the record could not be made (the edit goes ahead; the page says so).
+   */
+  record(message: string, activeArticleId: string | undefined, live?: { signal?: AbortSignal }): Promise<{ model: string; recorded: boolean; stopped?: boolean }>
   models: WriteModels
   permissions: { get(): Promise<WritePermissions>; set(p: WritePermissions): Promise<void> }
   /** Dollars spent on model calls in this browser so far (counts toward the cap). */
@@ -133,19 +143,33 @@ export async function assembleWriteServices(parts: {
   const assistant = await parts.buildAssistant(port, llm, chatModel)
 
   return {
+    backend,
     service,
     store,
     port,
-    async chat(message, activeArticleId) {
+    async chat(message, activeArticleId, live) {
       if (activeArticleId) await port.setActive(activeArticleId)
       const used = chatModel
       lastModelError = undefined
-      const result = await assistant.turn(message, { sessionId: SESSION_ID })
+      const result = await assistant.turn(message, { sessionId: SESSION_ID, ...(live?.signal ? { signal: live.signal } : {}), ...(live?.onToken ? { onToken: live.onToken } : {}) })
+      if (result.status === 'cancelled') return { reply: 'Stopped.', model: used, stopped: true }
       // A turn that did not finish has no reply. The page says why instead of showing an empty answer: the model's own error when a call failed
       // (the harness wraps it in text about risk checks), otherwise the reason the turn gives.
-      const why = result.status === 'cancelled' ? 'The turn was stopped.' : lastModelError ?? result.reason
-      const hint = 'Check your key and the model in Settings, or pick another model next to the chat, then try again.'
+      const why = lastModelError ?? result.reason
+      const hint = modelFailureHint(backend)
       return { reply: result.reply ?? (why ? `I could not answer: ${why.replace(/[.\s]+$/, '')}. ${hint}` : `I could not answer, and the model gave no reason. ${hint}`), model: used }
+    },
+    async record(message, activeArticleId, live) {
+      if (activeArticleId) await port.setActive(activeArticleId)
+      const used = chatModel
+      const work = recordWriterMessage({ message, port }, llm, chatModel)
+      // A stop is honoured at once; the call itself finishes in the background and keeps what the writer said, which is harmless.
+      const signal = live?.signal
+      const outcome = signal
+        ? await Promise.race([work, new Promise<'stopped'>((resolve) => { if (signal.aborted) resolve('stopped'); else signal.addEventListener('abort', () => resolve('stopped'), { once: true }) })])
+        : await work
+      if (outcome === 'stopped') return { model: used, recorded: false, stopped: true }
+      return { model: used, recorded: outcome.status === 'captured' || outcome.status === 'off' }
     },
     models: {
       chat: () => chatModel,

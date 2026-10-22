@@ -17,6 +17,8 @@ interface Props {
   onPress(): void
   /** A double-click at this place in the text: select the sentence, and on each further double-click the next larger unit, then start over. */
   onDoubleClick(at: number): void
+  /** A passage a job has just written, lit for a moment so the eye finds it. */
+  flash?: { start: number; end: number } | null
 }
 
 const TINT_KEY = 'aielia-write.tint'
@@ -35,7 +37,7 @@ function loadTint(): boolean {
  * text area, laid out the same way and scrolled with it, so the writer types in a plain text area and the marks follow the words. Nothing changes
  * the layout of the text. The copy is hidden from screen readers; the line under the text and the box under that say the same in words.
  */
-export function MarkedText({ textRef, value, pieces, onChange, onSelection, onGrow, onShrink, onPress, onDoubleClick, selection }: Props): React.JSX.Element {
+export function MarkedText({ textRef, value, pieces, onChange, onSelection, onGrow, onShrink, onPress, onDoubleClick, selection, flash }: Props): React.JSX.Element {
   const back = useRef<HTMLDivElement | null>(null)
   const [tint, setTint] = useState(loadTint)
   const shown = tint ? pieces : []
@@ -46,14 +48,17 @@ export function MarkedText({ textRef, value, pieces, onChange, onSelection, onGr
   const cuts = new Set<number>([0, value.length])
   for (const p of shown) { cuts.add(p.start); cuts.add(p.end) }
   if (kept) { cuts.add(kept.start); cuts.add(kept.end) }
+  const lit = flash ? { start: Math.min(flash.start, value.length), end: Math.min(flash.end, value.length) } : undefined
+  if (lit && lit.end > lit.start) { cuts.add(lit.start); cuts.add(lit.end) }
   const edges = [...cuts].filter((n) => n >= 0 && n <= value.length).sort((x, y) => x - y)
   const parts: React.ReactNode[] = []
   for (let i = 0; i + 1 < edges.length; i++) {
     const [from, to] = [edges[i], edges[i + 1]]
     const p = shown.find((x) => x.start <= from && x.end >= to)
     const inSelection = kept !== undefined && from >= kept.start && to <= kept.end
-    if (!p && !inSelection) { parts.push(value.slice(from, to)); continue }
-    const cls = ['write__mark', p?.tone && `write__mark--${p.tone}`, p && p.commentIds.length > 0 && 'has-comment', p && p.suggestionIds.length > 0 && 'has-suggestion', p?.reviewSectionId && 'has-review', inSelection && 'write__sel'].filter(Boolean).join(' ')
+    const inFlash = lit !== undefined && lit.end > lit.start && from >= lit.start && to <= lit.end
+    if (!p && !inSelection && !inFlash) { parts.push(value.slice(from, to)); continue }
+    const cls = ['write__mark', p?.tone && `write__mark--${p.tone}`, p && p.commentIds.length > 0 && 'has-comment', p && p.suggestionIds.length > 0 && 'has-suggestion', p?.reviewSectionId && 'has-review', inSelection && 'write__sel', inFlash && 'write__flash'].filter(Boolean).join(' ')
     parts.push(<mark key={`${from}-${to}`} className={cls}>{value.slice(from, to)}</mark>)
   }
   const has = (f: (p: TextPiece) => boolean): boolean => pieces.some(f)

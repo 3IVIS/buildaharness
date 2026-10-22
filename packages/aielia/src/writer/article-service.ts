@@ -559,27 +559,36 @@ export class ArticleService {
     return (this.repos.get(id) ?? []).map((r) => r.name)
   }
 
-  async verifyClaims(id: string, opts: { claimIds?: string[]; limit?: number; pages?: number; model?: string; repoOnly?: boolean; batchSize?: number; maxToolCalls?: number; onStep?: (step: LoopStep) => void } = {}): Promise<VerifyReport> {
+  async verifyClaims(id: string, opts: { claimIds?: string[]; limit?: number; pages?: number; model?: string; repoOnly?: boolean; batchSize?: number; maxToolCalls?: number; onStep?: (step: LoopStep) => void; onProgress?: (done: number, total: number) => void; shouldStop?: () => boolean } = {}): Promise<VerifyReport> {
     let b = await this.get(id)
     if (b.meta.claims.length === 0) b = (await this.analyze(id, opts.model)).bundle
     const { ids, leftOver } = verifyTargets(b.meta, opts.claimIds, opts.limit ?? DEFAULT_VERIFY_LIMIT)
     const entries: VerifyEntry[] = []
     // With a repository attached, the model looks things up in it itself (search, read, list) a batch of claims at a time, and every quote it gives is checked against the file.
     if ((this.repos.get(id) ?? []).length > 0) {
-      for (const e of await this.verifyBySearch(id, ids, opts)) {
-        // A claim the repository does not settle goes on to the web, unless the writer asked for the repository only.
-        entries.push(e.outcome === 'no_source_found' && !opts.repoOnly && this.opts.searchWeb && this.opts.fetchWeb ? await this.verifyOne(id, e.claimId, opts.pages ?? DEFAULT_VERIFY_PAGES, opts.model) : e)
+      const found = await this.verifyBySearch(id, ids, opts)
+      for (const e of found) {
+        // A claim the repository does not settle goes on to the web, unless the writer asked for the repository only (or has stopped the run).
+        entries.push(e.outcome === 'no_source_found' && !opts.repoOnly && this.opts.searchWeb && this.opts.fetchWeb && !opts.shouldStop?.() ? await this.verifyOne(id, e.claimId, opts.pages ?? DEFAULT_VERIFY_PAGES, opts.model) : e)
+        opts.onProgress?.(entries.length, ids.length)
       }
-      return { entries, leftOver }
+      const stopped = opts.shouldStop?.() === true
+      return { entries, leftOver: stopped ? leftOver + ids.length - found.length : leftOver, ...(stopped ? { stopped: true } : {}) }
     }
-    for (const claimId of ids) entries.push(await this.verifyOne(id, claimId, opts.pages ?? DEFAULT_VERIFY_PAGES, opts.model, opts.repoOnly === true))
+    for (const claimId of ids) {
+      // A stop is honoured between claims: the ones already checked keep their results.
+      if (opts.shouldStop?.()) return { entries, leftOver: leftOver + ids.length - entries.length, stopped: true }
+      opts.onProgress?.(entries.length, ids.length)
+      entries.push(await this.verifyOne(id, claimId, opts.pages ?? DEFAULT_VERIFY_PAGES, opts.model, opts.repoOnly === true))
+    }
+    opts.onProgress?.(entries.length, ids.length)
     return { entries, leftOver }
   }
 
   private readonly repoIndexes = new WeakMap<RepoReader, Promise<RepoIndex>>()
 
   /** Claims in batches, each checked by a model that can search the first attached repository. Settled claims keep the lines they rest on as code sources and a recorded check. */
-  private async verifyBySearch(id: string, ids: readonly string[], opts: { model?: string; batchSize?: number; maxToolCalls?: number; onStep?: (step: LoopStep) => void }): Promise<VerifyEntry[]> {
+  private async verifyBySearch(id: string, ids: readonly string[], opts: { model?: string; batchSize?: number; maxToolCalls?: number; onStep?: (step: LoopStep) => void; onProgress?: (done: number, total: number) => void; shouldStop?: () => boolean }): Promise<VerifyEntry[]> {
     const attached = this.repos.get(id) ?? []
     // Several repositories are searched as one, each file under its repository's name.
     const reader = attached.length === 1 ? attached[0] : combineRepos(attached)
@@ -596,6 +605,8 @@ export class ArticleService {
     const entries: VerifyEntry[] = []
     const size = Math.max(1, opts.batchSize ?? 25)
     for (let i = 0; i < ids.length; i += size) {
+      if (opts.shouldStop?.()) break
+      opts.onProgress?.(entries.length, ids.length)
       const b = await this.get(id)
       const claims = ids.slice(i, i + size).map((cid) => b.meta.claims.find((c) => c.id === cid)).filter((c): c is Claim => c !== undefined).map((c) => ({ id: c.id, quote: c.quote }))
       const loop: LoopOptions = { model, onUsage: this.opts.onUsage, onStep: opts.onStep, maxToolCalls: opts.maxToolCalls }
@@ -1230,11 +1241,16 @@ export class ArticleService {
   }
 
   /** Every category in a sensible order, one action each. It prepares suggestions but does not apply them; `accept` also applies them at the end. */
-  async resolveAll(id: string, options: { model?: string; categories?: IssueCategory[]; accept?: boolean } = {}): Promise<ResolveReport[]> {
+  async resolveAll(id: string, options: { model?: string; categories?: IssueCategory[]; accept?: boolean; onProgress?: (done: number, total: number, category: IssueCategory) => void; shouldStop?: () => boolean } = {}): Promise<ResolveReport[]> {
     const order: IssueCategory[] = ['links', 'checkable', 'comments', 'unsupported', 'sections', 'stale']
-    const wanted = options.categories ?? order
+    const wanted = order.filter((c) => (options.categories ?? order).includes(c))
     const reports: ResolveReport[] = []
-    for (const category of order) if (wanted.includes(category)) reports.push(await this.resolveCategory(id, category, { model: options.model }))
+    // A stop is honoured between categories: the ones already worked on keep what they did.
+    for (const category of wanted) {
+      if (options.shouldStop?.()) return reports
+      options.onProgress?.(reports.length, wanted.length, category)
+      reports.push(await this.resolveCategory(id, category, { model: options.model }))
+    }
     if (options.accept) reports.push(await this.resolveCategory(id, 'suggestions', { model: options.model }))
     return reports
   }

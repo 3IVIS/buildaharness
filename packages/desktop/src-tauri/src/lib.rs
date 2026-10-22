@@ -315,8 +315,7 @@ async fn run_claude_prompt_with_file_tools(
     let status = child.wait().map_err(|e| format!("Couldn't wait on \"{claude_path}\": {e}"))?;
 
     if !status.success() {
-      let stderr_text = stderr_text.trim().to_string();
-      let err = if stderr_text.is_empty() { format!("claude exited with status {status}") } else { stderr_text };
+      let err = claude_failure_message(final_result_line.as_deref().unwrap_or(""), &stderr_text, &status.to_string());
       // invoke() rejections reach the frontend as a bare string with no code/name, and the
       // catch site only shows classifyError's generic fallback copy — this is the only place
       // the real cause is visible. Goes to this process's stderr, i.e. the `tauri dev` terminal.
@@ -333,6 +332,25 @@ async fn run_claude_prompt_with_file_tools(
   })
   .await
   .map_err(|e| format!("Internal error running claude: {e}"))?
+}
+
+/// What to report when `claude` exits with a failure. With `--output-format json` the CLI reports some failures (a logged-out session:
+/// "Not logged in · Please run /login") as `{"is_error":true,"result":"..."}` on stdout and leaves stderr empty, so reading stderr alone lost the
+/// reason. Order: stderr, then the `result` in the JSON on stdout, then the exit status. Mirrors `claudeFailureMessage` in aielia's claude-cli-prompt.ts.
+fn claude_failure_message(stdout: &str, stderr: &str, status: &str) -> String {
+  let err = stderr.trim();
+  if !err.is_empty() {
+    return err.to_string();
+  }
+  if let Ok(value) = serde_json::from_str::<serde_json::Value>(stdout.trim()) {
+    if let Some(result) = value.get("result").and_then(|v| v.as_str()) {
+      let result = result.trim();
+      if !result.is_empty() {
+        return result.to_string();
+      }
+    }
+  }
+  format!("claude exited with status {status}")
 }
 
 /// Runs a single `claude -p` turn on the host — the desktop-app equivalent of
@@ -396,8 +414,7 @@ async fn run_claude_prompt(
       .map_err(|e| format!("Couldn't run \"{claude_path}\": {e}"))?;
 
     if !output.status.success() {
-      let stderr = String::from_utf8_lossy(&output.stderr).trim().to_string();
-      let err = if stderr.is_empty() { format!("claude exited with status {}", output.status) } else { stderr };
+      let err = claude_failure_message(&String::from_utf8_lossy(&output.stdout), &String::from_utf8_lossy(&output.stderr), &output.status.to_string());
       // See run_claude_prompt_with_file_tools's matching eprintln! — same reasoning.
       eprintln!("[run_claude_prompt] {err}");
       return Err(err);
@@ -1199,5 +1216,18 @@ mod staged_action_tests {
     fs::create_dir_all(&dir).unwrap();
     assert!(find_staged_action(&dir, long_ago()).is_none());
     fs::remove_dir_all(&dir).ok();
+  }
+}
+
+#[cfg(test)]
+mod claude_failure_message_tests {
+  use super::claude_failure_message;
+
+  #[test]
+  fn prefers_stderr_then_the_json_result_then_the_status() {
+    assert_eq!(claude_failure_message("{\"is_error\":true,\"result\":\"ignored\"}", " boom \n", "exit status: 1"), "boom");
+    assert_eq!(claude_failure_message("{\"is_error\":true,\"result\":\"Not logged in · Please run /login\"}", "", "exit status: 1"), "Not logged in · Please run /login");
+    assert_eq!(claude_failure_message("not json", "", "exit status: 2"), "claude exited with status exit status: 2");
+    assert_eq!(claude_failure_message("", "", "exit status: 1"), "claude exited with status exit status: 1");
   }
 }

@@ -271,6 +271,12 @@ failing tool call, escalation) run under both `oneLoopMode` states against a
 **single** build — B1 made `oneLoopMode` a runtime value, so `e2e/fixtures.ts`
 sets it per test via `addInitScript`.
 
+`e2e/write-engagement.spec.ts` is the Aielia Write layout and progress spec. It drives the real `WriteApp` over scripted model calls (the page in
+`e2e/write-scripted/`, served on :4174 by `vite.write-scripted.config.ts`; no key needed) and checks what jsdom cannot see: the page header and the
+chat box keep their layout (a new CSS class once reused the header's class name and passed every jsdom test), the working block shows its steps and
+clears, the changed passage is lit, Stop ends a check between claims, and nothing overflows on a phone or animates under reduced motion. Run it
+with `npx playwright test e2e/write-engagement.spec.ts`.
+
 **On a dev machine or in CI:**
 
 ```bash
