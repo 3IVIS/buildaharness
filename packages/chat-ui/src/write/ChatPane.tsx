@@ -13,6 +13,8 @@ export interface WorkProgress {
   startedAt: number
   /** How far through a counted job (claims checked, categories worked through). */
   count?: readonly [number, number]
+  /** How long this kind of job usually takes, as a sentence ("Usually about 20 s"), from the writer's own earlier runs. */
+  usually?: string
   /** The newest finished pieces of a counted job (claims checked so far), with how each came out. */
   results?: readonly ResultLine[]
   /** The words of a plain answer so far, while it is being written. */
@@ -163,6 +165,7 @@ function WorkTicker({ progress, onStop }: { progress: WorkProgress; onStop?: () 
         {onStop && !progress.finishing && !progress.stopping && <button type="button" className="write__stop" title="Stop after the step it is on (Esc)" onClick={onStop}>Stop</button>}
       </div>
       {progress.detail && <div className="write__workdetail" key={progress.detail}>{progress.detail}</div>}
+      {progress.usually && !progress.finishing && <div className="write__workdetail">{progress.usually}</div>}
       {total > 0 && (
         <div className="write__count">
           <div className="write__countbar" role="progressbar" aria-valuemin={0} aria-valuemax={total} aria-valuenow={done}><div style={{ width: `${Math.min(100, (done / total) * 100)}%` }} /></div>
