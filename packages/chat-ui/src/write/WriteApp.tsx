@@ -29,6 +29,8 @@ import './write.css'
 /** The kinds of job that call the model; they leave a trace in the chat. Any other job does so only if it turns out to have made a call. */
 const MODEL_KINDS = new Set<WorkKind>(['edit', 'draft', 'suggest', 'answer', 'verify', 'check', 'resolve', 'prepare', 'style'])
 const CHANGES_TEXT = new Set<WorkKind>(['edit', 'draft', 'change', 'resolve', 'files', 'import', 'page'])
+/** How long a banner message stays before it clears itself. */
+const BANNER_MS = 10_000
 
 type Tab = 'text' | 'style' | 'ideas' | 'issues' | 'sources' | 'history' | 'chat' | 'settings'
 
@@ -194,6 +196,12 @@ function WriteAppBody({ services, connection, onDeleted }: WriteAppProps): React
   const panelTakesRoom = (): boolean => railOpen && isDesktop()
   // Every message the app has for the writer goes into the chat; the banner only repeats the latest one where the chat is not on screen.
   const [banner, setBannerText] = useState<{ text: string; inChat: boolean } | null>(null)
+  // The banner goes away on its own; a newer message is a new object, so it restarts the timer.
+  useEffect(() => {
+    if (!banner) return
+    const timer = setTimeout(() => setBannerText(null), BANNER_MS)
+    return () => clearTimeout(timer)
+  }, [banner])
   /**
    * Only an action that calls the model leaves a trace in the chat. An action that does not (opening, renaming, saving a setting)
    * reports in the banner. A job that might call the model holds its lines until it has finished and drops them if no call was made.

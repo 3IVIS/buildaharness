@@ -631,9 +631,9 @@ describe('chat: model, check and adjust', () => {
     render(<WriteApp services={s} />)
     await waitForText()
     await userEvent.click(rail('Chat'))
-    await userEvent.selectOptions(screen.getByLabelText('Adjust', { selector: 'select' }), 'tone-of-voice')
+    await userEvent.selectOptions(screen.getByLabelText('Adjust', { selector: 'select' }), 'tone')
     expect(screen.queryByRole('button', { name: /Send adjustment/ })).toBeNull() // no extra button: Enter sends
-    await userEvent.type(screen.getByLabelText('How'), 'Conversational{Enter}')
+    await userEvent.type(screen.getByLabelText('How'), 'Tone of voice: Conversational{Enter}')
     expect(await screen.findByText(/tone of voice is: Conversational/)).toBeInTheDocument()
     expect(await screen.findByText(/added 1 suggested change/)).toBeInTheDocument()
     expect(await screen.findByText(/“It is quick\.” → “It is, well, quick\.”/)).toBeInTheDocument() // the chat states the suggestion that was stored
@@ -645,9 +645,8 @@ describe('chat: model, check and adjust', () => {
     await waitForText()
     await userEvent.click(rail('Chat'))
     await userEvent.selectOptions(screen.getByLabelText('Adjust', { selector: 'select' }), 'other')
-    await userEvent.type(screen.getByLabelText('What to adjust'), 'pacing')
-    await userEvent.type(screen.getByLabelText('How'), 'slower in the middle{Enter}')
-    expect(await screen.findByText(/pacing is: slower in the middle/)).toBeInTheDocument()
+    await userEvent.type(screen.getByLabelText('How'), 'pacing: slower in the middle{Enter}')
+    expect(await screen.findByText(/Adjust the article: pacing: slower in the middle/)).toBeInTheDocument()
   })
 
   it('Delete all my data asks first, then removes the articles, the chat and the settings', async () => {
