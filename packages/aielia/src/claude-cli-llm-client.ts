@@ -449,6 +449,8 @@ export class ClaudeCliLLMClient implements ILLMClient {
               ...(recallToolEnabled() ? { ENABLE_RECALL_TOOL: '1' } : {}),
               // Always passed (even empty): the server reads an unset value as the default, every family off.
               ASSISTANT_LEXICAL_RESOLVED_OFF: lexicalOffEnvValue(),
+              // Eval harness only: absent in the product, so the env block is unchanged.
+              ...(process.env.BENCHMARK_TOOL_FAILURE ? { BENCHMARK_TOOL_FAILURE: process.env.BENCHMARK_TOOL_FAILURE } : {}),
             },
           },
         },
