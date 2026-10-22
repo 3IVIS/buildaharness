@@ -76,3 +76,12 @@ export function changedRange(before: string, after: string): { start: number; en
   const end = after.length - tail
   return end > start ? { start, end } : null
 }
+
+/**
+ * The passage to light after a job changed the text: the changed range, unless it is most of the text (a first draft, a full rewrite),
+ * where lighting it would only tint the whole article and point at nothing.
+ */
+export function litRange(before: string, after: string, maxShare = 0.7): { start: number; end: number } | null {
+  const r = changedRange(before, after)
+  return r && (r.end - r.start) / Math.max(1, after.length) <= maxShare ? r : null
+}

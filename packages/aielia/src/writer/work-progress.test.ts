@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { changedRange, checklistAt, elapsedText, stageSentence, workPlan } from './work-progress.js'
+import { changedRange, litRange, checklistAt, elapsedText, stageSentence, workPlan } from './work-progress.js'
 
 describe('work progress', () => {
   it('marks earlier steps done, the current one current and the rest waiting', () => {
@@ -27,5 +27,11 @@ describe('work progress', () => {
     expect(changedRange('abc', 'abc')).toBeNull()
     expect(changedRange('One. Two.', 'One.')).toBeNull()
     expect(changedRange('', 'New text')).toEqual({ start: 0, end: 8 })
+  })
+  it('lights a changed passage but not a text that is nearly all new', () => {
+    const base = 'One sentence here. Another one follows. A third closes the paragraph.'
+    expect(litRange(base, base.replace('Another one follows', 'A different one follows'))).not.toBeNull()
+    expect(litRange('', 'A brand new first draft of the article.')).toBeNull()
+    expect(litRange(base, base)).toBeNull()
   })
 })
