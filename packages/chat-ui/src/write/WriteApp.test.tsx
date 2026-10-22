@@ -459,6 +459,43 @@ describe('chat: model, check and adjust', () => {
     expect(screen.getAllByTitle('The model that wrote this')[0]).toHaveTextContent('my-own-model')
   })
 
+  it('an edit keeps what the writer said in the record without running the whole chat turn, and says when it could not', async () => {
+    let turns = 0
+    const store = createMemoryArticleStore()
+    const id = await new ArticleService({ store, llm: llm({}) }).create('Post', MD2)
+    const s = await assembleWriteServices({
+      store,
+      llm: llm({ capture: { articleId: id, ops: [{ op: 'add_correction', note: 'The p99 is 41 ms.' }] }, edits: { suggestions: [{ quote: 'It is quick.', replacement: 'It is very quick.', reason: 'stronger' }] } }),
+      buildAssistant: async () => ({ turn: async () => { turns++; return { reply: 'Noted.' } }, setModel: () => undefined }) as unknown as PersonalAssistant,
+    })
+    // The record is made (the correction in the message is kept in the article) and the assistant's own turn is not run.
+    const ok = await s.record('The p99 is 41 ms. Make it stronger.', id)
+    expect(ok.recorded).toBe(true)
+    expect(turns).toBe(0)
+    expect((await s.service.get(id)).meta.corrections.map((c) => c.note)).toContain('The p99 is 41 ms.')
+    // Through the page: no turn either, and no "not added" note when the record was made.
+    render(<WriteApp services={s} />)
+    const box = await waitForText()
+    await userEvent.click(rail('Chat'))
+    await userEvent.selectOptions(screen.getByLabelText('When I ask for a change'), 'edit')
+    await userEvent.type(screen.getByLabelText('Message'), 'Make it stronger{Enter}')
+    expect(await screen.findByText(/I saved a version first/)).toBeInTheDocument()
+    await waitFor(() => expect(box.value).toContain('It is very quick.'))
+    expect(turns).toBe(0)
+    expect(screen.queryByText(/were not added to the article/)).toBeNull()
+  })
+  it('says so when what the writer said could not be recorded, and still makes the edit', async () => {
+    // No scripted reply for the record call: it fails, and the edit goes ahead with a note.
+    const s = await services({ edits: { suggestions: [{ quote: 'It is quick.', replacement: 'It is very quick.', reason: 'stronger' }] } }, MD2)
+    render(<WriteApp services={s} />)
+    await waitForText()
+    await userEvent.click(rail('Chat'))
+    await userEvent.selectOptions(screen.getByLabelText('When I ask for a change'), 'edit')
+    await userEvent.type(screen.getByLabelText('Message'), 'Make it stronger{Enter}')
+    expect(await screen.findByText(/were not added to the article's notes/)).toBeInTheDocument()
+    expect(await screen.findByText(/I saved a version first/)).toBeInTheDocument()
+  })
+
   it('"Edit the article" saves a version first, then edits, and the page shows the edited text', async () => {
     const s = await services({ capture: { articleId: null, ops: [] }, edits: { suggestions: [{ quote: 'It is quick.', replacement: 'It is very quick.', reason: 'stronger' }] } }, MD2)
     const id = (await s.service.list())[0].id

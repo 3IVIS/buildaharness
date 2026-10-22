@@ -175,7 +175,7 @@ export { checkClaimSupport, sourcesForClaim, needsAutoCheck } from './writer/art
 export type { SupportCheck, SupportVerdict } from './writer/article-support.js'
 export { resolveChange, assessSourceChange, linkedSectionIds } from './writer/article-resolver.js'
 export type { Change, ResolveResult, SourceImpact, SourceChangeResult } from './writer/article-resolver.js'
-export { processWriterMessage, createMemoryWriterChatPort } from './writer/writer-chat-turn.js'
+export { processWriterMessage, recordWriterMessage, createMemoryWriterChatPort } from './writer/writer-chat-turn.js'
 export type { WriterChatPort } from './writer/writer-chat-turn.js'
 export { proposeSuggestion, refreshSuggestions, acceptSuggestion, rejectSuggestion } from './writer/article-suggestions.js'
 export type { SuggestionResult } from './writer/article-suggestions.js'

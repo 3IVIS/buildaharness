@@ -978,6 +978,12 @@ function WriteAppBody({ services, connection, onDeleted }: WriteAppProps): React
        if (r.stopped) throw new StoppedError()
        return r
      }
+     // An edit, a draft or suggestions need only what the writer said kept in the article's record (one call), not a written reply (the rest of a turn).
+     const noteIt = async (id: string | undefined): Promise<{ model: string; tail: string }> => {
+       const r = await services.record(text, id, { signal: step.signal })
+       if (r.stopped) throw new StoppedError()
+       return { model: r.model, tail: r.recorded ? '' : '\n\nAny comments or corrections in your message were not added to the article\'s notes.' }
+     }
      try {
       step('', 0)
       if (activeId) await service.updateText(activeId, draft, { analyze: false })
@@ -992,7 +998,7 @@ function WriteAppBody({ services, connection, onDeleted }: WriteAppProps): React
           await refreshList()
           await select(id)
         }
-        const { reply, model: said } = await talk(id)
+        const { model: said, tail } = await noteIt(id)
         step('', 2)
         const outline = view === 'outline'
         if (!outline && (fresh || !draft.trim())) {
@@ -1003,7 +1009,7 @@ function WriteAppBody({ services, connection, onDeleted }: WriteAppProps): React
           setShowHistory(false)
           setVersionsTick((t) => t + 1)
           void refreshList()
-          setChat((c) => [...c, { id: ++lineId, from: 'aielia', text: d.status === 'drafted' ? `I wrote the first draft${d.name ? ` and named the article “${d.name}”` : ''}, and the article now shows it. To go back, restore the earlier version in History.` : `${reply}\n\nI could not write the draft${d.reason ? `: ${d.reason}` : ''}, so the article is unchanged.`, model: said }])
+          setChat((c) => [...c, { id: ++lineId, from: 'aielia', text: (d.status === 'drafted' ? `I wrote the first draft${d.name ? ` and named the article “${d.name}”` : ''}, and the article now shows it. To go back, restore the earlier version in History.` : `I could not write the draft${d.reason ? `: ${d.reason}` : ''}, so the article is unchanged.`) + tail, model: said }])
           return
         }
         const r = outline ? await service.editOutlineFromChat(id, text, said) : await service.editFromChat(id, text, said)
@@ -1015,14 +1021,14 @@ function WriteAppBody({ services, connection, onDeleted }: WriteAppProps): React
         const saved = `I saved a version first (“${r.savedAs}”).`
         const short = (t: string): string => (t.length > 140 ? `${t.slice(0, 140)}…` : t)
         let body: string
-        if (r.status === 'failed') body = `${reply}\n\n${saved} I could not make that edit${'reason' in r && r.reason ? `: ${r.reason}` : ''}, so the ${outline ? 'outline' : 'article'} is unchanged.`
+        if (r.status === 'failed') body = `${saved} I could not make that edit${'reason' in r && r.reason ? `: ${r.reason}` : ''}, so the ${outline ? 'outline' : 'article'} is unchanged.`
         else if (r.status === 'nothing') body = `${saved} I found nothing to change in the ${outline ? 'outline' : 'text'} for that, so it is unchanged.`
         else if ('applied' in r) body = `${saved} Then I made ${r.applied.length} change${r.applied.length === 1 ? '' : 's'}${r.skipped > 0 ? ` (${r.skipped} no longer fitted)` : ''}, and the article now shows the edited text. To go back, restore that version in History.\n${r.applied.slice(0, 4).map((x) => `• “${short(x.quote)}” → “${short(x.replacement)}”`).join('\n')}${r.applied.length > 4 ? `\n…and ${r.applied.length - 4} more.` : ''}`
         else body = `${saved} Then I reworked the outline, and the article now shows it. To go back, restore that version in History.\nThe outline is now:\n${(r.after ?? '').split('\n').slice(0, 20).join('\n')}`
-        setChat((c) => [...c, { id: ++lineId, from: 'aielia', text: body, model: said }])
+        setChat((c) => [...c, { id: ++lineId, from: 'aielia', text: body + tail, model: said }])
       } else if (wantEdits && activeId) {
         // Record what the writer said (comments, corrections) the same way a chat turn does, then turn the request into suggestions.
-        const { reply, model: said } = await talk(activeId)
+        const { model: said, tail } = await noteIt(activeId)
         step('', 2)
         const r = await service.suggest(activeId, text, said)
         const now = await service.get(activeId)
@@ -1031,10 +1037,10 @@ function WriteAppBody({ services, connection, onDeleted }: WriteAppProps): React
         const short = (t: string): string => (t.length > 140 ? `${t.slice(0, 140)}…` : t)
         // The reply is a separate model answer and can word an edit differently from the suggestion that was stored, so when suggestions were
         // made the chat states what was stored, and not the reply.
-        const body = r.status === 'failed' ? `${reply}\n\nI could not turn that into edits.`
-          : added.length === 0 ? `${reply}\n\nI found nothing to change in the text for that.`
+        const body = r.status === 'failed' ? 'I could not turn that into edits.'
+          : added.length === 0 ? 'I found nothing to change in the text for that.'
           : `I added ${added.length} suggested change${added.length === 1 ? '' : 's'}. Open Issues to accept or reject ${added.length === 1 ? 'it' : 'them'}:\n${added.slice(0, 4).map((x) => `• “${short(x.span.quote)}” → “${short(x.replacement)}”`).join('\n')}${added.length > 4 ? `\n…and ${added.length - 4} more.` : ''}`
-        setChat((c) => [...c, { id: ++lineId, from: 'aielia', text: body, model: said }])
+        setChat((c) => [...c, { id: ++lineId, from: 'aielia', text: body + tail, model: said }])
       } else {
         const { reply, model: said } = await talk(activeId)
         if (activeId) setBundle(await service.get(activeId))
