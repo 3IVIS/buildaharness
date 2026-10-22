@@ -68,7 +68,18 @@ export class TauriClaudeCliLLMClient implements ILLMClient {
 
   async callChatSync(messages: ChatMessage[], options: ChatOptions = {}): Promise<string> {
     const { systemPrompt, prompt } = buildClaudePrompt(messages)
-    const stdout = await invoke<string>('run_claude_prompt', { systemPrompt, prompt, model: options.model?.trim() || null })
+    const signal = options.signal
+    if (signal?.aborted) throw new DOMException('Stopped', 'AbortError')
+    // A call that may be stopped carries an id, so the host can end the `claude` process when the signal aborts.
+    const requestId = signal ? crypto.randomUUID() : null
+    const onAbort = (): void => { void invoke('cancel_claude_prompt', { requestId }).catch(() => undefined) }
+    signal?.addEventListener('abort', onAbort, { once: true })
+    let stdout: string
+    try {
+      stdout = await invoke<string>('run_claude_prompt', { systemPrompt, prompt, model: options.model?.trim() || null, requestId })
+    } finally {
+      signal?.removeEventListener('abort', onAbort)
+    }
     const { reply, usage } = parseClaudeCliOutput(stdout)
     if (usage) options.onUsage?.(usage)
     return reply

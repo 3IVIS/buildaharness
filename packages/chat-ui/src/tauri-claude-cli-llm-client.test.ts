@@ -18,7 +18,7 @@ describe('TauriClaudeCliLLMClient (U7 audit: what it shares with ClaudeCliLLMCli
     invokeMock.mockResolvedValue(reply('hello'))
     const client = new TauriClaudeCliLLMClient()
     expect(await client.callChatSync([{ role: 'system', content: 'be brief' }, ...user], { model: 'opus' })).toBe('hello')
-    expect(invokeMock).toHaveBeenCalledWith('run_claude_prompt', { systemPrompt: 'be brief', prompt: 'hi', model: 'opus' })
+    expect(invokeMock).toHaveBeenCalledWith('run_claude_prompt', { systemPrompt: 'be brief', prompt: 'hi', model: 'opus', requestId: null })
   })
 
   it('sends no model when it is empty or blank, so the CLI uses its own default (an empty --model is rejected as unrecognized)', async () => {
@@ -62,5 +62,27 @@ describe('TauriClaudeCliLLMClient structured output (gap G1 of U7, fixed in U10)
     invokeMock.mockResolvedValue(reply('```json\n{"ok":true}\n```'))
     const out = await new TauriClaudeCliLLMClient().callChatStructured(user)
     expect(out.content).toContain('```json')
+  })
+})
+
+describe('TauriClaudeCliLLMClient: Stop', () => {
+  it('gives a stoppable call an id and tells the host to end that process when the signal aborts', async () => {
+    let finish: (v: string) => void = () => undefined
+    invokeMock.mockImplementation((cmd: string) => (cmd === 'run_claude_prompt' ? new Promise<string>((r) => { finish = r }) : Promise.resolve()))
+    const stop = new AbortController()
+    const run = new TauriClaudeCliLLMClient().callChatSync(user, { signal: stop.signal })
+    await Promise.resolve()
+    const started = invokeMock.mock.calls.find((c) => c[0] === 'run_claude_prompt')![1] as { requestId: string }
+    expect(typeof started.requestId).toBe('string')
+    stop.abort()
+    expect(invokeMock).toHaveBeenCalledWith('cancel_claude_prompt', { requestId: started.requestId })
+    finish(reply('late'))
+    await run
+  })
+  it('does not start a call that is already stopped', async () => {
+    const stop = new AbortController()
+    stop.abort()
+    await expect(new TauriClaudeCliLLMClient().callChatSync(user, { signal: stop.signal })).rejects.toMatchObject({ name: 'AbortError' })
+    expect(invokeMock).not.toHaveBeenCalled()
   })
 })
