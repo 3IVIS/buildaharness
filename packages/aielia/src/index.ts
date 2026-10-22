@@ -157,6 +157,8 @@ export type { KeyedBackend, ProviderSetupInfo, KeyTestResult } from './provider-
 // Aielia Write: state the writer gives in chat (plans/aielia_write_article_model_plan.html, section 8)
 export { WriterChatStateSchema, WriterCommentSchema, WriterCorrectionSchema, WRITER_CHAT_STATE_VERSION, createEmptyWriterChatState, applyCaptureOps, renderWriterChatBlock } from './writer/writer-chat-state.js'
 export type { WriterChatState, WriterComment, WriterCorrection, ArticleRef, CaptureOp, ApplyResult } from './writer/writer-chat-state.js'
+export { ACTIVITY_KEY, MAX_ACTIVITY_RECORDS, addRecord, activityReport, createActivityLog, summarizeActivity, isJobRecord } from './writer/write-activity.js'
+export type { ActivityLog, ActivitySummary, JobOutcome, JobRecord, KindSummary } from './writer/write-activity.js'
 export { captureChatState } from './writer/writer-chat-capture.js'
 export type { CaptureResult, CaptureStatus } from './writer/writer-chat-capture.js'
 // Aielia Write: the article model, its rules, folder format and stored sources

@@ -1,4 +1,6 @@
 import {
+  createActivityLog,
+  type ActivityLog,
   type FolderReader,
   ArticleService,
   serializeByArticle,
@@ -74,6 +76,8 @@ export interface WriteServices {
   setGithubToken?: (token: string | undefined) => Promise<void>
   /** Saves a file the writer asked for (an export). Absent where a download link does the job (a browser tab). */
   saveFile?: (name: string, text: string) => Promise<void>
+  /** How Write has been used here: one small record per background job, kept only in this browser or app. */
+  activity: ActivityLog
   /** Dollars and calls so far for each kind of call, biggest first. */
   spendByType(): { id: string; usd: number; calls: number }[]
   /** Deletes every article, version, comment, source and saved setting, the chat and the spending record, and puts the models back to their defaults. The connection (the key) is kept. */
@@ -221,6 +225,7 @@ export async function assembleWriteServices(parts: {
       assistant.setModel?.(defaults.chat)
       githubToken = parts.githubToken
     },
+    activity: createActivityLog(store),
     spentUsd: () => meter.spentUsd(),
     spend: { snapshot: () => meter.snapshot(), subscribe: (l) => meter.subscribe(l) },
     spendByType: () => Object.entries(meter.byType()).map(([id, v]) => ({ id, ...v })).sort((a, b) => b.usd - a.usd),

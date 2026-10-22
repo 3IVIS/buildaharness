@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { SpendBadge } from './SpendBadge'
-import { type WorkKind, workPlan, litRange, modelFailureHint, modelLabel, githubRepoReader, parseGithubRepoAddress, type FolderReader, expandSelection, summarizeVerify, summarizeArticleSources, type VerifyReport, textPieces, collectIssues, parseLineRange, sourceKindForFile, computeReadiness, effectiveSourceStatus, issueCount, textUnitAt, autosaveStep, outlineOf, issuesInRange, unitOfSelection, shouldDeriveStyle, type ArticleBundle, type ChangeSummary, type DependencyKind, type IssueCategory, type Section, type WritePermissions } from '@buildaharness/aielia'
+import { type WorkKind, workPlan, litRange, modelFailureHint, modelLabel, githubRepoReader, parseGithubRepoAddress, type FolderReader, expandSelection, summarizeVerify, summarizeArticleSources, type VerifyReport, textPieces, collectIssues, parseLineRange, sourceKindForFile, computeReadiness, effectiveSourceStatus, issueCount, textUnitAt, autosaveStep, outlineOf, issuesInRange, unitOfSelection, shouldDeriveStyle, type ArticleBundle, type ChangeSummary, type DependencyKind, type IssueCategory, type Section, type WritePermissions, type JobOutcome } from '@buildaharness/aielia'
 import type { ChatAction } from './AdjustBar'
 import { ArticleSwitcher, type ArticleItem } from './ArticleSwitcher'
 import { readFileText } from './file-text'
@@ -208,6 +208,7 @@ function WriteAppBody({ services, connection, onDeleted }: WriteAppProps): React
   const [dropping, setDropping] = useState(false)
   useEffect(() => services.spend.subscribe(() => setSpendTick((n) => n + 1)), [services.spend])
   const [chat, setChat] = useState<ChatLine[]>([])
+  const [activityTick, setActivityTick] = useState(0)
   const [chatInput, setChatInput] = useState('')
   const [chatMode, setChatMode] = useState<ChatMode>('answer')
   // Until the writer picks a mode, a chat with no article, or an empty one, writes the article; otherwise it answers.
@@ -303,6 +304,7 @@ function WriteAppBody({ services, connection, onDeleted }: WriteAppProps): React
       { quiet, stopped: () => ctl.signal.aborted, signal: ctl.signal },
     ) as Step
     let ok = false
+    let outcome: JobOutcome = 'done'
     try {
       await work(step)
       ok = true
@@ -311,6 +313,7 @@ function WriteAppBody({ services, connection, onDeleted }: WriteAppProps): React
       // Stop was pressed while the last step was already running (a model call cannot be taken back), so the work finished: say so, so it does not look ignored.
       if (ctl.signal.aborted) sayInChat('Stop came while the last step was already running, so it finished. If you did not want its result, the version saved before it is in History.')
     } catch (err) {
+      outcome = isStopped(err) ? 'stopped' : 'failed'
       if (isStopped(err)) {
         sayInChat(`${label}: stopped. What was done before that stays; nothing after it ran.`)
         // The work may have changed the article before it stopped, so the page shows it as it is now.
@@ -321,6 +324,7 @@ function WriteAppBody({ services, connection, onDeleted }: WriteAppProps): React
       // The last thing said in this turn carries what the whole request used, in small type.
       const after = services.spend.snapshot()
       const usage = usageText(Date.now() - started, { usd: after.usd - before.usd, inputTokens: after.inputTokens - before.inputTokens, outputTokens: after.outputTokens - before.outputTokens, calls: after.calls - before.calls })
+      void services.activity.record({ at: new Date(started).toISOString(), kind, outcome, ms: Date.now() - started, usd: Math.max(0, after.usd - before.usd), calls: after.calls - before.calls }).then(() => setActivityTick((t) => t + 1))
       setChat((c) => { let i = -1; c.forEach((l, k) => { if (l.from === 'aielia' && l.id > mark) i = k }); return i < 0 ? c : c.map((l, k) => (k === i ? { ...l, usage } : l)) })
       if (stopRef.current === ctl) stopRef.current = null
       setBusy(null)
@@ -1160,7 +1164,7 @@ function WriteAppBody({ services, connection, onDeleted }: WriteAppProps): React
             <p className="write__muted">Create or import an article to use the panels.</p>
           )}
           <section className={`write__pane write__panel-pane ${tab === 'settings' ? 'is-shown' : ''}`} aria-label="Settings">
-            <SettingsPane hostName={services.hostName} connection={connection && { value: connection.value, onSave: (c) => { try { connection.onSave(c); sayInChat('The connection is saved.') } catch (e) { sayInChat(`The connection could not be saved: ${e instanceof Error ? e.message : String(e)}`) } }, onForget: () => { try { connection.onForget(); sayInChat('The connection was forgotten.') } catch (e) { sayInChat(`The connection could not be forgotten: ${e instanceof Error ? e.message : String(e)}`) } } }} github={services.setGithubToken ? { token: services.githubToken, onSave: (t) => run('Saving the GitHub token', async () => { await services.setGithubToken?.(t); setModelTick((n) => n + 1); sayInChat(t?.trim() ? 'The GitHub token is saved.' : 'The GitHub token is removed.') }) } : undefined} perms={perms} busy={busy !== null} onDeleteAll={() => void deleteAllData()} autoModel={services.models.auto()} chatModel={chatModel} suggestions={services.models.suggestions} onAutoModel={(m) => void run(`Switching the automatic checks to ${m}`, async () => { await services.models.setAuto(m); setModelTick((t) => t + 1); sayInChat(`Automatic checks now use ${m}.`) })} onSave={(p) => run('Saving the settings', async () => { await services.permissions.set(p); permsRef.current = p; setPerms(p); sayInChat('Settings saved.') })} />
+            <SettingsPane activity={services.activity} activityTick={activityTick} hostName={services.hostName} connection={connection && { value: connection.value, onSave: (c) => { try { connection.onSave(c); sayInChat('The connection is saved.') } catch (e) { sayInChat(`The connection could not be saved: ${e instanceof Error ? e.message : String(e)}`) } }, onForget: () => { try { connection.onForget(); sayInChat('The connection was forgotten.') } catch (e) { sayInChat(`The connection could not be forgotten: ${e instanceof Error ? e.message : String(e)}`) } } }} github={services.setGithubToken ? { token: services.githubToken, onSave: (t) => run('Saving the GitHub token', async () => { await services.setGithubToken?.(t); setModelTick((n) => n + 1); sayInChat(t?.trim() ? 'The GitHub token is saved.' : 'The GitHub token is removed.') }) } : undefined} perms={perms} busy={busy !== null} onDeleteAll={() => void deleteAllData()} autoModel={services.models.auto()} chatModel={chatModel} suggestions={services.models.suggestions} onAutoModel={(m) => void run(`Switching the automatic checks to ${m}`, async () => { await services.models.setAuto(m); setModelTick((t) => t + 1); sayInChat(`Automatic checks now use ${m}.`) })} onSave={(p) => run('Saving the settings', async () => { await services.permissions.set(p); permsRef.current = p; setPerms(p); sayInChat('Settings saved.') })} />
           </section>
         </aside>
         {ready && meta ? (
