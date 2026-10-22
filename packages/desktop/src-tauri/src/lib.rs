@@ -1,7 +1,8 @@
-use std::io::{BufRead, BufReader};
+use std::collections::HashMap;
+use std::io::{BufRead, BufReader, Read};
 use std::path::{Path, PathBuf};
 use std::process::{Command, Stdio};
-use std::sync::mpsc;
+use std::sync::{mpsc, Mutex, OnceLock};
 use std::time::SystemTime;
 use tauri::Emitter;
 use tauri_plugin_dialog::DialogExt;
@@ -353,6 +354,33 @@ fn claude_failure_message(stdout: &str, stderr: &str, status: &str) -> String {
   format!("claude exited with status {status}")
 }
 
+/// The `claude -p` processes started by run_claude_prompt that the page may still want to stop, by the request id the page gave.
+fn running_claude() -> &'static Mutex<HashMap<String, u32>> {
+  static RUNNING: OnceLock<Mutex<HashMap<String, u32>>> = OnceLock::new();
+  RUNNING.get_or_init(|| Mutex::new(HashMap::new()))
+}
+
+/// Kills the process group (Unix, where the child leads its own) or process tree (Windows) of `pid`.
+#[cfg(unix)]
+fn kill_pid_tree(pid: u32) {
+  let _ = Command::new("kill").arg("-KILL").arg(format!("-{pid}")).status();
+}
+
+#[cfg(windows)]
+fn kill_pid_tree(pid: u32) {
+  let _ = Command::new("taskkill").args(["/F", "/T", "/PID", &pid.to_string()]).status();
+}
+
+/// Stops a run_claude_prompt call the writer no longer wants (Stop in Write). The entry is removed first, which is how the call knows it was
+/// stopped and answers "Stopped". A call that already finished, or has not started, is left alone.
+#[tauri::command]
+fn cancel_claude_prompt(request_id: String) {
+  let pid = running_claude().lock().unwrap().remove(&request_id);
+  if let Some(pid) = pid {
+    kill_pid_tree(pid);
+  }
+}
+
 /// Runs a single `claude -p` turn on the host — the desktop-app equivalent of
 /// aielia's ClaudeCliLLMClient, which can't run inside a webview because it
 /// needs node:child_process. `system_prompt`/`prompt` are built on the JS side by the
@@ -370,6 +398,7 @@ async fn run_claude_prompt(
   system_prompt: String,
   prompt: String,
   model: Option<String>,
+  request_id: Option<String>,
 ) -> Result<String, String> {
   tauri::async_runtime::spawn_blocking(move || {
     let claude_path = std::env::var("CLAUDE_PATH").unwrap_or_else(|_| "claude".to_string());
@@ -407,20 +436,47 @@ async fn run_claude_prompt(
     // flag to suppress project-context loading, it infers project instructions/.mcp.json/
     // skills entirely from the process's cwd regardless of --system-prompt/--tools. See
     // claude-cli-llm-client.ts's invokeClaude for the same fix on the CLI front end.
-    let output = Command::new(&claude_path)
-      .args(&args)
-      .current_dir(std::env::temp_dir())
-      .output()
-      .map_err(|e| format!("Couldn't run \"{claude_path}\": {e}"))?;
+    let mut cmd = Command::new(&claude_path);
+    cmd.args(&args).current_dir(std::env::temp_dir()).stdin(Stdio::null()).stdout(Stdio::piped()).stderr(Stdio::piped());
+    // Its own process group (pgid == pid), so cancel_claude_prompt's group kill reaches anything `claude` started too.
+    #[cfg(unix)]
+    {
+      use std::os::unix::process::CommandExt;
+      cmd.process_group(0);
+    }
+    let mut child = cmd.spawn().map_err(|e| format!("Couldn't run \"{claude_path}\": {e}"))?;
+    if let Some(id) = &request_id {
+      running_claude().lock().unwrap().insert(id.clone(), child.id());
+    }
+    let mut stdout_pipe = child.stdout.take();
+    let mut stderr_pipe = child.stderr.take();
+    let out_reader = std::thread::spawn(move || {
+      let mut buf = Vec::new();
+      if let Some(p) = stdout_pipe.as_mut() { let _ = p.read_to_end(&mut buf); }
+      buf
+    });
+    let err_reader = std::thread::spawn(move || {
+      let mut buf = Vec::new();
+      if let Some(p) = stderr_pipe.as_mut() { let _ = p.read_to_end(&mut buf); }
+      buf
+    });
+    let status = child.wait().map_err(|e| format!("Couldn't wait for \"{claude_path}\": {e}"))?;
+    let stdout = out_reader.join().unwrap_or_default();
+    let stderr = err_reader.join().unwrap_or_default();
+    // cancel_claude_prompt removes the entry before it kills the process, so a missing entry here means the writer stopped this call.
+    let cancelled = request_id.as_ref().map(|id| running_claude().lock().unwrap().remove(id).is_none()).unwrap_or(false);
+    if cancelled {
+      return Err("Stopped".to_string());
+    }
 
-    if !output.status.success() {
-      let err = claude_failure_message(&String::from_utf8_lossy(&output.stdout), &String::from_utf8_lossy(&output.stderr), &output.status.to_string());
+    if !status.success() {
+      let err = claude_failure_message(&String::from_utf8_lossy(&stdout), &String::from_utf8_lossy(&stderr), &status.to_string());
       // See run_claude_prompt_with_file_tools's matching eprintln! — same reasoning.
       eprintln!("[run_claude_prompt] {err}");
       return Err(err);
     }
 
-    Ok(String::from_utf8_lossy(&output.stdout).trim().to_string())
+    Ok(String::from_utf8_lossy(&stdout).trim().to_string())
   })
   .await
   .map_err(|e| format!("Internal error running claude: {e}"))?
@@ -1127,6 +1183,7 @@ pub fn run() {
     .plugin(tauri_plugin_window_state::Builder::default().build())
     .invoke_handler(tauri::generate_handler![
       run_claude_prompt,
+      cancel_claude_prompt,
       run_claude_prompt_with_file_tools,
       run_shell_command,
       get_dev_workspace_root,
@@ -1229,5 +1286,48 @@ mod claude_failure_message_tests {
     assert_eq!(claude_failure_message("{\"is_error\":true,\"result\":\"Not logged in · Please run /login\"}", "", "exit status: 1"), "Not logged in · Please run /login");
     assert_eq!(claude_failure_message("not json", "", "exit status: 2"), "claude exited with status exit status: 2");
     assert_eq!(claude_failure_message("", "", "exit status: 1"), "claude exited with status exit status: 1");
+  }
+}
+
+#[cfg(all(test, unix))]
+mod cancel_claude_prompt_tests {
+  use super::{cancel_claude_prompt, run_claude_prompt, running_claude};
+  use std::os::unix::fs::PermissionsExt;
+  use std::time::{Duration, Instant};
+
+  // CLAUDE_PATH is process-wide, so one test sets it for both cases and they run in sequence.
+  fn fake_claude(body: &str) -> String {
+    let dir = std::env::temp_dir().join(format!("fake-claude-{}-{}", std::process::id(), body.len()));
+    std::fs::create_dir_all(&dir).unwrap();
+    let path = dir.join("claude");
+    std::fs::write(&path, format!("#!/bin/sh\n{body}\n")).unwrap();
+    std::fs::set_permissions(&path, std::fs::Permissions::from_mode(0o755)).unwrap();
+    path.to_string_lossy().to_string()
+  }
+
+  fn run(id: &str) -> std::thread::JoinHandle<Result<String, String>> {
+    let id = id.to_string();
+    std::thread::spawn(move || tauri::async_runtime::block_on(run_claude_prompt("s".into(), "p".into(), None, Some(id))))
+  }
+
+  #[test]
+  fn stopping_a_running_call_ends_the_process_and_answers_stopped_while_a_finished_call_is_untouched() {
+    std::env::set_var("CLAUDE_PATH", fake_claude("sleep 30"));
+    let started = Instant::now();
+    let handle = run("slow");
+    let waited = Instant::now();
+    while !running_claude().lock().unwrap().contains_key("slow") {
+      assert!(waited.elapsed() < Duration::from_secs(5), "the call never registered");
+      std::thread::sleep(Duration::from_millis(20));
+    }
+    cancel_claude_prompt("slow".to_string());
+    assert_eq!(handle.join().unwrap(), Err("Stopped".to_string()));
+    assert!(started.elapsed() < Duration::from_secs(10), "the process was not ended");
+    assert!(running_claude().lock().unwrap().is_empty());
+
+    std::env::set_var("CLAUDE_PATH", fake_claude("echo '{\"result\":\"hi\"}'"));
+    assert!(run("quick").join().unwrap().unwrap().contains("hi"));
+    cancel_claude_prompt("quick".to_string()); // already finished: nothing to stop
+    assert!(running_claude().lock().unwrap().is_empty());
   }
 }
