@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { CLI_DEFAULT_LABEL, type WritePermissions } from '@buildaharness/aielia'
+import { CLI_DEFAULT_LABEL, activityReport, summarizeActivity, type ActivityLog, type WritePermissions } from '@buildaharness/aielia'
 import { ModelPicker } from './ModelPicker'
 import { ConnectionSettings } from './ConnectionSettings'
 import { Hint } from './Hint'
@@ -21,12 +21,22 @@ interface Props {
   /** Deletes everything the writer has stored here, after asking. */
   onDeleteAll?: () => void
   busy?: boolean
+  /** How Write has been used here, shown as plain text; nothing in it leaves the device unless the writer copies it. */
+  activity?: ActivityLog
+  /** Changes when a job has ended, so the shown figures follow. */
+  activityTick?: number
 }
 
-export function SettingsPane({ perms, autoModel, chatModel, suggestions, onAutoModel, onSave, connection, github, hostName = 'browser', onDeleteAll, busy }: Props): React.JSX.Element {
+export function SettingsPane({ perms, autoModel, chatModel, suggestions, onAutoModel, onSave, connection, github, hostName = 'browser', onDeleteAll, busy, activity, activityTick }: Props): React.JSX.Element {
   const [cap, setCap] = useState<string>('')
   const [ghToken, setGhToken] = useState<string>(github?.token ?? '')
   useEffect(() => setCap(perms?.spendCapUsd !== undefined ? String(perms.spendCapUsd) : ''), [perms])
+  const [report, setReport] = useState<string | undefined>(undefined)
+  useEffect(() => {
+    let live = true
+    void activity?.read().then((r) => { if (live) setReport(activityReport(summarizeActivity(r))) }, () => undefined)
+    return () => { live = false }
+  }, [activity, activityTick])
   if (!perms) return <p className="write__muted">Loading…</p>
   const save = (next: Partial<WritePermissions>): Promise<void> => onSave({ ...perms, ...next })
   return (
@@ -44,6 +54,13 @@ export function SettingsPane({ perms, autoModel, chatModel, suggestions, onAutoM
       <label>Model for automatic checks
         <ModelPicker label="Model for the automatic checks" value={autoModel} suggestions={suggestions} onChange={onAutoModel} placeholder={CLI_DEFAULT_LABEL} />
       </label>
+      {activity && report !== undefined && (
+        <details className="write__activity">
+          <summary>How you have used Write<Hint text="Kept only on this device: the kind of each job, how it ended, how long it took and what it cost. Never your words or article names. Nothing is sent anywhere." /></summary>
+          <pre aria-label="Your use of Write">{report}</pre>
+          <button type="button" className="write__link" onClick={() => void navigator.clipboard?.writeText(report).catch(() => undefined)}>Copy</button>
+        </details>
+      )}
       {autoModel === chatModel && <p className="write__warn">Same model as the chat<Hint text="A different, smaller model gives you a second opinion and costs less." /></p>}
       <label>Spending cap, US$<Hint text="Stops using your key after this much. Leave blank for no limit." />
         <input aria-label="Spending cap" inputMode="decimal" value={cap} onChange={(e) => setCap(e.target.value)} onBlur={() => { const n = Number(cap); void save({ spendCapUsd: cap.trim() !== '' && Number.isFinite(n) && n > 0 ? n : undefined }) }} />

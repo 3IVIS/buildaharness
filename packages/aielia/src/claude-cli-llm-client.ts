@@ -5,7 +5,7 @@
  * (https://code.claude.com/docs/en/legal-and-compliance) — use the anthropic/openai/openrouter
  * API-key backends for anything beyond local testing on your own machine.
  */
-import { spawn } from 'node:child_process'
+import { spawn, type ChildProcess } from 'node:child_process'
 import { readdir, readFile, stat } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { createServer, type Server } from 'node:net'
@@ -98,9 +98,17 @@ export interface ClaudeCliLLMClientOptions {
  * repo happens to be the launch directory, every invocation runs from a directory that's
  * essentially guaranteed to have none of that project-level config to auto-load.
  */
-function invokeClaude(claudePath: string, args: string[]): Promise<ParsedClaudeCliOutput> {
+/** Ends the subprocess when `signal` aborts, so a call the caller no longer wants stops using the model; the call then rejects as any killed run does. */
+function killOnAbort(proc: ChildProcess, signal?: AbortSignal): void {
+  if (!signal) return
+  if (signal.aborted) proc.kill()
+  else signal.addEventListener('abort', () => proc.kill(), { once: true })
+}
+
+function invokeClaude(claudePath: string, args: string[], signal?: AbortSignal): Promise<ParsedClaudeCliOutput> {
   return new Promise((resolvePromise, reject) => {
     const proc = spawn(claudePath, args, { cwd: tmpdir(), stdio: ['ignore', 'pipe', 'pipe'] })
+    killOnAbort(proc, signal)
     let stdout = ''
     let stderr = ''
     proc.stdout.on('data', (chunk) => { stdout += chunk })
@@ -127,9 +135,10 @@ function invokeClaude(claudePath: string, args: string[]): Promise<ParsedClaudeC
  * result/content/fallback logic covers it unchanged — just handed one line instead of the
  * whole stdout.
  */
-function invokeClaudeStreaming(claudePath: string, args: string[], onToolStep?: (event: ToolStepEvent) => void): Promise<ParsedClaudeCliOutput> {
+function invokeClaudeStreaming(claudePath: string, args: string[], onToolStep?: (event: ToolStepEvent) => void, signal?: AbortSignal): Promise<ParsedClaudeCliOutput> {
   return new Promise((resolvePromise, reject) => {
     const proc = spawn(claudePath, args, { cwd: tmpdir(), stdio: ['ignore', 'pipe', 'pipe'] })
+    killOnAbort(proc, signal)
     let buffer = ''
     let stderr = ''
     let finalResultLine: string | undefined
@@ -360,7 +369,7 @@ export class ClaudeCliLLMClient implements ILLMClient {
     if (model) args.push('--model', model)
     // `--` ends option parsing: a message that starts with "-" (a markdown list, "-5 degrees") would otherwise be rejected as an unknown option.
     args.push('--', prompt)
-    const { reply, usage, model: resolved } = await invokeClaude(this.claudePath, args)
+    const { reply, usage, model: resolved } = await invokeClaude(this.claudePath, args, options.signal)
     if (resolved) this.resolvedModelId = resolved
     if (usage) options.onUsage?.(usage)
     return reply
@@ -461,7 +470,7 @@ export class ClaudeCliLLMClient implements ILLMClient {
       args.push('--', prompt) // see callChatSync: a prompt starting with "-" must not be parsed as an option
 
       const callStartedAt = Date.now()
-      const { reply, usage, model: resolved } = await invokeClaudeStreaming(this.claudePath, args, options.onToolStep)
+      const { reply, usage, model: resolved } = await invokeClaudeStreaming(this.claudePath, args, options.onToolStep, options.signal)
       if (resolved) this.resolvedModelId = resolved
       if (usage) options.onUsage?.(usage)
       const staged = await this.findPendingActionStagedSince(workspaceRoot, callStartedAt)

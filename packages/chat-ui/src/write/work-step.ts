@@ -6,7 +6,8 @@ export class StoppedError extends Error {
   }
 }
 
-export const isStopped = (e: unknown): boolean => e instanceof StoppedError
+/** A stop of either kind: the writer pressed Stop at a step boundary, or a model call was cut off by it (the service throws TurnAbortedError). */
+export const isStopped = (e: unknown): boolean => e instanceof StoppedError || (e instanceof Error && e.name === 'TurnAbortedError')
 
 /**
  * What an action's work gets to report with. Calling it moves the checklist to `stage`, sets the finer step under it and, with `count`, a

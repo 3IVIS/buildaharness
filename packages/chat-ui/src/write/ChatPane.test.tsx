@@ -1,6 +1,6 @@
 import { render, screen } from '@testing-library/react'
 import { describe, expect, it } from 'vitest'
-import { ChatPane, type WorkProgress } from './ChatPane'
+import { ChatPane, RECORD_HINT, type WorkProgress } from './ChatPane'
 
 const base = { lines: [], model: 'm', suggestions: [], onModel: () => undefined, input: '', onInput: () => undefined, mode: 'edit' as const, onMode: () => undefined, editLabel: 'Edit', busy: true, canAct: true, shown: true, onSend: () => undefined, onAdjust: () => undefined, onAction: () => undefined, repos: [], onRepoVerify: () => undefined, onRemoveRepo: () => undefined, onDropFiles: () => undefined, onClose: () => undefined }
 
@@ -30,5 +30,21 @@ describe('ChatPane work ticker', () => {
     expect(screen.getByText('Done.')).toBeInTheDocument()
     expect(screen.queryByRole('button', { name: 'Stop' })).toBeNull()
     expect([...screen.getByLabelText('Steps').querySelectorAll('li')].every((l) => l.className === 'is-done')).toBe(true)
+  })
+})
+
+describe('ChatPane: records of interface actions', () => {
+  it('draws a record apart from a chat message and says on hover what it is', () => {
+    render(<ChatPane {...base} lines={[{ id: 1, from: 'you', text: 'Check the claims', record: true }, { id: 2, from: 'aielia', text: 'Check: done.', record: true }, { id: 3, from: 'you', text: 'Is it clear?' }, { id: 4, from: 'aielia', text: 'Yes.', model: 'm' }]} progress={null} />)
+    for (const t of ['Check the claims', 'Check: done.']) {
+      const li = screen.getByText(t).closest('li')!
+      expect(li).toHaveClass('write__line--record')
+      expect(li).toHaveAttribute('title', RECORD_HINT)
+    }
+    for (const t of ['Is it clear?', 'Yes.']) {
+      const li = screen.getByText(t).closest('li')!
+      expect(li).not.toHaveClass('write__line--record')
+      expect(li).not.toHaveAttribute('title')
+    }
   })
 })

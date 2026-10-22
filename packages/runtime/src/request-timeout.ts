@@ -29,3 +29,10 @@ export function withRequestTimeout<T>(promise: Promise<T>, ms: number, nodeId: s
 export function isRequestTimeout(err: unknown): boolean {
   return err instanceof FlowExecutionError && typeof err.cause === 'object' && err.cause !== null && (err.cause as { timeout?: unknown }).timeout === true
 }
+
+/** Aborts `controller` when the caller's `signal` aborts (at once if it already has), so a request the caller no longer wants is cut off, not left to run to its end. */
+export function linkAbortSignal(controller: AbortController, signal?: AbortSignal): void {
+  if (!signal) return
+  if (signal.aborted) controller.abort()
+  else signal.addEventListener('abort', () => controller.abort(), { once: true })
+}

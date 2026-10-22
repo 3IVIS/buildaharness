@@ -21,7 +21,20 @@ const MARK = {
   style: 'You read an article and describe it so a co-writer',
 }
 function llm(replies: Partial<Record<keyof typeof MARK, unknown>>): ILLMClient {
+  const structured = async (messages: { role: string; content: string }[], _tools?: unknown, options?: { onUsage?: (u: { inputTokens: number; outputTokens: number; costUsd: number }) => void }): Promise<{ content: string }> => {
+    options?.onUsage?.({ inputTokens: 100, outputTokens: 20, costUsd: 0.01 })
+    const sys = messages.find((m) => m.role === 'system')!.content
+    const key = (Object.keys(MARK) as (keyof typeof MARK)[]).find((k) => sys.includes(MARK[k]))
+    const out = key ? replies[key] : undefined
+    if (out === undefined) throw new Error(`no scripted reply for ${key}`)
+    return { content: JSON.stringify(out) }
+  }
   return {
+    // A streamed call (the first draft) gets the same scripted reply, a few characters at a time.
+    callChat: async function* (messages: { role: string; content: string }[], options?: { onUsage?: (u: { inputTokens: number; outputTokens: number; costUsd: number }) => void }) {
+      const { content } = await structured(messages, undefined, options)
+      for (let i = 0; i < content.length; i += 9) yield content.slice(i, i + 9)
+    },
     callChatStructured: async (messages: { role: string; content: string }[], _tools?: unknown, options?: { onUsage?: (u: { inputTokens: number; outputTokens: number; costUsd: number }) => void }) => {
       options?.onUsage?.({ inputTokens: 100, outputTokens: 20, costUsd: 0.01 })
       const sys = messages.find((m) => m.role === 'system')!.content
