@@ -223,25 +223,27 @@ describe('header and article menu', () => {
   })
 })
 
-describe('every action is told in the chat', () => {
+describe('only actions that call the model are told in the chat; the rest report in the banner', () => {
   const chatText = (): string => (document.querySelector('.write__chat') as HTMLElement).textContent ?? ''
-  it('says the action, then that the article is updated, for a plain change', async () => {
+  it('keeps an action that made no model call out of the chat and says it is done in the banner', async () => {
     const s = await services({}, MD)
     render(<WriteApp services={s} />)
     await waitForText()
     await userEvent.click(rail('History'))
     await userEvent.click(await within(panel('History')).findByRole('button', { name: /Save version/i }))
     await answerDialog('mine')
-    await waitFor(() => expect(chatText()).toMatch(/Saving the version[\s\S]*Saving the version: done\. The article is updated\./))
+    await waitFor(() => expect(screen.getByRole('status').textContent).toMatch(/Saving the version: done\. The article is updated\./))
+    expect(chatText()).not.toMatch(/Saving the version/)
   })
-  it('tells a failure in the chat, with the action that failed and the reason', async () => {
+  it('tells a failure of such an action in the banner, with the action that failed and the reason', async () => {
     const s = await services({}, MD)
     render(<WriteApp services={{ ...s, service: Object.assign(s.service, { rename: async () => { throw new Error('disk gone') } }) }} />)
     await waitForText()
     await userEvent.click(screen.getByRole('button', { name: 'Article' }))
     await userEvent.click(screen.getByRole('button', { name: /Rename this article/ }))
     await answerDialog('New name')
-    await waitFor(() => expect(chatText()).toMatch(/Renaming did not finish: disk gone/))
+    await waitFor(() => expect(screen.getByRole('status').textContent).toMatch(/Renaming did not finish: disk gone/))
+    expect(chatText()).not.toMatch(/Renaming/)
   })
 })
 
@@ -264,7 +266,7 @@ describe('spending is shown in the header, and each request says what it used', 
     expect(s.spentUsd()).toBeGreaterThan(before)
     expect(screen.getByLabelText(/Spent so far in this browser/).getAttribute('aria-label')).toContain(s.spentUsd().toFixed(2))
   })
-  it('says when a request made no model call', async () => {
+  it('leaves nothing in the chat for a request that made no model call', async () => {
     const s = await services({}, MD)
     render(<WriteApp services={s} />)
     await waitForText()
@@ -272,7 +274,8 @@ describe('spending is shown in the header, and each request says what it used', 
     await userEvent.click(screen.getByRole('button', { name: /Rename this article/ }))
     await answerDialog('Other')
     const chat = document.querySelector('.write__chat') as HTMLElement
-    expect((await within(chat).findByTitle('Tokens, time and cost of this request')).textContent).toMatch(/^no model call · /)
+    await waitFor(() => expect(screen.getByRole('status').textContent).toMatch(/Renaming: done/))
+    expect(within(chat).queryByTitle('Tokens, time and cost of this request')).toBeNull()
   })
 })
 
@@ -286,11 +289,8 @@ describe('the chat is stored as shown', () => {
     await userEvent.click(rail('History'))
     await userEvent.click(await within(panel('History')).findByRole('button', { name: /Save version/i }))
     await answerDialog('mine')
-    await waitFor(async () => {
-      const texts = ((await s.store.getSetting('chat-lines')) as { text: string }[]).map((l) => l.text)
-      expect(texts).toContain('Saving the version')
-      expect(texts).toContain('Saving the version: done. The article is updated.')
-    })
+    await waitFor(async () => expect(await s.store.getSetting('chat-pending')).toBe(''))
+    expect((((await s.store.getSetting('chat-lines')) as { text: string }[] | undefined) ?? []).map((l) => l.text)).not.toContain('Saving the version')
     expect(await s.store.getSetting('chat-pending')).toBe('')
   })
 })
@@ -1488,6 +1488,9 @@ describe('links, history', () => {
     expect(within(history).queryByLabelText('Version detail')).toBeNull() // shown in the main text window, not in the side panel
     // the Article / Outline toggle stays at the top and works on the version too
     const show = screen.getByRole('group', { name: 'Show' })
+    const which = screen.getByRole('group', { name: 'Which text' })
+    expect(which.parentElement).toBe(show.parentElement) // Current / History sit in the same row as Article / Outline...
+    expect(which.compareDocumentPosition(show) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy() // ...to the left of it
     expect(screen.getByLabelText('Version detail').compareDocumentPosition(show) & Node.DOCUMENT_POSITION_PRECEDING).toBeTruthy() // above the version, not under it
     await userEvent.click(within(show).getByRole('button', { name: 'Outline view' }))
     expect(screen.queryByLabelText('Version detail')).toBeNull()

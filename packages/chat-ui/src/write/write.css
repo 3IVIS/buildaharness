@@ -341,7 +341,7 @@
 }
 
 /* The text pane: a toggle between the article and its outline. */
-.write__viewtoggle { align-self: flex-start; margin-bottom: 8px; }
+.write__viewbar { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; align-self: flex-start; margin-bottom: 8px; }
 .write__outlineview { flex: 1 1 auto; min-height: 120px; overflow: auto; padding: 4px 2px; }
 .write__textview { display: flex; flex-direction: column; flex: 1; min-height: 0; }
 .write__textview.is-hidden { display: none; }
