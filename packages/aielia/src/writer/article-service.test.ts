@@ -643,6 +643,33 @@ describe('the chat edits the article itself', () => {
     expect((await s.draftFromChat(id, 'Write it')).status).toBe('failed')
     expect((await s.get(id)).markdown).toBe('')
   })
+  it('Stop during a draft ends the wait at once, passes the signal on, and saves nothing when the call returns late', async () => {
+    const store = createMemoryArticleStore()
+    let release: (v: unknown) => void = () => undefined
+    let seen: AbortSignal | undefined
+    const llm = { callChatStructured: (_m: unknown, _t: unknown, o?: { signal?: AbortSignal }) => { seen = o?.signal; return new Promise((r) => { release = r }) } } as unknown as ILLMClient
+    const s = new ArticleService({ store, llm, now: () => NOW, newId: () => 'art1', modelName: 'checker-1' })
+    const id = await s.create('Post', '')
+    const stop = new AbortController()
+    const run = s.draftFromChat(id, 'Write it', undefined, false, stop.signal)
+    await new Promise((r) => setTimeout(r, 0))
+    expect(seen).toBe(stop.signal)
+    stop.abort()
+    await expect(run).rejects.toMatchObject({ name: 'TurnAbortedError' })
+    release({ content: JSON.stringify({ name: 'N', markdown: '# N\nLate.' }) })
+    await new Promise((r) => setTimeout(r, 0))
+    expect((await s.get(id)).markdown).toBe('')
+  })
+  it('Stop during an edit leaves the article and its suggestions as they were', async () => {
+    const { svc: s } = svc({ edits: () => ({ suggestions: [] }) })
+    const id = await s.create('Post', MD)
+    const stop = new AbortController()
+    stop.abort()
+    await expect(s.editFromChat(id, 'Tighten the intro', undefined, stop.signal)).rejects.toMatchObject({ name: 'TurnAbortedError' })
+    const b = await s.get(id)
+    expect(b.markdown).toBe(MD)
+    expect(b.meta.suggestions).toEqual([])
+  })
   it('the outline: saved first, then the headings are reworked and each section keeps its text', async () => {
     const { svc: s } = svc({ outline: { outline: '# Post\n## Conclusion\n## Latency' } })
     const id = await s.create('Post', MD)

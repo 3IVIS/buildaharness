@@ -70,3 +70,25 @@ export function raceAbort<T>(work: Promise<T>, signal: AbortSignal): Promise<T> 
     )
   })
 }
+
+/**
+ * A client for one job that can be stopped: every call carries `signal` (so a backend that honours it cuts the request off), the wait ends the
+ * moment it aborts even on a backend that ignores it, and what such a call returns later is dropped. With no signal the client is returned as is.
+ */
+export function stoppableLlmClient(client: ILLMClient, signal?: AbortSignal): ILLMClient {
+  if (!signal) return client
+  const withSignal = (options?: ChatOptions): ChatOptions => ({ ...options, signal })
+  return {
+    callChat(messages: ChatMessage[], options?: ChatOptions): AsyncIterable<string> {
+      return (async function* () {
+        if (signal.aborted) throw new TurnAbortedError()
+        for await (const token of client.callChat(messages, withSignal(options))) {
+          if (signal.aborted) throw new TurnAbortedError()
+          yield token
+        }
+      })()
+    },
+    callChatSync: (messages, options) => raceAbort(client.callChatSync(messages, withSignal(options)), signal),
+    callChatStructured: (messages, tools, options) => raceAbort(client.callChatStructured(messages, tools, withSignal(options)), signal),
+  }
+}

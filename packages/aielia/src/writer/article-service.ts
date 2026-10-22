@@ -1,4 +1,5 @@
 import type { ILLMClient, TokenUsage } from '@buildaharness/runtime'
+import { TurnAbortedError, stoppableLlmClient } from '../turn-abort.js'
 import { dropLinksToMissingClaims, extractClaims, type ExtractionResult } from './article-claims.js'
 import { serializeArticle, loadArticleFolder, type ArticleBundle, type ArticleFolder } from './article-folder.js'
 import { createArticleMeta, type ArticleMeta, type Claim, type Idea, type Link, type Source } from './article-model.js'
@@ -726,11 +727,13 @@ export class ArticleService {
   }
 
   /** The assistant turns the writer\'s instruction into suggestions; nothing is applied until the writer accepts. */
-  async suggest(id: string, instruction: string, modelOverride?: string, refs: { ideaIds?: string[]; commentIds?: string[]; sectionIds?: string[]; focus?: { start: number; end: number } } = {}): Promise<EditSuggestResult> {
+  async suggest(id: string, instruction: string, modelOverride?: string, refs: { ideaIds?: string[]; commentIds?: string[]; sectionIds?: string[]; focus?: { start: number; end: number } } = {}, signal?: AbortSignal): Promise<EditSuggestResult> {
     const b = await this.get(id)
-    const { llm, onUsage } = this.opts
+    const { onUsage } = this.opts
     const model = modelOverride ?? this.writer()
-    const r = await suggestEdits({ meta: b.meta, markdown: b.markdown, instruction, now: this.now(), modelName: model, ...refs }, llm, model, onUsage)
+    const r = await suggestEdits({ meta: b.meta, markdown: b.markdown, instruction, now: this.now(), modelName: model, ...refs }, stoppableLlmClient(this.opts.llm, signal), model, onUsage)
+    // Stopped while the call ran: it is dropped whatever it said (the call reports a stop as a failure), and nothing is saved.
+    if (signal?.aborted) throw new TurnAbortedError()
     if (r.status === 'suggested' && r.added.length > 0) await this.store.save(id, { ...b, meta: r.meta })
     return r
   }
@@ -747,10 +750,10 @@ export class ArticleService {
    * The chat edits the article itself. The text as it is now is saved as a version first, always, so the edit can be undone from History; then
    * the edit is made, and only the changes this request produced are applied (suggestions waiting from before stay as they are).
    */
-  async editFromChat(id: string, instruction: string, modelOverride?: string): Promise<ChatEditResult> {
+  async editFromChat(id: string, instruction: string, modelOverride?: string, signal?: AbortSignal): Promise<ChatEditResult> {
     const savedAs = `Before a chat edit: ${clipLabel(instruction)}`
     await this.saveVersion(id, savedAs)
-    const r = await this.suggest(id, instruction, modelOverride)
+    const r = await this.suggest(id, instruction, modelOverride, {}, signal)
     if (r.status === 'failed') return { status: 'failed', savedAs, applied: [], skipped: 0 }
     const b = await this.get(id)
     const mine = b.meta.suggestions.filter((x) => r.added.includes(x.id)).sort((x, y) => y.span.start - x.span.start)
@@ -772,12 +775,13 @@ export class ArticleService {
    * The chat writes the text of an article that has none: a version is saved first (as for any chat edit), then the draft becomes the text.
    * With `nameIt`, the article is also given the name the draft came with (for an article the chat has just made, which has no name of its own yet).
    */
-  async draftFromChat(id: string, instruction: string, modelOverride?: string, nameIt = false): Promise<{ status: 'drafted' | 'failed'; savedAs: string; name?: string; reason?: string }> {
+  async draftFromChat(id: string, instruction: string, modelOverride?: string, nameIt = false, signal?: AbortSignal): Promise<{ status: 'drafted' | 'failed'; savedAs: string; name?: string; reason?: string }> {
     const savedAs = `Before a chat draft: ${clipLabel(instruction)}`
     await this.saveVersion(id, savedAs)
     const b = await this.get(id)
-    const { llm, onUsage } = this.opts
-    const r = await draftArticle({ meta: b.meta, instruction }, llm, modelOverride ?? this.writer(), onUsage)
+    const { onUsage } = this.opts
+    const r = await draftArticle({ meta: b.meta, instruction }, stoppableLlmClient(this.opts.llm, signal), modelOverride ?? this.writer(), onUsage)
+    if (signal?.aborted) throw new TurnAbortedError()
     if (r.status === 'failed') return { status: 'failed', savedAs, reason: r.reason }
     await this.updateText(id, r.markdown, { analyze: false })
     if (nameIt && r.name) await this.rename(id, r.name)
@@ -785,13 +789,14 @@ export class ArticleService {
   }
 
   /** The same for the outline: saved first, then the headings are reworked (reworded, added, removed, moved) and each section's text follows its heading. */
-  async editOutlineFromChat(id: string, instruction: string, modelOverride?: string): Promise<OutlineEditResult> {
+  async editOutlineFromChat(id: string, instruction: string, modelOverride?: string, signal?: AbortSignal): Promise<OutlineEditResult> {
     const savedAs = `Before a chat edit of the outline: ${clipLabel(instruction)}`
     await this.saveVersion(id, savedAs)
     const b = await this.get(id)
     const before = outlineToText(b.markdown)
-    const { llm, onUsage } = this.opts
-    const r = await editOutline({ meta: b.meta, outline: before, instruction }, llm, modelOverride ?? this.writer(), onUsage)
+    const { onUsage } = this.opts
+    const r = await editOutline({ meta: b.meta, outline: before, instruction }, stoppableLlmClient(this.opts.llm, signal), modelOverride ?? this.writer(), onUsage)
+    if (signal?.aborted) throw new TurnAbortedError()
     if (r.status === 'failed') return { status: 'failed', savedAs, reason: r.reason }
     const next = applyOutlineText(b.markdown, r.outline)
     if (next === b.markdown) return { status: 'nothing', savedAs, before, after: before }

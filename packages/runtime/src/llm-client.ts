@@ -29,6 +29,11 @@ export interface ChatOptions {
    */
   timeoutMs?: number
   /**
+   * Cuts the call off when it aborts: the request is cancelled rather than left to run to its end. Honoured by AnthropicLLMClient,
+   * OpenAICompatibleLLMClient and the Node Claude CLI client; other backends ignore it (callers also stop waiting for them).
+   */
+  signal?: AbortSignal
+  /**
    * Called once per tool call as a backend's own internal agentic loop makes it — only
    * meaningful for a backend whose tool loop is otherwise invisible to the caller, e.g.
    * Claude Code's own loop resolving read_file/list_directory/etc. autonomously inside a

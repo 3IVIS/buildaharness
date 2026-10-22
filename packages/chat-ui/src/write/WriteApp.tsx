@@ -1002,7 +1002,7 @@ function WriteAppBody({ services, connection, onDeleted }: WriteAppProps): React
         const outline = view === 'outline'
         if (!outline && (fresh || !draft.trim())) {
           // An empty article has no text to quote, so the chat writes the first draft instead of editing.
-          const d = await service.draftFromChat(id, text, said, fresh)
+          const d = await service.draftFromChat(id, text, said, fresh, step.signal)
           await reload(id)
           setViewing(null)
           setShowHistory(false)
@@ -1011,7 +1011,7 @@ function WriteAppBody({ services, connection, onDeleted }: WriteAppProps): React
           setChat((c) => [...c, { id: ++lineId, from: 'aielia', text: (d.status === 'drafted' ? `I wrote the first draft${d.name ? ` and named the article “${d.name}”` : ''}, and the article now shows it. To go back, restore the earlier version in History.` : `I could not write the draft${d.reason ? `: ${d.reason}` : ''}, so the article is unchanged.`) + tail, model: said }])
           return
         }
-        const r = outline ? await service.editOutlineFromChat(id, text, said) : await service.editFromChat(id, text, said)
+        const r = outline ? await service.editOutlineFromChat(id, text, said, step.signal) : await service.editFromChat(id, text, said, step.signal)
         await reload(id)
         setViewing(null)
         setShowHistory(false)
@@ -1029,7 +1029,7 @@ function WriteAppBody({ services, connection, onDeleted }: WriteAppProps): React
         // Record what the writer said (comments, corrections) the same way a chat turn does, then turn the request into suggestions.
         const { model: said, tail } = await noteIt(activeId)
         step('', 2)
-        const r = await service.suggest(activeId, text, said)
+        const r = await service.suggest(activeId, text, said, {}, step.signal)
         const now = await service.get(activeId)
         setBundle(now)
         const added = now.meta.suggestions.filter((x) => r.added.includes(x.id))
