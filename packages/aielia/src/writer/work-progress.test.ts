@@ -1,0 +1,22 @@
+import { describe, expect, it } from 'vitest'
+import { checklistAt, elapsedText, stageSentence, workPlan } from './work-progress.js'
+
+describe('work progress', () => {
+  it('marks earlier steps done, the current one current and the rest waiting', () => {
+    const items = checklistAt(workPlan('edit'), 1)
+    expect(items.map((i) => i.state)).toEqual(['done', 'current', 'waiting'])
+  })
+  it('marks everything done past the last step', () => {
+    expect(checklistAt(workPlan('answer'), 9).every((i) => i.state === 'done')).toBe(true)
+  })
+  it('says the current stage in a sentence, clamped to the plan', () => {
+    expect(stageSentence(workPlan('answer'), 1)).toBe('Writing the answer…')
+    expect(stageSentence(workPlan('answer'), 7)).toBe('Writing the answer…')
+    expect(stageSentence(workPlan('other'), 0)).toBeUndefined()
+  })
+  it('shows elapsed time only after a few seconds', () => {
+    expect(elapsedText(3999)).toBeUndefined()
+    expect(elapsedText(12_300)).toBe('12s')
+    expect(elapsedText(125_000)).toBe('2m 05s')
+  })
+})

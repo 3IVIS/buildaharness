@@ -222,3 +222,7 @@ export type { WriteParameter, ParameterGroup, ParameterKind } from './writer/wri
 export { addCommentOnText, commentsInRange, refreshComments } from './writer/article-comments.js'
 export { collectIssues, issuesInRange, issueCount, checkableClaims, unsupportedClaims, ISSUE_CATEGORIES } from './writer/article-issues.js'
 export type { IssueBatch, IssueItem, IssueCategory } from './writer/article-issues.js'
+
+// Aielia Write: the checklist and sentences shown while a background model call runs
+export { workPlan, checklistAt, stageSentence, elapsedText } from './writer/work-progress.js'
+export type { WorkKind, WorkPlan, StepState, ChecklistItem } from './writer/work-progress.js'

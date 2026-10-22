@@ -1,6 +1,11 @@
 import { AdjustBar, type ChatAction } from './AdjustBar'
 import { ModelPicker } from './ModelPicker'
+import { useEffect, useState } from 'react'
+import { checklistAt, elapsedText, stageSentence, workPlan, type WorkKind } from '@buildaharness/aielia'
 import { ICON_PATHS, Icon, IconButton } from './icons'
+
+/** A background model call as the chat shows it: its kind (which checklist), the stage it is at, and a finer step inside the stage. */
+export interface WorkProgress { kind: WorkKind; label: string; stage: number; detail?: string; startedAt: number }
 
 export type ChatMode = 'answer' | 'suggest' | 'edit'
 
@@ -27,7 +32,7 @@ interface Props {
   editLabel: string
   busy: boolean
   /** What a command sent through the chat is doing now; shown as the last line until the result or the error replaces it. */
-  progress?: string | null
+  progress?: WorkProgress | null
   canAct: boolean
   shown: boolean
   onSend: () => void
@@ -69,11 +74,11 @@ export function ChatPane(p: Props): React.JSX.Element {
             )}
           </li>
         ))}
-        {p.progress && <li className="write__line write__line--aielia write__line--progress" role="status">{p.progress}</li>}
+        {p.progress && <WorkTicker progress={p.progress} />}
         {p.lines.length === 0 && !p.progress && <li className="write__muted">Talk to Aielia about the article, paste reviewer comments, or drop a file here to use it as a source.</li>}
       </ul>
       <AdjustBar disabled={p.busy || !p.canAct} checkLabel="Find the factual claims and check them against their sources" verifyLabel="Search the web for sources and verify the claims" repos={p.repos} onRepoVerify={p.onRepoVerify} onPickRepoFolder={p.onPickRepoFolder} onRemoveRepo={p.onRemoveRepo} onSend={p.onAdjust} onAction={p.onAction} />
-      <div className="write__compose">
+      <div className={`write__compose${p.progress ? ' is-working' : ''}`}>
         <textarea
           aria-label="Message"
           value={p.input}
@@ -90,9 +95,42 @@ export function ChatPane(p: Props): React.JSX.Element {
               <option value="edit">{p.editLabel}</option>
             </select>
           </label>
-          <button type="button" className="write__iconbtn write__send" aria-label="Send" title="Send" onClick={p.onSend} disabled={p.busy || !p.input.trim()}><Icon d={ICON_PATHS.write} /></button>
+          <button type="button" className={`write__iconbtn write__send${p.progress ? ' is-working' : ''}`} aria-label="Send" title="Send" onClick={p.onSend} disabled={p.busy || !p.input.trim()}><Icon d={ICON_PATHS.write} /></button>
         </div>
       </div>
     </section>
+  )
+}
+
+/**
+ * What Aielia is doing while a model call runs: a pulse, the stage in a sentence that fades into the next one, the finer step under it,
+ * the checklist for the kind of job, and a running time once it has gone on a few seconds. It is the last line of the chat and is gone
+ * when the answer arrives, so only the result stays.
+ */
+function WorkTicker({ progress }: { progress: WorkProgress }): React.JSX.Element {
+  const [now, setNow] = useState(() => Date.now())
+  useEffect(() => {
+    const t = setInterval(() => setNow(Date.now()), 1000)
+    return () => clearInterval(t)
+  }, [])
+  const plan = workPlan(progress.kind)
+  const items = checklistAt(plan, progress.stage)
+  const sentence = stageSentence(plan, progress.stage) ?? `${progress.label}…`
+  const elapsed = elapsedText(now - progress.startedAt)
+  return (
+    <li className="write__line write__line--aielia write__line--progress write__work" role="status">
+      <div className="write__worklabel">{progress.label}</div>
+      <div className="write__workhead">
+        <span className="write__pulse" aria-hidden="true"><i /><i /><i /></span>
+        <span key={sentence} className="write__worksentence">{sentence}</span>
+        {elapsed && <span className="write__workelapsed" title="How long this has been running">{elapsed}</span>}
+      </div>
+      {progress.detail && <div className="write__workdetail" key={progress.detail}>{progress.detail}</div>}
+      {items.length > 1 && (
+        <ol className="write__checklist" aria-label="Steps">
+          {items.map((it) => <li key={it.text} className={`is-${it.state}`}><span className="write__tick" aria-hidden="true">{it.state === 'done' ? '✓' : ''}</span>{it.text}</li>)}
+        </ol>
+      )}
+    </li>
   )
 }
