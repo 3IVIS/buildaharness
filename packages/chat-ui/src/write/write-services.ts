@@ -39,6 +39,8 @@ export interface WriteModels {
 
 /** What the Write page needs from the outside: the article service, the chat, and the articles' chat port. */
 export interface WriteServices {
+  /** The model backend in use ("anthropic", "claude-cli" and so on), which decides what a failed call tells the writer to try. */
+  backend: string
   service: ArticleService
   store: ArticleStore
   port: WriterChatPort
@@ -141,6 +143,7 @@ export async function assembleWriteServices(parts: {
   const assistant = await parts.buildAssistant(port, llm, chatModel)
 
   return {
+    backend,
     service,
     store,
     port,
@@ -153,7 +156,7 @@ export async function assembleWriteServices(parts: {
       // A turn that did not finish has no reply. The page says why instead of showing an empty answer: the model's own error when a call failed
       // (the harness wraps it in text about risk checks), otherwise the reason the turn gives.
       const why = lastModelError ?? result.reason
-      const hint = modelFailureHint(why)
+      const hint = modelFailureHint(backend)
       return { reply: result.reply ?? (why ? `I could not answer: ${why.replace(/[.\s]+$/, '')}. ${hint}` : `I could not answer, and the model gave no reason. ${hint}`), model: used }
     },
     async record(message, activeArticleId, live) {

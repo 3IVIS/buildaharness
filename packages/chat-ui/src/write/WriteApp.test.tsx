@@ -71,6 +71,7 @@ describe('the chat turn: words as they come, and stopping', () => {
   })
   it('tells a logged-out Claude session to sign in, not to check a key', async () => {
     const s = await assembleWriteServices({
+      backend: 'claude-cli',
       store: createMemoryArticleStore(),
       llm: llm({}),
       buildAssistant: async () => ({ turn: async () => ({ status: 'escalated', reply: null, reason: 'Not logged in · Please run /login' }), setModel: () => undefined }) as unknown as PersonalAssistant,

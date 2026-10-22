@@ -88,10 +88,7 @@ export const stepText = (step: { tool: string; input: Record<string, unknown> })
   const what = step.tool === 'search' ? `searching for “${arg('pattern') || arg('query')}”` : step.tool === 'read' ? `reading ${arg('path') || arg('file')}` : step.tool === 'list' ? 'listing files' : `using ${step.tool}`
   return what
 }
-export const failureText = (what: string, err: unknown): string => {
-  const message = err instanceof Error ? err.message : String(err)
-  return `${what}: ${message}. ${modelFailureHint(message)}`
-}
+export const failureText = (what: string, err: unknown, backend?: string): string => `${what}: ${err instanceof Error ? err.message : String(err)}. ${modelFailureHint(backend)}`
 
 const isDesktop = (): boolean => typeof window !== 'undefined' && window.matchMedia?.('(min-width: 960px)').matches === true
 const isWide = (): boolean => typeof window !== 'undefined' && window.matchMedia?.('(min-width: 640px)').matches === true
@@ -619,7 +616,7 @@ function WriteAppBody({ services, connection, onDeleted }: WriteAppProps): React
         setChat((c) => [...c, { id: ++lineId, from: 'aielia', text, model: used }])
       } catch (e) {
         if (isStopped(e)) throw e
-        setChat((c) => [...c, { id: ++lineId, from: 'aielia', text: failureText('I could not do that', e) }])
+        setChat((c) => [...c, { id: ++lineId, from: 'aielia', text: failureText('I could not do that', e, services.backend) }])
       }
     }, 'prepare')
   }
@@ -912,7 +909,7 @@ function WriteAppBody({ services, connection, onDeleted }: WriteAppProps): React
         setChat((c) => [...c, { id: ++lineId, from: 'aielia', text: early + verifyText(r.stopped ? { ...r, leftOver: 0 } : r, fresh.meta), model: used }])
       } catch (e) {
         if (isStopped(e)) throw e
-        setChat((c) => [...c, { id: ++lineId, from: 'aielia', text: failureText('The check could not finish', e) }])
+        setChat((c) => [...c, { id: ++lineId, from: 'aielia', text: failureText('The check could not finish', e, services.backend) }])
       }
     }, 'verify')
   }
@@ -943,7 +940,7 @@ function WriteAppBody({ services, connection, onDeleted }: WriteAppProps): React
       setChat((c) => [...c, { id: ++lineId, from: 'aielia', text, model: used }])
       } catch (e) {
         if (isStopped(e)) throw e
-        setChat((c) => [...c, { id: ++lineId, from: 'aielia', text: failureText('The check could not finish', e) }])
+        setChat((c) => [...c, { id: ++lineId, from: 'aielia', text: failureText('The check could not finish', e, services.backend) }])
       }
     }, 'check')
   }
@@ -1048,7 +1045,7 @@ function WriteAppBody({ services, connection, onDeleted }: WriteAppProps): React
       }
      } catch (e) {
       if (isStopped(e)) throw e
-      setChat((c) => [...c, { id: ++lineId, from: 'aielia', text: failureText('The model call failed', e) }])
+      setChat((c) => [...c, { id: ++lineId, from: 'aielia', text: failureText('The model call failed', e, services.backend) }])
      }
     }, kind)
   }

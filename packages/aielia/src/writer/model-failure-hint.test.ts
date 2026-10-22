@@ -3,9 +3,9 @@ import { CLAUDE_SIGN_IN_HINT, DEFAULT_MODEL_HINT, modelFailureHint } from './mod
 import { claudeFailureMessage } from '../claude-cli-prompt.js'
 
 describe('model failure hint', () => {
-  it('tells a logged-out Claude session to sign in, and everything else to check the key and model', () => {
-    expect(modelFailureHint('Not logged in · Please run /login')).toBe(CLAUDE_SIGN_IN_HINT)
-    expect(modelFailureHint('401 invalid x-api-key')).toBe(DEFAULT_MODEL_HINT)
+  it('tells the Claude CLI backend to sign in (it has no key to check) and every other backend to check the key and model', () => {
+    expect(modelFailureHint('claude-cli')).toBe(CLAUDE_SIGN_IN_HINT)
+    expect(modelFailureHint('anthropic')).toBe(DEFAULT_MODEL_HINT)
     expect(modelFailureHint(undefined)).toBe(DEFAULT_MODEL_HINT)
   })
 })
