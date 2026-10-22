@@ -1145,6 +1145,24 @@ describe('finding sources', () => {
     expect(searches).toBe(1)
     expect(screen.queryByText(/each run takes/)).toBeNull()
   })
+  it('says so when Stop came while the last step was already running and the work finished', async () => {
+    const claims = { claims: [{ quote: 'The p99 was 18 ms.', kind: 'factual', matchesId: null, sure: true }] }
+    let release: () => void = () => undefined
+    const gate = new Promise<void>((r) => { release = r })
+    let searches = 0
+    const s = await services({ claims, resolve: { affected: [] } }, MD, async () => 'x', async () => { searches++; await gate; return [] })
+    const id = (await s.service.list())[0].id
+    await s.service.analyze(id)
+    render(<WriteApp services={s} />)
+    await waitForText()
+    await userEvent.selectOptions(screen.getByLabelText('Adjust', { selector: 'select' }), 'action:verify')
+    const stop = await screen.findByRole('button', { name: 'Stop' })
+    await waitFor(() => expect(searches).toBe(1))
+    await userEvent.click(stop) // the only claim is already being searched: nothing is left to skip
+    release()
+    expect(await screen.findByText(/Looked at 1 claim/)).toBeInTheDocument()
+    expect(await screen.findByText(/Stop came while the last step was already running, so it finished/)).toBeInTheDocument()
+  })
   it('offers no search button when no search is set up', async () => {
     const s = await services({ claims: { claims: [{ quote: 'The p99 was 18 ms.', kind: 'factual', matchesId: null, sure: true }] }, resolve: { affected: [] } }, MD)
     await s.service.analyze((await s.service.list())[0].id)

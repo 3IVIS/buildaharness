@@ -308,6 +308,8 @@ function WriteAppBody({ services, connection, onDeleted }: WriteAppProps): React
       ok = true
       // An action that had nothing to say still says it is done.
       if (lineId === mark) sayInChat(`${label}: done.${doneNote}`)
+      // Stop was pressed while the last step was already running (a model call cannot be taken back), so the work finished: say so, so it does not look ignored.
+      if (ctl.signal.aborted) sayInChat('Stop came while the last step was already running, so it finished. If you did not want its result, the version saved before it is in History.')
     } catch (err) {
       if (isStopped(err)) {
         sayInChat(`${label}: stopped. What was done before that stays; nothing after it ran.`)
