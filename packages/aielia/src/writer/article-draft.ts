@@ -23,11 +23,19 @@ export type ArticleDraft = { status: 'drafted'; markdown: string; name: string }
  * in half at the end is left out, and the value is `undefined` until its opening quote has been written. Used to show a draft as it is typed.
  */
 export function partialJsonString(json: string, key: string): string | undefined {
-  const m = new RegExp(`"${key}"\\s*:\\s*"`).exec(json)
-  if (!m) return undefined
+  const at = json.indexOf(`"${key}"`)
+  if (at < 0) return undefined
+  let start = at + key.length + 2
+  const skip = (): void => { while (start < json.length && ' \n\r\t'.includes(json[start])) start++ }
+  skip()
+  if (json[start] !== ':') return undefined
+  start++
+  skip()
+  if (json[start] !== '"') return undefined
+  start++
   const ESC: Record<string, string> = { n: '\n', t: '\t', r: '\r', b: '\b', f: '\f', '"': '"', '\\': '\\', '/': '/' }
   let out = ''
-  for (let i = m.index + m[0].length; i < json.length; i++) {
+  for (let i = start; i < json.length; i++) {
     const c = json[i]
     if (c === '"') break
     if (c !== '\\') { out += c; continue }
@@ -35,8 +43,9 @@ export function partialJsonString(json: string, key: string): string | undefined
     if (n === undefined) break
     if (n === 'u') {
       const hex = json.slice(i + 2, i + 6)
-      if (!/^[0-9a-fA-F]{4}$/.test(hex)) break
-      out += String.fromCharCode(parseInt(hex, 16))
+      const code = parseInt(hex, 16)
+      if (hex.length < 4 || Number.isNaN(code) || hex.includes('+') || hex.includes('-') || hex.includes(' ')) break
+      out += String.fromCharCode(code)
       i += 5
     } else { out += ESC[n] ?? n; i++ }
   }
