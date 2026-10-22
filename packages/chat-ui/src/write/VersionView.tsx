@@ -22,7 +22,7 @@ export function VersionView({ viewing, statusLabel, onRestore }: Props): React.J
         <button type="button" className="write__link" onClick={() => onRestore(viewing.index)}>Restore this version</button>
       </p>
       {viewing.mode === 'view' ? (
-        <pre className="write__pre">{viewing.markdown}</pre>
+        viewing.markdown.trim() ? <pre className="write__pre">{viewing.markdown}</pre> : <p className="write__muted">That version has no text. It was saved before anything was written.</p>
       ) : (
         <>
           <div className="write__pre write__diff" role="group" aria-label="Changes">

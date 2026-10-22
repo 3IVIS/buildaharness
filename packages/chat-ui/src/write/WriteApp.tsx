@@ -26,6 +26,8 @@ import type { WriteServices } from './write-services'
 import './write.css'
 
 /** The kinds of job that can change the article's text, so that what they changed is lit afterwards. */
+/** The kinds of job that call the model; they leave a trace in the chat. Any other job does so only if it turns out to have made a call. */
+const MODEL_KINDS = new Set<WorkKind>(['edit', 'draft', 'suggest', 'answer', 'verify', 'check', 'resolve', 'prepare', 'style'])
 const CHANGES_TEXT = new Set<WorkKind>(['edit', 'draft', 'change', 'resolve', 'files', 'import', 'page'])
 
 type Tab = 'text' | 'style' | 'ideas' | 'issues' | 'sources' | 'history' | 'chat' | 'settings'
@@ -191,9 +193,30 @@ function WriteAppBody({ services, connection, onDeleted }: WriteAppProps): React
   /** On a tablet the side panel floats over the text, so it takes no room from it (and the chat may use all but the text's minimum). */
   const panelTakesRoom = (): boolean => railOpen && isDesktop()
   // Every message the app has for the writer goes into the chat; the banner only repeats the latest one where the chat is not on screen.
-  const [banner, setBanner] = useState<string | null>(null)
-  const sayInChat = useCallback((text: string): void => setChat((c) => [...c, { id: ++lineId, record: true, from: 'aielia', text }]), [])
-  const setNotice = useCallback((text: string | null): void => { setBanner(text); if (text) sayInChat(text) }, [sayInChat])
+  const [banner, setBannerText] = useState<{ text: string; inChat: boolean } | null>(null)
+  /**
+   * Only an action that calls the model leaves a trace in the chat. An action that does not (opening, renaming, saving a setting)
+   * reports in the banner. A job that might call the model holds its lines until it has finished and drops them if no call was made.
+   */
+  const jobTrace = useRef<{ mode: 'chat' | 'held'; held: ChatLine[] } | null>(null)
+  const trace = useCallback((from: 'you' | 'aielia', text: string): void => {
+    const line: ChatLine = { id: ++lineId, record: true, from, text }
+    const job = jobTrace.current
+    // Outside a job, a line comes from a flow that goes on to call the model (a verify or prepare request), so it belongs in the chat.
+    if (!job || job.mode === 'chat') { setChat((c) => [...c, line]); return }
+    job.held.push(line)
+    if (from === 'aielia') setBannerText({ text, inChat: false })
+  }, [])
+  /** A message from the interface itself: a trace in the chat only while a model job is running, otherwise the banner. */
+  const sayInChat = useCallback((text: string): void => {
+    if (jobTrace.current) trace('aielia', text)
+    else setBannerText({ text, inChat: false })
+  }, [trace])
+  const setNotice = useCallback((text: string | null): void => {
+    if (!text) { setBannerText(null); return }
+    sayInChat(text)
+    if (jobTrace.current?.mode === 'chat') setBannerText({ text, inChat: true })
+  }, [sayInChat])
   /** What a command sent through the chat is doing right now, shown as the last line of the chat until the result or the error replaces it. */
   const [progress, setProgress] = useState<WorkProgress | null>(null)
   const stopRef = useRef<AbortController | null>(null)
@@ -271,30 +294,32 @@ function WriteAppBody({ services, connection, onDeleted }: WriteAppProps): React
       // Said once, in the chat itself; the failing save is not retried by this line, or it would loop.
       if (saveFailed.current) return
       saveFailed.current = true
-      setChat((now) => [...now, { id: ++lineId, record: true, from: 'aielia', text: `The chat could not be stored, so it will not be here next time: ${e instanceof Error ? e.message : String(e)}` }])
+      trace('aielia', `The chat could not be stored, so it will not be here next time: ${e instanceof Error ? e.message : String(e)}`)
     })
-  }, [chat, services.store])
+  }, [chat, services.store, trace])
 
   useEffect(() => {
     if (!activeId) { setVersions([]); setWorking(undefined); return }
     void service.history(activeId).then((v) => setVersions(v as VersionRow[]), () => undefined)
     void service.changeSinceLastVersion(activeId).then(setWorking, () => undefined)
-    setViewing(null)
   }, [service, activeId, bundle, versionsTick])
+  // An earlier version stays on screen while the article is saved underneath it; only opening another article ends the view.
+  useEffect(() => { setViewing(null); setShowHistory(false) }, [activeId])
 
   /**
    * Every action is a short conversation in the chat: the writer's action as a line, the progress as the last line while it runs, then
    * what came of it, or what went wrong. `announce` is false when the writer's own words already opened the exchange (a typed message).
    */
   async function run(label: string, work: (step: Step) => Promise<void>, announce = true, doneNote = '', kind: WorkKind = 'other'): Promise<void> {
-    if (announce) setChat((c) => [...c, { id: ++lineId, record: true, from: 'you', text: label }])
+    jobTrace.current = { mode: MODEL_KINDS.has(kind) ? 'chat' : 'held', held: [] }
+    if (announce) trace('you', label)
     const mark = lineId
     const before = services.spend.snapshot()
     const started = Date.now()
     const ctl = new AbortController()
     stopRef.current = ctl
     setBusy(label)
-    setBanner(null)
+    setBannerText(null)
     setProgress({ kind, label, stage: 0, startedAt: started })
     // How long this kind of job usually takes for this writer, once there is enough history to say.
     void services.activity.read().then((r) => { const usually = usuallyText(typicalMs(r, kind)); if (usually) setProgress((p) => (p && p.startedAt === started ? { ...p, usually } : p)) }, () => undefined)
@@ -325,6 +350,10 @@ function WriteAppBody({ services, connection, onDeleted }: WriteAppProps): React
     } finally {
       // The last thing said in this turn carries what the whole request used, in small type.
       const after = services.spend.snapshot()
+      const job = jobTrace.current
+      jobTrace.current = null
+      // A job that held its lines shows them in the chat only if it called the model after all.
+      if (job?.mode === 'held' && after.calls > before.calls) { setChat((c) => [...c, ...job.held]); setBannerText(null) }
       const usage = usageText(Date.now() - started, { usd: after.usd - before.usd, inputTokens: after.inputTokens - before.inputTokens, outputTokens: after.outputTokens - before.outputTokens, calls: after.calls - before.calls })
       void services.activity.record({ at: new Date(started).toISOString(), kind, outcome, ms: Date.now() - started, usd: Math.max(0, after.usd - before.usd), calls: after.calls - before.calls }).then(() => setActivityTick((t) => t + 1))
       setChat((c) => { let i = -1; c.forEach((l, k) => { if (l.from === 'aielia' && l.id > mark) i = k }); return i < 0 ? c : c.map((l, k) => (k === i ? { ...l, usage } : l)) })
@@ -616,7 +645,7 @@ function WriteAppBody({ services, connection, onDeleted }: WriteAppProps): React
     if (!activeId) { sayInChat('Open or create an article first.'); return }
     const id = activeId
     const used = services.models.chat() // started from the chat, so it runs on the model chosen there
-    setChat((c) => [...c, { id: ++lineId, record: true, from: 'you', text: 'Fill in the style and links from the article' }])
+    trace('you', 'Fill in the style and links from the article')
     void chatRun('Filling in the style and links', async (step) => {
       try {
         await flushDraft()
@@ -624,7 +653,7 @@ function WriteAppBody({ services, connection, onDeleted }: WriteAppProps): React
         setChat((c) => [...c, { id: ++lineId, from: 'aielia', text, model: used }])
       } catch (e) {
         if (isStopped(e)) throw e
-        setChat((c) => [...c, { id: ++lineId, record: true, from: 'aielia', text: failureText('I could not do that', e, services.backend) }])
+        trace('aielia', failureText('I could not do that', e, services.backend))
       }
     }, 'prepare')
   }
@@ -732,8 +761,8 @@ function WriteAppBody({ services, connection, onDeleted }: WriteAppProps): React
    * attached; with nothing typed, the repositories already attached are used. Then the claims are checked against them, and only them.
    */
   const verifyInRepo = (address: string): void => {
-    const say = (text: string): void => setChat((c) => [...c, { id: ++lineId, record: true, from: 'aielia', text }])
-    setChat((c) => [...c, { id: ++lineId, record: true, from: 'you', text: address.trim() ? `Verify the claims against ${address.trim()}` : 'Verify the claims against the attached repositories' }])
+    const say = (text: string): void => trace('aielia', text)
+    trace('you', address.trim() ? `Verify the claims against ${address.trim()}` : 'Verify the claims against the attached repositories')
     if (!activeId) { say('Open or create an article first, then choose the repository.'); return }
     const id = activeId
     const typed = address.trim()
@@ -765,7 +794,7 @@ function WriteAppBody({ services, connection, onDeleted }: WriteAppProps): React
   }
   /** Chooses a repository folder on this computer, attaches it and checks the claims against it. */
   const pickRepoFolderAndVerify = (): void => {
-    setChat((c) => [...c, { id: ++lineId, record: true, from: 'you', text: 'Verify the claims against a folder on this computer' }])
+    trace('you', 'Verify the claims against a folder on this computer')
     if (!activeId) { sayInChat('Open or create an article first, then choose the folder.'); return }
     const id = activeId
     void (async () => {
@@ -778,7 +807,7 @@ function WriteAppBody({ services, connection, onDeleted }: WriteAppProps): React
         service.attachRepo(id, reader)
         setRepoTick((n) => n + 1)
       } catch (e) {
-        setChat((c) => [...c, { id: ++lineId, record: true, from: 'aielia', text: `I could not use that folder: ${e instanceof Error ? e.message : String(e)}` }])
+        trace('aielia', `I could not use that folder: ${e instanceof Error ? e.message : String(e)}`)
         return
       } finally {
         setBusy(null)
@@ -894,7 +923,7 @@ function WriteAppBody({ services, connection, onDeleted }: WriteAppProps): React
   }
   const verifyFromChat = (repoOnly = false, said?: string | null): void => {
     const used = services.models.chat()
-    if (said !== null) setChat((c) => [...c, { id: ++lineId, record: true, from: 'you', text: said ?? (repoOnly ? 'Verify the claims against the repository' : 'Search the web for sources and verify the claims') }])
+    if (said !== null) trace('you', said ?? (repoOnly ? 'Verify the claims against the repository' : 'Search the web for sources and verify the claims'))
     if (!activeId) { sayInChat('Open or create an article first.'); return }
     void chatRun(`Verifying with ${modelLabel(used)}`, async (step) => {
       try {
@@ -918,14 +947,14 @@ function WriteAppBody({ services, connection, onDeleted }: WriteAppProps): React
         setChat((c) => [...c, { id: ++lineId, from: 'aielia', text: early + verifyText(r.stopped ? { ...r, leftOver: 0 } : r, fresh.meta), model: used }])
       } catch (e) {
         if (isStopped(e)) throw e
-        setChat((c) => [...c, { id: ++lineId, record: true, from: 'aielia', text: failureText('The check could not finish', e, services.backend) }])
+        trace('aielia', failureText('The check could not finish', e, services.backend))
       }
     }, 'verify')
   }
   /** A check started from the chat, with the model chosen there. The result is said in the chat, with the model's name. */
   const checkFromChat = (): void => {
     const used = services.models.chat()
-    setChat((c) => [...c, { id: ++lineId, record: true, from: 'you', text: 'Find the factual claims and check them against their sources' }])
+    trace('you', 'Find the factual claims and check them against their sources')
     if (!activeId) { sayInChat('Open or create an article first.'); return }
     void chatRun(`Checking with ${modelLabel(used)}`, async (step) => {
       try {
@@ -949,7 +978,7 @@ function WriteAppBody({ services, connection, onDeleted }: WriteAppProps): React
       setChat((c) => [...c, { id: ++lineId, from: 'aielia', text, model: used }])
       } catch (e) {
         if (isStopped(e)) throw e
-        setChat((c) => [...c, { id: ++lineId, record: true, from: 'aielia', text: failureText('The check could not finish', e, services.backend) }])
+        trace('aielia', failureText('The check could not finish', e, services.backend))
       }
     }, 'check')
   }
@@ -1119,7 +1148,7 @@ function WriteAppBody({ services, connection, onDeleted }: WriteAppProps): React
           <button type="button" className="write__primary" onClick={() => void publish()} disabled={!activeId || busy !== null}>Publish</button>
         </div>
       </header>
-      {(busy || banner) && !(isWide() || tab === 'chat') && <p className="write__notice" role="status">{busy ? `${busy}…` : banner}</p>}
+      {((busy && !(isWide() || tab === 'chat')) || (banner && (!banner.inChat || !(isWide() || tab === 'chat')))) && <p className="write__notice" role="status">{busy && !(isWide() || tab === 'chat') ? `${busy}…` : banner?.text}</p>}
 
       <div className="write__status" role="group" aria-label="How close the article is to publishable, and what has been spent">
         <span>{readiness && `${readiness.unsourcedFactualClaims} unsourced · ${readiness.staleOrUnsupportedClaims} stale or unsupported · ${readiness.openComments} open comment${readiness.openComments === 1 ? '' : 's'} · ${readiness.sectionsNeedingReview} section${readiness.sectionsNeedingReview === 1 ? '' : 's'} to review`}</span>
@@ -1174,6 +1203,7 @@ function WriteAppBody({ services, connection, onDeleted }: WriteAppProps): React
         </aside>
         {ready && meta ? (
           <section className={`write__pane write__pane--text ${tab === 'text' || tab === 'chat' ? 'is-shown' : ''}`} aria-label="Text">
+            <div className="write__viewbar">
             {viewing && (
               <div className="write__seg write__viewtoggle" role="group" aria-label="Which text">
                 <button type="button" aria-pressed={!showHistory} className={!showHistory ? 'is-on' : ''} onClick={() => { setShowHistory(false); setViewing(null) }}>Current</button>
@@ -1183,6 +1213,7 @@ function WriteAppBody({ services, connection, onDeleted }: WriteAppProps): React
             <div className="write__seg write__viewtoggle" role="group" aria-label="Show">
               <button type="button" aria-label="Article view" aria-pressed={view === 'text'} className={view === 'text' ? 'is-on' : ''} onClick={() => setView('text')}>Article</button>
               <button type="button" aria-label="Outline view" aria-pressed={view === 'outline'} className={view === 'outline' ? 'is-on' : ''} onClick={() => setView('outline')}>Outline</button>
+            </div>
             </div>
             {viewing && showHistory && (view === 'outline' ? <VersionOutline viewing={viewing} onRestore={(i) => void restoreVersion(i)} /> : <VersionView viewing={viewing} statusLabel={STATUS_LABEL} onRestore={(i) => void restoreVersion(i)} />)}
             {view === 'outline' && !(viewing && showHistory) && (
