@@ -483,3 +483,11 @@ body.write--resizing { user-select: none; -webkit-user-select: none; cursor: col
   .write__switcher { order: 3; }
   .write__status { padding: 4px 14px; font-size: 0.8rem; }
 }
+
+/* Inside the desktop app: the way back is a slim strip, not a bar of its own. */
+.write-host__bar { padding: 4px 12px; background: var(--bg); border-bottom: none; }
+.write-host__bar button { min-height: 28px; padding: 2px 10px; font-size: 0.85rem; background: transparent; border-color: transparent; color: var(--muted); }
+.write-host__bar button:hover { color: var(--text); background: var(--tint-2); }
+/* No article yet: a quiet, centred line in the reading face instead of a stray grey sentence. */
+.write__empty { font-family: var(--write-serif); font-size: 1.15rem; line-height: 1.6; text-align: center; align-self: center; justify-self: center; max-width: 28rem; }
+.write__empty:empty { display: none; }
