@@ -560,7 +560,7 @@ export class ArticleService {
     return (this.repos.get(id) ?? []).map((r) => r.name)
   }
 
-  async verifyClaims(id: string, opts: { claimIds?: string[]; limit?: number; pages?: number; model?: string; repoOnly?: boolean; batchSize?: number; maxToolCalls?: number; onStep?: (step: LoopStep) => void; onProgress?: (done: number, total: number) => void; shouldStop?: () => boolean } = {}): Promise<VerifyReport> {
+  async verifyClaims(id: string, opts: { claimIds?: string[]; limit?: number; pages?: number; model?: string; repoOnly?: boolean; batchSize?: number; maxToolCalls?: number; onStep?: (step: LoopStep) => void; onProgress?: (done: number, total: number) => void; onEntry?: (entry: VerifyEntry) => void; shouldStop?: () => boolean } = {}): Promise<VerifyReport> {
     let b = await this.get(id)
     if (b.meta.claims.length === 0) b = (await this.analyze(id, opts.model)).bundle
     const { ids, leftOver } = verifyTargets(b.meta, opts.claimIds, opts.limit ?? DEFAULT_VERIFY_LIMIT)
@@ -571,6 +571,7 @@ export class ArticleService {
       for (const e of found) {
         // A claim the repository does not settle goes on to the web, unless the writer asked for the repository only (or has stopped the run).
         entries.push(e.outcome === 'no_source_found' && !opts.repoOnly && this.opts.searchWeb && this.opts.fetchWeb && !opts.shouldStop?.() ? await this.verifyOne(id, e.claimId, opts.pages ?? DEFAULT_VERIFY_PAGES, opts.model) : e)
+        opts.onEntry?.(entries[entries.length - 1])
         opts.onProgress?.(entries.length, ids.length)
       }
       const stopped = opts.shouldStop?.() === true
@@ -581,6 +582,7 @@ export class ArticleService {
       if (opts.shouldStop?.()) return { entries, leftOver: leftOver + ids.length - entries.length, stopped: true }
       opts.onProgress?.(entries.length, ids.length)
       entries.push(await this.verifyOne(id, claimId, opts.pages ?? DEFAULT_VERIFY_PAGES, opts.model, opts.repoOnly === true))
+      opts.onEntry?.(entries[entries.length - 1])
     }
     opts.onProgress?.(entries.length, ids.length)
     return { entries, leftOver }

@@ -48,3 +48,11 @@ describe('ChatPane: records of interface actions', () => {
     }
   })
 })
+
+describe('ChatPane: claims settling during a check', () => {
+  it('lists the newest results under the bar', () => {
+    render(<ChatPane {...base} progress={{ kind: 'verify', label: 'Verifying', stage: 2, startedAt: Date.now(), count: [2, 5], results: [{ text: 'Backed: The p99 was 18 ms.', tone: 'good' }, { text: 'No source found: Latency halved.', tone: 'warn' }] }} />)
+    const list = screen.getByLabelText('Checked so far')
+    expect([...list.querySelectorAll('li')].map((l) => [l.textContent, l.className])).toEqual([['Backed: The p99 was 18 ms.', 'is-good'], ['No source found: Latency halved.', 'is-warn']])
+  })
+})

@@ -85,3 +85,31 @@ export function litRange(before: string, after: string, maxShare = 0.7): { start
   const r = changedRange(before, after)
   return r && (r.end - r.start) / Math.max(1, after.length) <= maxShare ? r : null
 }
+
+export type ResultTone = 'good' | 'warn' | 'bad'
+
+/** One finished piece of a counted job, shown under the bar as it settles ("Backed: the p99 was 18 ms"). */
+export interface ResultLine { text: string; tone: ResultTone }
+
+const OUTCOME_WORDS: Record<string, { word: string; tone: ResultTone }> = {
+  supported: { word: 'Backed', tone: 'good' },
+  partly_supported: { word: 'Partly backed', tone: 'warn' },
+  contradicted: { word: 'Contradicted', tone: 'bad' },
+  not_supported: { word: 'Not backed', tone: 'warn' },
+  no_source_found: { word: 'No source found', tone: 'warn' },
+  cannot_search: { word: 'Could not search', tone: 'warn' },
+  search_failed: { word: 'Search failed', tone: 'bad' },
+  could_not_check: { word: 'Could not check', tone: 'warn' },
+}
+
+/** The line for one checked claim: what came of it, then the claim cut to `max` characters. */
+export function claimResultLine(outcome: string, quote: string, max = 70): ResultLine {
+  const o = OUTCOME_WORDS[outcome] ?? { word: 'Checked', tone: 'warn' as const }
+  const q = quote.replace(/\s+/g, ' ').trim()
+  return { text: `${o.word}: ${q.length > max ? `${q.slice(0, max - 1)}…` : q}`, tone: o.tone }
+}
+
+/** The lines kept on show: the newest few, so a long run does not push the rest of the block away. */
+export function recentResults(lines: readonly ResultLine[], line: ResultLine, keep = 4): ResultLine[] {
+  return [...lines, line].slice(-keep)
+}

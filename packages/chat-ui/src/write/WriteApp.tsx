@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { SpendBadge } from './SpendBadge'
-import { type WorkKind, workPlan, litRange, modelFailureHint, modelLabel, githubRepoReader, parseGithubRepoAddress, type FolderReader, expandSelection, summarizeVerify, summarizeArticleSources, type VerifyReport, textPieces, collectIssues, parseLineRange, sourceKindForFile, computeReadiness, effectiveSourceStatus, issueCount, textUnitAt, autosaveStep, outlineOf, issuesInRange, unitOfSelection, shouldDeriveStyle, type ArticleBundle, type ChangeSummary, type DependencyKind, type IssueCategory, type Section, type WritePermissions, type JobOutcome } from '@buildaharness/aielia'
+import { type WorkKind, workPlan, litRange, modelFailureHint, modelLabel, githubRepoReader, parseGithubRepoAddress, type FolderReader, expandSelection, summarizeVerify, summarizeArticleSources, type VerifyReport, textPieces, collectIssues, parseLineRange, sourceKindForFile, computeReadiness, effectiveSourceStatus, issueCount, textUnitAt, autosaveStep, outlineOf, issuesInRange, unitOfSelection, shouldDeriveStyle, type ArticleBundle, type ChangeSummary, type DependencyKind, type IssueCategory, type Section, type WritePermissions, type JobOutcome, type ResultLine, claimResultLine, recentResults } from '@buildaharness/aielia'
 import type { ChatAction } from './AdjustBar'
 import { ArticleSwitcher, type ArticleItem } from './ArticleSwitcher'
 import { readFileText } from './file-text'
@@ -301,7 +301,7 @@ function WriteAppBody({ services, connection, onDeleted }: WriteAppProps): React
     const quiet = (text: string, stage?: number, count?: readonly [number, number]): void => setProgress((p) => (p ? { ...p, detail: text || undefined, stage: stage ?? p.stage, count } : p))
     const step = Object.assign(
       (text: string, stage?: number, count?: readonly [number, number]): void => { if (ctl.signal.aborted) throw new StoppedError(); quiet(text, stage, count) },
-      { quiet, stopped: () => ctl.signal.aborted, signal: ctl.signal },
+      { quiet, note: (line: ResultLine): void => setProgress((p) => (p ? { ...p, results: recentResults(p.results ?? [], line) } : p)), stopped: () => ctl.signal.aborted, signal: ctl.signal },
     ) as Step
     let ok = false
     let outcome: JobOutcome = 'done'
@@ -906,6 +906,7 @@ function WriteAppBody({ services, connection, onDeleted }: WriteAppProps): React
           repoOnly,
           onStep: (st) => { detail = `${stepText(st)} (lookup ${++calls})`; step.quiet(detail, 2, latest) },
           onProgress: (done, total) => { latest = [done, total]; step.quiet(detail, 2, latest) },
+          onEntry: (e) => step.note(claimResultLine(e.outcome, e.quote)),
           shouldStop: step.stopped,
         })
         step.quiet('', 3)

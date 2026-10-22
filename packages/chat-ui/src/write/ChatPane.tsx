@@ -1,7 +1,7 @@
 import { AdjustBar, type ChatAction } from './AdjustBar'
 import { ModelPicker } from './ModelPicker'
 import { useEffect, useLayoutEffect, useRef, useState } from 'react'
-import { CLI_DEFAULT_LABEL, modelLabel, checklistAt, elapsedText, stageSentence, workPlan, type WorkKind } from '@buildaharness/aielia'
+import { CLI_DEFAULT_LABEL, modelLabel, checklistAt, elapsedText, stageSentence, workPlan, type WorkKind, type ResultLine } from '@buildaharness/aielia'
 import { ICON_PATHS, Icon, IconButton } from './icons'
 
 /** A background model call as the chat shows it: its kind (which checklist), the stage it is at, and a finer step inside the stage. */
@@ -13,6 +13,8 @@ export interface WorkProgress {
   startedAt: number
   /** How far through a counted job (claims checked, categories worked through). */
   count?: readonly [number, number]
+  /** The newest finished pieces of a counted job (claims checked so far), with how each came out. */
+  results?: readonly ResultLine[]
   /** The words of a plain answer so far, while it is being written. */
   streamed?: string
   /** Stop was pressed; the job ends at its next step. */
@@ -166,6 +168,11 @@ function WorkTicker({ progress, onStop }: { progress: WorkProgress; onStop?: () 
           <div className="write__countbar" role="progressbar" aria-valuemin={0} aria-valuemax={total} aria-valuenow={done}><div style={{ width: `${Math.min(100, (done / total) * 100)}%` }} /></div>
           <span>{done} of {total} done</span>
         </div>
+      )}
+      {progress.results && progress.results.length > 0 && (
+        <ul className="write__results" aria-label="Checked so far">
+          {progress.results.map((r, i) => <li key={`${i}-${r.text}`} className={`is-${r.tone}`}>{r.text}</li>)}
+        </ul>
       )}
       {items.length > 1 && (
         <ol className="write__checklist" aria-label="Steps">

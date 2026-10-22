@@ -57,6 +57,13 @@ describe('progress and stopping a verify run', () => {
     expect(r.entries).toHaveLength(1)
     expect(r).toMatchObject({ stopped: true, leftOver: 1 })
   })
+  it('hands over each claim\'s result as soon as it is settled', async () => {
+    const { svc, id } = await setup({})
+    const seen: string[] = []
+    const r = await svc.verifyClaims(id, { claimIds: ['c1', 'c2'], onEntry: (e) => seen.push(e.claimId) })
+    expect(seen).toEqual(r.entries.map((e) => e.claimId))
+    expect(seen).toHaveLength(2)
+  })
   it('does not say stopped when it ran to the end', async () => {
     const { svc, id } = await setup({})
     const r = await svc.verifyClaims(id, { claimIds: ['c1', 'c2'], shouldStop: () => false })

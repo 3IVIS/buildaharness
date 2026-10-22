@@ -226,6 +226,6 @@ export { collectIssues, issuesInRange, issueCount, checkableClaims, unsupportedC
 export type { IssueBatch, IssueItem, IssueCategory } from './writer/article-issues.js'
 
 // Aielia Write: the checklist and sentences shown while a background model call runs
-export { workPlan, checklistAt, stageSentence, elapsedText, changedRange, litRange } from './writer/work-progress.js'
-export type { WorkKind, WorkPlan, StepState, ChecklistItem } from './writer/work-progress.js'
+export { workPlan, checklistAt, stageSentence, elapsedText, changedRange, litRange, claimResultLine, recentResults } from './writer/work-progress.js'
+export type { WorkKind, WorkPlan, StepState, ChecklistItem, ResultLine, ResultTone } from './writer/work-progress.js'
 export { modelFailureHint, DEFAULT_MODEL_HINT, CLAUDE_SIGN_IN_HINT } from './writer/model-failure-hint.js'
