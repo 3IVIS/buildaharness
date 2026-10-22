@@ -687,3 +687,32 @@ describe('the chat edits the article itself', () => {
     expect((await s.editOutlineFromChat(id, 'Leave it')).status).toBe('nothing')
   })
 })
+
+describe('a draft typed as it is written', () => {
+  const streaming = (json: string, calls: { signal?: AbortSignal }[] = []): ILLMClient => ({
+    callChat: async function* (_m: unknown, o?: { signal?: AbortSignal }) { calls.push({ signal: o?.signal }); for (let i = 0; i < json.length; i += 7) yield json.slice(i, i + 7) },
+  }) as unknown as ILLMClient
+  it('hands the article over as it grows, then stores the finished text and name', async () => {
+    const json = JSON.stringify({ name: 'Fast posts', markdown: '# Fast\n\n## Intro\n"Quoted" and a é.\n' })
+    const s = new ArticleService({ store: createMemoryArticleStore(), llm: streaming(json), now: () => NOW, newId: () => 'a1', modelName: 'm' })
+    const id = await s.create('New article', '')
+    const seen: string[] = []
+    const r = await s.draftFromChat(id, 'Write it', undefined, true, undefined, (t) => seen.push(t))
+    expect(r).toMatchObject({ status: 'drafted', name: 'Fast posts' })
+    expect(seen.length).toBeGreaterThan(2)
+    expect(seen.every((t, i) => i === 0 || t.startsWith(seen[i - 1]) || seen[i - 1].startsWith(t))).toBe(true)
+    expect(seen.at(-1)).toBe('# Fast\n\n## Intro\n"Quoted" and a é.\n')
+    expect((await s.get(id)).markdown).toBe('# Fast\n\n## Intro\n"Quoted" and a é.\n')
+  })
+})
+
+describe('partialJsonString', () => {
+  it('reads a string value that is still being written', async () => {
+    const { partialJsonString } = await import('./article-draft.js')
+    expect(partialJsonString('{"name":"A"', 'markdown')).toBeUndefined()
+    expect(partialJsonString('{"name":"A","markdown": "# T\\nLine', 'markdown')).toBe('# T\nLine')
+    expect(partialJsonString('{"markdown":"cut \\', 'markdown')).toBe('cut ')
+    expect(partialJsonString('{"markdown":"a\\u00', 'markdown')).toBe('a')
+    expect(partialJsonString('{"markdown":"say \\"hi\\" \\u00e9","x":1}', 'markdown')).toBe('say "hi" é')
+  })
+})

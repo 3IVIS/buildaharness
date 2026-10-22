@@ -958,6 +958,17 @@ function WriteAppBody({ services, connection, onDeleted }: WriteAppProps): React
     }
   }
 
+  /** Shows text as it arrives in the article's own box (not stored: the finished text is stored and reloaded when the job ends). */
+  const typeInto = (): { push: (text: string) => void; end: () => void } => {
+    let latest = ''
+    let timer: ReturnType<typeof setTimeout> | undefined
+    const show = (): void => { timer = undefined; setDraft(latest) }
+    return {
+      push: (text) => { latest = text; if (!timer) timer = setTimeout(show, 80) },
+      end: () => { if (timer) clearTimeout(timer); timer = undefined },
+    }
+  }
+
   /** One chat message, the same path whether typed or composed by the Adjust control. `mode` overrides the chat's mode for this message. */
   async function sendChat(override?: string, mode?: ChatMode): Promise<void> {
     const text = (override ?? chatInput).trim()
@@ -1002,7 +1013,10 @@ function WriteAppBody({ services, connection, onDeleted }: WriteAppProps): React
         const outline = view === 'outline'
         if (!outline && (fresh || !draft.trim())) {
           // An empty article has no text to quote, so the chat writes the first draft instead of editing.
-          const d = await service.draftFromChat(id, text, said, fresh, step.signal)
+          // The draft is typed into the article as the model writes it; if it ends any other way than a finished draft, the stored text comes back below.
+          const typed = typeInto()
+          let d: Awaited<ReturnType<typeof service.draftFromChat>>
+          try { d = await service.draftFromChat(id, text, said, fresh, step.signal, typed.push) } catch (e) { typed.end(); await reload(id); throw e } finally { typed.end() }
           await reload(id)
           setViewing(null)
           setShowHistory(false)

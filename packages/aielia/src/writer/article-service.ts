@@ -775,12 +775,12 @@ export class ArticleService {
    * The chat writes the text of an article that has none: a version is saved first (as for any chat edit), then the draft becomes the text.
    * With `nameIt`, the article is also given the name the draft came with (for an article the chat has just made, which has no name of its own yet).
    */
-  async draftFromChat(id: string, instruction: string, modelOverride?: string, nameIt = false, signal?: AbortSignal): Promise<{ status: 'drafted' | 'failed'; savedAs: string; name?: string; reason?: string }> {
+  async draftFromChat(id: string, instruction: string, modelOverride?: string, nameIt = false, signal?: AbortSignal, onText?: (markdownSoFar: string) => void): Promise<{ status: 'drafted' | 'failed'; savedAs: string; name?: string; reason?: string }> {
     const savedAs = `Before a chat draft: ${clipLabel(instruction)}`
     await this.saveVersion(id, savedAs)
     const b = await this.get(id)
     const { onUsage } = this.opts
-    const r = await draftArticle({ meta: b.meta, instruction }, stoppableLlmClient(this.opts.llm, signal), modelOverride ?? this.writer(), onUsage)
+    const r = await draftArticle({ meta: b.meta, instruction }, stoppableLlmClient(this.opts.llm, signal), modelOverride ?? this.writer(), onUsage, onText)
     if (signal?.aborted) throw new TurnAbortedError()
     if (r.status === 'failed') return { status: 'failed', savedAs, reason: r.reason }
     await this.updateText(id, r.markdown, { analyze: false })
