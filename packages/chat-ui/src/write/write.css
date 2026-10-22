@@ -164,6 +164,18 @@
 .write__tick { display: inline-grid; place-items: center; width: 14px; height: 14px; border-radius: 50%; border: 1px solid var(--border); font-size: 0.65rem; flex: none; }
 .write__checklist li.is-done .write__tick { background: var(--accent); border-color: var(--accent); color: var(--surface, #fff); animation: write-pop 0.25s ease-out; }
 .write__checklist li.is-current .write__tick { border-color: var(--accent); animation: write-ring 1.4s ease-in-out infinite; }
+.write__stop { margin-left: auto; padding: 2px 10px; font-size: 0.8rem; }
+.write__workelapsed + .write__stop { margin-left: 8px; }
+.write__workhead .write__stop:first-of-type:not(:last-child) { margin-left: 8px; }
+.write__count { display: flex; align-items: center; gap: 8px; padding-left: 28px; font-size: 0.8rem; }
+.write__bar { flex: 1; height: 4px; border-radius: 2px; background: var(--border); overflow: hidden; }
+.write__bar > div { height: 100%; background: var(--accent); transition: width 0.4s ease; }
+.write__stream { white-space: pre-wrap; color: var(--text); font-style: normal; border-top: 1px solid var(--border); padding-top: 6px; }
+.write__work.is-finishing { animation: write-settle 0.7s ease-out both; }
+.write__work.is-finishing .write__pulse i { animation: none; opacity: 0.9; }
+.write__mark.write__flash { background: var(--accent-a18); box-shadow: 0 0 0 2px var(--accent-a18); animation: write-lit 2.8s ease-out both; }
+@keyframes write-settle { 0% { opacity: 1; } 70% { opacity: 1; } 100% { opacity: 0; } }
+@keyframes write-lit { 0% { background: var(--accent-a18); } 60% { background: var(--accent-a18); } 100% { background: transparent; box-shadow: none; } }
 @keyframes write-fade { from { opacity: 0; transform: translateY(3px); } to { opacity: 1; transform: none; } }
 @keyframes write-pulse { 0%, 80%, 100% { opacity: 0.25; transform: scale(0.8); } 40% { opacity: 1; transform: scale(1.15); } }
 @keyframes write-pop { from { transform: scale(0.5); } to { transform: scale(1); } }
@@ -175,7 +187,7 @@
 .write__send.is-working svg { animation: write-pulse 1.2s ease-in-out infinite; }
 .write.is-working .write__pane--text::before { content: ''; position: absolute; top: 0; left: 0; right: 0; height: 2px; z-index: 3; background: linear-gradient(90deg, transparent, var(--accent), transparent); background-size: 200% 100%; animation: write-glint 1.8s linear infinite; }
 @media (prefers-reduced-motion: reduce) {
-  .write__work, .write__pulse i, .write__worksentence, .write__workdetail, .write__tick, .write__checklist li.is-current .write__tick, .write__compose.is-working textarea, .write__send.is-working svg, .write.is-working .write__pane--text::before { animation: none; }
+  .write__work.is-finishing, .write__mark.write__flash, .write__work, .write__pulse i, .write__worksentence, .write__workdetail, .write__tick, .write__checklist li.is-current .write__tick, .write__compose.is-working textarea, .write__send.is-working svg, .write.is-working .write__pane--text::before { animation: none; }
   .write__pulse i { opacity: 0.7; }
   .write.is-working .write__pane--text::before { background: var(--accent); opacity: 0.5; }
 }

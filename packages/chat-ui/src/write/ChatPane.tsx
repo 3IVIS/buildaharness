@@ -5,7 +5,21 @@ import { checklistAt, elapsedText, stageSentence, workPlan, type WorkKind } from
 import { ICON_PATHS, Icon, IconButton } from './icons'
 
 /** A background model call as the chat shows it: its kind (which checklist), the stage it is at, and a finer step inside the stage. */
-export interface WorkProgress { kind: WorkKind; label: string; stage: number; detail?: string; startedAt: number }
+export interface WorkProgress {
+  kind: WorkKind
+  label: string
+  stage: number
+  detail?: string
+  startedAt: number
+  /** How far through a counted job (claims checked, categories worked through). */
+  count?: readonly [number, number]
+  /** The words of a plain answer so far, while it is being written. */
+  streamed?: string
+  /** Stop was pressed; the job ends at its next step. */
+  stopping?: boolean
+  /** The job is over and the last step is shown ticked for a moment before it goes. */
+  finishing?: boolean
+}
 
 export type ChatMode = 'answer' | 'suggest' | 'edit'
 
@@ -33,6 +47,8 @@ interface Props {
   busy: boolean
   /** What a command sent through the chat is doing now; shown as the last line until the result or the error replaces it. */
   progress?: WorkProgress | null
+  /** Stops the job that is running, at its next step. */
+  onStop?: () => void
   canAct: boolean
   shown: boolean
   onSend: () => void
@@ -74,17 +90,17 @@ export function ChatPane(p: Props): React.JSX.Element {
             )}
           </li>
         ))}
-        {p.progress && <WorkTicker progress={p.progress} />}
+        {p.progress && <WorkTicker progress={p.progress} onStop={p.onStop} />}
         {p.lines.length === 0 && !p.progress && <li className="write__muted">Talk to Aielia about the article, paste reviewer comments, or drop a file here to use it as a source.</li>}
       </ul>
       <AdjustBar disabled={p.busy || !p.canAct} checkLabel="Find the factual claims and check them against their sources" verifyLabel="Search the web for sources and verify the claims" repos={p.repos} onRepoVerify={p.onRepoVerify} onPickRepoFolder={p.onPickRepoFolder} onRemoveRepo={p.onRemoveRepo} onSend={p.onAdjust} onAction={p.onAction} />
-      <div className={`write__compose${p.progress ? ' is-working' : ''}`}>
+      <div className={`write__compose${p.progress && !p.progress.finishing ? ' is-working' : ''}`}>
         <textarea
           aria-label="Message"
           value={p.input}
           rows={3}
           onChange={(e) => p.onInput(e.target.value)}
-          onKeyDown={(e) => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); if (!p.busy && p.input.trim()) p.onSend() } }}
+          onKeyDown={(e) => { if (e.key === 'Escape' && p.progress && !p.progress.finishing) { e.preventDefault(); p.onStop?.() } else if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); if (!p.busy && p.input.trim()) p.onSend() } }}
           placeholder="Message Aielia. Enter sends, Shift+Enter starts a new line."
         />
         <div className="write__composebar">
@@ -95,7 +111,7 @@ export function ChatPane(p: Props): React.JSX.Element {
               <option value="edit">{p.editLabel}</option>
             </select>
           </label>
-          <button type="button" className={`write__iconbtn write__send${p.progress ? ' is-working' : ''}`} aria-label="Send" title="Send" onClick={p.onSend} disabled={p.busy || !p.input.trim()}><Icon d={ICON_PATHS.write} /></button>
+          <button type="button" className={`write__iconbtn write__send${p.progress && !p.progress.finishing ? ' is-working' : ''}`} aria-label="Send" title="Send" onClick={p.onSend} disabled={p.busy || !p.input.trim()}><Icon d={ICON_PATHS.write} /></button>
         </div>
       </div>
     </section>
@@ -107,30 +123,41 @@ export function ChatPane(p: Props): React.JSX.Element {
  * the checklist for the kind of job, and a running time once it has gone on a few seconds. It is the last line of the chat and is gone
  * when the answer arrives, so only the result stays.
  */
-function WorkTicker({ progress }: { progress: WorkProgress }): React.JSX.Element {
+function WorkTicker({ progress, onStop }: { progress: WorkProgress; onStop?: () => void }): React.JSX.Element {
   const [now, setNow] = useState(() => Date.now())
   useEffect(() => {
     const t = setInterval(() => setNow(Date.now()), 1000)
     return () => clearInterval(t)
   }, [])
   const plan = workPlan(progress.kind, progress.label)
-  const items = checklistAt(plan, progress.stage)
-  const sentence = stageSentence(plan, progress.stage) ?? `${progress.label}…`
-  const elapsed = elapsedText(now - progress.startedAt)
+  const items = checklistAt(plan, progress.finishing ? plan.steps.length : progress.stage)
+  const sentence = progress.finishing ? 'Done.' : progress.stopping ? 'Stopping after this step…' : stageSentence(plan, progress.stage) ?? `${progress.label}…`
+  const elapsed = progress.finishing ? undefined : elapsedText(now - progress.startedAt)
+  const long = !progress.finishing && !progress.stopping && now - progress.startedAt > 20000 && progress.streamed === undefined
+  const [done, total] = progress.count ?? [0, 0]
   return (
-    <li className="write__line write__line--aielia write__line--progress write__work" role="status">
+    <li className={`write__line write__line--aielia write__line--progress write__work${progress.finishing ? ' is-finishing' : ''}`} role="status">
       <div className="write__worklabel">{progress.label}</div>
       <div className="write__workhead">
         <span className="write__pulse" aria-hidden="true"><i /><i /><i /></span>
         <span key={sentence} className="write__worksentence">{sentence}</span>
         {elapsed && <span className="write__workelapsed" title="How long this has been running">{elapsed}</span>}
+        {onStop && !progress.finishing && !progress.stopping && <button type="button" className="write__stop" title="Stop after the step it is on (Esc)" onClick={onStop}>Stop</button>}
       </div>
       {progress.detail && <div className="write__workdetail" key={progress.detail}>{progress.detail}</div>}
+      {total > 0 && (
+        <div className="write__count">
+          <div className="write__bar" role="progressbar" aria-valuemin={0} aria-valuemax={total} aria-valuenow={done}><div style={{ width: `${Math.min(100, (done / total) * 100)}%` }} /></div>
+          <span>{done} of {total} done</span>
+        </div>
+      )}
       {items.length > 1 && (
         <ol className="write__checklist" aria-label="Steps">
           {items.map((it) => <li key={it.text} className={`is-${it.state}`}><span className="write__tick" aria-hidden="true">{it.state === 'done' ? '✓' : ''}</span>{it.text}</li>)}
         </ol>
       )}
+      {progress.streamed && <div className="write__stream">{progress.streamed}</div>}
+      {long && <div className="write__workdetail">This one takes a while. You can keep reading the article.</div>}
     </li>
   )
 }

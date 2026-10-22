@@ -47,6 +47,24 @@ describe('which claims are verified', () => {
   })
 })
 
+describe('progress and stopping a verify run', () => {
+  it('reports how many claims are done and stops between claims when asked, keeping the ones already checked', async () => {
+    const { svc, id } = await setup({ search: async () => [{ title: 'Bench', url: 'https://x.test/bench', snippet: 's' }], pages: { 'https://x.test/bench': 'p99 latency was 18 ms.' } })
+    const seen: string[] = []
+    let stop = false
+    const r = await svc.verifyClaims(id, { claimIds: ['c1', 'c2'], onProgress: (d, t) => { seen.push(`${d}/${t}`); if (d === 0) stop = true }, shouldStop: () => stop })
+    expect(seen).toEqual(['0/2'])
+    expect(r.entries).toHaveLength(1)
+    expect(r).toMatchObject({ stopped: true, leftOver: 1 })
+  })
+  it('does not say stopped when it ran to the end', async () => {
+    const { svc, id } = await setup({})
+    const r = await svc.verifyClaims(id, { claimIds: ['c1', 'c2'], shouldStop: () => false })
+    expect(r.stopped).toBeUndefined()
+    expect(r.entries).toHaveLength(2)
+  })
+})
+
 describe('verifying claims', () => {
   it('finds pages, keeps them as proposed sources and records the verdict when they back the claim', async () => {
     const { svc, id } = await setup({

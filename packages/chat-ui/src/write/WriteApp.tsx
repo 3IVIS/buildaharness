@@ -1,9 +1,10 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { SpendBadge } from './SpendBadge'
-import { type WorkKind, workPlan, githubRepoReader, parseGithubRepoAddress, type FolderReader, expandSelection, summarizeVerify, summarizeArticleSources, type VerifyReport, textPieces, collectIssues, parseLineRange, sourceKindForFile, computeReadiness, effectiveSourceStatus, issueCount, textUnitAt, autosaveStep, outlineOf, issuesInRange, unitOfSelection, shouldDeriveStyle, type ArticleBundle, type ChangeSummary, type DependencyKind, type IssueCategory, type Section, type WritePermissions } from '@buildaharness/aielia'
+import { type WorkKind, workPlan, changedRange, githubRepoReader, parseGithubRepoAddress, type FolderReader, expandSelection, summarizeVerify, summarizeArticleSources, type VerifyReport, textPieces, collectIssues, parseLineRange, sourceKindForFile, computeReadiness, effectiveSourceStatus, issueCount, textUnitAt, autosaveStep, outlineOf, issuesInRange, unitOfSelection, shouldDeriveStyle, type ArticleBundle, type ChangeSummary, type DependencyKind, type IssueCategory, type Section, type WritePermissions } from '@buildaharness/aielia'
 import type { ChatAction } from './AdjustBar'
 import { ArticleSwitcher, type ArticleItem } from './ArticleSwitcher'
 import { readFileText } from './file-text'
+import { StoppedError, isStopped, type Step } from './work-step'
 import { ChatPane, type ChatLine, type ChatMode, type WorkProgress } from './ChatPane'
 import { HistoryPanel, type VersionRow } from './HistoryPanel'
 import { VersionOutline, VersionView, type Viewing } from './VersionView'
@@ -23,6 +24,9 @@ import { Icon } from './icons'
 import { DialogProvider, useDialogs } from './dialogs'
 import type { WriteServices } from './write-services'
 import './write.css'
+
+/** The kinds of job that can change the article's text, so that what they changed is lit afterwards. */
+const CHANGES_TEXT = new Set<WorkKind>(['edit', 'draft', 'change', 'resolve', 'files', 'import', 'page'])
 
 type Tab = 'text' | 'style' | 'ideas' | 'issues' | 'sources' | 'history' | 'chat' | 'settings'
 
@@ -192,6 +196,11 @@ function WriteAppBody({ services, connection, onDeleted }: WriteAppProps): React
   const setNotice = useCallback((text: string | null): void => { setBanner(text); if (text) sayInChat(text) }, [sayInChat])
   /** What a command sent through the chat is doing right now, shown as the last line of the chat until the result or the error replaces it. */
   const [progress, setProgress] = useState<WorkProgress | null>(null)
+  const stopRef = useRef<AbortController | null>(null)
+  /** The text as it was when a job that changes the article began; when the article changes under it, the passage that changed is lit for a moment. */
+  const flashFrom = useRef<string | null>(null)
+  const lastTyped = useRef(0)
+  const [flash, setFlash] = useState<{ start: number; end: number } | null>(null)
   const [busy, setBusy] = useState<string | null>(null)
   // What has been spent follows every model call, so the header is right while a command is still running.
   const [spendTick, setSpendTick] = useState(0)
@@ -276,33 +285,60 @@ function WriteAppBody({ services, connection, onDeleted }: WriteAppProps): React
    * Every action is a short conversation in the chat: the writer's action as a line, the progress as the last line while it runs, then
    * what came of it, or what went wrong. `announce` is false when the writer's own words already opened the exchange (a typed message).
    */
-  async function run(label: string, work: (step: (text: string, stage?: number) => void) => Promise<void>, announce = true, doneNote = '', kind: WorkKind = 'other'): Promise<void> {
+  async function run(label: string, work: (step: Step) => Promise<void>, announce = true, doneNote = '', kind: WorkKind = 'other'): Promise<void> {
     if (announce) setChat((c) => [...c, { id: ++lineId, from: 'you', text: label }])
     const mark = lineId
     const before = services.spend.snapshot()
     const started = Date.now()
+    const ctl = new AbortController()
+    stopRef.current = ctl
     setBusy(label)
     setBanner(null)
     setProgress({ kind, label, stage: 0, startedAt: started })
+    if (CHANGES_TEXT.has(kind)) flashFrom.current = draftRef.current
     void services.store.setSetting(PENDING_KEY, label).catch(() => undefined)
+    const quiet = (text: string, stage?: number, count?: readonly [number, number]): void => setProgress((p) => (p ? { ...p, detail: text || undefined, stage: stage ?? p.stage, count } : p))
+    const step = Object.assign(
+      (text: string, stage?: number, count?: readonly [number, number]): void => { if (ctl.signal.aborted) throw new StoppedError(); quiet(text, stage, count) },
+      { quiet, stopped: () => ctl.signal.aborted, signal: ctl.signal },
+    ) as Step
+    let ok = false
     try {
-      await work((text, stage) => setProgress((p) => (p ? { ...p, detail: text || undefined, stage: stage ?? p.stage } : p)))
+      await work(step)
+      ok = true
       // An action that had nothing to say still says it is done.
       if (lineId === mark) sayInChat(`${label}: done.${doneNote}`)
     } catch (err) {
-      sayInChat(`${label} did not finish: ${err instanceof Error ? err.message : String(err)}`)
+      if (isStopped(err)) {
+        sayInChat(`${label}: stopped. What was done before that stays; nothing after it ran.`)
+        // The work may have changed the article before it stopped, so the page shows it as it is now.
+        const id = activeIdRef.current
+        if (id) { try { await reload(id) } catch { /* the page keeps what it shows */ } }
+      } else sayInChat(`${label} did not finish: ${err instanceof Error ? err.message : String(err)}`)
     } finally {
       // The last thing said in this turn carries what the whole request used, in small type.
       const after = services.spend.snapshot()
       const usage = usageText(Date.now() - started, { usd: after.usd - before.usd, inputTokens: after.inputTokens - before.inputTokens, outputTokens: after.outputTokens - before.outputTokens, calls: after.calls - before.calls })
       setChat((c) => { let i = -1; c.forEach((l, k) => { if (l.from === 'aielia' && l.id > mark) i = k }); return i < 0 ? c : c.map((l, k) => (k === i ? { ...l, usage } : l)) })
+      if (stopRef.current === ctl) stopRef.current = null
       setBusy(null)
-      setProgress(null)
+      // A finished job ticks its last step and holds for a moment before it goes, so the end is seen; a stopped or failed one goes at once.
+      if (ok) {
+        setProgress((p) => (p ? { ...p, finishing: true, detail: undefined, count: undefined, streamed: undefined } : p))
+        setTimeout(() => setProgress((p) => (p && p.startedAt === started ? null : p)), 700)
+      } else setProgress(null)
+      setTimeout(() => { flashFrom.current = null }, 800)
       void services.store.setSetting(PENDING_KEY, '').catch(() => undefined)
     }
   }
+  /** Stop was pressed: the work ends at its next step boundary, and the chat turn itself is cancelled. */
+  const stopWork = (): void => {
+    if (!stopRef.current || stopRef.current.signal.aborted) return
+    stopRef.current.abort()
+    setProgress((p) => (p ? { ...p, stopping: true } : p))
+  }
   /** A command the writer sent through the chat: the writer's line is already there, so it is not repeated. */
-  const chatRun = (label: string, work: (step: (text: string, stage?: number) => void) => Promise<void>, kind: WorkKind = 'other'): Promise<void> => run(label, work, false, '', kind)
+  const chatRun = (label: string, work: (step: Step) => Promise<void>, kind: WorkKind = 'other'): Promise<void> => run(label, work, false, '', kind)
 
   /** Saves what is in the text box now, so a comparison, a restore or a batch starts from what the writer sees, not from the last autosave. */
   async function flushDraft(): Promise<void> {
@@ -364,10 +400,10 @@ function WriteAppBody({ services, connection, onDeleted }: WriteAppProps): React
   folderRef.current = folder
   const [candidates, setCandidates] = useState<Record<string, { title: string; url: string; snippet: string }[]>>({})
 
-  const change = (label: string, work: (id: string, step: (text: string, stage?: number) => void) => Promise<void>, kind: WorkKind = 'change'): void => {
+  const change = (label: string, work: (id: string, step: Step) => Promise<void>, kind: WorkKind = 'change'): void => {
     if (!activeId) { sayInChat('Open or create an article first.'); return }
     const last = workPlan(kind, label).steps.length - 1
-    void run(label, async (step) => { step('', 0); await flushDraft(); step('', 1); await work(activeId, step); step('', last); await reload(activeId) }, true, ' The article is updated.', kind)
+    void run(label, async (step) => { step('', 0); await flushDraft(); step('', 1); await work(activeId, step); step.quiet('', last); await reload(activeId) }, true, ' The article is updated.', kind)
   }
 
   async function select(id: string): Promise<void> {
@@ -397,6 +433,8 @@ function WriteAppBody({ services, connection, onDeleted }: WriteAppProps): React
   function onType(value: string): void {
     const prev = draftRef.current
     draftRef.current = value
+    lastTyped.current = Date.now()
+    if (flash) setFlash(null)
     setDraft(value)
     // A version is saved by itself when a sentence is finished, a section started, or the writer moves on to change another sentence.
     const step = autosaveStep(prev, value, sentenceRef.current)
@@ -552,7 +590,7 @@ function WriteAppBody({ services, connection, onDeleted }: WriteAppProps): React
 
   // ---- style sheet and links drawn from the text
   /** A first style sheet and the links between sections, drawn from the article's own text with the model for automatic checks; says in one sentence what it found. */
-  async function prepareFromText(id: string, model: string = services.models.auto(), step?: (text: string, stage?: number) => void, at = 1): Promise<string> {
+  async function prepareFromText(id: string, model: string = services.models.auto(), step?: Step, at = 1): Promise<string> {
     const before = await service.get(id)
     step?.('', at)
     const style = await service.deriveStyleFromText(id, model)
@@ -577,6 +615,7 @@ function WriteAppBody({ services, connection, onDeleted }: WriteAppProps): React
         const text = await prepareFromText(id, used, step)
         setChat((c) => [...c, { id: ++lineId, from: 'aielia', text, model: used }])
       } catch (e) {
+        if (isStopped(e)) throw e
         setChat((c) => [...c, { id: ++lineId, from: 'aielia', text: failureText('I could not do that', e) }])
       }
     }, 'prepare')
@@ -612,6 +651,39 @@ function WriteAppBody({ services, connection, onDeleted }: WriteAppProps): React
   activeIdRef.current = activeId
 
   /** The scratchpad is saved quietly as the writer types, without the busy line. */
+  // When a job has changed the article, the passage that changed is lit for a moment (not when the writer is the one typing).
+  const flashTimer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined)
+  useEffect(() => {
+    const from = flashFrom.current
+    if (from === null || from === draft || Date.now() - lastTyped.current < 1500) return
+    flashFrom.current = null
+    const r = changedRange(from, draft)
+    if (!r) return
+    setFlash(r)
+    if (flashTimer.current) clearTimeout(flashTimer.current)
+    flashTimer.current = setTimeout(() => setFlash(null), 2800)
+  }, [draft])
+
+  // The tab title says when work is going on and, if the writer has looked away, when it is done.
+  useEffect(() => {
+    if (typeof document === 'undefined') return
+    const base = document.title.replace(/^(Working… · |✓ Done · )/, '')
+    if (busy) { document.title = `Working… · ${base}`; return () => { document.title = base } }
+    return undefined
+  }, [busy])
+  const wasBusy = useRef(false)
+  useEffect(() => {
+    if (typeof document === 'undefined') return
+    if (busy) { wasBusy.current = true; return }
+    if (!wasBusy.current) return
+    wasBusy.current = false
+    if (!document.hidden) return
+    const base = document.title.replace(/^(Working… · |✓ Done · )/, '')
+    document.title = `✓ Done · ${base}`
+    const back = (): void => { if (!document.hidden) { document.title = base; document.removeEventListener('visibilitychange', back) } }
+    document.addEventListener('visibilitychange', back)
+  }, [busy])
+
   const saveScratchpad = (text: string): void => {
     if (!activeId) return
     const id = activeId
@@ -801,8 +873,8 @@ function WriteAppBody({ services, connection, onDeleted }: WriteAppProps): React
     const r = await service.resolveCategory(id, category, { model: chatModel })
     setNotes([{ category, done: r.done, note: r.note }])
   }, 'resolve')
-  const resolveAll = (): void => change(`Resolving with ${chatModel}`, async (id) => {
-    const reports = await service.resolveAll(id, { model: chatModel })
+  const resolveAll = (): void => change(`Resolving with ${chatModel}`, async (id, step) => {
+    const reports = await service.resolveAll(id, { model: chatModel, onProgress: (done, total, category) => step.quiet(`${category}`, 1, [done, total]), shouldStop: step.stopped })
     setNotes(reports.filter((r) => r.done > 0 || r.note).map((r) => ({ category: r.category, done: r.done, note: r.note })))
   }, 'resolve')
 
@@ -821,12 +893,22 @@ function WriteAppBody({ services, connection, onDeleted }: WriteAppProps): React
         await flushDraft()
         step('', 1)
         let calls = 0
-        const r = await service.verifyClaims(activeId, { model: used, repoOnly, onStep: (st) => step(`${stepText(st)} (lookup ${++calls})`, 2) })
-        step('', 3)
+        let detail = ''
+        let latest: readonly [number, number] | undefined
+        const r = await service.verifyClaims(activeId, {
+          model: used,
+          repoOnly,
+          onStep: (st) => { detail = `${stepText(st)} (lookup ${++calls})`; step.quiet(detail, 2, latest) },
+          onProgress: (done, total) => { latest = [done, total]; step.quiet(detail, 2, latest) },
+          shouldStop: step.stopped,
+        })
+        step.quiet('', 3)
         const fresh = await service.get(activeId)
         setBundle(fresh)
-        setChat((c) => [...c, { id: ++lineId, from: 'aielia', text: verifyText(r, fresh.meta), model: used }])
+        const early = r.stopped ? `Stopped early: ${r.entries.length} claim${r.entries.length === 1 ? ' was' : 's were'} checked and ${r.leftOver} ${r.leftOver === 1 ? 'is' : 'are'} left for another run.\n` : ''
+        setChat((c) => [...c, { id: ++lineId, from: 'aielia', text: early + verifyText(r, fresh.meta), model: used }])
       } catch (e) {
+        if (isStopped(e)) throw e
         setChat((c) => [...c, { id: ++lineId, from: 'aielia', text: failureText('The check could not finish', e) }])
       }
     }, 'verify')
@@ -857,9 +939,21 @@ function WriteAppBody({ services, connection, onDeleted }: WriteAppProps): React
       }
       setChat((c) => [...c, { id: ++lineId, from: 'aielia', text, model: used }])
       } catch (e) {
+        if (isStopped(e)) throw e
         setChat((c) => [...c, { id: ++lineId, from: 'aielia', text: failureText('The check could not finish', e) }])
       }
     }, 'check')
+  }
+
+  /** Collects the words of a streaming answer and shows them a few times a second, not once for every word. */
+  const streamInto = (): { push: (token: string) => void; end: () => void } => {
+    let text = ''
+    let timer: ReturnType<typeof setTimeout> | undefined
+    const show = (): void => { timer = undefined; setProgress((p) => (p ? { ...p, streamed: text } : p)) }
+    return {
+      push: (token) => { text += token; if (!timer) timer = setTimeout(show, 80) },
+      end: () => { if (timer) clearTimeout(timer); timer = undefined },
+    }
   }
 
   /** One chat message, the same path whether typed or composed by the Adjust control. `mode` overrides the chat's mode for this message. */
@@ -873,6 +967,14 @@ function WriteAppBody({ services, connection, onDeleted }: WriteAppProps): React
     const drafting = how === 'edit' && view !== 'outline' && (!activeId || !draft.trim())
     const kind: WorkKind = how === 'edit' ? (drafting ? 'draft' : 'edit') : wantEdits ? 'suggest' : 'answer'
     await chatRun(how === 'edit' ? 'Editing' : wantEdits ? 'Asking for edits' : 'Thinking', async (step) => {
+     // The words of a plain answer appear as they are written; an edit or a suggestion shows its steps instead, since the reply is not what is shown.
+     const live = kind === 'answer' ? streamInto() : undefined
+     const talk = async (id: string | undefined): Promise<{ reply: string; model: string }> => {
+       const r = await services.chat(text, id, { signal: step.signal, onToken: live?.push })
+       live?.end()
+       if (r.stopped) throw new StoppedError()
+       return r
+     }
      try {
       step('', 0)
       if (activeId) await service.updateText(activeId, draft, { analyze: false })
@@ -887,7 +989,7 @@ function WriteAppBody({ services, connection, onDeleted }: WriteAppProps): React
           await refreshList()
           await select(id)
         }
-        const { reply, model: said } = await services.chat(text, id)
+        const { reply, model: said } = await talk(id)
         step('', 2)
         const outline = view === 'outline'
         if (!outline && (fresh || !draft.trim())) {
@@ -917,7 +1019,7 @@ function WriteAppBody({ services, connection, onDeleted }: WriteAppProps): React
         setChat((c) => [...c, { id: ++lineId, from: 'aielia', text: body, model: said }])
       } else if (wantEdits && activeId) {
         // Record what the writer said (comments, corrections) the same way a chat turn does, then turn the request into suggestions.
-        const { reply, model: said } = await services.chat(text, activeId)
+        const { reply, model: said } = await talk(activeId)
         step('', 2)
         const r = await service.suggest(activeId, text, said)
         const now = await service.get(activeId)
@@ -931,11 +1033,12 @@ function WriteAppBody({ services, connection, onDeleted }: WriteAppProps): React
           : `I added ${added.length} suggested change${added.length === 1 ? '' : 's'}. Open Issues to accept or reject ${added.length === 1 ? 'it' : 'them'}:\n${added.slice(0, 4).map((x) => `• “${short(x.span.quote)}” → “${short(x.replacement)}”`).join('\n')}${added.length > 4 ? `\n…and ${added.length - 4} more.` : ''}`
         setChat((c) => [...c, { id: ++lineId, from: 'aielia', text: body, model: said }])
       } else {
-        const { reply, model: said } = await services.chat(text, activeId)
+        const { reply, model: said } = await talk(activeId)
         if (activeId) setBundle(await service.get(activeId))
         setChat((c) => [...c, { id: ++lineId, from: 'aielia', text: reply, model: said }])
       }
      } catch (e) {
+      if (isStopped(e)) throw e
       setChat((c) => [...c, { id: ++lineId, from: 'aielia', text: failureText('The model call failed', e) }])
      }
     }, kind)
@@ -973,7 +1076,7 @@ function WriteAppBody({ services, connection, onDeleted }: WriteAppProps): React
               />
   return (
     <div
-      className={`write${dropping ? ' is-dropping' : ''}${progress ? ' is-working' : ''}`}
+      className={`write${dropping ? ' is-dropping' : ''}${progress && !progress.finishing ? ' is-working' : ''}`}
       onDragOver={(e) => { if (!e.dataTransfer.types.includes('Files')) return; e.preventDefault(); setDropping(true) }}
       onDragLeave={(e) => { if (e.currentTarget === e.target || !e.currentTarget.contains(e.relatedTarget as Node | null)) setDropping(false) }}
       onDrop={(e) => { setDropping(false); const files = Array.from(e.dataTransfer.files); if (files.length === 0) return; e.preventDefault(); dropFiles(files, false) }}
@@ -1057,7 +1160,7 @@ function WriteAppBody({ services, connection, onDeleted }: WriteAppProps): React
               </div>
             )}
             <div className={`write__textview ${view === 'outline' || (viewing && showHistory) ? 'is-hidden' : ''}`}>
-            <MarkedText textRef={textRef} value={draft} pieces={textPieces(meta, draft)} onChange={onType} onSelection={(r) => { setSelection(r); const g = grownTo.current; if (!g || g.start !== r.start || g.end !== r.end) { growth.current = []; grownTo.current = undefined; setGrownUnit(undefined) } }} onGrow={growSelection} onShrink={shrinkSelection} onPress={pressText} onDoubleClick={doubleClickText} selection={selection} />
+            <MarkedText flash={flash} textRef={textRef} value={draft} pieces={textPieces(meta, draft)} onChange={onType} onSelection={(r) => { setSelection(r); const g = grownTo.current; if (!g || g.start !== r.start || g.end !== r.end) { growth.current = []; grownTo.current = undefined; setGrownUnit(undefined) } }} onGrow={growSelection} onShrink={shrinkSelection} onPress={pressText} onDoubleClick={doubleClickText} selection={selection} />
             </div>
             {!dockOn && <button type="button" className="write__dockchev write__dockchev--show" aria-label="Show the box under the text" title="Show the box under the text" onClick={toggleDock}>⌃</button>}
             {dockOn && <TextNotes
@@ -1130,7 +1233,7 @@ function WriteAppBody({ services, connection, onDeleted }: WriteAppProps): React
           busy={busy !== null}
           canAct={Boolean(activeId)}
           shown={tab === 'chat'}
-          onSend={() => void sendChat()}
+          onSend={() => void sendChat()} onStop={stopWork}
           onAdjust={(m) => { const mode = effectiveMode === 'answer' ? 'suggest' : effectiveMode; setChatMode(mode); setModePicked(true); void sendChat(m, mode) }}
           onAction={(a: ChatAction) => { if (a === 'check') checkFromChat(); else if (a === 'prepare') prepareFromChat(); else verifyFromChat() }}
           repos={activeId ? (void repoTick, service.attachedRepos(activeId)) : []}

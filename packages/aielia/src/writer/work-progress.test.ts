@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { checklistAt, elapsedText, stageSentence, workPlan } from './work-progress.js'
+import { changedRange, checklistAt, elapsedText, stageSentence, workPlan } from './work-progress.js'
 
 describe('work progress', () => {
   it('marks earlier steps done, the current one current and the rest waiting', () => {
@@ -21,5 +21,11 @@ describe('work progress', () => {
     expect(elapsedText(3999)).toBeUndefined()
     expect(elapsedText(12_300)).toBe('12s')
     expect(elapsedText(125_000)).toBe('2m 05s')
+  })
+  it('finds the passage that changed between two texts', () => {
+    expect(changedRange('One. Two. Three.', 'One. Twenty. Three.')).toEqual({ start: 7, end: 11 })
+    expect(changedRange('abc', 'abc')).toBeNull()
+    expect(changedRange('One. Two.', 'One.')).toBeNull()
+    expect(changedRange('', 'New text')).toEqual({ start: 0, end: 8 })
   })
 })

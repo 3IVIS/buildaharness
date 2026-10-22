@@ -29,6 +29,8 @@ export interface VerifyReport {
   entries: VerifyEntry[]
   /** Factual claims left for another run because of the limit. */
   leftOver: number
+  /** The writer stopped the run: the entries are the claims checked before that. */
+  stopped?: boolean
 }
 
 export const DEFAULT_VERIFY_LIMIT = 10

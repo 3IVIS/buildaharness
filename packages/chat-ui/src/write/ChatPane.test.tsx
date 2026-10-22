@@ -18,4 +18,17 @@ describe('ChatPane work ticker', () => {
     expect(screen.queryByRole('status')).toBeNull()
     expect(screen.queryByLabelText('Steps')).toBeNull()
   })
+  it('shows the count, the words of an answer as they come, and Stop; and a finished job shows Done', async () => {
+    let stopped = 0
+    const { rerender } = render(<ChatPane {...base} onStop={() => { stopped++ }} progress={{ ...progress, kind: 'verify', stage: 2, count: [4, 11], streamed: 'The answer so f' }} />)
+    expect(screen.getByText('4 of 11 done')).toBeInTheDocument()
+    expect(screen.getByRole('progressbar')).toHaveAttribute('aria-valuenow', '4')
+    expect(screen.getByText('The answer so f')).toBeInTheDocument()
+    screen.getByRole('button', { name: 'Stop' }).click()
+    expect(stopped).toBe(1)
+    rerender(<ChatPane {...base} onStop={() => undefined} progress={{ ...progress, kind: 'verify', finishing: true }} />)
+    expect(screen.getByText('Done.')).toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: 'Stop' })).toBeNull()
+    expect([...screen.getByLabelText('Steps').querySelectorAll('li')].every((l) => l.className === 'is-done')).toBe(true)
+  })
 })

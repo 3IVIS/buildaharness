@@ -41,7 +41,7 @@ export interface WriteServices {
   store: ArticleStore
   port: WriterChatPort
   /** One chat turn about the article currently open. `model` is the model that answered. */
-  chat(message: string, activeArticleId: string | undefined): Promise<{ reply: string; model: string }>
+  chat(message: string, activeArticleId: string | undefined, live?: { onToken?: (token: string) => void; signal?: AbortSignal }): Promise<{ reply: string; model: string; stopped?: boolean }>
   models: WriteModels
   permissions: { get(): Promise<WritePermissions>; set(p: WritePermissions): Promise<void> }
   /** Dollars spent on model calls in this browser so far (counts toward the cap). */
@@ -136,14 +136,15 @@ export async function assembleWriteServices(parts: {
     service,
     store,
     port,
-    async chat(message, activeArticleId) {
+    async chat(message, activeArticleId, live) {
       if (activeArticleId) await port.setActive(activeArticleId)
       const used = chatModel
       lastModelError = undefined
-      const result = await assistant.turn(message, { sessionId: SESSION_ID })
+      const result = await assistant.turn(message, { sessionId: SESSION_ID, ...(live?.signal ? { signal: live.signal } : {}), ...(live?.onToken ? { onToken: live.onToken } : {}) })
+      if (result.status === 'cancelled') return { reply: 'Stopped.', model: used, stopped: true }
       // A turn that did not finish has no reply. The page says why instead of showing an empty answer: the model's own error when a call failed
       // (the harness wraps it in text about risk checks), otherwise the reason the turn gives.
-      const why = result.status === 'cancelled' ? 'The turn was stopped.' : lastModelError ?? result.reason
+      const why = lastModelError ?? result.reason
       const hint = 'Check your key and the model in Settings, or pick another model next to the chat, then try again.'
       return { reply: result.reply ?? (why ? `I could not answer: ${why.replace(/[.\s]+$/, '')}. ${hint}` : `I could not answer, and the model gave no reason. ${hint}`), model: used }
     },

@@ -44,6 +44,33 @@ afterEach(() => {
   vi.restoreAllMocks()
 })
 
+describe('the chat turn: words as they come, and stopping', () => {
+  it('hands the turn the signal and a token callback, and says stopped when the turn was cancelled', async () => {
+    const seen: { signal?: AbortSignal; tokens: string[] } = { tokens: [] }
+    let cancel = false
+    const s = await assembleWriteServices({
+      store: createMemoryArticleStore(),
+      llm: llm({}),
+      buildAssistant: async () => ({
+        turn: async (_m: string, o: { signal?: AbortSignal; onToken?: (t: string) => void }) => {
+          seen.signal = o.signal
+          o.onToken?.('Hel'); o.onToken?.('lo')
+          return cancel ? { status: 'cancelled', reply: null, reason: 'Stopped by user' } : { status: 'ok', reply: 'Hello' }
+        },
+        setModel: () => undefined,
+      }) as unknown as PersonalAssistant,
+    })
+    const ctl = new AbortController()
+    const ok = await s.chat('hi', undefined, { signal: ctl.signal, onToken: (t) => seen.tokens.push(t) })
+    expect(ok).toMatchObject({ reply: 'Hello' })
+    expect(ok.stopped).toBeUndefined()
+    expect(seen.signal).toBe(ctl.signal)
+    expect(seen.tokens.join('')).toBe('Hello')
+    cancel = true
+    expect(await s.chat('hi', undefined, { signal: ctl.signal })).toMatchObject({ reply: 'Stopped.', stopped: true })
+  })
+})
+
 const MD = '# Post\n\n## Latency\n\nThe p99 was 18 ms.\n'
 const MD2 = '# Post\n\n## Latency\n\nThe p99 was 18 ms. It is quick.\n\n## Conclusion\n\nSo p99 stays under 20 ms.\n'
 const openMenu = (): Promise<void> => userEvent.click(screen.getByRole('button', { name: 'Article' }))
@@ -1048,6 +1075,25 @@ describe('finding sources', () => {
     release()
     expect(await screen.findByText(/Looked at 1 claim/)).toBeInTheDocument()
     await waitFor(() => expect(within(chatList()).queryByText(/^Verifying with /)).toBeNull())
+  })
+  it('counts the claims done, and Stop ends a check between claims, keeping the ones already checked', async () => {
+    const claims = { claims: [{ quote: 'The p99 was 18 ms.', kind: 'factual', matchesId: null, sure: true }, { quote: 'So p99 stays under 20 ms.', kind: 'factual', matchesId: null, sure: true }] }
+    let release: () => void = () => undefined
+    const gate = new Promise<void>((r) => { release = r })
+    let searches = 0
+    const s = await services({ claims, resolve: { affected: [] } }, MD2, async () => 'x', async () => { searches++; await gate; return [] })
+    const id = (await s.service.list())[0].id
+    await s.service.analyze(id)
+    render(<WriteApp services={s} />)
+    await waitForText()
+    await userEvent.selectOptions(screen.getByLabelText('Adjust', { selector: 'select' }), 'action:verify')
+    const stop = await screen.findByRole('button', { name: 'Stop' })
+    await waitFor(() => expect(searches).toBe(1))
+    await userEvent.click(stop)
+    expect(await screen.findByText('Stopping after this step…')).toBeInTheDocument()
+    release()
+    expect(await screen.findByText(/Stopped early: 1 claim was checked and 1 is left/)).toBeInTheDocument()
+    expect(searches).toBe(1)
   })
   it('offers no search button when no search is set up', async () => {
     const s = await services({ claims: { claims: [{ quote: 'The p99 was 18 ms.', kind: 'factual', matchesId: null, sure: true }] }, resolve: { affected: [] } }, MD)

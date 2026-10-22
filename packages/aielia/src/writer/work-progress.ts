@@ -61,3 +61,18 @@ export function elapsedText(ms: number, after = 4000): string | undefined {
   const s = Math.floor(ms / 1000)
   return s < 60 ? `${s}s` : `${Math.floor(s / 60)}m ${String(s % 60).padStart(2, '0')}s`
 }
+
+/**
+ * The stretch of `after` that differs from `before`, found from the text both start and end with; null when nothing was added or changed
+ * (a pure deletion leaves nothing to light). Used to light the passage a job has just written.
+ */
+export function changedRange(before: string, after: string): { start: number; end: number } | null {
+  if (before === after) return null
+  let start = 0
+  const max = Math.min(before.length, after.length)
+  while (start < max && before[start] === after[start]) start++
+  let tail = 0
+  while (tail < max - start && before[before.length - 1 - tail] === after[after.length - 1 - tail]) tail++
+  const end = after.length - tail
+  return end > start ? { start, end } : null
+}
