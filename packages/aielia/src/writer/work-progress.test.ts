@@ -5,7 +5,7 @@ import type { ResultLine } from './work-progress.js'
 describe('work progress', () => {
   it('marks earlier steps done, the current one current and the rest waiting', () => {
     const items = checklistAt(workPlan('edit'), 1)
-    expect(items.map((i) => i.state)).toEqual(['done', 'current', 'waiting'])
+    expect(items.map((i) => i.state)).toEqual(['done', 'current', 'waiting', 'waiting', 'waiting'])
   })
   it('marks everything done past the last step', () => {
     expect(checklistAt(workPlan('answer'), 9).every((i) => i.state === 'done')).toBe(true)

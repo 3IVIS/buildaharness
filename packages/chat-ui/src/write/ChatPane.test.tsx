@@ -11,7 +11,7 @@ describe('ChatPane work ticker', () => {
     expect(screen.getByText('Noting what you said…')).toBeInTheDocument()
     expect(screen.getByText('one more moment')).toBeInTheDocument()
     const steps = screen.getByLabelText('Steps').querySelectorAll('li')
-    expect([...steps].map((l) => l.className)).toEqual(['is-done', 'is-current', 'is-waiting'])
+    expect([...steps].map((l) => l.className)).toEqual(['is-done', 'is-current', 'is-waiting', 'is-waiting', 'is-waiting'])
   })
   it('is gone when the work is over', () => {
     render(<ChatPane {...base} progress={null} />)

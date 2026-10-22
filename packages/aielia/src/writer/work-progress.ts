@@ -17,8 +17,8 @@ export interface WorkPlan {
 }
 
 const PLANS: Record<WorkKind, readonly string[]> = {
-  edit: ['Saving your text', 'Noting what you said', 'Making the edit'],
-  draft: ['Saving your text', 'Noting what you said', 'Writing the first draft'],
+  edit: ['Saving your text', 'Noting what you said', 'Saving a version to go back to', 'Asking for the edit', 'Applying the changes'],
+  draft: ['Saving your text', 'Noting what you said', 'Saving a version to go back to', 'Writing the first draft', 'Putting it in the article'],
   suggest: ['Saving your text', 'Noting what you said', 'Finding changes to suggest'],
   answer: ['Reading your article', 'Writing the answer'],
   verify: ['Saving your text', 'Finding the claims to check', 'Looking things up', 'Writing up what I found'],
