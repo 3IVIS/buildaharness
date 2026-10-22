@@ -168,8 +168,8 @@
 .write__workelapsed + .write__stop { margin-left: 8px; }
 .write__workhead .write__stop:first-of-type:not(:last-child) { margin-left: 8px; }
 .write__count { display: flex; align-items: center; gap: 8px; padding-left: 28px; font-size: 0.8rem; }
-.write__bar { flex: 1; height: 4px; border-radius: 2px; background: var(--border); overflow: hidden; }
-.write__bar > div { height: 100%; background: var(--accent); transition: width 0.4s ease; }
+.write__countbar { flex: 1; height: 4px; border-radius: 2px; background: var(--border); overflow: hidden; }
+.write__countbar > div { height: 100%; background: var(--accent); transition: width 0.4s ease; }
 .write__stream { white-space: pre-wrap; color: var(--text); font-style: normal; border-top: 1px solid var(--border); padding-top: 6px; }
 .write__work.is-finishing { animation: write-settle 0.7s ease-out both; }
 .write__work.is-finishing .write__pulse i { animation: none; opacity: 0.9; }

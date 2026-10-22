@@ -906,7 +906,7 @@ function WriteAppBody({ services, connection, onDeleted }: WriteAppProps): React
         const fresh = await service.get(activeId)
         setBundle(fresh)
         const early = r.stopped ? `Stopped early: ${r.entries.length} claim${r.entries.length === 1 ? ' was' : 's were'} checked and ${r.leftOver} ${r.leftOver === 1 ? 'is' : 'are'} left for another run.\n` : ''
-        setChat((c) => [...c, { id: ++lineId, from: 'aielia', text: early + verifyText(r, fresh.meta), model: used }])
+        setChat((c) => [...c, { id: ++lineId, from: 'aielia', text: early + verifyText(r.stopped ? { ...r, leftOver: 0 } : r, fresh.meta), model: used }])
       } catch (e) {
         if (isStopped(e)) throw e
         setChat((c) => [...c, { id: ++lineId, from: 'aielia', text: failureText('The check could not finish', e) }])

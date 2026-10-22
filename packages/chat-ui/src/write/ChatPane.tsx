@@ -1,6 +1,6 @@
 import { AdjustBar, type ChatAction } from './AdjustBar'
 import { ModelPicker } from './ModelPicker'
-import { useEffect, useState } from 'react'
+import { useEffect, useLayoutEffect, useRef, useState } from 'react'
 import { checklistAt, elapsedText, stageSentence, workPlan, type WorkKind } from '@buildaharness/aielia'
 import { ICON_PATHS, Icon, IconButton } from './icons'
 
@@ -66,6 +66,15 @@ interface Props {
 
 /** The chat: always visible on a wide screen. The model is picked next to the title; every answer says which model wrote it. */
 export function ChatPane(p: Props): React.JSX.Element {
+  // The chat follows new lines and the working block while the writer is at the bottom; a writer who has scrolled up to read is left alone,
+  // unless they have just sent a message.
+  const list = useRef<HTMLUListElement | null>(null)
+  const atBottom = useRef(true)
+  const lastFrom = p.lines.at(-1)?.from
+  useLayoutEffect(() => {
+    const el = list.current
+    if (el && (atBottom.current || lastFrom === 'you')) { el.scrollTop = el.scrollHeight; atBottom.current = true }
+  }, [p.lines.length, lastFrom, Boolean(p.progress), p.progress?.stage, p.progress?.detail, p.progress?.streamed, p.progress?.finishing])
   return (
     <section
       className={`write__pane write__pane--chat ${p.shown ? 'is-shown' : ''}`}
@@ -78,7 +87,7 @@ export function ChatPane(p: Props): React.JSX.Element {
         <ModelPicker label="Model for the chat" value={p.model} suggestions={p.suggestions} onChange={p.onModel} />
         <IconButton label="Close the chat" icon="close" className="write__chatclose" onClick={p.onClose} />
       </header>
-      <ul className="write__chat" aria-live="polite">
+      <ul className="write__chat" aria-live="polite" ref={list} onScroll={(e) => { const el = e.currentTarget; atBottom.current = el.scrollHeight - el.scrollTop - el.clientHeight < 60 }}>
         {p.lines.map((l) => (
           <li key={l.id} className={`write__line write__line--${l.from}`}>
             <div>{l.text}</div>
@@ -147,7 +156,7 @@ function WorkTicker({ progress, onStop }: { progress: WorkProgress; onStop?: () 
       {progress.detail && <div className="write__workdetail" key={progress.detail}>{progress.detail}</div>}
       {total > 0 && (
         <div className="write__count">
-          <div className="write__bar" role="progressbar" aria-valuemin={0} aria-valuemax={total} aria-valuenow={done}><div style={{ width: `${Math.min(100, (done / total) * 100)}%` }} /></div>
+          <div className="write__countbar" role="progressbar" aria-valuemin={0} aria-valuemax={total} aria-valuenow={done}><div style={{ width: `${Math.min(100, (done / total) * 100)}%` }} /></div>
           <span>{done} of {total} done</span>
         </div>
       )}

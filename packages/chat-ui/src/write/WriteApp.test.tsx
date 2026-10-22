@@ -1094,6 +1094,7 @@ describe('finding sources', () => {
     release()
     expect(await screen.findByText(/Stopped early: 1 claim was checked and 1 is left/)).toBeInTheDocument()
     expect(searches).toBe(1)
+    expect(screen.queryByText(/each run takes/)).toBeNull()
   })
   it('offers no search button when no search is set up', async () => {
     const s = await services({ claims: { claims: [{ quote: 'The p99 was 18 ms.', kind: 'factual', matchesId: null, sure: true }] }, resolve: { affected: [] } }, MD)
