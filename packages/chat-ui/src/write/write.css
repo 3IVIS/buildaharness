@@ -1,6 +1,6 @@
 @import '../index.css';
 
-.write { display: flex; flex-direction: column; min-height: 100dvh; background: var(--bg); color: var(--text); font: 16px/1.5 system-ui, sans-serif; overflow-x: hidden; }
+.write { --write-serif: 'Iowan Old Style', Charter, 'Palatino Linotype', Georgia, serif; display: flex; flex-direction: column; min-height: 100dvh; background: var(--bg); color: var(--text); font: 16px/1.5 system-ui, sans-serif; overflow-x: hidden; }
 
 /* Header: the name and the article switcher on the left, the actions on the right. */
 .write__bar { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; padding: 10px 16px; border-bottom: 1px solid var(--border); background: var(--surface); }
@@ -17,8 +17,8 @@
 .write__model input { width: 100%; min-width: 0; font-size: 0.85rem; padding: 4px 8px; }
 .write__model { display: inline-block; min-width: 0; flex: 1 1 140px; }
 .write__lineusage { margin-top: 4px; font-size: 0.68rem; line-height: 1.2; color: var(--muted); font-variant-numeric: tabular-nums; }
-.write__spend { position: relative; }
-.write__spend > summary { list-style: none; cursor: pointer; font: 0.85rem ui-monospace, Menlo, monospace; color: var(--muted); border: 1px solid var(--border); border-radius: 999px; padding: 2px 10px; }
+.write__spend { position: relative; flex: none; white-space: nowrap; }
+.write__spend > summary { list-style: none; cursor: pointer; font-size: 0.85rem; font-variant-numeric: tabular-nums; color: var(--muted); border: 1px solid var(--border); border-radius: 999px; padding: 2px 10px; }
 .write__spend > summary::-webkit-details-marker { display: none; }
 .write__spendpop { position: absolute; right: 0; top: calc(100% + 6px); z-index: 6; min-width: 240px; max-width: 90vw; padding: 10px 12px; background: var(--surface); border: 1px solid var(--border); border-radius: 8px; box-shadow: 0 8px 24px rgba(0, 0, 0, 0.18); }
 .write__actions { display: flex; flex-wrap: wrap; gap: 8px; }
@@ -46,7 +46,7 @@
 .write__panel { display: contents; }
 .write__editor { position: relative; display: flex; flex-direction: column; flex: 1; min-height: 0; }
 .write__editbox { position: relative; display: flex; flex-direction: column; flex: 1; min-height: 0; }
-.write__editor textarea, .write__backdrop { width: 100%; box-sizing: border-box; min-height: 48dvh; margin: 0; padding: 6px 10px; border: 1px solid transparent; font-family: ui-monospace, Menlo, monospace; font-size: inherit; line-height: 1.6; white-space: pre-wrap; overflow-wrap: break-word; word-break: normal; overflow-y: scroll; }
+.write__editor textarea, .write__backdrop { width: 100%; box-sizing: border-box; min-height: 48dvh; margin: 0; padding: 24px max(20px, calc((100% - 44rem) / 2)); border: 1px solid transparent; font-family: var(--write-serif); font-size: 1.0625rem; line-height: 1.75; letter-spacing: 0.005em; white-space: pre-wrap; overflow-wrap: break-word; word-break: normal; overflow-y: scroll; }
 .write__editor textarea { position: relative; resize: vertical; background: transparent; border-color: color-mix(in srgb, var(--border) 55%, transparent); }
 .write__backdrop { position: absolute; inset: 0 0 auto 0; height: 100%; color: transparent; pointer-events: none; overflow: hidden; overflow-y: scroll; scrollbar-color: transparent transparent; }
 .write__mark { color: transparent; background: none; border-radius: 3px; }
@@ -117,7 +117,7 @@
 .write__chathead { display: flex; align-items: center; gap: 10px; margin-bottom: 8px; }
 .write__chathead h2 { margin: 0; flex: none; }
 .write__linemeta { display: flex; flex-wrap: wrap; gap: 4px 10px; align-items: center; margin-top: 6px; }
-.write__linemodel { font: 0.75rem ui-monospace, Menlo, monospace; color: var(--muted); border: 1px solid var(--border); border-radius: 999px; padding: 0 8px; }
+.write__linemodel { font-size: 0.75rem; color: var(--muted); border: 1px solid var(--border); border-radius: 999px; padding: 0 8px; }
 .write__adjust { display: grid; gap: 6px; margin-bottom: 8px; padding: 8px; border: 1px solid var(--border); border-radius: 8px; background: var(--tint-1); }
 .write__adjust select, .write__adjust input { width: 100%; min-width: 0; }
 .write__composebar { display: flex; flex-wrap: wrap; gap: 8px; justify-content: space-between; }
@@ -147,7 +147,7 @@
 .write__line--you { background: var(--accent-a18); justify-self: end; }
 .write__line--progress { color: var(--muted); font-style: italic; }
 .write__work { font-style: normal; display: grid; gap: 6px; animation: write-fade 0.4s ease-out 0.35s both; }
-.write__worklabel { font-size: 0.75rem; text-transform: uppercase; letter-spacing: 0.04em; }
+.write__worklabel { font-size: 0.8rem; }
 .write__workhead { display: flex; align-items: center; gap: 8px; }
 .write__worksentence { animation: write-fade 0.4s ease-out; color: var(--text, inherit); }
 .write__workelapsed { margin-left: auto; font-size: 0.75rem; font-variant-numeric: tabular-nums; }
@@ -458,3 +458,36 @@ body.write--resizing { user-select: none; -webkit-user-select: none; cursor: col
 /* A claim in the issues list is one line, cut with … when there is no room; the full claim is the hover text. */
 .write__rowmain--line { overflow: hidden; overflow-wrap: normal; }
 .write .write__linkline { display: block; max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+/* Write's own palette: neutral greys with one blue accent (the shared tokens in index.css still serve the chat page). */
+.write { --bg: #14161a; --surface: #1b1e23; --border: #2c3038; --text: #e7e9ee; --muted: #9aa1ad; --accent: #6f9cf2; --accent-solid: #3b6fd6; }
+:root[data-theme='light'] .write { --bg: #f6f6f4; --surface: #ffffff; --border: #d6d8de; --text: #1c2029; --muted: #5d6573; --accent: #2f5fc4; --accent-solid: #2f5fc4; }
+@media (prefers-color-scheme: light) { :root:not([data-theme]) .write { --bg: #f6f6f4; --surface: #ffffff; --border: #d6d8de; --text: #1c2029; --muted: #5d6573; --accent: #2f5fc4; --accent-solid: #2f5fc4; } }
+.write__title { font-weight: 650; letter-spacing: -0.01em; }
+.write :focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+
+/* Finish: one corner radius for controls, softer chat bubbles, calmer headings and status bar. */
+.write button, .write select, .write input, .write textarea, .write__import { border-radius: 8px; }
+.write__line { border-radius: 12px; padding: 9px 13px; line-height: 1.55; }
+.write__panehead, .write__panel h2, .write__pane--chat h2 { font-size: 1.05rem; font-weight: 650; letter-spacing: -0.005em; }
+.write__status { font-size: 0.85rem; background: transparent; }
+.write__compose textarea { padding: 10px 12px; }
+.write .write__primary { box-shadow: 0 1px 2px var(--shadow); }
+.write__list li, .write__dock { border-radius: 10px; }
+
+/* Phone header: the name and Publish share a row, the article switcher sits under them. */
+@media (max-width: 639px) {
+  .write__bar { padding: 8px 14px; gap: 6px 8px; }
+  .write__title { order: 1; flex: 1 1 auto; margin: 0; }
+  .write__actions { order: 2; margin-left: auto; }
+  .write__switcher { order: 3; }
+  .write__status { padding: 4px 14px; font-size: 0.8rem; }
+}
+
+/* Inside the desktop app: the way back is a slim strip, not a bar of its own. */
+.write-host__bar { padding: 4px 12px; background: var(--bg); border-bottom: none; }
+.write-host__bar button { min-height: 28px; padding: 2px 10px; font-size: 0.85rem; background: transparent; border-color: transparent; color: var(--muted); }
+.write-host__bar button:hover { color: var(--text); background: var(--tint-2); }
+/* No article yet: a quiet, centred line in the reading face instead of a stray grey sentence. */
+.write__empty { font-family: var(--write-serif); font-size: 1.15rem; line-height: 1.6; text-align: center; align-self: center; justify-self: center; max-width: 28rem; }
+.write__empty:empty { display: none; }
