@@ -465,3 +465,21 @@ body.write--resizing { user-select: none; -webkit-user-select: none; cursor: col
 @media (prefers-color-scheme: light) { :root:not([data-theme]) .write { --bg: #f6f6f4; --surface: #ffffff; --border: #d6d8de; --text: #1c2029; --muted: #5d6573; --accent: #2f5fc4; --accent-solid: #2f5fc4; } }
 .write__title { font-weight: 650; letter-spacing: -0.01em; }
 .write :focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+
+/* Finish: one corner radius for controls, softer chat bubbles, calmer headings and status bar. */
+.write button, .write select, .write input, .write textarea, .write__import { border-radius: 8px; }
+.write__line { border-radius: 12px; padding: 9px 13px; line-height: 1.55; }
+.write__panehead, .write__panel h2, .write__pane--chat h2 { font-size: 1.05rem; font-weight: 650; letter-spacing: -0.005em; }
+.write__status { font-size: 0.85rem; background: transparent; }
+.write__compose textarea { padding: 10px 12px; }
+.write .write__primary { box-shadow: 0 1px 2px var(--shadow); }
+.write__list li, .write__dock { border-radius: 10px; }
+
+/* Phone header: the name and Publish share a row, the article switcher sits under them. */
+@media (max-width: 639px) {
+  .write__bar { padding: 8px 14px; gap: 6px 8px; }
+  .write__title { order: 1; flex: 1 1 auto; margin: 0; }
+  .write__actions { order: 2; margin-left: auto; }
+  .write__switcher { order: 3; }
+  .write__status { padding: 4px 14px; font-size: 0.8rem; }
+}
