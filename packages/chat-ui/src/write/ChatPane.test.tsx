@@ -8,7 +8,7 @@ describe('ChatPane work ticker', () => {
   const progress: WorkProgress = { kind: 'edit', label: 'Editing', stage: 1, detail: 'one more moment', startedAt: Date.now() }
   it('says the stage, the finer step and a checklist with the earlier steps done', () => {
     render(<ChatPane {...base} progress={progress} />)
-    expect(screen.getByText('Reading your request…')).toBeInTheDocument()
+    expect(screen.getByText('Thinking about your request…')).toBeInTheDocument()
     expect(screen.getByText('one more moment')).toBeInTheDocument()
     const steps = screen.getByLabelText('Steps').querySelectorAll('li')
     expect([...steps].map((l) => l.className)).toEqual(['is-done', 'is-current', 'is-waiting'])

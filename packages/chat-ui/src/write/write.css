@@ -332,6 +332,9 @@
 
 /* Write opened from the desktop app: a bar to go back, then the page itself */
 .write-host__bar { padding: 8px 16px; border-bottom: 1px solid var(--border); background: var(--surface); }
+/* Write inside the desktop app sits under the bar above, so it fills what is left of the window instead of a whole window of its own (which pushed the page taller than the window and cut off the bottom of the chat box). */
+.write-host { display: flex; flex-direction: column; min-height: 100dvh; }
+.write-host > .write { flex: 1 1 auto; min-height: 0; }
 
 /* The text pane: a toggle between the article and its outline. */
 .write__viewtoggle { align-self: flex-start; margin-bottom: 8px; }
