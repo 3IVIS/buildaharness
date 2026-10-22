@@ -54,7 +54,7 @@ export function SettingsPane({ perms, autoModel, chatModel, suggestions, onAutoM
       <label>Model for automatic checks
         <ModelPicker label="Model for the automatic checks" value={autoModel} suggestions={suggestions} onChange={onAutoModel} placeholder={CLI_DEFAULT_LABEL} />
       </label>
-      {report !== undefined && (
+      {activity && report !== undefined && (
         <details className="write__activity">
           <summary>How you have used Write<Hint text="Kept only on this device: the kind of each job, how it ended, how long it took and what it cost. Never your words or article names. Nothing is sent anywhere." /></summary>
           <pre aria-label="Your use of Write">{report}</pre>
