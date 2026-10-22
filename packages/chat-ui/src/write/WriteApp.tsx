@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { SpendBadge } from './SpendBadge'
-import { type WorkKind, workPlan, litRange, githubRepoReader, parseGithubRepoAddress, type FolderReader, expandSelection, summarizeVerify, summarizeArticleSources, type VerifyReport, textPieces, collectIssues, parseLineRange, sourceKindForFile, computeReadiness, effectiveSourceStatus, issueCount, textUnitAt, autosaveStep, outlineOf, issuesInRange, unitOfSelection, shouldDeriveStyle, type ArticleBundle, type ChangeSummary, type DependencyKind, type IssueCategory, type Section, type WritePermissions } from '@buildaharness/aielia'
+import { type WorkKind, workPlan, litRange, modelFailureHint, modelLabel, githubRepoReader, parseGithubRepoAddress, type FolderReader, expandSelection, summarizeVerify, summarizeArticleSources, type VerifyReport, textPieces, collectIssues, parseLineRange, sourceKindForFile, computeReadiness, effectiveSourceStatus, issueCount, textUnitAt, autosaveStep, outlineOf, issuesInRange, unitOfSelection, shouldDeriveStyle, type ArticleBundle, type ChangeSummary, type DependencyKind, type IssueCategory, type Section, type WritePermissions } from '@buildaharness/aielia'
 import type { ChatAction } from './AdjustBar'
 import { ArticleSwitcher, type ArticleItem } from './ArticleSwitcher'
 import { readFileText } from './file-text'
@@ -88,7 +88,10 @@ export const stepText = (step: { tool: string; input: Record<string, unknown> })
   const what = step.tool === 'search' ? `searching for “${arg('pattern') || arg('query')}”` : step.tool === 'read' ? `reading ${arg('path') || arg('file')}` : step.tool === 'list' ? 'listing files' : `using ${step.tool}`
   return what
 }
-export const failureText = (what: string, err: unknown): string => `${what}: ${err instanceof Error ? err.message : String(err)}. Check your key and the model in Settings, or pick another model next to the chat, then try again.`
+export const failureText = (what: string, err: unknown): string => {
+  const message = err instanceof Error ? err.message : String(err)
+  return `${what}: ${message}. ${modelFailureHint(message)}`
+}
 
 const isDesktop = (): boolean => typeof window !== 'undefined' && window.matchMedia?.('(min-width: 960px)').matches === true
 const isWide = (): boolean => typeof window !== 'undefined' && window.matchMedia?.('(min-width: 640px)').matches === true
@@ -873,7 +876,7 @@ function WriteAppBody({ services, connection, onDeleted }: WriteAppProps): React
     const r = await service.resolveCategory(id, category, { model: chatModel })
     setNotes([{ category, done: r.done, note: r.note }])
   }, 'resolve')
-  const resolveAll = (): void => change(`Resolving with ${chatModel}`, async (id, step) => {
+  const resolveAll = (): void => change(`Resolving with ${modelLabel(chatModel)}`, async (id, step) => {
     const reports = await service.resolveAll(id, { model: chatModel, onProgress: (done, total, category) => step.quiet(`${category}`, 1, [done, total]), shouldStop: step.stopped })
     setNotes(reports.filter((r) => r.done > 0 || r.note).map((r) => ({ category: r.category, done: r.done, note: r.note })))
   }, 'resolve')
@@ -888,7 +891,7 @@ function WriteAppBody({ services, connection, onDeleted }: WriteAppProps): React
     const used = services.models.chat()
     if (said !== null) setChat((c) => [...c, { id: ++lineId, from: 'you', text: said ?? (repoOnly ? 'Verify the claims against the repository' : 'Search the web for sources and verify the claims') }])
     if (!activeId) { sayInChat('Open or create an article first.'); return }
-    void chatRun(`Verifying with ${used}`, async (step) => {
+    void chatRun(`Verifying with ${modelLabel(used)}`, async (step) => {
       try {
         await flushDraft()
         step('', 1)
@@ -918,7 +921,7 @@ function WriteAppBody({ services, connection, onDeleted }: WriteAppProps): React
     const used = services.models.chat()
     setChat((c) => [...c, { id: ++lineId, from: 'you', text: 'Find the factual claims and check them against their sources' }])
     if (!activeId) { sayInChat('Open or create an article first.'); return }
-    void chatRun(`Checking with ${used}`, async (step) => {
+    void chatRun(`Checking with ${modelLabel(used)}`, async (step) => {
       try {
       if (saveTimer.current) clearTimeout(saveTimer.current)
       const o = await service.updateText(activeId, draft, { model: used })
@@ -1212,8 +1215,8 @@ function WriteAppBody({ services, connection, onDeleted }: WriteAppProps): React
                 change('Keeping those lines', async (id) => { const r = await service.setSourceLines(id, sourceId, range); setNotice(r.ok ? (range ? `Keeping lines ${range.from}–${range.to}. Claims checked on the old text need checking again.` : 'Keeping all of it.') : (r.reason ?? 'That did not work.')) })
               }}
               onAcceptNew={(sourceId) => change('Saving', async (id) => { const r = await service.acceptSourceChange(id, sourceId); if (!r.ok && r.reason) setNotice(r.reason) })}
-              onVerify={(claimId) => change(`Looking for a source with ${chatModel}`, async (id) => { const r = await service.verifyClaims(id, { claimIds: [claimId], model: chatModel }); setNotice(verifyText(r)) })}
-              onCheck={(claimId) => change(`Checking with ${chatModel}`, async (id) => { const r = await service.checkClaim(id, claimId, chatModel); setNotice(r.status === 'checked' ? `Checked with ${chatModel}: ${r.verdict.replace('_', ' ')}. ${r.reason}` : r.status === 'no_sources' ? 'There is no stored passage to check against.' : r.reason) })}
+              onVerify={(claimId) => change(`Looking for a source with ${modelLabel(chatModel)}`, async (id) => { const r = await service.verifyClaims(id, { claimIds: [claimId], model: chatModel }); setNotice(verifyText(r)) })}
+              onCheck={(claimId) => change(`Checking with ${modelLabel(chatModel)}`, async (id) => { const r = await service.checkClaim(id, claimId, chatModel); setNotice(r.status === 'checked' ? `Checked with ${chatModel}: ${r.verdict.replace('_', ' ')}. ${r.reason}` : r.status === 'no_sources' ? 'There is no stored passage to check against.' : r.reason) })}
             />}
           </section>
         ) : (

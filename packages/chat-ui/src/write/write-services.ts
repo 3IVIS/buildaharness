@@ -5,6 +5,7 @@ import {
   PersonalAssistant,
   WEB_FEATURES,
   buildAssistantOptions,
+  modelFailureHint,
   createArticleChatPort,
   createLlmClient,
   createMemoryAdapterArticleStore,
@@ -145,7 +146,7 @@ export async function assembleWriteServices(parts: {
       // A turn that did not finish has no reply. The page says why instead of showing an empty answer: the model's own error when a call failed
       // (the harness wraps it in text about risk checks), otherwise the reason the turn gives.
       const why = lastModelError ?? result.reason
-      const hint = 'Check your key and the model in Settings, or pick another model next to the chat, then try again.'
+      const hint = modelFailureHint(why)
       return { reply: result.reply ?? (why ? `I could not answer: ${why.replace(/[.\s]+$/, '')}. ${hint}` : `I could not answer, and the model gave no reason. ${hint}`), model: used }
     },
     models: {

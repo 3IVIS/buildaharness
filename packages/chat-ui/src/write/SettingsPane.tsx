@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { type WritePermissions } from '@buildaharness/aielia'
+import { CLI_DEFAULT_LABEL, type WritePermissions } from '@buildaharness/aielia'
 import { ModelPicker } from './ModelPicker'
 import { ConnectionSettings } from './ConnectionSettings'
 import { Hint } from './Hint'
@@ -42,7 +42,7 @@ export function SettingsPane({ perms, autoModel, chatModel, suggestions, onAutoM
       <label><input type="checkbox" checked={perms.recheckBeforePublish} onChange={(e) => void save({ recheckBeforePublish: e.target.checked })} /> Reread web sources before publishing<Hint text="Reads your web sources again before you publish and tells you which changed." /></label>
       <label><input type="checkbox" checked={perms.autoCheck} onChange={(e) => void save({ autoCheck: e.target.checked })} /> Check by itself when I stop typing<Hint text="Looks for claims and checks what an edit affects after each pause. Uses your key." /></label>
       <label>Model for automatic checks
-        <ModelPicker label="Model for the automatic checks" value={autoModel} suggestions={suggestions} onChange={onAutoModel} />
+        <ModelPicker label="Model for the automatic checks" value={autoModel} suggestions={suggestions} onChange={onAutoModel} placeholder={CLI_DEFAULT_LABEL} />
       </label>
       {autoModel === chatModel && <p className="write__warn">Same model as the chat<Hint text="A different, smaller model gives you a second opinion and costs less." /></p>}
       <label>Spending cap, US$<Hint text="Stops using your key after this much. Leave blank for no limit." />

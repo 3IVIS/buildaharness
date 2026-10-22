@@ -74,7 +74,7 @@ export { WEB_TOOLS, WEB_SEARCH_TOOL, FETCH_URL_TOOL, executeWebTool, assertPubli
 export type { WebToolsContext, WebToolResult, WebSearchResult, DnsResolver } from './web-tools.js'
 export { braveSearch } from './web-search-provider.js'
 export type { BraveSearchOptions } from './web-search-provider.js'
-export { buildClaudePrompt, stripJsonCodeFence, parseClaudeCliOutput, ALREADY_STAGED_ACTION_TOOL, stagedActionInput } from './claude-cli-prompt.js'
+export { buildClaudePrompt, claudeFailureMessage, stripJsonCodeFence, parseClaudeCliOutput, ALREADY_STAGED_ACTION_TOOL, stagedActionInput } from './claude-cli-prompt.js'
 export type { ParsedClaudeCliOutput } from './claude-cli-prompt.js'
 export { stripMcpToolPrefix, summarizeToolStep, summarizeSettledToolStep } from './tool-step.js'
 export type { AssistantToolStep } from './tool-step.js'
@@ -198,7 +198,7 @@ export { proposeDependencies, addDrawnLink, dependenciesOf, wouldCycle, DEPENDEN
 export type { DependencyKind, DependencyProposal, SectionDependencies, AddLinkResult } from './writer/article-dependencies.js'
 export { textUnitAt, claimsInRange, attachSourceToText, proposeSourceLinks } from './writer/article-source-links.js'
 export type { TextUnit, TextRange, AttachResult, SourceLinkProposal } from './writer/article-source-links.js'
-export { suggestedModels, defaultWriteModels } from './writer/write-models.js'
+export { suggestedModels, modelLabel, CLI_DEFAULT_LABEL, defaultWriteModels } from './writer/write-models.js'
 export type { WriteModelDefaults } from './writer/write-models.js'
 export { addIdea, editIdea, setIdeaState, removeIdea, suggestIdeas } from './writer/article-ideas.js'
 export type { IdeaSuggestion } from './writer/article-ideas.js'
@@ -226,3 +226,4 @@ export type { IssueBatch, IssueItem, IssueCategory } from './writer/article-issu
 // Aielia Write: the checklist and sentences shown while a background model call runs
 export { workPlan, checklistAt, stageSentence, elapsedText, changedRange, litRange } from './writer/work-progress.js'
 export type { WorkKind, WorkPlan, StepState, ChecklistItem } from './writer/work-progress.js'
+export { modelFailureHint, DEFAULT_MODEL_HINT, CLAUDE_SIGN_IN_HINT } from './writer/model-failure-hint.js'

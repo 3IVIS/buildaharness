@@ -10,7 +10,13 @@ import { ANTHROPIC_DEFAULT_MODEL, defaultModelForBackend } from '@buildaharness/
 const SMALLER_ANTHROPIC = 'claude-haiku-5-5'
 const OTHER_ANTHROPIC = ['claude-opus-5-5', SMALLER_ANTHROPIC, 'claude-fable-5-1']
 
+/** What to call a model id in the page. The Claude CLI backend has no default id of its own (the CLI picks the model), so its id is empty: say so rather than show nothing. */
+export const CLI_DEFAULT_LABEL = 'Claude default'
+export const modelLabel = (model: string | undefined): string => model?.trim() || CLI_DEFAULT_LABEL
+
 export function suggestedModels(backend: string): string[] {
+  // The Claude CLI takes these aliases for --model; leaving the box empty uses the CLI's own default.
+  if (backend === 'claude-cli') return ['sonnet', 'opus', 'haiku']
   const fallback = defaultModelForBackend(backend)
   if (backend === 'anthropic' || backend === 'proxy') return [ANTHROPIC_DEFAULT_MODEL, ...OTHER_ANTHROPIC]
   return fallback ? [fallback] : []

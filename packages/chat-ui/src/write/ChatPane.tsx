@@ -1,7 +1,7 @@
 import { AdjustBar, type ChatAction } from './AdjustBar'
 import { ModelPicker } from './ModelPicker'
 import { useEffect, useLayoutEffect, useRef, useState } from 'react'
-import { checklistAt, elapsedText, stageSentence, workPlan, type WorkKind } from '@buildaharness/aielia'
+import { CLI_DEFAULT_LABEL, modelLabel, checklistAt, elapsedText, stageSentence, workPlan, type WorkKind } from '@buildaharness/aielia'
 import { ICON_PATHS, Icon, IconButton } from './icons'
 
 /** A background model call as the chat shows it: its kind (which checklist), the stage it is at, and a finer step inside the stage. */
@@ -86,7 +86,7 @@ export function ChatPane(p: Props): React.JSX.Element {
     >
       <header className="write__chathead">
         <h2 className="write__panehead">Chat</h2>
-        <ModelPicker label="Model for the chat" value={p.model} suggestions={p.suggestions} onChange={p.onModel} />
+        <ModelPicker label="Model for the chat" value={p.model} suggestions={p.suggestions} onChange={p.onModel} placeholder={CLI_DEFAULT_LABEL} />
         <IconButton label="Close the chat" icon="close" className="write__chatclose" onClick={p.onClose} />
       </header>
       <ul className="write__chat" aria-live="polite" ref={list} onScroll={(e) => { const el = e.currentTarget; atBottom.current = el.scrollHeight - el.scrollTop - el.clientHeight < 60 }}>
@@ -94,9 +94,9 @@ export function ChatPane(p: Props): React.JSX.Element {
           <li key={l.id} className={`write__line write__line--${l.from}`}>
             <div>{l.text}</div>
             {l.usage && <div className="write__lineusage" title="Tokens, time and cost of this request">{l.usage}</div>}
-            {l.from === 'aielia' && l.model && (
+            {l.from === 'aielia' && l.model !== undefined && (
               <div className="write__linemeta">
-                <span className="write__linemodel" title="The model that wrote this">{l.model}</span>
+                <span className="write__linemodel" title="The model that wrote this">{modelLabel(l.model)}</span>
               </div>
             )}
           </li>

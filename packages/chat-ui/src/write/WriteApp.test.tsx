@@ -69,6 +69,17 @@ describe('the chat turn: words as they come, and stopping', () => {
     cancel = true
     expect(await s.chat('hi', undefined, { signal: ctl.signal })).toMatchObject({ reply: 'Stopped.', stopped: true })
   })
+  it('tells a logged-out Claude session to sign in, not to check a key', async () => {
+    const s = await assembleWriteServices({
+      store: createMemoryArticleStore(),
+      llm: llm({}),
+      buildAssistant: async () => ({ turn: async () => ({ status: 'escalated', reply: null, reason: 'Not logged in · Please run /login' }), setModel: () => undefined }) as unknown as PersonalAssistant,
+    })
+    const r = await s.chat('hi', undefined)
+    expect(r.reply).toContain('Not logged in · Please run /login')
+    expect(r.reply).toContain('Sign in to Claude')
+    expect(r.reply).not.toContain('Check your key')
+  })
 })
 
 const MD = '# Post\n\n## Latency\n\nThe p99 was 18 ms.\n'

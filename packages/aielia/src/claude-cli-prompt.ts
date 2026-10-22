@@ -159,3 +159,21 @@ export function parseClaudeCliOutput(stdout: string): ParsedClaudeCliOutput {
     return { reply: stdout.trim() }
   }
 }
+
+/**
+ * What to say when `claude` exits with a failure. The CLI prints its own error on stderr for some failures, but with `--output-format json`
+ * it reports others (a logged-out session: "Not logged in · Please run /login") as `{"is_error":true,"result":"..."}` on stdout and leaves
+ * stderr empty, so reading stderr alone lost the reason and left only "exited with code 1". The desktop shell's Rust twin
+ * (`claude_failure_message` in lib.rs) follows the same order.
+ */
+export function claudeFailureMessage(stdout: string, stderr: string, code: number | string | null): string {
+  const err = stderr.trim()
+  if (err) return err
+  try {
+    const data = JSON.parse(stdout.trim()) as { result?: unknown; is_error?: unknown }
+    if (typeof data.result === 'string' && data.result.trim()) return data.result.trim()
+  } catch {
+    // stdout was not the JSON result object; fall through to the plain exit code.
+  }
+  return `claude exited with code ${code}`
+}
