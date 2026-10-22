@@ -334,7 +334,11 @@
 .write-host__bar { padding: 8px 16px; border-bottom: 1px solid var(--border); background: var(--surface); }
 /* Write inside the desktop app sits under the bar above, so it fills what is left of the window instead of a whole window of its own (which pushed the page taller than the window and cut off the bottom of the chat box). */
 .write-host { display: flex; flex-direction: column; min-height: 100dvh; }
-.write-host > .write { flex: 1 1 auto; min-height: 0; }
+@media (min-width: 640px) {
+  /* From tablet width Write is exactly one window tall (see .write above), so under the bar the host is one window tall and Write takes what is left. */
+  .write-host { height: 100dvh; min-height: 0; }
+  .write-host > .write { height: auto; flex: 1 1 0; min-height: 0; }
+}
 
 /* The text pane: a toggle between the article and its outline. */
 .write__viewtoggle { align-self: flex-start; margin-bottom: 8px; }
