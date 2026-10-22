@@ -491,3 +491,11 @@ body.write--resizing { user-select: none; -webkit-user-select: none; cursor: col
 /* No article yet: a quiet, centred line in the reading face instead of a stray grey sentence. */
 .write__empty { font-family: var(--write-serif); font-size: 1.15rem; line-height: 1.6; text-align: center; align-self: center; justify-self: center; max-width: 28rem; }
 .write__empty:empty { display: none; }
+
+/* Panels: checkboxes take the accent, forms breathe a little more, and the rare destructive action is an outline until it is pointed at. */
+.write input[type='checkbox'], .write input[type='radio'] { accent-color: var(--accent-solid); }
+.write__form { gap: 12px; }
+.write__form > label, .write__field > label { font-weight: 500; font-size: 0.92rem; }
+.write .write__dangerbtn { background: transparent; color: var(--red); border-color: var(--red); font-weight: 500; }
+.write .write__dangerbtn:hover:not(:disabled) { background: var(--red); border-color: var(--red); color: #fff; }
+.write__danger { margin-top: 24px; }
