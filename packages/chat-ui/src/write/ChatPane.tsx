@@ -23,6 +23,9 @@ export interface WorkProgress {
 
 export type ChatMode = 'answer' | 'suggest' | 'edit'
 
+/** What hovering a record line says. */
+export const RECORD_HINT = 'A record of an action in the interface, not a chat message'
+
 export interface ChatLine {
   id: number
   from: 'you' | 'aielia'
@@ -30,6 +33,8 @@ export interface ChatLine {
   model?: string
   /** What the request that ended with this line used: tokens, time and cost, in small type. */
   usage?: string
+  /** The line records an action taken in the interface (a button, a drop, a setting), not something said in the chat; it is drawn quieter and says so on hover. */
+  record?: boolean
 }
 
 interface Props {
@@ -91,7 +96,7 @@ export function ChatPane(p: Props): React.JSX.Element {
       </header>
       <ul className="write__chat" aria-live="polite" ref={list} onScroll={(e) => { const el = e.currentTarget; atBottom.current = el.scrollHeight - el.scrollTop - el.clientHeight < 60 }}>
         {p.lines.map((l) => (
-          <li key={l.id} className={`write__line write__line--${l.from}`}>
+          <li key={l.id} className={`write__line write__line--${l.from}${l.record ? ' write__line--record' : ''}`} title={l.record ? RECORD_HINT : undefined}>
             <div>{l.text}</div>
             {l.usage && <div className="write__lineusage" title="Tokens, time and cost of this request">{l.usage}</div>}
             {l.from === 'aielia' && l.model !== undefined && (

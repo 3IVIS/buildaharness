@@ -192,7 +192,7 @@ function WriteAppBody({ services, connection, onDeleted }: WriteAppProps): React
   const panelTakesRoom = (): boolean => railOpen && isDesktop()
   // Every message the app has for the writer goes into the chat; the banner only repeats the latest one where the chat is not on screen.
   const [banner, setBanner] = useState<string | null>(null)
-  const sayInChat = useCallback((text: string): void => setChat((c) => [...c, { id: ++lineId, from: 'aielia', text }]), [])
+  const sayInChat = useCallback((text: string): void => setChat((c) => [...c, { id: ++lineId, record: true, from: 'aielia', text }]), [])
   const setNotice = useCallback((text: string | null): void => { setBanner(text); if (text) sayInChat(text) }, [sayInChat])
   /** What a command sent through the chat is doing right now, shown as the last line of the chat until the result or the error replaces it. */
   const [progress, setProgress] = useState<WorkProgress | null>(null)
@@ -270,7 +270,7 @@ function WriteAppBody({ services, connection, onDeleted }: WriteAppProps): React
       // Said once, in the chat itself; the failing save is not retried by this line, or it would loop.
       if (saveFailed.current) return
       saveFailed.current = true
-      setChat((now) => [...now, { id: ++lineId, from: 'aielia', text: `The chat could not be stored, so it will not be here next time: ${e instanceof Error ? e.message : String(e)}` }])
+      setChat((now) => [...now, { id: ++lineId, record: true, from: 'aielia', text: `The chat could not be stored, so it will not be here next time: ${e instanceof Error ? e.message : String(e)}` }])
     })
   }, [chat, services.store])
 
@@ -286,7 +286,7 @@ function WriteAppBody({ services, connection, onDeleted }: WriteAppProps): React
    * what came of it, or what went wrong. `announce` is false when the writer's own words already opened the exchange (a typed message).
    */
   async function run(label: string, work: (step: Step) => Promise<void>, announce = true, doneNote = '', kind: WorkKind = 'other'): Promise<void> {
-    if (announce) setChat((c) => [...c, { id: ++lineId, from: 'you', text: label }])
+    if (announce) setChat((c) => [...c, { id: ++lineId, record: true, from: 'you', text: label }])
     const mark = lineId
     const before = services.spend.snapshot()
     const started = Date.now()
@@ -610,7 +610,7 @@ function WriteAppBody({ services, connection, onDeleted }: WriteAppProps): React
     if (!activeId) { sayInChat('Open or create an article first.'); return }
     const id = activeId
     const used = services.models.chat() // started from the chat, so it runs on the model chosen there
-    setChat((c) => [...c, { id: ++lineId, from: 'you', text: 'Fill in the style and links from the article' }])
+    setChat((c) => [...c, { id: ++lineId, record: true, from: 'you', text: 'Fill in the style and links from the article' }])
     void chatRun('Filling in the style and links', async (step) => {
       try {
         await flushDraft()
@@ -618,7 +618,7 @@ function WriteAppBody({ services, connection, onDeleted }: WriteAppProps): React
         setChat((c) => [...c, { id: ++lineId, from: 'aielia', text, model: used }])
       } catch (e) {
         if (isStopped(e)) throw e
-        setChat((c) => [...c, { id: ++lineId, from: 'aielia', text: failureText('I could not do that', e, services.backend) }])
+        setChat((c) => [...c, { id: ++lineId, record: true, from: 'aielia', text: failureText('I could not do that', e, services.backend) }])
       }
     }, 'prepare')
   }
@@ -726,8 +726,8 @@ function WriteAppBody({ services, connection, onDeleted }: WriteAppProps): React
    * attached; with nothing typed, the repositories already attached are used. Then the claims are checked against them, and only them.
    */
   const verifyInRepo = (address: string): void => {
-    const say = (text: string): void => setChat((c) => [...c, { id: ++lineId, from: 'aielia', text }])
-    setChat((c) => [...c, { id: ++lineId, from: 'you', text: address.trim() ? `Verify the claims against ${address.trim()}` : 'Verify the claims against the attached repositories' }])
+    const say = (text: string): void => setChat((c) => [...c, { id: ++lineId, record: true, from: 'aielia', text }])
+    setChat((c) => [...c, { id: ++lineId, record: true, from: 'you', text: address.trim() ? `Verify the claims against ${address.trim()}` : 'Verify the claims against the attached repositories' }])
     if (!activeId) { say('Open or create an article first, then choose the repository.'); return }
     const id = activeId
     const typed = address.trim()
@@ -759,7 +759,7 @@ function WriteAppBody({ services, connection, onDeleted }: WriteAppProps): React
   }
   /** Chooses a repository folder on this computer, attaches it and checks the claims against it. */
   const pickRepoFolderAndVerify = (): void => {
-    setChat((c) => [...c, { id: ++lineId, from: 'you', text: 'Verify the claims against a folder on this computer' }])
+    setChat((c) => [...c, { id: ++lineId, record: true, from: 'you', text: 'Verify the claims against a folder on this computer' }])
     if (!activeId) { sayInChat('Open or create an article first, then choose the folder.'); return }
     const id = activeId
     void (async () => {
@@ -772,7 +772,7 @@ function WriteAppBody({ services, connection, onDeleted }: WriteAppProps): React
         service.attachRepo(id, reader)
         setRepoTick((n) => n + 1)
       } catch (e) {
-        setChat((c) => [...c, { id: ++lineId, from: 'aielia', text: `I could not use that folder: ${e instanceof Error ? e.message : String(e)}` }])
+        setChat((c) => [...c, { id: ++lineId, record: true, from: 'aielia', text: `I could not use that folder: ${e instanceof Error ? e.message : String(e)}` }])
         return
       } finally {
         setBusy(null)
@@ -888,7 +888,7 @@ function WriteAppBody({ services, connection, onDeleted }: WriteAppProps): React
   }
   const verifyFromChat = (repoOnly = false, said?: string | null): void => {
     const used = services.models.chat()
-    if (said !== null) setChat((c) => [...c, { id: ++lineId, from: 'you', text: said ?? (repoOnly ? 'Verify the claims against the repository' : 'Search the web for sources and verify the claims') }])
+    if (said !== null) setChat((c) => [...c, { id: ++lineId, record: true, from: 'you', text: said ?? (repoOnly ? 'Verify the claims against the repository' : 'Search the web for sources and verify the claims') }])
     if (!activeId) { sayInChat('Open or create an article first.'); return }
     void chatRun(`Verifying with ${modelLabel(used)}`, async (step) => {
       try {
@@ -911,14 +911,14 @@ function WriteAppBody({ services, connection, onDeleted }: WriteAppProps): React
         setChat((c) => [...c, { id: ++lineId, from: 'aielia', text: early + verifyText(r.stopped ? { ...r, leftOver: 0 } : r, fresh.meta), model: used }])
       } catch (e) {
         if (isStopped(e)) throw e
-        setChat((c) => [...c, { id: ++lineId, from: 'aielia', text: failureText('The check could not finish', e, services.backend) }])
+        setChat((c) => [...c, { id: ++lineId, record: true, from: 'aielia', text: failureText('The check could not finish', e, services.backend) }])
       }
     }, 'verify')
   }
   /** A check started from the chat, with the model chosen there. The result is said in the chat, with the model's name. */
   const checkFromChat = (): void => {
     const used = services.models.chat()
-    setChat((c) => [...c, { id: ++lineId, from: 'you', text: 'Find the factual claims and check them against their sources' }])
+    setChat((c) => [...c, { id: ++lineId, record: true, from: 'you', text: 'Find the factual claims and check them against their sources' }])
     if (!activeId) { sayInChat('Open or create an article first.'); return }
     void chatRun(`Checking with ${modelLabel(used)}`, async (step) => {
       try {
@@ -942,7 +942,7 @@ function WriteAppBody({ services, connection, onDeleted }: WriteAppProps): React
       setChat((c) => [...c, { id: ++lineId, from: 'aielia', text, model: used }])
       } catch (e) {
         if (isStopped(e)) throw e
-        setChat((c) => [...c, { id: ++lineId, from: 'aielia', text: failureText('The check could not finish', e, services.backend) }])
+        setChat((c) => [...c, { id: ++lineId, record: true, from: 'aielia', text: failureText('The check could not finish', e, services.backend) }])
       }
     }, 'check')
   }

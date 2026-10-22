@@ -499,3 +499,7 @@ body.write--resizing { user-select: none; -webkit-user-select: none; cursor: col
 .write .write__dangerbtn { background: transparent; color: var(--red); border-color: var(--red); font-weight: 500; }
 .write .write__dangerbtn:hover:not(:disabled) { background: var(--red); border-color: var(--red); color: #fff; }
 .write__danger { margin-top: 24px; }
+
+/* A line that records an interface action: no bubble, smaller and quieter, so it reads as a log entry beside the conversation. */
+.write__line--record { background: transparent; border: 0; border-left: 2px solid var(--border); border-radius: 0; padding: 2px 10px; font-size: 0.82rem; line-height: 1.45; color: var(--muted); cursor: default; }
+.write__line--record.write__line--you { justify-self: end; border-left: 0; border-right: 2px solid var(--border); text-align: right; }
