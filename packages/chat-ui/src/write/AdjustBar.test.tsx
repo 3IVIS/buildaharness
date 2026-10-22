@@ -44,3 +44,14 @@ describe('the fill-in action', () => {
     expect(onAction).toHaveBeenCalledWith('prepare')
   })
 })
+
+describe('the adjust categories', () => {
+  it('lists a few categories rather than every aspect, and sends the typed words after Enter', async () => {
+    const onSend = vi.fn()
+    render(<AdjustBar {...base} onSend={onSend} />)
+    expect(screen.getAllByRole('option').length).toBeLessThan(20)
+    await userEvent.selectOptions(screen.getByRole('combobox'), 'tone')
+    await userEvent.type(screen.getByLabelText('How'), 'less like a press release{Enter}')
+    expect(onSend).toHaveBeenCalledWith(expect.stringContaining('Adjust the article: less like a press release'))
+  })
+})

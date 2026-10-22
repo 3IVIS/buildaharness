@@ -220,7 +220,7 @@ export { shouldDeriveStyle, STYLE_DERIVE_MIN_WORDS } from './writer/article-styl
 export { textPieces, describeAt, type TextPiece } from './writer/article-decorations.js'
 export type { ClaimMark, MarkTone } from './writer/article-marks.js'
 export type { Brief, StyleProfile } from './writer/article-model.js'
-export { WRITE_PARAMETERS, PARAMETER_GROUPS, findParameter, adjustmentInstruction } from './writer/write-parameters.js'
+export { WRITE_PARAMETERS, PARAMETER_GROUPS, findParameter, adjustmentInstruction, adjustmentChoices, adjustmentFromText } from './writer/write-parameters.js'
 export type { WriteParameter, ParameterGroup, ParameterKind } from './writer/write-parameters.js'
 export { addCommentOnText, commentsInRange, refreshComments } from './writer/article-comments.js'
 export { collectIssues, issuesInRange, issueCount, checkableClaims, unsupportedClaims, ISSUE_CATEGORIES } from './writer/article-issues.js'
