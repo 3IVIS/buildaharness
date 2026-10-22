@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { SpendBadge } from './SpendBadge'
-import { type WorkKind, githubRepoReader, parseGithubRepoAddress, type FolderReader, expandSelection, summarizeVerify, summarizeArticleSources, type VerifyReport, textPieces, collectIssues, parseLineRange, sourceKindForFile, computeReadiness, effectiveSourceStatus, issueCount, textUnitAt, autosaveStep, outlineOf, issuesInRange, unitOfSelection, shouldDeriveStyle, type ArticleBundle, type ChangeSummary, type DependencyKind, type IssueCategory, type Section, type WritePermissions } from '@buildaharness/aielia'
+import { type WorkKind, workPlan, githubRepoReader, parseGithubRepoAddress, type FolderReader, expandSelection, summarizeVerify, summarizeArticleSources, type VerifyReport, textPieces, collectIssues, parseLineRange, sourceKindForFile, computeReadiness, effectiveSourceStatus, issueCount, textUnitAt, autosaveStep, outlineOf, issuesInRange, unitOfSelection, shouldDeriveStyle, type ArticleBundle, type ChangeSummary, type DependencyKind, type IssueCategory, type Section, type WritePermissions } from '@buildaharness/aielia'
 import type { ChatAction } from './AdjustBar'
 import { ArticleSwitcher, type ArticleItem } from './ArticleSwitcher'
 import { readFileText } from './file-text'
@@ -364,9 +364,10 @@ function WriteAppBody({ services, connection, onDeleted }: WriteAppProps): React
   folderRef.current = folder
   const [candidates, setCandidates] = useState<Record<string, { title: string; url: string; snippet: string }[]>>({})
 
-  const change = (label: string, work: (id: string) => Promise<void>): void => {
+  const change = (label: string, work: (id: string, step: (text: string, stage?: number) => void) => Promise<void>, kind: WorkKind = 'change'): void => {
     if (!activeId) { sayInChat('Open or create an article first.'); return }
-    void run(label, async () => { await flushDraft(); await work(activeId); await reload(activeId) }, true, ' The article is updated.')
+    const last = workPlan(kind, label).steps.length - 1
+    void run(label, async (step) => { step('', 0); await flushDraft(); step('', 1); await work(activeId, step); step('', last); await reload(activeId) }, true, ' The article is updated.', kind)
   }
 
   async function select(id: string): Promise<void> {
@@ -460,10 +461,12 @@ function WriteAppBody({ services, connection, onDeleted }: WriteAppProps): React
   async function publish(): Promise<void> {
     if (!activeId) { sayInChat('Open or create an article first.'); return }
     const label = await dialogs.ask('Label for this published version (optional)?')
-    await run('Publishing', async () => {
+    await run('Publishing', async (step) => {
       await flushDraft()
+      step('', 1)
       const recheck = (permsRef.current ?? perms)?.recheckBeforePublish !== false ? await service.recheckSources(activeId, services.models.auto()) : undefined
       const folderReport = folderRef.current && (permsRef.current ?? perms)?.recheckBeforePublish !== false ? await service.recheckFolder(activeId, folderRef.current.reader, services.models.auto()) : undefined
+      step('', 2)
       const b = await service.publish(activeId, label?.trim() || undefined)
       setBundle(b)
       const r = computeReadiness(b.meta)
@@ -471,7 +474,7 @@ function WriteAppBody({ services, connection, onDeleted }: WriteAppProps): React
       const sources = recheck ? [recheck.changed.length > 0 ? `${recheck.changed.length} web source${recheck.changed.length === 1 ? ' has' : 's have'} changed since you read ${recheck.changed.length === 1 ? 'it' : 'them'}` : '', recheck.unreachable.length > 0 ? `${recheck.unreachable.length} could not be reached` : ''].filter(Boolean).join(' and ') : ''
       const files = folderReport && (folderReport.changed.length > 0 || folderReport.missing.length > 0) ? [folderReport.changed.length > 0 ? `${folderReport.changed.length} file${folderReport.changed.length === 1 ? '' : 's'} from the folder ${folderReport.changed.length === 1 ? 'has' : 'have'} changed` : '', folderReport.missing.length > 0 ? `${folderReport.missing.length} could not be found` : ''].filter(Boolean).join(' and ') : ''
       setNotice(`Published as a frozen snapshot.${open > 0 ? ` ${open} item${open === 1 ? ' was' : 's were'} still open; ${open === 1 ? 'it is' : 'they are'} recorded with it.` : ''}${sources ? ` ${sources}: see Issues.` : ''}${files ? ` ${files} since you read them: see the sources.` : ''}`)
-    })
+    }, true, '', 'publish')
   }
 
   async function exportArticle(): Promise<void> {
@@ -493,34 +496,37 @@ function WriteAppBody({ services, connection, onDeleted }: WriteAppProps): React
   }
 
   async function importArticle(file: File): Promise<void> {
-    await run('Importing', async () => {
+    await run('Importing', async (step) => {
       if (!file.name.toLowerCase().endsWith('.json')) {
         const r = await service.importTextFile(file.name, await file.text())
         if (!r.ok) throw new Error(r.reason)
+        step('', 1)
         await refreshList()
         await select(r.id)
-        setNotice(`This is a copy of the file. Editing it does not change the original. ${await prepareFromText(r.id)}`)
+        setNotice(`This is a copy of the file. Editing it does not change the original. ${await prepareFromText(r.id, undefined, step, 2)}`)
         return
       }
       let folder: Record<string, string>
       try { folder = JSON.parse(await file.text()) as Record<string, string> } catch { throw new Error('That file is not an exported article.') }
+      step('', 1)
       const r = await service.importArticle(folder)
       if (!r.ok) throw new Error(r.reason)
       await refreshList()
       await select(r.id)
-    })
+    }, true, '', 'import')
   }
 
   async function openPage(): Promise<void> {
     const address = await dialogs.ask('Address of the web page to bring in and edit (http:// or https://)?')
     if (!address?.trim()) return
-    await run('Reading the page', async () => {
+    await run('Reading the page', async (step) => {
       const r = await service.importPage(address)
       if (!r.ok) throw new Error(r.reason)
+      step('', 1)
       await refreshList()
       await select(r.id)
-      setNotice(`This is a copy of the page as it reads now. Editing it does not change the original, and the page is kept as a source. ${await prepareFromText(r.id)}`)
-    })
+      setNotice(`This is a copy of the page as it reads now. Editing it does not change the original, and the page is kept as a source. ${await prepareFromText(r.id, undefined, step, 2)}`)
+    }, true, '', 'page')
   }
 
   // ---- history
@@ -546,9 +552,11 @@ function WriteAppBody({ services, connection, onDeleted }: WriteAppProps): React
 
   // ---- style sheet and links drawn from the text
   /** A first style sheet and the links between sections, drawn from the article's own text with the model for automatic checks; says in one sentence what it found. */
-  async function prepareFromText(id: string, model: string = services.models.auto()): Promise<string> {
+  async function prepareFromText(id: string, model: string = services.models.auto(), step?: (text: string, stage?: number) => void, at = 1): Promise<string> {
     const before = await service.get(id)
+    step?.('', at)
     const style = await service.deriveStyleFromText(id, model)
+    step?.('', at + 1)
     const links = await service.findDependencies(id, model)
     setBundle(await service.get(id))
     const hadBrief = Object.values(before.meta.brief ?? {}).some((v) => typeof v === 'string' && v.trim())
@@ -563,28 +571,29 @@ function WriteAppBody({ services, connection, onDeleted }: WriteAppProps): React
     const id = activeId
     const used = services.models.chat() // started from the chat, so it runs on the model chosen there
     setChat((c) => [...c, { id: ++lineId, from: 'you', text: 'Fill in the style and links from the article' }])
-    void chatRun('Filling in the style and links', async () => {
+    void chatRun('Filling in the style and links', async (step) => {
       try {
         await flushDraft()
-        const text = await prepareFromText(id, used)
+        const text = await prepareFromText(id, used, step)
         setChat((c) => [...c, { id: ++lineId, from: 'aielia', text, model: used }])
       } catch (e) {
         setChat((c) => [...c, { id: ++lineId, from: 'aielia', text: failureText('I could not do that', e) }])
       }
-    })
+    }, 'prepare')
   }
 
   /** Reads the style from the text, filling only the empty lines. */
   const deriveStyle = (): void => {
     if (!activeId) { sayInChat('Open or create an article first.'); return }
     const id = activeId
-    void run('Reading the style from the text', async () => {
+    void run('Reading the style from the text', async (step) => {
       await flushDraft()
+      step('', 1)
       const r = await service.deriveStyleFromText(id, services.models.auto())
       setStyleReading({ id, state: r.reason ? 'failed' : 'idle', error: r.reason })
       setBundle(await service.get(id))
       setNotice(r.filled.length > 0 ? `Filled in: ${r.filled.join(', ')}. Edit anything that is off.` : 'I found nothing to add to the style.')
-    })
+    }, true, '', 'style')
   }
   // The style fills in by itself once there is about a page of text (typed, pasted or imported), once for each article.
   const styleTried = useRef<Set<string>>(new Set())
@@ -756,14 +765,16 @@ function WriteAppBody({ services, connection, onDeleted }: WriteAppProps): React
       })
       return
     }
-    change('Adding the files', async () => {
+    change('Adding the files', async (_id, step) => {
       const lines: string[] = []
       for (const f of files) {
+        step(`${f.name}`, 1)
         const kind = sourceKindForFile(f)
         if (!kind) { lines.push(`${f.name}: only text, code, PDF and Word (.docx) files can be read.`); continue }
         let text: string
         try { text = await readFileText(f) } catch (e) { lines.push(`${f.name}: could not be read (${e instanceof Error ? e.message : String(e)}).`); continue }
         if (!text.trim()) { lines.push(`${f.name}: has no text I can read${/\.pdf$/i.test(f.name) ? ' (a scanned PDF is a picture of text)' : ''}.`); continue }
+        step(f.name, 2)
         const again = await service.offerFileVersion(activeId as string, f.name, text, services.models.auto())
         if (again.status !== 'no_match') {
           lines.push(`${f.name}: ${again.status === 'unchanged' ? 'the same as the stored copy.' : again.status === 'changed' ? `changed. ${again.impacts.length === 0 ? 'No claim looks affected.' : `${again.impacts.length} claim${again.impacts.length === 1 ? '' : 's'} may be affected.`} Use the new text from the source row when you are ready.` : 'stored.'}`)
@@ -774,7 +785,7 @@ function WriteAppBody({ services, connection, onDeleted }: WriteAppProps): React
       }
       if (say) setChat((c) => [...c, { id: ++lineId, from: 'aielia', text: `${lines.join('\n')}\nI stored ${files.length === 1 ? 'it' : 'them'} and looked for the claims they bear on. Click in the text to see and confirm them under it.`, model: chatModel }])
       else setNotice(lines.join(' '))
-    })
+    }, 'files')
   }
 
   useEffect(() => {
@@ -789,11 +800,11 @@ function WriteAppBody({ services, connection, onDeleted }: WriteAppProps): React
   const resolveCategory = (category: IssueCategory): void => change('Working on it', async (id) => {
     const r = await service.resolveCategory(id, category, { model: chatModel })
     setNotes([{ category, done: r.done, note: r.note }])
-  })
+  }, 'resolve')
   const resolveAll = (): void => change(`Resolving with ${chatModel}`, async (id) => {
     const reports = await service.resolveAll(id, { model: chatModel })
     setNotes(reports.filter((r) => r.done > 0 || r.note).map((r) => ({ category: r.category, done: r.done, note: r.note })))
-  })
+  }, 'resolve')
 
   // ---- chat
   const verifyText = (r: VerifyReport, meta?: Parameters<typeof summarizeArticleSources>[0]): string => {

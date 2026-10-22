@@ -113,7 +113,7 @@ function WorkTicker({ progress }: { progress: WorkProgress }): React.JSX.Element
     const t = setInterval(() => setNow(Date.now()), 1000)
     return () => clearInterval(t)
   }, [])
-  const plan = workPlan(progress.kind)
+  const plan = workPlan(progress.kind, progress.label)
   const items = checklistAt(plan, progress.stage)
   const sentence = stageSentence(plan, progress.stage) ?? `${progress.label}…`
   const elapsed = elapsedText(now - progress.startedAt)

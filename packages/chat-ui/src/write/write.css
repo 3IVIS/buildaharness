@@ -146,7 +146,7 @@
 .write__line { padding: 8px 12px; border-radius: 8px; white-space: pre-wrap; }
 .write__line--you { background: var(--accent-a18); justify-self: end; }
 .write__line--progress { color: var(--muted); font-style: italic; }
-.write__work { font-style: normal; display: grid; gap: 6px; }
+.write__work { font-style: normal; display: grid; gap: 6px; animation: write-fade 0.4s ease-out 0.35s both; }
 .write__worklabel { font-size: 0.75rem; text-transform: uppercase; letter-spacing: 0.04em; }
 .write__workhead { display: flex; align-items: center; gap: 8px; }
 .write__worksentence { animation: write-fade 0.4s ease-out; color: var(--text, inherit); }
@@ -175,7 +175,7 @@
 .write__send.is-working svg { animation: write-pulse 1.2s ease-in-out infinite; }
 .write.is-working .write__pane--text::before { content: ''; position: absolute; top: 0; left: 0; right: 0; height: 2px; z-index: 3; background: linear-gradient(90deg, transparent, var(--accent), transparent); background-size: 200% 100%; animation: write-glint 1.8s linear infinite; }
 @media (prefers-reduced-motion: reduce) {
-  .write__pulse i, .write__worksentence, .write__workdetail, .write__tick, .write__checklist li.is-current .write__tick, .write__compose.is-working textarea, .write__send.is-working svg, .write.is-working .write__pane--text::before { animation: none; }
+  .write__work, .write__pulse i, .write__worksentence, .write__workdetail, .write__tick, .write__checklist li.is-current .write__tick, .write__compose.is-working textarea, .write__send.is-working svg, .write.is-working .write__pane--text::before { animation: none; }
   .write__pulse i { opacity: 0.7; }
   .write.is-working .write__pane--text::before { background: var(--accent); opacity: 0.5; }
 }

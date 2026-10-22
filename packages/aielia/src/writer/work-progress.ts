@@ -4,7 +4,12 @@
  * nothing here cycles on a timer.
  */
 
-export type WorkKind = 'edit' | 'draft' | 'suggest' | 'answer' | 'verify' | 'check' | 'other'
+export type WorkKind =
+  | 'edit' | 'draft' | 'suggest' | 'answer' | 'verify' | 'check'
+  /** Any change to the article that saves the text first and reloads it after; the middle step is the action's own label. */
+  | 'change'
+  | 'resolve' | 'files' | 'publish' | 'prepare' | 'style' | 'import' | 'page'
+  | 'other'
 
 export interface WorkPlan {
   /** The stages of this kind of job, in order, each a phrase for a checklist ("Reading your request"). */
@@ -17,12 +22,21 @@ const PLANS: Record<WorkKind, readonly string[]> = {
   suggest: ['Saving your text', 'Reading your request', 'Finding changes to suggest'],
   answer: ['Reading your article', 'Writing the answer'],
   verify: ['Saving your text', 'Finding the claims to check', 'Looking things up', 'Writing up what I found'],
-  check: ['Reading the text', 'Finding and checking the claims'],
+  check: ['Finding the factual claims', 'Summing up what I found'],
+  change: [],
+  resolve: ['Saving your text', 'Working through the issues', 'Updating the article'],
+  files: ['Saving your text', 'Reading the files', 'Finding the claims they bear on', 'Updating the article'],
+  publish: ['Saving your text', 'Rechecking the sources', 'Freezing the snapshot'],
+  prepare: ['Saving your text', 'Drafting the style sheet', 'Looking for links between sections'],
+  style: ['Saving your text', 'Reading the style from the text'],
+  import: ['Reading the file', 'Setting up the article', 'Drafting the style sheet', 'Looking for links between sections'],
+  page: ['Fetching the page', 'Setting up the article', 'Drafting the style sheet', 'Looking for links between sections'],
   other: [],
 }
 
-/** The checklist for a kind of job; empty when the job is too short to need one. */
-export function workPlan(kind: WorkKind): WorkPlan {
+/** The checklist for a kind of job; empty when the job is too short to need one. A 'change' is named by the action's own `label`. */
+export function workPlan(kind: WorkKind, label?: string): WorkPlan {
+  if (kind === 'change') return { steps: ['Saving your text', label?.trim() || 'Making the change', 'Updating the article'] }
   return { steps: PLANS[kind] }
 }
 

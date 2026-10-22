@@ -14,6 +14,9 @@ describe('work progress', () => {
     expect(stageSentence(workPlan('answer'), 7)).toBe('Writing the answer…')
     expect(stageSentence(workPlan('other'), 0)).toBeUndefined()
   })
+  it('names the middle step of a change after the action', () => {
+    expect(workPlan('change', 'Saving the version').steps).toEqual(['Saving your text', 'Saving the version', 'Updating the article'])
+  })
   it('shows elapsed time only after a few seconds', () => {
     expect(elapsedText(3999)).toBeUndefined()
     expect(elapsedText(12_300)).toBe('12s')
