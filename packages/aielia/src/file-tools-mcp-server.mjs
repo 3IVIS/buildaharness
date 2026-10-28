@@ -758,6 +758,25 @@ export function createReminder(remindersFile, rawText) {
   return run
 }
 
+/**
+ * Eval harness only. `BENCHMARK_TOOL_FAILURE` (JSON `{"remaining": N, "symptom": "..."}`) makes the first N
+ * read_file / list_directory calls of this subprocess fail with the symptom text; unset (the product case) it
+ * is inert. The benchmark's `bare` arm uses it because its tool calls resolve in here, out of process. The
+ * parent re-arms it per `claude -p` invocation with the failures still owed.
+ */
+export const BENCHMARK_DEFAULT_SYMPTOM = 'injected: persistent tool failure (ETIMEDOUT)'
+let benchmarkFailuresTaken = 0
+export function resetBenchmarkToolFailureForTests() { benchmarkFailuresTaken = 0 }
+export function takeBenchmarkToolFailure(env = process.env) {
+  const raw = env.BENCHMARK_TOOL_FAILURE
+  if (!raw) return undefined
+  let spec
+  try { spec = JSON.parse(raw) } catch { return undefined }
+  if (!spec || !(Number(spec.remaining) > benchmarkFailuresTaken)) return undefined
+  benchmarkFailuresTaken += 1
+  return typeof spec.symptom === 'string' && spec.symptom ? spec.symptom : BENCHMARK_DEFAULT_SYMPTOM
+}
+
 async function main() {
   const workspaceRoot = process.env.WORKSPACE_ROOT
   if (!workspaceRoot) {
@@ -783,6 +802,11 @@ async function main() {
         const gate = await requestToolGate('read_file', { path })
         if (gate.decision === 'deny') {
           return { content: [{ type: 'text', text: `Denied: ${gate.reason ?? 'not permitted by tool policy'}` }], isError: true }
+        }
+        const injected = takeBenchmarkToolFailure()
+        if (injected !== undefined) {
+          await reportToolResult('read_file', { path }, `Error: ${injected}`, false)
+          return { content: [{ type: 'text', text: `Error: ${injected}` }], isError: true }
         }
         const resolved = await resolveAndVerify(workspaceRoot, path)
         const content = await readFile(resolved, 'utf-8').catch((err) => {
@@ -815,6 +839,11 @@ async function main() {
         const gate = await requestToolGate('list_directory', { path })
         if (gate.decision === 'deny') {
           return { content: [{ type: 'text', text: `Denied: ${gate.reason ?? 'not permitted by tool policy'}` }], isError: true }
+        }
+        const injected = takeBenchmarkToolFailure()
+        if (injected !== undefined) {
+          await reportToolResult('list_directory', { path }, `Error: ${injected}`, false)
+          return { content: [{ type: 'text', text: `Error: ${injected}` }], isError: true }
         }
         const resolved = await resolveAndVerify(workspaceRoot, path)
         const names = await readdir(resolved).catch((err) => {
