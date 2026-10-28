@@ -3,6 +3,7 @@ import { downloadBlob } from './download-blob'
 import { rememberUserUrls } from './user-urls'
 import { createWebTools } from './web-context'
 import { isTauri, invoke } from '@tauri-apps/api/core'
+import { SiteNav } from './components/SiteNav'
 import {
   PersonalAssistant,
   nodeDisplayName,
@@ -1169,7 +1170,7 @@ export function App(): React.JSX.Element {
     <div className="app">
       <header className="app__header">
         <span className="app__header-brand">
-          <span className="app__header-title">Aielia</span>
+          <span className="app__header-title">Aielia Chat</span>
           <span className="app__header-badge" title="Early-stage alpha software — expect rough edges and breaking changes.">Alpha</span>
           {config.dangerouslySkipPermissions && (
             <button
@@ -1220,6 +1221,7 @@ export function App(): React.JSX.Element {
           </div>
           <button type="button" className="app__settings-button" aria-label="Settings" onClick={() => void handleOpenSettings()}>⚙</button>
         </div>
+        <SiteNav />
       </header>
       {planGraphModeEnabled && planVizOpen && (
         <PlanVizPanel

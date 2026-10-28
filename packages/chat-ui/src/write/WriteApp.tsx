@@ -23,6 +23,7 @@ import { TextNotes, looksLikeLink, type NoteKind } from './TextNotes'
 import { Icon } from './icons'
 import { DialogProvider, useDialogs } from './dialogs'
 import type { WriteServices } from './write-services'
+import { SiteNav } from '../components/SiteNav'
 import './write.css'
 
 /** The kinds of job that can change the article's text, so that what they changed is lit afterwards. */
@@ -148,13 +149,15 @@ type WriteAppProps = {
   connection?: { value: WriteConnection; onSave: (c: WriteConnection) => void; onForget: () => void }
   /** Called when the writer deleted all their data, so the host can start the page afresh (its models and spending were reset). */
   onDeleted?: () => void
+  /** The Publish button is hidden for now; the publish flow itself is kept (and tested) for when it comes back. */
+  showPublish?: boolean
 }
 
 export function WriteApp(props: WriteAppProps): React.JSX.Element {
   return <DialogProvider><WriteAppBody {...props} /></DialogProvider>
 }
 
-function WriteAppBody({ services, connection, onDeleted }: WriteAppProps): React.JSX.Element {
+function WriteAppBody({ services, connection, onDeleted, showPublish = false }: WriteAppProps): React.JSX.Element {
   const { service, port } = services
   const dialogs = useDialogs()
   const [articles, setArticles] = useState<ArticleItem[]>([])
@@ -1151,10 +1154,10 @@ function WriteAppBody({ services, connection, onDeleted }: WriteAppProps): React
     >
       <header className="write__bar">
         <h1 className="write__title">Aielia Write</h1>
+        <span className="write__badge" title="Early-stage alpha software — expect rough edges and breaking changes.">Alpha</span>
         <ArticleSwitcher articles={articles} activeId={activeId} onSelect={(id) => void run('Opening the article', async () => { await select(id) }, true, ' It is open.')} onRename={() => void renameArticle()} onNew={() => void createArticle()} onExport={() => void exportArticle()} onImport={(f) => void importArticle(f)} onOpenPage={services.canReadPages ? () => void openPage() : undefined} />
-        <div className="write__actions">
-          <button type="button" className="write__primary" onClick={() => void publish()} disabled={!activeId || busy !== null}>Publish</button>
-        </div>
+        {showPublish && <button type="button" className="write__primary" onClick={() => void publish()} disabled={!activeId || busy !== null}>Publish</button>}
+        <SiteNav />
       </header>
       {((busy && !(isWide() || tab === 'chat')) || (banner && (!banner.inChat || !(isWide() || tab === 'chat')))) && <p className="write__notice" role="status">{busy && !(isWide() || tab === 'chat') ? `${busy}…` : banner?.text}</p>}
 
