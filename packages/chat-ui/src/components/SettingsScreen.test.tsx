@@ -362,6 +362,17 @@ describe('SettingsScreen', () => {
       expect(screen.queryByRole('checkbox', { name: 'diagnostics' })).not.toBeInTheDocument()
     })
 
+    it('keeps groups collapsed unless a layer in them was changed, is pinned or has an unmet need', () => {
+      const { container } = renderSettings({ config: { ...DEFAULT_CONFIG, layers: { semantic_hypotheses: true } } })
+      const open = Array.from(container.querySelectorAll<HTMLDetailsElement>('details.settings__layer-group')).map((d) => [d.querySelector('summary')!.textContent, d.open])
+      expect(open).toEqual([
+        [expect.stringContaining('Checks, on by default'), false],
+        [expect.stringContaining('Other behaviours'), false],
+        [expect.stringContaining('Off by default'), true],
+        [expect.stringContaining('Safety floor'), false],
+      ])
+    })
+
     it('says when a switched-on layer needs one that is off', () => {
       renderSettings({ config: { ...DEFAULT_CONFIG, layers: { recall_tool: true } } })
       expect(screen.getByText(/Needs episodic_digest, which is off/)).toBeInTheDocument()

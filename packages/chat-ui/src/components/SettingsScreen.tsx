@@ -9,11 +9,19 @@ import {
   followersOf,
   unmetRequirements,
   type AssistantConfig,
+  type LayerGroup,
   type MemorySummary,
   type DoctorCheck,
 } from '@buildaharness/aielia'
 import { ANTHROPIC_DEFAULT_MODEL, OPENAI_DEFAULT_MODEL, OPENROUTER_DEFAULT_MODEL, type TokenUsage } from '@buildaharness/runtime'
 import { ENV_VAR_FOR_CONFIG_KEY } from '../browser-config'
+
+const LAYER_GROUPS: readonly [LayerGroup, string][] = [
+  ['escalation', 'Checks, on by default'],
+  ['behaviour', 'Other behaviours, on by default'],
+  ['opt_in', 'Off by default'],
+  ['floor', 'Safety floor'],
+]
 
 const BACKEND_LABEL: Record<AssistantConfig['llmBackend'], string> = {
   proxy: 'Self-hosted proxy',
@@ -474,36 +482,53 @@ export function SettingsScreen({
 
         <section className="settings__section">
           <h2>Reasoning layers</h2>
-          <p className="settings__hint">
-            Extra checks and behaviours that run on top of Aielia. Each costs extra model calls when it fires; the audit found limited
-            benefit for some. Approval staging is always on and not listed. Safety layers marked with a caution can be switched off.
+          <p className="settings__info">
+            Extra checks and behaviours on top of Aielia; each can cost model calls when it fires. Approval staging is always on and not listed.
           </p>
-          {LAYER_SETTINGS.filter(isToggleable).map((layer) => {
+          {LAYER_GROUPS.map(([group, title]) => {
+            const layers = LAYER_SETTINGS.filter((l) => l.group === group && isToggleable(l))
             const layerEnv = (globalThis as { process?: { env?: Record<string, string | undefined> } }).process?.env ?? {}
-            const isPinned = layerPins.has(layer.id)
-            const checked = form.layers?.[layer.id] ?? layer.defaultOn
+            const isOn = (l: (typeof layers)[number]): boolean => form.layers?.[l.id] ?? l.defaultOn
+            const needsAttention = layers.some(
+              (l) => form.layers?.[l.id] !== undefined || layerPins.has(l.id) || unmetRequirements(l, form.layers, layerPins, layerEnv).length > 0,
+            )
             return (
-              <label key={layer.id} className="settings__field settings__layer">
-                <span className="settings__field-label">
-                  <input
-                    type="checkbox"
-                    aria-label={layer.id}
-                    checked={checked}
-                    disabled={disabled || isPinned}
-                    onChange={(e) => setLayer(layer.id, e.target.checked, layer.defaultOn)}
-                  />{' '}
-                  {layer.id}
-                  {isPinned ? <span className="settings__pinned"> (pinned by {layer.flag})</span> : null}
-                </span>
-                <span className="settings__hint">
-                  {layer.summary}. Cost: {layer.cost}. Evidence: {layer.evidence}.
-                  {layer.caution ? ` Caution: ${layer.caution}` : ''}
-                  {unmetRequirements(layer, form.layers, layerPins, layerEnv).length > 0
-                    ? ` Needs ${unmetRequirements(layer, form.layers, layerPins, layerEnv).map((u) => u.id).join(', ')}, which is off, so this has no effect.`
-                    : ''}
-                  {followersOf(layer).length > 0 ? ` Also controls: ${followersOf(layer).map((f) => f.id).join(', ')}.` : ''}
-                </span>
-              </label>
+              <details key={group} className="settings__layer-group" open={needsAttention || undefined}>
+                <summary>
+                  {title} <span className="settings__pinned">({layers.filter(isOn).length} of {layers.length} on)</span>
+                </summary>
+                {layers.map((layer) => {
+                  const isPinned = layerPins.has(layer.id)
+                  const unmet = unmetRequirements(layer, form.layers, layerPins, layerEnv)
+                  const followers = followersOf(layer)
+                  return (
+                    <div key={layer.id} className="settings__layer">
+                      <label className="settings__layer-row">
+                        <input
+                          type="checkbox"
+                          aria-label={layer.id}
+                          checked={isOn(layer)}
+                          disabled={disabled || isPinned}
+                          onChange={(e) => setLayer(layer.id, e.target.checked, layer.defaultOn)}
+                        />
+                        <span className="settings__layer-name">{layer.id}</span>
+                        {layer.caution ? <span className="settings__layer-flag" title="Read the caution under Details before switching this off"> ⚠</span> : null}
+                        <span className="settings__layer-summary">{layer.summary}</span>
+                        {isPinned ? <span className="settings__pinned"> (pinned by {layer.flag})</span> : null}
+                      </label>
+                      {unmet.length > 0 ? (
+                        <div className="settings__layer-need">Needs {unmet.map((u) => u.id).join(', ')}, which is off, so this has no effect.</div>
+                      ) : null}
+                      <details className="settings__layer-more">
+                        <summary>Details</summary>
+                        <div>Cost: {layer.cost}. Evidence: {layer.evidence}.</div>
+                        {layer.caution ? <div>Caution: {layer.caution}</div> : null}
+                        {followers.length > 0 ? <div>Also controls: {followers.map((f) => f.id).join(', ')}.</div> : null}
+                      </details>
+                    </div>
+                  )
+                })}
+              </details>
             )
           })}
         </section>
