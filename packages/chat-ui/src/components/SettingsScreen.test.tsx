@@ -362,6 +362,11 @@ describe('SettingsScreen', () => {
       expect(screen.queryByRole('checkbox', { name: 'diagnostics' })).not.toBeInTheDocument()
     })
 
+    it('says when a switched-on layer needs one that is off', () => {
+      renderSettings({ config: { ...DEFAULT_CONFIG, layers: { recall_tool: true } } })
+      expect(screen.getByText(/Needs episodic_digest, which is off/)).toBeInTheDocument()
+    })
+
     it('saves only the layers the user moved off their default', async () => {
       const user = userEvent.setup()
       const { onSave } = renderSettings()

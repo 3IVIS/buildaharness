@@ -260,6 +260,16 @@ describe('/layers settings|on|off|reset', () => {
     expect(process.env.AUDIT_SEMANTIC_HYPOTHESES).toBeUndefined()
   })
 
+  it('warns when a layer is switched on while one it needs is off', async () => {
+    const { cli } = await setupCli()
+    const lines = captureOutput()
+
+    await cli.dispatchLine('/layers on memory_consolidation')
+
+    expect(lines.join('\n')).toContain('"memory_consolidation" is on but does nothing while "memory_audit_log" is off.')
+    await cli.dispatchLine('/layers reset')
+  })
+
   it('refuses a locked or unknown layer and saves nothing', async () => {
     const { cli, configStore } = await setupCli()
     const lines = captureOutput()

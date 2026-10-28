@@ -28,6 +28,8 @@ export interface LayerSetting {
   caution?: string
   /** A layer with no gate of its own: it is on exactly when this layer is. */
   followsLayer?: string
+  /** Layers this one does nothing without. Switching it on while one of them is off is allowed but reported. */
+  requires?: readonly string[]
 }
 
 export const LAYER_SETTINGS: readonly LayerSetting[] = [
@@ -42,7 +44,7 @@ export const LAYER_SETTINGS: readonly LayerSetting[] = [
 
   { id: 'supervisor', group: 'behaviour', flag: 'HARNESS_TRAJECTORY_SUPERVISOR', defaultOn: true, summary: 'When a turn stalls, one call decides whether to gather evidence, change strategy or ask you', cost: 'one call per stall, none on a healthy turn', evidence: 'best evidence of the set (94% vs 78% on injected stalls); the stalls are synthetic' },
   { id: 'constraint_check', group: 'behaviour', flag: 'AUDIT_SEMANTIC_CONSTRAINT_CHECK', defaultOn: true, summary: 'Checks the finished answer against rules you stated, and re-asks once on a violation', cost: 'one call per turn with a stated rule', evidence: 'fires and persists; no outcome delta (the base model obeys unaided)' },
-  { id: 'semantic_grounding', group: 'behaviour', flag: 'AUDIT_SEMANTIC_GROUNDING', defaultOn: true, summary: 'Compares a reply with the raw tool text before it is labelled verified', cost: 'one call on tool or research turns', evidence: 'mechanism real, outcome not shown' },
+  { id: 'semantic_grounding', group: 'behaviour', flag: 'AUDIT_SEMANTIC_GROUNDING', requires: ['mandatory_verification'], defaultOn: true, summary: 'Compares a reply with the raw tool text before it is labelled verified', cost: 'one call on tool or research turns', evidence: 'mechanism real, outcome not shown' },
   { id: 'retry_system_errors', group: 'behaviour', flag: 'AUDIT_RETRY_SYSTEM_ERRORS', defaultOn: true, summary: 'Retries a task once after a transient model or tool error', cost: 'one extra attempt after an error', evidence: 'demonstrated on a synthetic 503' },
   { id: 'plan_step_prompt', group: 'behaviour', flag: 'AUDIT_PLAN_STEP_PROMPT', defaultOn: true, summary: 'Tells each plan step which step it is and carries earlier answers forward', cost: 'none (prompt text)', evidence: 'cost removed; completion not measured beyond one conversation' },
   { id: 'decomposed_answer_once', group: 'behaviour', flag: 'AUDIT_DECOMPOSED_ANSWER_ONCE', defaultOn: true, summary: 'A decomposed turn answers once and later subtasks reuse that answer', cost: 'none (saves calls)', evidence: 'cost removed' },
@@ -52,7 +54,7 @@ export const LAYER_SETTINGS: readonly LayerSetting[] = [
 
   { id: 'semantic_hypotheses', group: 'opt_in', flag: 'AUDIT_SEMANTIC_HYPOTHESES', defaultOn: false, summary: 'For an underdetermined question, weighs 2-4 competing explanations before answering', cost: 'about 4x per turn when it fires', evidence: 'suggestive: 13/15 vs 11/18, not significant' },
   { id: 'source_reliability', group: 'opt_in', flag: 'AUDIT_SEMANTIC_SOURCE_RELIABILITY', defaultOn: false, summary: 'Weighs how trustworthy each file or page is', cost: 'two calls per turn', evidence: 'mechanism verified' },
-  { id: 'reviewer_revision', group: 'opt_in', flag: 'AUDIT_REVIEWER_REVISION', defaultOn: false, summary: 'Lets reviewer findings revise the reply', cost: 'a second answer when it fires', evidence: 'fires and acts; no outcome delta' },
+  { id: 'reviewer_revision', group: 'opt_in', flag: 'AUDIT_REVIEWER_REVISION', requires: ['reviewer_adversarial'], defaultOn: false, summary: 'Lets reviewer findings revise the reply', cost: 'a second answer when it fires', evidence: 'fires and acts; no outcome delta' },
   { id: 'experience_learning', group: 'opt_in', flag: 'AUDIT_EXPERIENCE_LEARNING', defaultOn: false, summary: 'Learns which recovery strategies worked before', cost: 'none (bookkeeping)', evidence: 'not demonstrable as an outcome' },
   { id: 'semantic_compaction', group: 'opt_in', flag: 'AUDIT_SEMANTIC_COMPACTION', defaultOn: false, summary: 'Summarises long transcripts by meaning instead of truncating', cost: 'one call when the thresholds trip', evidence: 'demonstrated on one matched pair' },
   { id: 'semantic_task_completion', group: 'opt_in', flag: 'AUDIT_SEMANTIC_TASK_COMPLETION', defaultOn: false, summary: 'A plan step counts complete only if its output did the task', cost: 'one call per plan step', evidence: 'shown on one conversation, 3/3 seeds; not measured on a broader set' },
@@ -62,8 +64,8 @@ export const LAYER_SETTINGS: readonly LayerSetting[] = [
   { id: 'memory_write_gate', group: 'opt_in', flag: 'AUDIT_MEMORY_WRITE_GATE', defaultOn: false, summary: 'Screens memory writes for secrets and instructions', cost: 'none extra (rides the classifier)', evidence: 'mechanism works; no outcome delta' },
   { id: 'memory_audit_log', group: 'opt_in', flag: 'AUDIT_MEMORY_AUDIT_LOG', defaultOn: false, summary: 'Logs every memory change with its pre-image (/memory history, /memory undo)', cost: 'none', evidence: 'undo exactness unit-tested only' },
   { id: 'episodic_digest', group: 'opt_in', flag: 'AUDIT_EPISODIC_DIGEST', defaultOn: false, summary: 'Summarises a session when it ends so the next one can pick up', cost: 'one call per session end', evidence: 'control FAIL 2/2, candidate PASS 2/2 on one scenario' },
-  { id: 'recall_tool', group: 'opt_in', flag: 'AUDIT_RECALL_TOOL', defaultOn: false, summary: 'Gives the model a read-only tool to look up past session digests', cost: 'tool calls when used', evidence: 'measured together with the digest' },
-  { id: 'memory_consolidation', group: 'opt_in', flag: 'AUDIT_MEMORY_CONSOLIDATION', defaultOn: false, summary: 'Merges duplicate memories and proposes archiving old ones', cost: 'extra calls; needs the audit log', evidence: 'not measured as an outcome' },
+  { id: 'recall_tool', group: 'opt_in', flag: 'AUDIT_RECALL_TOOL', requires: ['episodic_digest'], defaultOn: false, summary: 'Gives the model a read-only tool to look up past session digests', cost: 'tool calls when used', evidence: 'measured together with the digest' },
+  { id: 'memory_consolidation', group: 'opt_in', flag: 'AUDIT_MEMORY_CONSOLIDATION', requires: ['memory_audit_log'], defaultOn: false, summary: 'Merges duplicate memories and proposes archiving old ones', cost: 'extra calls; needs the audit log', evidence: 'not measured as an outcome' },
   { id: 'memory_reviewer', group: 'opt_in', flag: 'AUDIT_MEMORY_REVIEWER', defaultOn: false, summary: 'Reviews recent turns for facts worth remembering', cost: 'two calls every few turns', evidence: 'small samples' },
 
   { id: 'control_state', group: 'floor', flag: 'AUDIT_CONTROL_STATE_GATE', defaultOn: true, summary: 'Tightens or blocks the harness as failures accumulate', cost: 'none', evidence: 'harness-level only (<=4 executions vs 43); redundant in the assistant', caution: 'Off: the harness never blocks or escalates on repeated failures, and diagnostics and hypothesis go with it; the supervisor and stall rule still bound a loop.' },
@@ -83,6 +85,23 @@ export function findLayer(id: string): LayerSetting | undefined {
 /** The layers that have no switch of their own and are on exactly when `leader` is. */
 export function followersOf(leader: LayerSetting): LayerSetting[] {
   return LAYER_SETTINGS.filter((l) => l.followsLayer === leader.id)
+}
+
+/** The layers `layer` needs that are currently off. Empty when `layer` is off itself: nothing is lost then. */
+export function unmetRequirements(layer: LayerSetting, choices: LayerChoices | undefined, pinned: ReadonlySet<string>, env: Env): LayerSetting[] {
+  if (!layer.requires || !effectiveState(layer, choices, pinned, env)) return []
+  return layer.requires.flatMap((id) => {
+    const need = findLayer(id)
+    return need && !effectiveState(need, choices, pinned, env) ? [need] : []
+  })
+}
+
+/** One line per switched-on layer that has no effect because a layer it needs is off. */
+export function layerWarnings(choices: LayerChoices | undefined, pinned: ReadonlySet<string>, env: Env): string[] {
+  return LAYER_SETTINGS.flatMap((l) => {
+    const unmet = unmetRequirements(l, choices, pinned, env)
+    return unmet.length === 0 ? [] : [`"${l.id}" is on but does nothing while ${unmet.map((u) => `"${u.id}"`).join(' and ')} ${unmet.length === 1 ? 'is' : 'are'} off.`]
+  })
 }
 
 /** The layers a user may change: everything except the locked floor. */
@@ -183,6 +202,8 @@ export function formatLayerListing(choices: LayerChoices | undefined, pinned: Re
       const note = pinned.has(layer.id) ? `  (pinned by ${layer.flag})` : choices?.[layer.id] !== undefined ? '  (changed)' : ''
       lines.push(`  ${layer.id.padEnd(24)} ${mark.padEnd(6)} ${layer.summary}${note}`)
       lines.push(`  ${''.padEnd(24)} ${''.padEnd(6)} cost: ${layer.cost}; evidence: ${layer.evidence}`)
+      const unmet = unmetRequirements(layer, choices, pinned, env)
+      if (unmet.length > 0) lines.push(`  ${''.padEnd(24)} ${''.padEnd(6)} needs: ${unmet.map((u) => u.id).join(', ')} (off), so this has no effect`)
       if (layer.caution) lines.push(`  ${''.padEnd(24)} ${''.padEnd(6)} caution: ${layer.caution}`)
     }
     lines.push('')

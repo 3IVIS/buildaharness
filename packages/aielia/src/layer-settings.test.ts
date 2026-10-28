@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest'
 import { OPT_IN_FLAG } from '@buildaharness/harness'
-import { LAYER_SETTINGS, applyLayerSettings, effectiveState, withLayerChoice, sanitizeLayerChoices, formatLayerListing, findLayer, LayerSettingError } from './layer-settings.js'
+import { LAYER_SETTINGS, applyLayerSettings, effectiveState, withLayerChoice, unmetRequirements, layerWarnings, sanitizeLayerChoices, formatLayerListing, findLayer, LayerSettingError } from './layer-settings.js'
 import { ESCALATION_ENV } from './layer-policy-wiring.js'
 import { semanticHypothesesEnabled } from './semantic-hypotheses.js'
 import { decompositionEnabled } from './turn-interpreter.js'
@@ -34,6 +34,29 @@ describe('registry', () => {
     expect(locked).toEqual(['approval_staging'])
     for (const l of LAYER_SETTINGS.filter((x) => x.followsLayer)) expect(findLayer(l.followsLayer!)?.flag).toBeDefined()
     for (const l of LAYER_SETTINGS.filter((x) => x.group === 'floor' && x.flag)) expect(l.caution).toBeTruthy()
+  })
+})
+
+describe('requirements', () => {
+  it('only names real layers, and none is a layer that follows another or is locked', () => {
+    for (const l of LAYER_SETTINGS.filter((x) => x.requires)) for (const r of l.requires!) expect(findLayer(r)?.flag).toBeDefined()
+  })
+  it('reports a switched-on layer whose requirement is off, and nothing when it is off itself or the need is met', () => {
+    const rec = findLayer('memory_consolidation')!
+    expect(unmetRequirements(rec, { memory_consolidation: true }, new Set(), {}).map((l) => l.id)).toEqual(['memory_audit_log'])
+    expect(unmetRequirements(rec, { memory_consolidation: true, memory_audit_log: true }, new Set(), {})).toEqual([])
+    expect(unmetRequirements(rec, {}, new Set(), {})).toEqual([])
+  })
+  it('catches the default-on layer whose requirement the user switched off', () => {
+    expect(layerWarnings({ mandatory_verification: false }, new Set(), {})).toEqual(['"semantic_grounding" is on but does nothing while "mandatory_verification" is off.'])
+    expect(layerWarnings({}, new Set(), {})).toEqual([])
+  })
+  it('uses the pinned env value for a requirement set outside Settings', () => {
+    expect(layerWarnings({}, new Set(['reviewer_adversarial']), { AUDIT_REVIEWER_PASS: '0' }).join()).toBe('')
+    expect(layerWarnings({ reviewer_revision: true }, new Set(['reviewer_adversarial']), { AUDIT_REVIEWER_PASS: '0' })).toHaveLength(1)
+  })
+  it('shows the need in the listing', () => {
+    expect(formatLayerListing({ recall_tool: true }, new Set(), {})).toMatch(/needs: episodic_digest \(off\)/)
   })
 })
 

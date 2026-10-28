@@ -7,6 +7,7 @@ import {
   LAYER_SETTINGS,
   isToggleable,
   followersOf,
+  unmetRequirements,
   type AssistantConfig,
   type MemorySummary,
   type DoctorCheck,
@@ -478,6 +479,7 @@ export function SettingsScreen({
             benefit for some. Approval staging is always on and not listed. Safety layers marked with a caution can be switched off.
           </p>
           {LAYER_SETTINGS.filter(isToggleable).map((layer) => {
+            const layerEnv = (globalThis as { process?: { env?: Record<string, string | undefined> } }).process?.env ?? {}
             const isPinned = layerPins.has(layer.id)
             const checked = form.layers?.[layer.id] ?? layer.defaultOn
             return (
@@ -496,6 +498,9 @@ export function SettingsScreen({
                 <span className="settings__hint">
                   {layer.summary}. Cost: {layer.cost}. Evidence: {layer.evidence}.
                   {layer.caution ? ` Caution: ${layer.caution}` : ''}
+                  {unmetRequirements(layer, form.layers, layerPins, layerEnv).length > 0
+                    ? ` Needs ${unmetRequirements(layer, form.layers, layerPins, layerEnv).map((u) => u.id).join(', ')}, which is off, so this has no effect.`
+                    : ''}
                   {followersOf(layer).length > 0 ? ` Also controls: ${followersOf(layer).map((f) => f.id).join(', ')}.` : ''}
                 </span>
               </label>
