@@ -196,6 +196,28 @@ body {
     flex-wrap: nowrap;
   }
 
+  /* Name and website menu share the first row; the buttons take the row under them instead of pushing the page wider. */
+  .app__header {
+    flex-wrap: wrap;
+    row-gap: 8px;
+  }
+
+  .app__header-brand {
+    order: 1;
+  }
+
+  .app__header .site-nav {
+    order: 2;
+    margin-left: auto;
+  }
+
+  .app__header-actions {
+    order: 3;
+    flex: 1 1 100%;
+    margin-left: 0;
+    justify-content: flex-start;
+  }
+
   .app__header-actions button:not(.app__settings-button) {
     padding: 4px 7px;
   }

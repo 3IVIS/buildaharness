@@ -3,11 +3,6 @@ import { isTauri } from '@tauri-apps/api/core'
 import './site-nav.css'
 
 const SITE = 'https://myaielia.com'
-const INLINE = [
-  { href: `${SITE}/how-it-works`, label: 'How it works' },
-  { href: `${SITE}/try`, label: 'Try it' },
-  { href: 'https://buildaharness.com', label: 'Build a harness ↗' },
-]
 const MENU = [
   { href: `${SITE}/how-it-works`, label: 'How it works' },
   { href: `${SITE}/try`, label: 'Try it' },
@@ -23,7 +18,7 @@ const MENU = [
   { href: `${SITE}/impressum.html`, label: 'Impressum' },
 ]
 
-/** The website's top-right menu (links, Install, the full-site menu), shown on the web pages only; the desktop app has no website around it. */
+/** The website's collapsed top-right menu (the ⋯ button and the full-site list), shown on the web pages only; the desktop app has no website around it. */
 export function SiteNav(): React.JSX.Element | null {
   const [open, setOpen] = useState(false)
   const ref = useRef<HTMLDivElement>(null)
@@ -38,10 +33,6 @@ export function SiteNav(): React.JSX.Element | null {
   if (isTauri()) return null
   return (
     <div className="site-nav" ref={ref}>
-      <nav className="site-nav__links" aria-label="Site">
-        {INLINE.map((l) => <a key={l.href} href={l.href}>{l.label}</a>)}
-      </nav>
-      <a className="site-nav__install" href={`${SITE}/install`}>Install</a>
       <div className="site-nav__full">
         <button type="button" className="site-nav__toggle" aria-label="Open site menu" aria-expanded={open} onClick={() => setOpen((o) => !o)}>
           <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><circle cx="5" cy="12" r="1.6" /><circle cx="12" cy="12" r="1.6" /><circle cx="19" cy="12" r="1.6" /></svg>
