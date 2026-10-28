@@ -75,6 +75,7 @@ import { GoalsPanel } from './components/GoalsPanel'
 import { MemoryPanel, type MemoryPanelData } from './components/MemoryPanel'
 import { NextStepChips } from './components/NextStepChips'
 import { BrowserConfigStore } from './browser-config-store'
+import { seedChatFromWrite } from './shared-settings'
 import { TauriConfigStore } from './tauri-config-store'
 import { envOverridesFromImportMetaEnv, llmBackendFromEnvValue, splitBuildDefaults } from './browser-config'
 import { applyBrowserLayerSettings } from './layer-env'
@@ -162,7 +163,10 @@ function isFirstRun(persisted: Partial<AssistantConfig>, overriddenKeys: Readonl
 
 /** Picks the platform-appropriate ConfigStore — localStorage in a plain browser, a Tauri-fs-backed JSON file on desktop (same appLocalDataDir already used for transcripts). */
 async function createConfigStore(): Promise<ConfigStore> {
-  if (!isTauri()) return new BrowserConfigStore()
+  if (!isTauri()) {
+    seedChatFromWrite()
+    return new BrowserConfigStore()
+  }
   const [{ appLocalDataDir }, { createTauriFsBackend }] = await Promise.all([
     import('@tauri-apps/api/path'),
     import('./tauri-fs-backend'),
