@@ -235,6 +235,16 @@ describe('only actions that call the model are told in the chat; the rest report
     await waitFor(() => expect(screen.getByRole('status').textContent).toMatch(/Saving the version: done\. The article is updated\./))
     expect(chatText()).not.toMatch(/Saving the version/)
   })
+  it('clears the banner by itself after ten seconds', async () => {
+    const s = await services({}, MD)
+    render(<WriteApp services={s} />)
+    await waitForText()
+    await userEvent.click(rail('History'))
+    await userEvent.click(await within(panel('History')).findByRole('button', { name: /Save version/i }))
+    await answerDialog('mine')
+    await waitFor(() => expect(document.querySelector('.write__notice')?.textContent).toMatch(/Saving the version: done/))
+    await waitFor(() => expect(document.querySelector('.write__notice')).toBeNull(), { timeout: 11_500 })
+  }, 15_000)
   it('tells a failure of such an action in the banner, with the action that failed and the reason', async () => {
     const s = await services({}, MD)
     render(<WriteApp services={{ ...s, service: Object.assign(s.service, { rename: async () => { throw new Error('disk gone') } }) }} />)
