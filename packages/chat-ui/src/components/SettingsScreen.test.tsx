@@ -367,6 +367,16 @@ describe('SettingsScreen', () => {
       expect(screen.getByText(/Needs episodic_digest, which is off/)).toBeInTheDocument()
     })
 
+    it('updates the need note live when the layer it needs is toggled, including for a default-on layer', async () => {
+      const user = userEvent.setup()
+      renderSettings()
+      expect(screen.queryByText(/Needs mandatory_verification/)).not.toBeInTheDocument()
+      await user.click(screen.getByRole('checkbox', { name: 'mandatory_verification' }))
+      expect(screen.getByText(/Needs mandatory_verification, which is off/)).toBeInTheDocument()
+      await user.click(screen.getByRole('checkbox', { name: 'mandatory_verification' }))
+      expect(screen.queryByText(/Needs mandatory_verification/)).not.toBeInTheDocument()
+    })
+
     it('saves only the layers the user moved off their default', async () => {
       const user = userEvent.setup()
       const { onSave } = renderSettings()
