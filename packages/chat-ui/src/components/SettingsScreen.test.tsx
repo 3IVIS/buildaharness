@@ -354,6 +354,40 @@ describe('SettingsScreen', () => {
       expect(screen.queryByRole('checkbox', { name: 'approval_staging' })).not.toBeInTheDocument()
     })
 
+    it('shows a floor layer with its caution and what follows it, but not approval staging', () => {
+      renderSettings()
+      expect(screen.getByRole('checkbox', { name: 'control_state' })).toBeChecked()
+      expect(screen.getByText(/Caution: Off: the harness never blocks/)).toBeInTheDocument()
+      expect(screen.getByText(/Also controls: diagnostics, hypothesis\./)).toBeInTheDocument()
+      expect(screen.queryByRole('checkbox', { name: 'diagnostics' })).not.toBeInTheDocument()
+    })
+
+    it('keeps groups collapsed unless a layer in them was changed, is pinned or has an unmet need', () => {
+      const { container } = renderSettings({ config: { ...DEFAULT_CONFIG, layers: { semantic_hypotheses: true } } })
+      const open = Array.from(container.querySelectorAll<HTMLDetailsElement>('details.settings__layer-group')).map((d) => [d.querySelector('summary')!.textContent, d.open])
+      expect(open).toEqual([
+        [expect.stringContaining('Checks, on by default'), false],
+        [expect.stringContaining('Other behaviours'), false],
+        [expect.stringContaining('Off by default'), true],
+        [expect.stringContaining('Safety floor'), false],
+      ])
+    })
+
+    it('says when a switched-on layer needs one that is off', () => {
+      renderSettings({ config: { ...DEFAULT_CONFIG, layers: { recall_tool: true } } })
+      expect(screen.getByText(/Needs episodic_digest, which is off/)).toBeInTheDocument()
+    })
+
+    it('updates the need note live when the layer it needs is toggled, including for a default-on layer', async () => {
+      const user = userEvent.setup()
+      renderSettings()
+      expect(screen.queryByText(/Needs mandatory_verification/)).not.toBeInTheDocument()
+      await user.click(screen.getByRole('checkbox', { name: 'mandatory_verification' }))
+      expect(screen.getByText(/Needs mandatory_verification, which is off/)).toBeInTheDocument()
+      await user.click(screen.getByRole('checkbox', { name: 'mandatory_verification' }))
+      expect(screen.queryByText(/Needs mandatory_verification/)).not.toBeInTheDocument()
+    })
+
     it('saves only the layers the user moved off their default', async () => {
       const user = userEvent.setup()
       const { onSave } = renderSettings()

@@ -61,11 +61,11 @@ import { resolveEscalationPlan, escalationEnabled, escalationHookWired, optInLay
 import type { LayerDecision, LayerPolicyMode } from '@buildaharness/harness'
 
 /**
- * `AUDIT_VERIFICATION` gate — feature-value audit (Phase C5 of the internal plan). EVAL-ONLY:
- * default **ON** (an unset / empty / truthy value keeps today's always-on verification). Only the
- * benchmark's `verificationOff` arm sets a falsy value (`0` / `false` / `off` / `no` / `disabled`),
- * which makes `HarnessBridge.run` pass `skipVerification: true` to HarnessRuntime. Read at exactly
- * one call site (below); no product path sets it. Same shape as `semanticContradictionEnabled()`.
+ * `AUDIT_VERIFICATION` gate — feature-value audit (Phase C5 of the internal plan). Default **ON** (an
+ * unset / empty / truthy value keeps today's always-on verification). A falsy value (`0` / `false` /
+ * `off` / `no` / `disabled`) makes `HarnessBridge.run` pass `skipVerification: true` to HarnessRuntime.
+ * Set by the benchmark's `verificationOff` arm and by the user's `mandatory_verification` layer setting
+ * (`layer-settings.ts`). Read at exactly one call site (below). Same shape as `semanticContradictionEnabled()`.
  */
 export function verificationEnabled(env?: Record<string, string | undefined>): boolean {
   const source = env ?? (typeof process !== 'undefined' ? process.env : {})

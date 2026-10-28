@@ -43,7 +43,7 @@ import { createSmtpSender } from './email-smtp.js'
 import { braveSearch } from './web-search-provider.js'
 import { resolveConfig, validateConfig, ConfigValidationError, type AssistantConfig, type ConfigStore } from './config.js'
 import { NodeConfigStore } from './node-config-store.js'
-import { applyLayerSettings, formatLayerListing, sanitizeLayerChoices, withLayerChoice, LayerSettingError } from './layer-settings.js'
+import { applyLayerSettings, formatLayerListing, layerWarnings, sanitizeLayerChoices, withLayerChoice, LayerSettingError } from './layer-settings.js'
 import { isConfigKey, findInvalidNumericSettings, envOverridesFromProcessEnv, parseConfigValue, ConfigValueParseError, formatConfigListing, ENV_VAR_FOR_CONFIG_KEY, CONFIG_KEYS } from './cli-config.js'
 import { stripTerminalControls, formatHelp, isQuitCommand, formatStatus, formatTranscriptMarkdown, defaultExportFilename, formatMemorySummary, formatMemoryExport, defaultMemoryExportFilename, formatSearchResults, formatGoalGraphState, formatNextSteps, formatCostSummary, formatDoctorReport, formatUndoLogListing, formatMemoryPendingOutcome, formatMemoryHistory, formatMemoryArchive, formatMemoryStatus } from './cli-session.js'
 import { formatMemoryEvents } from './memory-events.js'
@@ -1711,7 +1711,7 @@ export async function runCli(options: RunCliOptions = {}): Promise<CliInstance> 
 
   /**
    * `/layers settings|on|off|reset` — list the reasoning layers and switch one on or off (bare `/layers` is printLayers' last-turn view). Persists `config.layers` through the same store as /config and
-   * re-applies the flags immediately; floor layers are locked and an operator-set AUDIT_* flag is reported as pinned.
+   * re-applies the flags immediately; approval staging is locked, a follower layer has no switch of its own, and an operator-set AUDIT_* flag is reported as pinned.
    */
   async function handleLayers(args: string[]): Promise<void> {
     const [sub, id] = args
@@ -1739,6 +1739,7 @@ export async function runCli(options: RunCliOptions = {}): Promise<CliInstance> 
     await reloadAssistant()
     const pinned = id !== undefined && layerPins.has(id)
     printSafe(pinned ? `\n✗ Saved, but "${id}" is pinned by its AUDIT_* env flag, so the saved choice has no effect until that is unset.\n` : `\n✓ Layers updated (took effect immediately, no restart needed)\n`)
+    for (const warning of layerWarnings(sanitizeLayerChoices(config.layers), layerPins, process.env)) printSafe(`⚠ ${warning}\n`)
   }
 
   /** Thin convenience wrapper over /config set model — not a second mechanism. Bare /model shows the current value. */
