@@ -4,7 +4,7 @@ import type { WriteConnection } from './write/write-config'
 /**
  * /try and /write are served from the same origin and keep their settings apart. When one of them has a model connection and the other
  * has none yet, the other starts from a copy of it (once: after that each is changed and cleared on its own). A page that already has
- * its own connection is never touched.
+ * its own connection is never touched. Search key, page-reading proxy and GitHub token travel with the connection.
  */
 export const CHAT_KEY = 'buildaharness.personal-assistant.config'
 export const WRITE_KEY = 'aielia-write.connection'
@@ -38,13 +38,16 @@ export function connectionFromChat(chat: Partial<AssistantConfig> | Record<strin
   const c = chat as Record<string, unknown>
   const backend = c.llmBackend as string | undefined
   const searchKey = text(c.braveApiKey)
+  const githubToken = text(c.githubToken)
   if (backend === 'proxy') {
     const modelUrl = text(c.proxyUrl)?.replace(/\/+$/, '')
-    return modelUrl ? { provider: 'proxy', apiKey: text(c.authToken) ?? '', modelUrl, searchKey } : undefined
+    return modelUrl ? { provider: 'proxy', apiKey: text(c.authToken) ?? '', modelUrl, searchKey, githubToken } : undefined
   }
   const apiKey = text(c.apiKey)
   if (!apiKey || (backend !== undefined && !BACKENDS.includes(backend))) return undefined
-  return { provider: (backend as WriteConnection['provider'] | undefined) ?? 'anthropic', apiKey, searchKey }
+  // Behind a direct provider, the chat page's proxy address and token are for reading pages (they are the model proxy's only when the provider is 'proxy').
+  const pagesUrl = c.webBackend === 'proxy' ? text(c.proxyUrl)?.replace(/\/+$/, '') : undefined
+  return { provider: (backend as WriteConnection['provider'] | undefined) ?? 'anthropic', apiKey, searchKey, githubToken, ...(pagesUrl ? { pagesUrl, pagesToken: text(c.authToken) } : {}) }
 }
 
 /** Write's first start: a copy of the chat page's connection, if there is one and Write has never been set up or cleared. */
@@ -71,7 +74,15 @@ export function seedChatFromWrite(): void {
   } else {
     if (!text(w.apiKey)) return
     patch.apiKey = text(w.apiKey)
+    // The page-reading proxy fits the chat page's single proxy address only when the model is not itself behind a proxy.
+    if (text(w.pagesUrl)) {
+      patch.webBackend = 'proxy'
+      patch.proxyUrl = text(w.pagesUrl)
+      patch.authToken = text(w.pagesToken) ?? ''
+    }
   }
+  // The chat page has no use for a GitHub token yet; it keeps it so the two pages stay in step.
+  if (text(w.githubToken)) patch.githubToken = text(w.githubToken)
   if (text(w.searchKey) && !text(patch.braveApiKey)) patch.braveApiKey = text(w.searchKey)
   try {
     localStorage.setItem(CHAT_KEY, JSON.stringify(patch))

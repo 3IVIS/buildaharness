@@ -24,6 +24,20 @@ describe('chat settings → Write', () => {
   })
 })
 
+describe('page-reading proxy and GitHub token', () => {
+  it('chat → Write: copies the page proxy behind a direct provider, and the token', () => {
+    expect(connectionFromChat({ llmBackend: 'anthropic', apiKey: 'k', webBackend: 'proxy', proxyUrl: 'https://w/', authToken: 'wt', githubToken: 'gh' })).toMatchObject({ pagesUrl: 'https://w', pagesToken: 'wt', githubToken: 'gh' })
+  })
+  it('chat → Write: the proxy of a proxy provider is the model proxy, not a page proxy', () => {
+    expect(connectionFromChat({ llmBackend: 'proxy', proxyUrl: 'https://m', webBackend: 'proxy' })?.pagesUrl).toBeUndefined()
+  })
+  it('Write → chat: copies the page proxy and the token', () => {
+    localStorage.setItem(WRITE_KEY, JSON.stringify({ provider: 'openai', apiKey: 'k', pagesUrl: 'https://w', pagesToken: 'wt', githubToken: 'gh' }))
+    seedChatFromWrite()
+    expect(chat()).toMatchObject({ webBackend: 'proxy', proxyUrl: 'https://w', authToken: 'wt', githubToken: 'gh' })
+  })
+})
+
 describe('Write settings → chat', () => {
   it('copies the connection and keeps the chat page’s other settings', () => {
     localStorage.setItem(WRITE_KEY, JSON.stringify({ provider: 'anthropic', apiKey: 'sk-w', searchKey: 'b-w' }))
