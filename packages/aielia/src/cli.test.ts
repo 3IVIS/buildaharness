@@ -267,7 +267,7 @@ describe('/layers settings|on|off|reset', () => {
     await cli.dispatchLine('/layers off approval_staging')
     await cli.dispatchLine('/layers off not_a_layer')
 
-    expect(lines.join('\n')).toContain('cannot be switched off')
+    expect(lines.join('\n')).toContain('is locked')
     expect(lines.join('\n')).toContain('Unknown layer')
     expect(await configStore.load()).toEqual({})
   })

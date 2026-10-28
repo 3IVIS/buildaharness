@@ -473,8 +473,8 @@ export function SettingsScreen({
         <section className="settings__section">
           <h2>Reasoning layers</h2>
           <p className="settings__hint">
-            Extra checks that run on top of Aielia. Each costs extra model calls when it fires; the audit found limited benefit for
-            some. Safety layers (approvals, tool policy, verification) are always on and not listed.
+            Extra checks and behaviours that run on top of Aielia. Each costs extra model calls when it fires; the audit found limited
+            benefit for some. Approval staging is always on and not listed. Safety layers marked with a caution can be switched off.
           </p>
           {LAYER_SETTINGS.filter(isToggleable).map((layer) => {
             const isPinned = layerPins.has(layer.id)
@@ -494,6 +494,7 @@ export function SettingsScreen({
                 </span>
                 <span className="settings__hint">
                   {layer.summary}. Cost: {layer.cost}. Evidence: {layer.evidence}.
+                  {layer.caution ? ` Caution: ${layer.caution}` : ''}
                 </span>
               </label>
             )

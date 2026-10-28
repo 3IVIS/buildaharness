@@ -4,17 +4,32 @@ import { LAYER_SETTINGS, applyLayerSettings, effectiveState, withLayerChoice, sa
 import { ESCALATION_ENV } from './layer-policy-wiring.js'
 import { semanticHypothesesEnabled } from './semantic-hypotheses.js'
 import { decompositionEnabled } from './turn-interpreter.js'
+import { controlStateGateEnabled, controlStateToolPolicyEnabled } from './tool-control-plane.js'
+import { verificationEnabled, retrySystemErrorsEnabled, retryFailedTaskEnabled } from './harness-bridge.js'
+import { resolveSupervisorEnabled } from './supervisor-flag.js'
+import { semanticConstraintCheckEnabled } from './constraint-check.js'
+import { semanticGroundingEnabled } from './grounding-check.js'
+import { episodicDigestEnabled } from './episodic-digest.js'
+import { recallToolEnabled } from './recall-tool.js'
+import { memoryAuditLogEnabled, memoryWriteGateEnabled } from './memory-service.js'
+import { memoryConsolidationEnabled } from './memory-consolidation.js'
+import { semanticTaskCompletionEnabled } from './task-completion-check.js'
+import { codePlanTemplatesEnabled } from './code-plan-templates.js'
+import { semanticContradictionSeverityEnabled } from './contradiction-checker.js'
 
 describe('registry', () => {
   it('uses the same flags as the harness opt-in table and the escalation env table', () => {
     for (const [layer, flag] of Object.entries(OPT_IN_FLAG)) expect(findLayer(layer)?.flag).toBe(flag)
     for (const [layer, flag] of Object.entries(ESCALATION_ENV)) expect(findLayer(layer)?.flag).toBe(flag)
   })
-  it('has unique ids and flags, and locks every floor layer', () => {
+  it('has unique ids and flags, and every layer is switchable, follows one, or is approval staging', () => {
     expect(new Set(LAYER_SETTINGS.map((l) => l.id)).size).toBe(LAYER_SETTINGS.length)
     const flags = LAYER_SETTINGS.flatMap((l) => (l.flag ? [l.flag] : []))
     expect(new Set(flags).size).toBe(flags.length)
-    for (const l of LAYER_SETTINGS.filter((x) => x.group === 'floor')) expect(l.flag).toBeUndefined()
+    const locked = LAYER_SETTINGS.filter((l) => !l.flag && !l.followsLayer).map((l) => l.id)
+    expect(locked).toEqual(['approval_staging'])
+    for (const l of LAYER_SETTINGS.filter((x) => x.followsLayer)) expect(findLayer(l.followsLayer!)?.flag).toBeDefined()
+    for (const l of LAYER_SETTINGS.filter((x) => x.group === 'floor' && x.flag)) expect(l.caution).toBeTruthy()
   })
 })
 
@@ -41,6 +56,31 @@ describe('applyLayerSettings', () => {
     // still pinned on a re-apply, and an operator value that equals ours is not mistaken for ours
     expect(applyLayerSettings({}, env).pinned.has('decomposition_reframe')).toBe(true)
     expect(env.AUDIT_DECOMPOSITION).toBe('1')
+  })
+  it('switches the floor and behaviour gates the real code reads', () => {
+    const env: Record<string, string | undefined> = {}
+    expect(controlStateGateEnabled(env) && controlStateToolPolicyEnabled(env) && verificationEnabled(env)).toBe(true)
+    expect(resolveSupervisorEnabled(env) && semanticConstraintCheckEnabled(env) && semanticGroundingEnabled(env) && retrySystemErrorsEnabled(env)).toBe(true)
+    applyLayerSettings({ control_state: false, tool_policy: false, mandatory_verification: false, supervisor: false, constraint_check: false, semantic_grounding: false, retry_system_errors: false }, env)
+    expect(controlStateGateEnabled(env)).toBe(false)
+    expect(controlStateToolPolicyEnabled(env)).toBe(false)
+    expect(verificationEnabled(env)).toBe(false)
+    expect(resolveSupervisorEnabled(env)).toBe(false)
+    expect(semanticConstraintCheckEnabled(env)).toBe(false)
+    expect(semanticGroundingEnabled(env)).toBe(false)
+    expect(retrySystemErrorsEnabled(env)).toBe(false)
+  })
+  it('turns on the default-off memory and plan flags', () => {
+    const env: Record<string, string | undefined> = {}
+    applyLayerSettings({ episodic_digest: true, recall_tool: true, memory_audit_log: true, memory_write_gate: true, memory_consolidation: true, semantic_task_completion: true, code_plan_templates: true, contradiction_severity: true, retry_failed_task: true }, env)
+    expect(episodicDigestEnabled(env) && recallToolEnabled(env) && memoryAuditLogEnabled(env) && memoryWriteGateEnabled(env) && memoryConsolidationEnabled(env)).toBe(true)
+    expect(semanticTaskCompletionEnabled(env) && codePlanTemplatesEnabled(env) && semanticContradictionSeverityEnabled(env) && retryFailedTaskEnabled(env)).toBe(true)
+  })
+  it('diagnostics and hypothesis follow control_state, and have no switch of their own', () => {
+    const diag = findLayer('diagnostics')!
+    expect(effectiveState(diag, undefined, new Set(), {})).toBe(true)
+    expect(effectiveState(diag, { control_state: false }, new Set(), {})).toBe(false)
+    expect(() => withLayerChoice({}, 'diagnostics', false)).toThrow(/follows "control_state"/)
   })
   it('ignores unknown and locked ids', () => {
     const env: Record<string, string | undefined> = {}
@@ -69,10 +109,12 @@ describe('choices', () => {
     expect(effectiveState(hyp, { semantic_hypotheses: true }, new Set(), {})).toBe(true)
     expect(effectiveState(hyp, { semantic_hypotheses: true }, new Set(['semantic_hypotheses']), { AUDIT_SEMANTIC_HYPOTHESES: '0' })).toBe(false)
   })
-  it('lists every layer and marks floor layers locked', () => {
+  it('lists every layer, marks approval staging locked and shows cautions', () => {
     const text = formatLayerListing({ semantic_hypotheses: true }, new Set(), {})
     for (const l of LAYER_SETTINGS) expect(text).toContain(l.id)
     expect(text).toMatch(/approval_staging\s+locked/)
+    expect(text).toMatch(/control_state\s+on\s/)
+    expect(text).toMatch(/caution: Off: the harness never blocks/)
     expect(text).toMatch(/semantic_hypotheses\s+on\s.*\(changed\)/)
   })
 })

@@ -5,11 +5,12 @@
  * layer needed a second code path. An env value the operator set themselves always wins and renders as pinned,
  * the same precedence `explicitEnvOverride` already gives it.
  *
- * Floor layers (safety, approval, tool policy, verification, diagnostics) are listed but locked: there is no
- * flag for them and the adaptive policy's types make them un-decidable on purpose.
+ * Floor layers: control state, tool policy and verification each have a gate flag and may be switched off (they carry
+ * a `caution`). Approval staging is locked on purpose, and diagnostics and template hypotheses have no effect of their own
+ * (they only feed the control state), so they follow `control_state`.
  */
 
-export type LayerGroup = 'escalation' | 'opt_in' | 'floor'
+export type LayerGroup = 'escalation' | 'behaviour' | 'opt_in' | 'floor'
 
 export interface LayerSetting {
   id: string
@@ -23,6 +24,10 @@ export interface LayerSetting {
   cost: string
   /** What the audit found, in plain words — the record, not a promise. */
   evidence: string
+  /** What switching it off gives up; set on floor layers a user may still switch off. */
+  caution?: string
+  /** A layer with no gate of its own: it is on exactly when this layer is. */
+  followsLayer?: string
 }
 
 export const LAYER_SETTINGS: readonly LayerSetting[] = [
@@ -35,19 +40,37 @@ export const LAYER_SETTINGS: readonly LayerSetting[] = [
   { id: 'model_inferred_facts', group: 'escalation', flag: 'AUDIT_MODEL_INFERRED_FACTS', defaultOn: true, summary: 'Remembers facts you implied but never stated outright', cost: 'none extra (reuses the classifier call)', evidence: 'verified 3/3' },
   { id: 'reviewer_adversarial', group: 'escalation', flag: 'AUDIT_REVIEWER_PASS', defaultOn: true, summary: 'A three-lens reviewer pass over the draft reply', cost: 'extra calls per turn', evidence: 'no outcome delta in the audit' },
 
+  { id: 'supervisor', group: 'behaviour', flag: 'HARNESS_TRAJECTORY_SUPERVISOR', defaultOn: true, summary: 'When a turn stalls, one call decides whether to gather evidence, change strategy or ask you', cost: 'one call per stall, none on a healthy turn', evidence: 'best evidence of the set (94% vs 78% on injected stalls); the stalls are synthetic' },
+  { id: 'constraint_check', group: 'behaviour', flag: 'AUDIT_SEMANTIC_CONSTRAINT_CHECK', defaultOn: true, summary: 'Checks the finished answer against rules you stated, and re-asks once on a violation', cost: 'one call per turn with a stated rule', evidence: 'fires and persists; no outcome delta (the base model obeys unaided)' },
+  { id: 'semantic_grounding', group: 'behaviour', flag: 'AUDIT_SEMANTIC_GROUNDING', defaultOn: true, summary: 'Compares a reply with the raw tool text before it is labelled verified', cost: 'one call on tool or research turns', evidence: 'mechanism real, outcome not shown' },
+  { id: 'retry_system_errors', group: 'behaviour', flag: 'AUDIT_RETRY_SYSTEM_ERRORS', defaultOn: true, summary: 'Retries a task once after a transient model or tool error', cost: 'one extra attempt after an error', evidence: 'demonstrated on a synthetic 503' },
+  { id: 'plan_step_prompt', group: 'behaviour', flag: 'AUDIT_PLAN_STEP_PROMPT', defaultOn: true, summary: 'Tells each plan step which step it is and carries earlier answers forward', cost: 'none (prompt text)', evidence: 'cost removed; completion not measured beyond one conversation' },
+  { id: 'decomposed_answer_once', group: 'behaviour', flag: 'AUDIT_DECOMPOSED_ANSWER_ONCE', defaultOn: true, summary: 'A decomposed turn answers once and later subtasks reuse that answer', cost: 'none (saves calls)', evidence: 'cost removed' },
+  { id: 'stuck_plan_resume', group: 'behaviour', flag: 'AUDIT_STUCK_PLAN_RESUME', defaultOn: true, summary: 'A stuck plan is retried only by a message that continues it', cost: 'none', evidence: 'demonstrated once (control FAIL)' },
+  { id: 'memory_budgeted_render', group: 'behaviour', flag: 'AUDIT_MEMORY_BUDGETED_RENDER', defaultOn: true, summary: 'Fits remembered facts into a size budget and replaces older values of the same fact', cost: 'none', evidence: 'control FAIL, candidate PASS on 3/3 seeds' },
+
   { id: 'semantic_hypotheses', group: 'opt_in', flag: 'AUDIT_SEMANTIC_HYPOTHESES', defaultOn: false, summary: 'For an underdetermined question, weighs 2-4 competing explanations before answering', cost: 'about 4x per turn when it fires', evidence: 'suggestive: 13/15 vs 11/18, not significant' },
   { id: 'source_reliability', group: 'opt_in', flag: 'AUDIT_SEMANTIC_SOURCE_RELIABILITY', defaultOn: false, summary: 'Weighs how trustworthy each file or page is', cost: 'two calls per turn', evidence: 'mechanism verified' },
   { id: 'reviewer_revision', group: 'opt_in', flag: 'AUDIT_REVIEWER_REVISION', defaultOn: false, summary: 'Lets reviewer findings revise the reply', cost: 'a second answer when it fires', evidence: 'fires and acts; no outcome delta' },
   { id: 'experience_learning', group: 'opt_in', flag: 'AUDIT_EXPERIENCE_LEARNING', defaultOn: false, summary: 'Learns which recovery strategies worked before', cost: 'none (bookkeeping)', evidence: 'not demonstrable as an outcome' },
   { id: 'semantic_compaction', group: 'opt_in', flag: 'AUDIT_SEMANTIC_COMPACTION', defaultOn: false, summary: 'Summarises long transcripts by meaning instead of truncating', cost: 'one call when the thresholds trip', evidence: 'demonstrated on one matched pair' },
+  { id: 'semantic_task_completion', group: 'opt_in', flag: 'AUDIT_SEMANTIC_TASK_COMPLETION', defaultOn: false, summary: 'A plan step counts complete only if its output did the task', cost: 'one call per plan step', evidence: 'shown on one conversation, 3/3 seeds; not measured on a broader set' },
+  { id: 'contradiction_severity', group: 'opt_in', flag: 'AUDIT_SEMANTIC_CONTRADICTION_SEVERITY', defaultOn: false, summary: 'Grades how serious a detected contradiction is', cost: 'none extra (rides the contradiction call)', evidence: '10/10 direct HIGH, 0 false HIGH on synthetic pairs' },
+  { id: 'code_plan_templates', group: 'opt_in', flag: 'AUDIT_CODE_PLAN_TEMPLATES', defaultOn: false, summary: 'Offers plan templates for code work (debug, implement, review, refactor)', cost: 'none', evidence: 'wired; the base model passed unaided' },
+  { id: 'retry_failed_task', group: 'opt_in', flag: 'AUDIT_RETRY_FAILED_TASK', defaultOn: false, summary: 'Retries every failed task after a strategy switch, not only system errors', cost: 'extra attempts', evidence: 'demonstrated, but changes how runaway loops end' },
+  { id: 'memory_write_gate', group: 'opt_in', flag: 'AUDIT_MEMORY_WRITE_GATE', defaultOn: false, summary: 'Screens memory writes for secrets and instructions', cost: 'none extra (rides the classifier)', evidence: 'mechanism works; no outcome delta' },
+  { id: 'memory_audit_log', group: 'opt_in', flag: 'AUDIT_MEMORY_AUDIT_LOG', defaultOn: false, summary: 'Logs every memory change with its pre-image (/memory history, /memory undo)', cost: 'none', evidence: 'undo exactness unit-tested only' },
+  { id: 'episodic_digest', group: 'opt_in', flag: 'AUDIT_EPISODIC_DIGEST', defaultOn: false, summary: 'Summarises a session when it ends so the next one can pick up', cost: 'one call per session end', evidence: 'control FAIL 2/2, candidate PASS 2/2 on one scenario' },
+  { id: 'recall_tool', group: 'opt_in', flag: 'AUDIT_RECALL_TOOL', defaultOn: false, summary: 'Gives the model a read-only tool to look up past session digests', cost: 'tool calls when used', evidence: 'measured together with the digest' },
+  { id: 'memory_consolidation', group: 'opt_in', flag: 'AUDIT_MEMORY_CONSOLIDATION', defaultOn: false, summary: 'Merges duplicate memories and proposes archiving old ones', cost: 'extra calls; needs the audit log', evidence: 'not measured as an outcome' },
   { id: 'memory_reviewer', group: 'opt_in', flag: 'AUDIT_MEMORY_REVIEWER', defaultOn: false, summary: 'Reviews recent turns for facts worth remembering', cost: 'two calls every few turns', evidence: 'small samples' },
 
-  { id: 'control_state', group: 'floor', defaultOn: true, summary: 'Tightens or blocks tool use as failures accumulate', cost: 'none', evidence: 'safety floor' },
-  { id: 'approval_staging', group: 'floor', defaultOn: true, summary: 'Stages every consequential action until you approve it', cost: 'none', evidence: 'safety floor' },
-  { id: 'tool_policy', group: 'floor', defaultOn: true, summary: 'Denies tool calls the current control state forbids', cost: 'none', evidence: 'safety floor' },
-  { id: 'diagnostics', group: 'floor', defaultOn: true, summary: 'Tracks sub-dimensions that feed the control state', cost: 'none', evidence: 'safety floor' },
-  { id: 'hypothesis', group: 'floor', defaultOn: true, summary: 'Template hypothesis bookkeeping (entropy feeds the control state); not the same as semantic_hypotheses', cost: 'none', evidence: 'no outcome effect on its own' },
-  { id: 'mandatory_verification', group: 'floor', defaultOn: true, summary: 'Verifies figures and tool results before they are reported', cost: 'none', evidence: 'safety floor' },
+  { id: 'control_state', group: 'floor', flag: 'AUDIT_CONTROL_STATE_GATE', defaultOn: true, summary: 'Tightens or blocks the harness as failures accumulate', cost: 'none', evidence: 'harness-level only (<=4 executions vs 43); redundant in the assistant', caution: 'Off: the harness never blocks or escalates on repeated failures; the supervisor and stall rule still bound a loop.' },
+  { id: 'tool_policy', group: 'floor', flag: 'AUDIT_CONTROL_STATE_TOOL_POLICY', defaultOn: true, summary: 'Denies read-only tool calls once failures pile up', cost: 'none', evidence: 'demonstrated: stops a retry loop at 8 attempts instead of 15', caution: 'Off: a failing read-only tool can be retried without limit. Writes and shell commands still need approval.' },
+  { id: 'mandatory_verification', group: 'floor', flag: 'AUDIT_VERIFICATION', defaultOn: true, summary: 'Verifies figures and tool results before they are reported', cost: 'none', evidence: 'mechanism real; outcome not shown', caution: 'Off: replies are not checked by the nine verification layers, so a wrong figure goes out unflagged.' },
+  { id: 'approval_staging', group: 'floor', defaultOn: true, summary: 'Stages every consequential action until you approve it', cost: 'none', evidence: 'safety floor, always on', caution: 'Locked: it guards file writes, shell and email.' },
+  { id: 'diagnostics', group: 'floor', followsLayer: 'control_state', defaultOn: true, summary: 'Tracks sub-dimensions that feed the control state', cost: 'none', evidence: 'not separately demonstrable; no effect once control_state is off' },
+  { id: 'hypothesis', group: 'floor', followsLayer: 'control_state', defaultOn: true, summary: 'Template hypothesis bookkeeping (entropy feeds the control state); not the same as semantic_hypotheses', cost: 'none', evidence: 'no outcome effect on its own; follows control_state' },
 ]
 
 export type LayerChoices = Readonly<Record<string, boolean>>
@@ -101,6 +124,10 @@ export function applyLayerSettings(choices: LayerChoices | undefined, env: Env):
 
 /** What a layer will do right now: the saved choice, else its default; a pinned layer reports its env value. */
 export function effectiveState(layer: LayerSetting, choices: LayerChoices | undefined, pinned: ReadonlySet<string>, env: Env): boolean {
+  if (layer.followsLayer) {
+    const leader = findLayer(layer.followsLayer)
+    return leader ? effectiveState(leader, choices, pinned, env) : true
+  }
   if (!layer.flag) return true
   if (pinned.has(layer.id)) {
     const raw = String(env[layer.flag] ?? '').trim().toLowerCase()
@@ -113,7 +140,8 @@ export function effectiveState(layer: LayerSetting, choices: LayerChoices | unde
 export function withLayerChoice(choices: LayerChoices | undefined, id: string, on: boolean | undefined): Record<string, boolean> {
   const layer = findLayer(id)
   if (!layer) throw new LayerSettingError(`Unknown layer "${id}". Run /layers to see the list.`)
-  if (!isToggleable(layer)) throw new LayerSettingError(`"${id}" is a safety/floor layer and cannot be switched off.`)
+  if (layer.followsLayer) throw new LayerSettingError(`"${id}" has no switch of its own; it follows "${layer.followsLayer}".`)
+  if (!isToggleable(layer)) throw new LayerSettingError(`"${id}" is locked: ${layer.caution ?? 'it cannot be switched off.'}`)
   const next = { ...(choices ?? {}) }
   if (on === undefined) delete next[id]
   else next[id] = on
@@ -135,22 +163,25 @@ export function sanitizeLayerChoices(raw: unknown): Record<string, boolean> {
 
 export function formatLayerListing(choices: LayerChoices | undefined, pinned: ReadonlySet<string>, env: Env): string {
   const sections: [LayerGroup, string][] = [
-    ['escalation', 'On by default (switch off to save cost)'],
+    ['escalation', 'Checks, on by default (switch off to save cost)'],
+    ['behaviour', 'Other behaviours, on by default'],
     ['opt_in', 'Off by default (switch on to try)'],
-    ['floor', 'Always on (safety floor, locked)'],
+    ['floor', 'Safety floor (on by default; read the caution before switching off)'],
   ]
   const lines: string[] = []
   for (const [group, title] of sections) {
     lines.push(title)
     for (const layer of LAYER_SETTINGS.filter((l) => l.group === group)) {
       const on = effectiveState(layer, choices, pinned, env)
-      const mark = !isToggleable(layer) ? 'locked' : on ? 'on ' : 'off'
+      const mark = layer.followsLayer ? (on ? 'on*' : 'off*') : !isToggleable(layer) ? 'locked' : on ? 'on ' : 'off'
       const note = pinned.has(layer.id) ? `  (pinned by ${layer.flag})` : choices?.[layer.id] !== undefined ? '  (changed)' : ''
       lines.push(`  ${layer.id.padEnd(24)} ${mark.padEnd(6)} ${layer.summary}${note}`)
-      if (group !== 'floor') lines.push(`  ${''.padEnd(24)} ${''.padEnd(6)} cost: ${layer.cost}; evidence: ${layer.evidence}`)
+      lines.push(`  ${''.padEnd(24)} ${''.padEnd(6)} cost: ${layer.cost}; evidence: ${layer.evidence}`)
+      if (layer.caution) lines.push(`  ${''.padEnd(24)} ${''.padEnd(6)} caution: ${layer.caution}`)
     }
     lines.push('')
   }
+  lines.push('* follows control_state (no switch of its own)')
   lines.push('Change with: /layers on <id> | /layers off <id> | /layers reset [id]  (bare /layers shows what fired last turn)')
   return lines.join('\n')
 }
