@@ -16,6 +16,10 @@ import { memoryConsolidationEnabled } from './memory-consolidation.js'
 import { semanticTaskCompletionEnabled } from './task-completion-check.js'
 import { codePlanTemplatesEnabled } from './code-plan-templates.js'
 import { semanticContradictionSeverityEnabled } from './contradiction-checker.js'
+import { planStepPromptEnabled } from './plan-step-prompt.js'
+import { decomposedAnswerOnceEnabled } from './decomposed-answer.js'
+import { stuckPlanResumeEnabled } from './plan-question.js'
+import { memoryBudgetedRenderEnabled } from './memory-service.js'
 
 describe('registry', () => {
   it('uses the same flags as the harness opt-in table and the escalation env table', () => {
@@ -69,6 +73,15 @@ describe('applyLayerSettings', () => {
     expect(semanticConstraintCheckEnabled(env)).toBe(false)
     expect(semanticGroundingEnabled(env)).toBe(false)
     expect(retrySystemErrorsEnabled(env)).toBe(false)
+  })
+  it('switches the plan and memory-render behaviours the real code reads', () => {
+    const env: Record<string, string | undefined> = {}
+    expect(planStepPromptEnabled(env) && decomposedAnswerOnceEnabled(env) && stuckPlanResumeEnabled(env) && memoryBudgetedRenderEnabled(env)).toBe(true)
+    applyLayerSettings({ plan_step_prompt: false, decomposed_answer_once: false, stuck_plan_resume: false, memory_budgeted_render: false }, env)
+    expect(planStepPromptEnabled(env)).toBe(false)
+    expect(decomposedAnswerOnceEnabled(env)).toBe(false)
+    expect(stuckPlanResumeEnabled(env)).toBe(false)
+    expect(memoryBudgetedRenderEnabled(env)).toBe(false)
   })
   it('turns on the default-off memory and plan flags', () => {
     const env: Record<string, string | undefined> = {}

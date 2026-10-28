@@ -6,6 +6,7 @@ import {
   formatMemorySummary,
   LAYER_SETTINGS,
   isToggleable,
+  followersOf,
   type AssistantConfig,
   type MemorySummary,
   type DoctorCheck,
@@ -495,6 +496,7 @@ export function SettingsScreen({
                 <span className="settings__hint">
                   {layer.summary}. Cost: {layer.cost}. Evidence: {layer.evidence}.
                   {layer.caution ? ` Caution: ${layer.caution}` : ''}
+                  {followersOf(layer).length > 0 ? ` Also controls: ${followersOf(layer).map((f) => f.id).join(', ')}.` : ''}
                 </span>
               </label>
             )

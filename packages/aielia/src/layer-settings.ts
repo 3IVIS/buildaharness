@@ -46,6 +46,7 @@ export const LAYER_SETTINGS: readonly LayerSetting[] = [
   { id: 'retry_system_errors', group: 'behaviour', flag: 'AUDIT_RETRY_SYSTEM_ERRORS', defaultOn: true, summary: 'Retries a task once after a transient model or tool error', cost: 'one extra attempt after an error', evidence: 'demonstrated on a synthetic 503' },
   { id: 'plan_step_prompt', group: 'behaviour', flag: 'AUDIT_PLAN_STEP_PROMPT', defaultOn: true, summary: 'Tells each plan step which step it is and carries earlier answers forward', cost: 'none (prompt text)', evidence: 'cost removed; completion not measured beyond one conversation' },
   { id: 'decomposed_answer_once', group: 'behaviour', flag: 'AUDIT_DECOMPOSED_ANSWER_ONCE', defaultOn: true, summary: 'A decomposed turn answers once and later subtasks reuse that answer', cost: 'none (saves calls)', evidence: 'cost removed' },
+  // Separate from AUDIT_PLAN_QUESTION_ROUTING: that answers a question about the plan, this decides what a non-question message does to a stuck one.
   { id: 'stuck_plan_resume', group: 'behaviour', flag: 'AUDIT_STUCK_PLAN_RESUME', defaultOn: true, summary: 'A stuck plan is retried only by a message that continues it', cost: 'none', evidence: 'demonstrated once (control FAIL)' },
   { id: 'memory_budgeted_render', group: 'behaviour', flag: 'AUDIT_MEMORY_BUDGETED_RENDER', defaultOn: true, summary: 'Fits remembered facts into a size budget and replaces older values of the same fact', cost: 'none', evidence: 'control FAIL, candidate PASS on 3/3 seeds' },
 
@@ -65,7 +66,7 @@ export const LAYER_SETTINGS: readonly LayerSetting[] = [
   { id: 'memory_consolidation', group: 'opt_in', flag: 'AUDIT_MEMORY_CONSOLIDATION', defaultOn: false, summary: 'Merges duplicate memories and proposes archiving old ones', cost: 'extra calls; needs the audit log', evidence: 'not measured as an outcome' },
   { id: 'memory_reviewer', group: 'opt_in', flag: 'AUDIT_MEMORY_REVIEWER', defaultOn: false, summary: 'Reviews recent turns for facts worth remembering', cost: 'two calls every few turns', evidence: 'small samples' },
 
-  { id: 'control_state', group: 'floor', flag: 'AUDIT_CONTROL_STATE_GATE', defaultOn: true, summary: 'Tightens or blocks the harness as failures accumulate', cost: 'none', evidence: 'harness-level only (<=4 executions vs 43); redundant in the assistant', caution: 'Off: the harness never blocks or escalates on repeated failures; the supervisor and stall rule still bound a loop.' },
+  { id: 'control_state', group: 'floor', flag: 'AUDIT_CONTROL_STATE_GATE', defaultOn: true, summary: 'Tightens or blocks the harness as failures accumulate', cost: 'none', evidence: 'harness-level only (<=4 executions vs 43); redundant in the assistant', caution: 'Off: the harness never blocks or escalates on repeated failures, and diagnostics and hypothesis go with it; the supervisor and stall rule still bound a loop.' },
   { id: 'tool_policy', group: 'floor', flag: 'AUDIT_CONTROL_STATE_TOOL_POLICY', defaultOn: true, summary: 'Denies read-only tool calls once failures pile up', cost: 'none', evidence: 'demonstrated: stops a retry loop at 8 attempts instead of 15', caution: 'Off: a failing read-only tool can be retried without limit. Writes and shell commands still need approval.' },
   { id: 'mandatory_verification', group: 'floor', flag: 'AUDIT_VERIFICATION', defaultOn: true, summary: 'Verifies figures and tool results before they are reported', cost: 'none', evidence: 'mechanism real; outcome not shown', caution: 'Off: replies are not checked by the nine verification layers, so a wrong figure goes out unflagged.' },
   { id: 'approval_staging', group: 'floor', defaultOn: true, summary: 'Stages every consequential action until you approve it', cost: 'none', evidence: 'safety floor, always on', caution: 'Locked: it guards file writes, shell and email.' },
@@ -77,6 +78,11 @@ export type LayerChoices = Readonly<Record<string, boolean>>
 
 export function findLayer(id: string): LayerSetting | undefined {
   return LAYER_SETTINGS.find((l) => l.id === id)
+}
+
+/** The layers that have no switch of their own and are on exactly when `leader` is. */
+export function followersOf(leader: LayerSetting): LayerSetting[] {
+  return LAYER_SETTINGS.filter((l) => l.followsLayer === leader.id)
 }
 
 /** The layers a user may change: everything except the locked floor. */

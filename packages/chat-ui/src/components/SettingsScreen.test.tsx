@@ -354,6 +354,14 @@ describe('SettingsScreen', () => {
       expect(screen.queryByRole('checkbox', { name: 'approval_staging' })).not.toBeInTheDocument()
     })
 
+    it('shows a floor layer with its caution and what follows it, but not approval staging', () => {
+      renderSettings()
+      expect(screen.getByRole('checkbox', { name: 'control_state' })).toBeChecked()
+      expect(screen.getByText(/Caution: Off: the harness never blocks/)).toBeInTheDocument()
+      expect(screen.getByText(/Also controls: diagnostics, hypothesis\./)).toBeInTheDocument()
+      expect(screen.queryByRole('checkbox', { name: 'diagnostics' })).not.toBeInTheDocument()
+    })
+
     it('saves only the layers the user moved off their default', async () => {
       const user = userEvent.setup()
       const { onSave } = renderSettings()

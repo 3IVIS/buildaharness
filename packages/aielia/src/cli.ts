@@ -1711,7 +1711,7 @@ export async function runCli(options: RunCliOptions = {}): Promise<CliInstance> 
 
   /**
    * `/layers settings|on|off|reset` — list the reasoning layers and switch one on or off (bare `/layers` is printLayers' last-turn view). Persists `config.layers` through the same store as /config and
-   * re-applies the flags immediately; floor layers are locked and an operator-set AUDIT_* flag is reported as pinned.
+   * re-applies the flags immediately; approval staging is locked, a follower layer has no switch of its own, and an operator-set AUDIT_* flag is reported as pinned.
    */
   async function handleLayers(args: string[]): Promise<void> {
     const [sub, id] = args
