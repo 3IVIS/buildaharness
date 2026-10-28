@@ -119,9 +119,18 @@ const wide = <T,>(fn: () => Promise<T>, minWidth = 960): Promise<T> => {
 }
 
 describe('header and article menu', () => {
-  it('has only Publish in the header; New, Rename, Export and Import are in the article menu', async () => {
+  it('has no Publish button for now, shows the alpha pill and the website menu', async () => {
     const s = await services({}, MD)
     render(<WriteApp services={s} />)
+    await waitForText()
+    expect(screen.queryByRole('button', { name: 'Publish' })).toBeNull()
+    expect(screen.getByText('Alpha')).toBeInTheDocument()
+    await userEvent.click(screen.getByRole('button', { name: 'Open site menu' }))
+    expect(screen.getByRole('link', { name: 'Privacy' })).toHaveAttribute('href', 'https://myaielia.com/privacy.html')
+  })
+  it('has only Publish in the header; New, Rename, Export and Import are in the article menu', async () => {
+    const s = await services({}, MD)
+    render(<WriteApp services={s} showPublish />)
     await waitForText()
     expect(screen.getByRole('button', { name: 'Publish' })).toBeInTheDocument()
     for (const gone of ['New', 'Export', 'Import', 'Check article']) expect(screen.queryByRole('button', { name: gone })).toBeNull()
@@ -186,7 +195,7 @@ describe('header and article menu', () => {
     const id = await svc.create('Post', MD)
     const b = await svc.get(id)
     await store.save(id, { ...b, meta: { ...b.meta, comments: [{ id: 'wc1', articleId: id, text: 't', state: 'open', conflictsWith: [], origin: 'reviewer', capturedAt: 'now' }] } })
-    render(<WriteApp services={await servicesOn(store, {})} />)
+    render(<WriteApp services={await servicesOn(store, {})} showPublish />)
     await waitForText()
     await userEvent.click(screen.getByRole('button', { name: 'Publish' }))
     await answerDialog('v1')
@@ -202,7 +211,7 @@ describe('header and article menu', () => {
     const src = await s.service.addSource(id, { kind: 'web', address: 'https://example.com/bench' })
     await s.service.readSource(id, src)
     page = 'p99 is now 30 ms.'
-    render(<WriteApp services={s} />)
+    render(<WriteApp services={s} showPublish />)
     await waitForText()
     await userEvent.click(screen.getByRole('button', { name: 'Publish' }))
     await answerDialog('v1')
@@ -215,7 +224,7 @@ describe('header and article menu', () => {
 
   it('shows an error from the service instead of failing silently', async () => {
     const s = await services({}, MD)
-    render(<WriteApp services={{ ...s, service: Object.assign(s.service, { updateText: async () => { throw new Error('storage is full') } }) }} />)
+    render(<WriteApp showPublish services={{ ...s, service: Object.assign(s.service, { updateText: async () => { throw new Error('storage is full') } }) }} />)
     await waitForText()
     await userEvent.click(screen.getByRole('button', { name: 'Publish' }))
     await answerDialog('v1')
@@ -235,6 +244,16 @@ describe('only actions that call the model are told in the chat; the rest report
     await waitFor(() => expect(screen.getByRole('status').textContent).toMatch(/Saving the version: done\. The article is updated\./))
     expect(chatText()).not.toMatch(/Saving the version/)
   })
+  it('clears the banner by itself after ten seconds', async () => {
+    const s = await services({}, MD)
+    render(<WriteApp services={s} />)
+    await waitForText()
+    await userEvent.click(rail('History'))
+    await userEvent.click(await within(panel('History')).findByRole('button', { name: /Save version/i }))
+    await answerDialog('mine')
+    await waitFor(() => expect(document.querySelector('.write__notice')?.textContent).toMatch(/Saving the version: done/))
+    await waitFor(() => expect(document.querySelector('.write__notice')).toBeNull(), { timeout: 11_500 })
+  }, 15_000)
   it('tells a failure of such an action in the banner, with the action that failed and the reason', async () => {
     const s = await services({}, MD)
     render(<WriteApp services={{ ...s, service: Object.assign(s.service, { rename: async () => { throw new Error('disk gone') } }) }} />)

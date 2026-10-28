@@ -3,6 +3,7 @@ import { downloadBlob } from './download-blob'
 import { rememberUserUrls } from './user-urls'
 import { createWebTools } from './web-context'
 import { isTauri, invoke } from '@tauri-apps/api/core'
+import { SiteNav } from './components/SiteNav'
 import {
   PersonalAssistant,
   nodeDisplayName,
@@ -74,6 +75,7 @@ import { GoalsPanel } from './components/GoalsPanel'
 import { MemoryPanel, type MemoryPanelData } from './components/MemoryPanel'
 import { NextStepChips } from './components/NextStepChips'
 import { BrowserConfigStore } from './browser-config-store'
+import { seedChatFromWrite } from './shared-settings'
 import { TauriConfigStore } from './tauri-config-store'
 import { envOverridesFromImportMetaEnv, llmBackendFromEnvValue, splitBuildDefaults } from './browser-config'
 import { applyBrowserLayerSettings } from './layer-env'
@@ -161,7 +163,10 @@ function isFirstRun(persisted: Partial<AssistantConfig>, overriddenKeys: Readonl
 
 /** Picks the platform-appropriate ConfigStore — localStorage in a plain browser, a Tauri-fs-backed JSON file on desktop (same appLocalDataDir already used for transcripts). */
 async function createConfigStore(): Promise<ConfigStore> {
-  if (!isTauri()) return new BrowserConfigStore()
+  if (!isTauri()) {
+    seedChatFromWrite()
+    return new BrowserConfigStore()
+  }
   const [{ appLocalDataDir }, { createTauriFsBackend }] = await Promise.all([
     import('@tauri-apps/api/path'),
     import('./tauri-fs-backend'),
@@ -1169,7 +1174,7 @@ export function App(): React.JSX.Element {
     <div className="app">
       <header className="app__header">
         <span className="app__header-brand">
-          <span className="app__header-title">Aielia</span>
+          <span className="app__header-title">Aielia Chat</span>
           <span className="app__header-badge" title="Early-stage alpha software — expect rough edges and breaking changes.">Alpha</span>
           {config.dangerouslySkipPermissions && (
             <button
@@ -1220,6 +1225,7 @@ export function App(): React.JSX.Element {
           </div>
           <button type="button" className="app__settings-button" aria-label="Settings" onClick={() => void handleOpenSettings()}>⚙</button>
         </div>
+        <SiteNav />
       </header>
       {planGraphModeEnabled && planVizOpen && (
         <PlanVizPanel

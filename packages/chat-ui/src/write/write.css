@@ -515,3 +515,8 @@ body.write--resizing { user-select: none; -webkit-user-select: none; cursor: col
 .write__results li.is-bad { color: var(--text); }
 @keyframes write-result-in { from { opacity: 0; transform: translateY(2px); } }
 @media (prefers-reduced-motion: reduce) { .write__results li { animation: none; } }
+
+/* The alpha pill beside the name, and the website menu pushed to the right edge of the header. */
+.write__badge { display: inline-block; font-size: 10px; font-weight: 700; letter-spacing: 0.03em; padding: 1px 7px; border-radius: 999px; border: 1px solid var(--amber); color: var(--amber); text-transform: uppercase; cursor: default; margin-right: 8px; }
+.write__bar .site-nav { margin-left: auto; }
+@media (max-width: 639px) { .write__title { flex: 0 0 auto; } .write__bar .site-nav { order: 2; } }

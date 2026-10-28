@@ -5,14 +5,22 @@ import { ConnectionSettings } from './ConnectionSettings'
 import { DialogProvider } from './dialogs'
 import { WriteApp } from './WriteApp'
 import { clearConnection, loadConnection, saveConnection, toAssistantConfig, webProxyOf, type WriteConnection } from './write-config'
+import { markSettingsShared, writeConnectionFromChat } from '../shared-settings'
 import { createWriteServices, type WriteServices } from './write-services'
+
+/** Write's first start: copies the chat page's connection when there is one (and saves it, as if the writer had entered it). */
+function seedFromChat(): WriteConnection | undefined {
+  const found = writeConnectionFromChat()
+  if (found) saveConnection(found)
+  return loadConnection()
+}
 
 /**
  * The Write page's own connection (its own storage and settings, apart from /try): asks for a key if there is none, then opens the page.
  * Saving changed connection settings rebuilds the services; articles live in their own storage and are untouched.
  */
 function Root(): React.JSX.Element {
-  const [connection, setConnection] = useState<WriteConnection | undefined>(() => loadConnection())
+  const [connection, setConnection] = useState<WriteConnection | undefined>(() => loadConnection() ?? seedFromChat())
   const [services, setServices] = useState<WriteServices | undefined>()
   const [error, setError] = useState<string | undefined>()
 
@@ -34,7 +42,7 @@ function Root(): React.JSX.Element {
       connection={{
         value: connection,
         onSave: (c) => { saveConnection(c); setServices(undefined); setConnection(loadConnection()) },
-        onForget: () => { clearConnection(); setServices(undefined); setConnection(undefined) },
+        onForget: () => { clearConnection(); markSettingsShared(); setServices(undefined); setConnection(undefined) },
       }}
     />
   )
