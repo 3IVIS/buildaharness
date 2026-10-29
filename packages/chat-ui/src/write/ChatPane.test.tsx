@@ -66,3 +66,12 @@ describe('ChatPane: the usual time', () => {
     expect(screen.queryByText('Usually about 20 s')).toBeNull()
   })
 })
+
+describe('the mode box hint', () => {
+  it('says that choosing another mode turns automatic detection off, and in a manual mode that it is off', () => {
+    const { rerender } = render(<ChatPane {...base} mode="auto" progress={null} />)
+    expect(screen.getByLabelText('When I ask for a change')).toHaveAttribute('title', expect.stringMatching(/Choosing any other mode turns this automatic detection off until you change it back to Auto/))
+    rerender(<ChatPane {...base} mode="answer" progress={null} />)
+    expect(screen.getByLabelText('When I ask for a change')).toHaveAttribute('title', expect.stringMatching(/Automatic detection is off.*Choose Auto/))
+  })
+})

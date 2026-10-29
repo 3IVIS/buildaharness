@@ -27,6 +27,14 @@ export interface WorkProgress {
 
 export type ChatMode = 'auto' | 'answer' | 'suggest' | 'edit'
 
+/** What hovering the mode box says: what the mode does, and that picking anything but Auto turns the automatic reading of messages off. */
+const MODE_HINT: Record<ChatMode, string> = {
+  auto: 'Auto: Aielia reads each message and decides whether to edit the text, suggest changes or just answer. Choosing any other mode turns this automatic detection off until you change it back to Auto.',
+  answer: 'Automatic detection is off: every message is only answered, and the text is never changed. Choose Auto to let Aielia decide from each message.',
+  suggest: 'Automatic detection is off: every request for a change becomes suggestions to accept or reject. Choose Auto to let Aielia decide from each message.',
+  edit: 'Automatic detection is off: every request for a change is made in the text, after saving a version first so it can be undone from History. Choose Auto to let Aielia decide from each message.',
+}
+
 /** What hovering a record line says. */
 export const RECORD_HINT = 'A record of an action in the interface, not a chat message'
 
@@ -124,8 +132,8 @@ export function ChatPane(p: Props): React.JSX.Element {
           placeholder="Message Aielia. Enter sends, Shift+Enter starts a new line."
         />
         <div className="write__composebar">
-          <label className="write__switch2" title="What happens when you ask for a change to the text. Auto reads your message and decides. Editing saves a version first, so it can be undone from History.">
-            <select aria-label="When I ask for a change" value={p.mode} onChange={(e) => p.onMode(e.target.value as ChatMode)}>
+          <label className="write__switch2" title={MODE_HINT[p.mode]}>
+            <select aria-label="When I ask for a change" title={MODE_HINT[p.mode]} value={p.mode} onChange={(e) => p.onMode(e.target.value as ChatMode)}>
               <option value="auto">Auto (from your message)</option>
               <option value="answer">Just answer</option>
               <option value="suggest">Suggest edits</option>
