@@ -108,6 +108,8 @@ export { resolveConfig, validateConfig, ConfigValidationError, DEFAULT_CONFIG, C
 export type { AssistantConfig, ConfigStore, ResolvedConfig } from './config.js'
 export { LAYER_SETTINGS, applyLayerSettings, effectiveState, withLayerChoice, sanitizeLayerChoices, formatLayerListing, findLayer, followersOf, unmetRequirements, layerWarnings, isToggleable, LayerSettingError } from './layer-settings.js'
 export type { LayerSetting, LayerGroup, LayerChoices, AppliedLayers } from './layer-settings.js'
+export { ADVISOR_LAYER_IDS, SURFACE_REGISTRY, KERNEL_PATHS, protectedLayers, isAdvisorLayerId, layerSurfaces, findSurface, isKernelPath, kernelOverlaps } from './harness-surfaces.js'
+export type { AdvisorLayerId, SurfaceSpec, SurfaceClass, SurfaceBeacon, SurfaceValueSchema } from './harness-surfaces.js'
 export { resolveOneLoopMode, normalizeOneLoopMode, DEFAULT_ONE_LOOP_MODE } from './one-loop-flag.js'
 export type { OneLoopMode } from './one-loop-flag.js'
 export { resolveAskMode, normalizeAskMode, DEFAULT_ASK_MODE } from './ask-mode-flag.js'
