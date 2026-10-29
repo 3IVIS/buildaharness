@@ -58,4 +58,10 @@ describe('summarizeSectionChange', () => {
     const bare = summarizeSectionChange(before, doc(['Intro', 'Hello.'], ['Why not others', ''], ['Latency', 'It is quick.'], ['Close', 'Bye.']))
     expect(describe_(bare)).toBe('• Outline: added “Why not others”.')
   })
+  it('says what was written under a section that was renamed in the same change', () => {
+    const base = doc(['Intro', 'Hello.'], ['Else', ''], ['Close', 'Bye.'])
+    const c = summarizeSectionChange(base, doc(['Intro', 'Hello.'], ['Existing solutions', 'Other tools write but do not check.'], ['Close', 'Bye.']))
+    expect(c.outline.renamed).toEqual([{ from: 'Else', to: 'Existing solutions' }])
+    expect(describe_(c).split('\n')).toEqual(['• Outline: renamed “Else” → “Existing solutions”.', '• Wrote: “Existing solutions”.'])
+  })
 })

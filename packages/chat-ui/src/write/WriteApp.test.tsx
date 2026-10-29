@@ -1676,7 +1676,7 @@ describe('repositories on a host with its own network call', () => {
     await userEvent.selectOptions(screen.getByLabelText('Adjust', { selector: 'select' }), 'action:verify_repo')
     await userEvent.type(screen.getByLabelText('Repository address'), 'github.com/o/r{Enter}')
     await waitFor(() => expect(calls.some((u) => u.includes('/git/trees/'))).toBe(true))
-    expect(pageFetch).not.toHaveBeenCalled()
+    expect((pageFetch.mock.calls as unknown[][]).filter((c) => c[0] !== '/__mirror')).toEqual([])
     vi.unstubAllGlobals()
   })
 })

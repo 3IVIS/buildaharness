@@ -146,6 +146,9 @@ export async function assembleWriteServices(parts: {
   }
 
   const meter = await createSpendMeter(store, { backend, model: chatModel })
+  // In the dev mirror, each counted call's usage as the client reported it (so a count that looks wrong can be traced to the backend).
+  const recordUsage = meter.record.bind(meter)
+  meter.record = async (usage, callType, model) => { mirrorPost('usage', 'call', { backend, callType, model, ...usage }); return recordUsage(usage, callType, model) }
   let cap = (await loadPermissions(store)).spendCapUsd
   // Every model call, the article steps and the chat alike, goes through the cap.
   let lastModelError: string | undefined

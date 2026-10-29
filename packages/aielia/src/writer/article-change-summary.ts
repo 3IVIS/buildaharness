@@ -88,6 +88,12 @@ export function summarizeSectionChange(before: string, after: string): SectionCh
   const addedWithText = added.filter((h) => !!bodyOf(a, h))
   const how: Record<string, SectionEdit> = {}
   for (const h of reworded) how[h] = kindOfEdit(bodyOf(b, h) ?? '', bodyOf(a, h) ?? '')
+  // A renamed section whose text changed too is a section reworded under its new name.
+  for (const r of renamed) {
+    const was = bodyOf(b, r.from) ?? ''
+    const now = bodyOf(a, r.to) ?? ''
+    if (was !== now) { reworded.push(r.to); how[r.to] = kindOfEdit(was, now) }
+  }
   return { outline: { added, removed, renamed, moved: moved.sort((x, y) => pos(x) - pos(y)) }, addedWithText, reworded: reworded.sort((x, y) => pos(x) - pos(y)), how }
 }
 
