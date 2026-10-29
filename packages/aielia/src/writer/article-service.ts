@@ -1,3 +1,4 @@
+import { summarizeSectionChange, type SectionChange } from './article-change-summary.js'
 import type { ILLMClient, TokenUsage } from '@buildaharness/runtime'
 import { TurnAbortedError, stoppableLlmClient } from '../turn-abort.js'
 import { dropLinksToMissingClaims, extractClaims, type ExtractionResult } from './article-claims.js'
@@ -775,7 +776,7 @@ export class ArticleService {
     if (applied.length === 0) return { status: 'nothing', savedAs, applied, skipped }
     await this.store.save(id, { ...b, markdown: md, meta })
     await this.updateText(id, md, { analyze: false })
-    return { status: 'applied', savedAs, applied, skipped }
+    return { status: 'applied', savedAs, applied, skipped, change: summarizeSectionChange(b.markdown, md) }
   }
 
   /**
@@ -783,7 +784,7 @@ export class ArticleService {
    * With `nameIt`, the article is also given the name the draft came with (for an article the chat has just made, which has no name of its own yet).
    * With `rewrite`, the model is given the current text and reworks all of it as the instruction says (a change too wide for edits that quote text).
    */
-  async draftFromChat(id: string, instruction: string, modelOverride?: string, nameIt = false, signal?: AbortSignal, onText?: (markdownSoFar: string) => void, onStage?: ChatStageListener, rewrite = false): Promise<{ status: 'drafted' | 'failed'; savedAs: string; name?: string; reason?: string }> {
+  async draftFromChat(id: string, instruction: string, modelOverride?: string, nameIt = false, signal?: AbortSignal, onText?: (markdownSoFar: string) => void, onStage?: ChatStageListener, rewrite = false): Promise<{ status: 'drafted' | 'failed'; savedAs: string; name?: string; reason?: string; change?: SectionChange }> {
     const savedAs = `Before a chat ${rewrite ? 'rewrite' : 'draft'}: ${clipLabel(instruction)}`
     await this.saveVersion(id, savedAs)
     onStage?.('asking')
@@ -795,7 +796,7 @@ export class ArticleService {
     onStage?.('applying')
     await this.updateText(id, r.markdown, { analyze: false })
     if (nameIt && r.name) await this.rename(id, r.name)
-    return { status: 'drafted', savedAs, name: nameIt && r.name ? r.name : undefined }
+    return { status: 'drafted', savedAs, name: nameIt && r.name ? r.name : undefined, ...(rewrite ? { change: summarizeSectionChange(b.markdown, r.markdown) } : {}) }
   }
 
   /** The same for the outline: saved first, then the headings are reworked (reworded, added, removed, moved) and each section's text follows its heading. */
@@ -813,7 +814,7 @@ export class ArticleService {
     const next = applyOutlineText(b.markdown, r.outline)
     if (next === b.markdown) return { status: 'nothing', savedAs, before, after: before }
     await this.updateText(id, next, { analyze: false })
-    return { status: 'applied', savedAs, before, after: outlineToText(next) }
+    return { status: 'applied', savedAs, before, after: outlineToText(next), change: summarizeSectionChange(b.markdown, next) }
   }
 
   /** Accepts a suggestion (optionally with the writer\'s own wording): the Markdown changes, then the usual update runs. */
@@ -1417,6 +1418,8 @@ export interface ChatEditResult {
   applied: { quote: string; replacement: string }[]
   /** Changes that no longer fitted the text when they were made. */
   skipped: number
+  /** What the edit did to the outline and to the wording, section by section. */
+  change?: SectionChange
 }
 
 export interface OutlineEditResult {
@@ -1425,6 +1428,7 @@ export interface OutlineEditResult {
   before?: string
   after?: string
   reason?: string
+  change?: SectionChange
 }
 
 const clipLabel = (instruction: string): string => {

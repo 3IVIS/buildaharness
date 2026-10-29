@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { SpendBadge } from './SpendBadge'
-import { type WorkKind, workPlan, litRange, modelFailureHint, modelLabel, githubRepoReader, parseGithubRepoAddress, type FolderReader, expandSelection, summarizeVerify, summarizeArticleSources, type VerifyReport, textPieces, collectIssues, parseLineRange, sourceKindForFile, computeReadiness, effectiveSourceStatus, issueCount, textUnitAt, autosaveStep, outlineOf, issuesInRange, unitOfSelection, shouldDeriveStyle, type ArticleBundle, type ChangeSummary, type DependencyKind, type IssueCategory, type Section, type WritePermissions, type JobOutcome, type ResultLine, type ChatStageListener, claimResultLine, recentResults, typicalMs, usuallyText } from '@buildaharness/aielia'
+import { type WorkKind, describeSectionChange, workPlan, litRange, modelFailureHint, modelLabel, githubRepoReader, parseGithubRepoAddress, type FolderReader, expandSelection, summarizeVerify, summarizeArticleSources, type VerifyReport, textPieces, collectIssues, parseLineRange, sourceKindForFile, computeReadiness, effectiveSourceStatus, issueCount, textUnitAt, autosaveStep, outlineOf, issuesInRange, unitOfSelection, shouldDeriveStyle, type ArticleBundle, type ChangeSummary, type DependencyKind, type IssueCategory, type Section, type WritePermissions, type JobOutcome, type ResultLine, type ChatStageListener, claimResultLine, recentResults, typicalMs, usuallyText } from '@buildaharness/aielia'
 import type { ChatAction } from './AdjustBar'
 import { ArticleSwitcher, type ArticleItem } from './ArticleSwitcher'
 import { readFileText } from './file-text'
@@ -1100,7 +1100,7 @@ function WriteAppBody({ services, connection, onDeleted, showPublish = false }: 
           setShowHistory(false)
           setVersionsTick((t) => t + 1)
           void refreshList()
-          setChat((c) => [...c, { id: ++lineId, from: 'aielia', text: (d.status === 'drafted' ? (rewriting ? 'Rewrote the article. Undo from History.' : `Wrote the first draft${d.name ? ` and named the article “${d.name}”` : ''}.`) : `I could not ${rewriting ? 'rewrite the article' : 'write the draft'}${d.reason ? `: ${d.reason}` : ''}. The article is unchanged.`) + tail + refNote, model: said }])
+          setChat((c) => [...c, { id: ++lineId, from: 'aielia', text: (d.status === 'drafted' ? (rewriting ? `Rewrote the article.${d.change && describeSectionChange(d.change) ? `\n${describeSectionChange(d.change)}` : ''}\nUndo from History.` : `Wrote the first draft${d.name ? ` and named the article “${d.name}”` : ''}.`) : `I could not ${rewriting ? 'rewrite the article' : 'write the draft'}${d.reason ? `: ${d.reason}` : ''}. The article is unchanged.`) + tail + refNote, model: said }])
           return
         }
         const r = outline ? await service.editOutlineFromChat(id, ask, said, step.signal, chatStage) : await service.editFromChat(id, ask, said, step.signal, chatStage)
@@ -1111,11 +1111,12 @@ function WriteAppBody({ services, connection, onDeleted, showPublish = false }: 
         void refreshList()
         // One short line: the article shows the change, and History holds the earlier version.
         const undo = 'Undo from History.'
+        const what = (c: Parameters<typeof describeSectionChange>[0] | undefined): string => { const t = c ? describeSectionChange(c) : ''; return t ? `\n${t}` : '' }
         let body: string
         if (r.status === 'failed') body = `I could not make that edit${'reason' in r && r.reason ? `: ${r.reason}` : ''}. The ${outline ? 'outline' : 'article'} is unchanged.`
         else if (r.status === 'nothing') body = 'Nothing to change for that.'
-        else if ('applied' in r) body = `Made ${r.applied.length} change${r.applied.length === 1 ? '' : 's'}${r.skipped > 0 ? ` (${r.skipped} did not fit)` : ''}. ${undo}`
-        else body = `Reworked the outline. ${undo}`
+        else if ('applied' in r) body = `Made ${r.applied.length} change${r.applied.length === 1 ? '' : 's'}${r.skipped > 0 ? ` (${r.skipped} did not fit)` : ''}.${what(r.change)}\n${undo}`
+        else body = `Reworked the outline.${what(r.change)}\n${undo}`
         setChat((c) => [...c, { id: ++lineId, from: 'aielia', text: body + tail + refNote, model: said }])
       } else if (wantEdits && activeId) {
         // Record what the writer said (comments, corrections) the same way a chat turn does, then turn the request into suggestions.

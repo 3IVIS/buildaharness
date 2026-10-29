@@ -603,6 +603,7 @@ describe('chat: model, check and adjust', () => {
     await userEvent.selectOptions(screen.getByLabelText('When I ask for a change'), 'edit')
     await userEvent.type(screen.getByLabelText('Message'), 'Make it stronger{Enter}')
     expect(await screen.findByText(/Made 1 change/)).toBeInTheDocument()
+    expect(await screen.findByText(/Wording changed in “Latency”/)).toBeInTheDocument() // which section, not only how many
     await waitFor(() => expect(box.value).toContain('It is very quick.')) // the edited text is on screen
     const b = await s.service.get(id)
     expect(b.markdown).toContain('It is very quick.')
