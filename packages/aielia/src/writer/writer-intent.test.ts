@@ -32,13 +32,13 @@ describe('readWriterIntent', () => {
       { message: 'like https://a.test/post', articleHasText: true },
       client(JSON.stringify({ intent: 'rewrite', links: ['https://a.test/post', ' https://a.test/post ', 'not a link', 'ftp://x.test/f', 7, 'http://b.test/x'] })),
     )
-    expect(r).toEqual({ intent: 'rewrite', links: ['https://a.test/post', 'http://b.test/x'] })
+    expect(r).toEqual({ intent: 'rewrite', links: ['https://a.test/post', 'http://b.test/x'], scope: 'text' })
   })
   it('keeps at most three addresses and none when the model gives none or the call fails', async () => {
     const many = JSON.stringify({ intent: 'edit', links: ['https://1.test/', 'https://2.test/', 'https://3.test/', 'https://4.test/'] })
     expect((await readWriterIntent({ message: 'm', articleHasText: true }, client(many))).links).toHaveLength(3)
     expect((await readWriterIntent({ message: 'm', articleHasText: true }, client('{"intent":"edit"}'))).links).toEqual([])
-    expect(await readWriterIntent({ message: 'm', articleHasText: true }, client(new Error('x')))).toEqual({ intent: 'answer', links: [] })
+    expect(await readWriterIntent({ message: 'm', articleHasText: true }, client(new Error('x')))).toEqual({ intent: 'answer', links: [], scope: 'text' })
   })
   it('gives the model the last reply, clipped, and whether the article has text', async () => {
     const seen: { content: string }[][] = []
@@ -46,5 +46,13 @@ describe('readWriterIntent', () => {
     const body = JSON.parse(seen[0][1].content)
     expect(body.articleHasText).toBe(false)
     expect(body.assistantLastReply).toHaveLength(1500)
+  })
+  it('says what an edit changes: the headings, the wording or both, and the wording when it is not clear', async () => {
+    const read = async (reply: unknown) => (await readWriterIntent({ message: 'm', articleHasText: true }, client(JSON.stringify(reply)))).scope
+    expect(await read({ intent: 'edit', links: [], scope: 'outline' })).toBe('outline')
+    expect(await read({ intent: 'edit', links: [], scope: 'both' })).toBe('both')
+    expect(await read({ intent: 'edit', links: [], scope: 'text' })).toBe('text')
+    expect(await read({ intent: 'edit', links: [] })).toBe('text')
+    expect(await read({ intent: 'edit', links: [], scope: 'everything' })).toBe('text')
   })
 })

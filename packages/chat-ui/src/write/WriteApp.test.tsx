@@ -656,6 +656,36 @@ describe('chat: model, check and adjust', () => {
     expect((screen.getByLabelText('Outline', { exact: true }) as HTMLTextAreaElement).value).toBe('# Post\n## Conclusion\n## Latency')
   })
 
+  it('in Auto, a request for wording is a text edit even with the Outline showing, and one for headings alone is an outline edit', async () => {
+    const wording = await services({ intent: { intent: 'edit', links: [], scope: 'text' }, capture: { articleId: null, ops: [] }, edits: { suggestions: [{ quote: 'It is quick.', replacement: 'It is quick, and here is why.', reason: 'more' }] }, outline: { outline: '# Post\n## Conclusion\n## Latency' } }, MD2)
+    const first = render(<WriteApp services={wording} />)
+    await waitForText()
+    await userEvent.click(screen.getByRole('button', { name: 'Outline view' }))
+    await userEvent.click(rail('Chat'))
+    await userEvent.type(screen.getByLabelText('Message'), 'say more about why it is quick{Enter}')
+    expect(await screen.findByText(/Made 1 change/)).toBeInTheDocument()
+    expect(screen.queryByText(/Reworked the outline/)).toBeNull()
+    first.unmount()
+    const headings = await services({ intent: { intent: 'edit', links: [], scope: 'outline' }, capture: { articleId: null, ops: [] }, outline: { outline: '# Post\n## Conclusion\n## Latency' } }, MD2)
+    render(<WriteApp services={headings} />)
+    await waitForText()
+    await userEvent.click(rail('Chat'))
+    await userEvent.type(screen.getByLabelText('Message'), 'conclusion first{Enter}')
+    expect(await screen.findByText(/Reworked the outline/)).toBeInTheDocument()
+  })
+  it('in Auto, a request for both a new section and what it says changes the outline and then the text, and the reply says so', async () => {
+    const s = await services({ intent: { intent: 'edit', links: [], scope: 'both' }, capture: { articleId: null, ops: [] }, outline: { outline: '# Post\n## Latency\n## Why not others\n## Conclusion' }, edits: { suggestions: [{ quote: '## Why not others', replacement: '## Why not others\n\nOther tools fall short.', reason: 'content' }] } }, MD2)
+    const id = (await s.service.list())[0].id
+    render(<WriteApp services={s} />)
+    await waitForText()
+    await userEvent.click(rail('Chat'))
+    await userEvent.type(screen.getByLabelText('Message'), 'add a section on why others fall short, and write it{Enter}')
+    expect(await screen.findByText(/Reworked the outline and made 1 text change/)).toBeInTheDocument()
+    const b = await s.service.get(id)
+    expect(b.markdown).toContain('## Why not others\n\nOther tools fall short.')
+    expect(await screen.findByText(/with text/)).toBeInTheDocument()
+  })
+
   it('the conversation is still there after the page is opened again', async () => {
     const s = await services({}, MD)
     const first = render(<WriteApp services={s} />)

@@ -6,6 +6,8 @@ import { parseSections } from './article-sections.js'
  */
 export interface SectionChange {
   outline: { added: string[]; removed: string[]; renamed: { from: string; to: string }[]; moved: string[] }
+  /** The added sections that came with text of their own. */
+  addedWithText: string[]
   /** Sections that kept their heading and whose text changed. */
   reworded: string[]
   /** What was done to the text of each of those, judged by how much of the old wording is left. */
@@ -83,9 +85,10 @@ export function summarizeSectionChange(before: string, after: string): SectionCh
   const reworded = [...shared].filter((h) => bodyOf(b, h) !== bodyOf(a, h))
   // Document order, as the writer reads it.
   const pos = (h: string): number => a.findIndex((p) => p.heading === h)
+  const addedWithText = added.filter((h) => !!bodyOf(a, h))
   const how: Record<string, SectionEdit> = {}
   for (const h of reworded) how[h] = kindOfEdit(bodyOf(b, h) ?? '', bodyOf(a, h) ?? '')
-  return { outline: { added, removed, renamed, moved: moved.sort((x, y) => pos(x) - pos(y)) }, reworded: reworded.sort((x, y) => pos(x) - pos(y)), how }
+  return { outline: { added, removed, renamed, moved: moved.sort((x, y) => pos(x) - pos(y)) }, addedWithText, reworded: reworded.sort((x, y) => pos(x) - pos(y)), how }
 }
 
 const SHOWN = 4
@@ -100,7 +103,7 @@ const list = (names: string[]): string => `${names.slice(0, SHOWN).map(name).joi
 export function describeSectionChange(c: SectionChange): string {
   const o = c.outline
   const outline = [
-    o.added.length > 0 ? `added ${list(o.added)}` : '',
+    o.added.length > 0 ? `added ${list(o.added)}${c.addedWithText.length > 0 ? (c.addedWithText.length === o.added.length ? ', with text' : `, ${c.addedWithText.length} with text`) : ''}` : '',
     o.removed.length > 0 ? `removed ${list(o.removed)}` : '',
     o.renamed.length > 0 ? `renamed ${o.renamed.slice(0, SHOWN).map((r) => `${name(r.from)} → ${name(r.to)}`).join(', ')}${o.renamed.length > SHOWN ? ` and ${o.renamed.length - SHOWN} more` : ''}` : '',
     o.moved.length > 0 ? `moved ${list(o.moved)}` : '',

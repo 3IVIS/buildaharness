@@ -10,7 +10,7 @@ describe('summarizeSectionChange', () => {
 
   it('finds nothing in an unchanged article', () => {
     const c = summarizeSectionChange(before, before)
-    expect(c).toEqual({ outline: { added: [], removed: [], renamed: [], moved: [] }, reworded: [], how: {} })
+    expect(c).toEqual({ outline: { added: [], removed: [], renamed: [], moved: [] }, addedWithText: [], reworded: [], how: {} })
     expect(describe_(c)).toBe('')
   })
   it('names the sections whose wording changed, and leaves the outline alone', () => {
@@ -45,10 +45,17 @@ describe('summarizeSectionChange', () => {
     const text = describe_(summarizeSectionChange(before, many))
     expect(text).toContain('• Outline: added “A”, “B”, “C”, “D” and 2 more')
     const both = describe_(summarizeSectionChange(before, doc(['Intro', 'Hello there, friend.'], ['Story', 'New.'], ['Latency', 'It is quick.'], ['Close', 'Bye.'])))
-    expect(both.split('\n')).toEqual(['• Outline: added “Story”.', '• Added to: “Intro”.'])
+    expect(both.split('\n')).toEqual(['• Outline: added “Story”, with text.', '• Added to: “Intro”.'])
   })
   it('counts text before the first heading as the opening text', () => {
     const c = summarizeSectionChange('Intro text.\n\n## A\n\nx\n', 'New intro.\n\n## A\n\nx\n')
     expect(c.reworded).toEqual(['the opening text'])
+  })
+  it('says when an added section came with text', () => {
+    const c = summarizeSectionChange(before, doc(['Intro', 'Hello.'], ['Why not others', 'Other tools fall short.'], ['Latency', 'It is quick.'], ['Close', 'Bye.']))
+    expect(c.addedWithText).toEqual(['Why not others'])
+    expect(describe_(c)).toBe('• Outline: added “Why not others”, with text.')
+    const bare = summarizeSectionChange(before, doc(['Intro', 'Hello.'], ['Why not others', ''], ['Latency', 'It is quick.'], ['Close', 'Bye.']))
+    expect(describe_(bare)).toBe('• Outline: added “Why not others”.')
   })
 })

@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { SpendBadge } from './SpendBadge'
-import { type WorkKind, NAME_CLOSE, NAME_OPEN, describeSectionChange, workPlan, litRange, modelFailureHint, modelLabel, githubRepoReader, parseGithubRepoAddress, type FolderReader, expandSelection, summarizeVerify, summarizeArticleSources, type VerifyReport, textPieces, collectIssues, parseLineRange, sourceKindForFile, computeReadiness, effectiveSourceStatus, issueCount, textUnitAt, autosaveStep, outlineOf, issuesInRange, unitOfSelection, shouldDeriveStyle, type ArticleBundle, type ChangeSummary, type DependencyKind, type IssueCategory, type Section, type WritePermissions, type JobOutcome, type ResultLine, type ChatStageListener, type ChatTurn, claimResultLine, recentResults, typicalMs, usuallyText } from '@buildaharness/aielia'
+import { type WorkKind, NAME_CLOSE, NAME_OPEN, describeSectionChange, summarizeSectionChange, workPlan, litRange, modelFailureHint, modelLabel, githubRepoReader, parseGithubRepoAddress, type FolderReader, expandSelection, summarizeVerify, summarizeArticleSources, type VerifyReport, textPieces, collectIssues, parseLineRange, sourceKindForFile, computeReadiness, effectiveSourceStatus, issueCount, textUnitAt, autosaveStep, outlineOf, issuesInRange, unitOfSelection, shouldDeriveStyle, type ArticleBundle, type ChangeSummary, type DependencyKind, type IssueCategory, type Section, type WritePermissions, type JobOutcome, type ResultLine, type ChatStageListener, type ChatTurn, claimResultLine, recentResults, typicalMs, usuallyText } from '@buildaharness/aielia'
 import type { ChatAction } from './AdjustBar'
 import { ArticleSwitcher, type ArticleItem } from './ArticleSwitcher'
 import { readFileText } from './file-text'
@@ -1034,15 +1034,18 @@ function WriteAppBody({ services, connection, onDeleted, showPublish = false }: 
     // Pages the message points to; an answer reads them with its own tools, a change gets their text in its instruction.
     let links: string[] = []
     const asked = mode ?? effectiveMode
+    // What the change is to: the headings, the wording or both. In Auto the model says so from the message; otherwise it is the view the writer has open.
+    let scope: 'outline' | 'text' | 'both' = view === 'outline' ? 'outline' : 'text'
     // A change is asked for in the middle of a talk ("add the rest of those"), so the call that makes it is given the talk.
     const history: ChatTurn[] = chat.filter((l) => !l.record).map((l) => ({ from: l.from, text: l.text.split(NAME_OPEN).join('').split(NAME_CLOSE).join('') }))
     const lastReply = [...chat].reverse().find((l) => l.from === 'aielia' && !l.record)?.text?.split(NAME_OPEN).join('').split(NAME_CLOSE).join('')
     if (asked === 'auto') {
       // The model reads the message (and what Aielia last said) to tell an edit from a question; a failure counts as a question.
-      let read: { intent: 'edit' | 'rewrite' | 'suggest' | 'answer'; links: string[] } | undefined
+      let read: { intent: 'edit' | 'rewrite' | 'suggest' | 'answer'; links: string[]; scope: 'outline' | 'text' | 'both' } | undefined
       await chatRun('Reading your message', async (step) => { read = await services.intent(text, { articleHasText: !!(activeId && draft.trim()), lastReply }, { signal: step.signal }) }, 'other', false)
       if (!read) return
       rewriting = read.intent === 'rewrite'
+      scope = read.scope
       how = read.intent === 'rewrite' ? 'edit' : read.intent
       links = how === 'answer' ? [] : read.links
     } else how = asked
@@ -1057,7 +1060,7 @@ function WriteAppBody({ services, connection, onDeleted, showPublish = false }: 
         if (refs.failed.length > 0) refNote = `\n\nI could not read ${refs.failed.map((f) => `${f.url} (${f.reason})`).join('; ')}, so the change does not follow ${refs.failed.length === 1 ? 'it' : 'them'}.`
       }, 'other', false)
     }
-    const drafting = how === 'edit' && view !== 'outline' && (!activeId || !draft.trim() || rewriting)
+    const drafting = how === 'edit' && scope !== 'outline' && (!activeId || !draft.trim() || rewriting)
     const kind: WorkKind = how === 'edit' ? (drafting ? 'draft' : 'edit') : wantEdits ? 'suggest' : 'answer'
     await chatRun(how === 'edit' ? 'Editing' : wantEdits ? 'Asking for edits' : 'Thinking', async (step) => {
      // The words of a plain answer appear as they are written; an edit or a suggestion shows its steps instead, since the reply is not what is shown.
@@ -1078,7 +1081,7 @@ function WriteAppBody({ services, connection, onDeleted, showPublish = false }: 
       step('', 0)
       if (activeId) await service.updateText(activeId, draft, { analyze: false })
       step('', 1)
-      if (how === 'edit' && (activeId || view !== 'outline')) {
+      if (how === 'edit' && (activeId || scope !== 'outline')) {
         // The writer's words are recorded as in any chat turn. Then the version is saved, the edit is made, and the edited article is what is shown.
         // With no article open, the chat makes one first; it is named from the draft below.
         const fresh = !activeId
@@ -1092,7 +1095,7 @@ function WriteAppBody({ services, connection, onDeleted, showPublish = false }: 
         step('', 2)
         // After the version is saved, the service says when it is asking the model and when it is applying the result.
         const chatStage: ChatStageListener = (stage, detail) => step.quiet(detail ?? '', stage === 'asking' ? 3 : 4)
-        const outline = view === 'outline'
+        const outline = scope === 'outline'
         if (!outline && (fresh || !draft.trim() || rewriting)) {
           // An empty article has no text to quote, so the chat writes the first draft instead of editing.
           // The draft is typed into the article as the model writes it; if it ends any other way than a finished draft, the stored text comes back below.
@@ -1107,7 +1110,11 @@ function WriteAppBody({ services, connection, onDeleted, showPublish = false }: 
           addLine({ from: 'aielia', text: (d.status === 'drafted' ? (rewriting ? `Rewrote the article.${d.change && describeSectionChange(d.change) ? `\n${describeSectionChange(d.change)}` : ''}\nUndo from History.` : `Wrote the first draft${d.name ? ` and named the article “${d.name}”` : ''}.`) : `I could not ${rewriting ? 'rewrite the article' : 'write the draft'}${d.reason ? `: ${d.reason}` : ''}. The article is unchanged.`) + tail + refNote, model: said })
           return
         }
-        const r = outline ? await service.editOutlineFromChat(id, ask, said, step.signal, chatStage, history) : await service.editFromChat(id, ask, said, step.signal, chatStage, history)
+        // A request for both is done in two steps: the headings first, then the wording on the article as it now stands.
+        const startText = scope === 'both' ? (await service.get(id)).markdown : ''
+        const r = scope === 'text' ? await service.editFromChat(id, ask, said, step.signal, chatStage, history) : await service.editOutlineFromChat(id, ask, said, step.signal, chatStage, history)
+        const second = scope === 'both' && r.status !== 'failed' ? await service.editFromChat(id, ask, said, step.signal, chatStage, history) : undefined
+        const both = second ? summarizeSectionChange(startText, (await service.get(id)).markdown) : undefined
         await reload(id)
         setViewing(null)
         setShowHistory(false)
@@ -1117,7 +1124,15 @@ function WriteAppBody({ services, connection, onDeleted, showPublish = false }: 
         const undo = 'Undo from History.'
         const what = (c: Parameters<typeof describeSectionChange>[0] | undefined): string => { const t = c ? describeSectionChange(c) : ''; return t ? `\n${t}` : '' }
         let body: string
-        if (r.status === 'failed') body = `I could not make that edit${'reason' in r && r.reason ? `: ${r.reason}` : ''}. The ${outline ? 'outline' : 'article'} is unchanged.`
+        if (second) {
+          const wrote = second.status === 'applied' ? second.applied.length : 0
+          const outlineDone = r.status === 'applied'
+          const head = outlineDone && wrote > 0 ? `Reworked the outline and made ${wrote} text change${wrote === 1 ? '' : 's'}.`
+            : outlineDone ? (second.status === 'failed' ? 'Reworked the outline, but I could not make the text changes.' : 'Reworked the outline; the text needed no change.')
+            : wrote > 0 ? `Made ${wrote} text change${wrote === 1 ? '' : 's'}; the outline needed no change.`
+            : second.status === 'failed' ? 'I could not make that edit. The article is unchanged.' : ''
+          body = head ? `${head}${what(both)}\n${undo}` : 'Nothing to change for that.'
+        } else if (r.status === 'failed') body = `I could not make that edit${'reason' in r && r.reason ? `: ${r.reason}` : ''}. The ${outline ? 'outline' : 'article'} is unchanged.`
         else if (r.status === 'nothing') body = 'Nothing to change for that.'
         else if ('applied' in r) body = `Made ${r.applied.length} change${r.applied.length === 1 ? '' : 's'}${r.skipped > 0 ? ` (${r.skipped} did not fit)` : ''}.${what(r.change)}\n${undo}`
         else body = `Reworked the outline.${what(r.change)}\n${undo}`
