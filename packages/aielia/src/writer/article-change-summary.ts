@@ -8,7 +8,11 @@ export interface SectionChange {
   outline: { added: string[]; removed: string[]; renamed: { from: string; to: string }[]; moved: string[] }
   /** Sections that kept their heading and whose text changed. */
   reworded: string[]
+  /** What was done to the text of each of those, judged by how much of the old wording is left. */
+  how: Record<string, SectionEdit>
 }
+
+export type SectionEdit = 'wrote' | 'cleared' | 'rewrote' | 'added to' | 'shortened' | 'reworded'
 
 interface Part { heading: string; body: string }
 
@@ -16,6 +20,30 @@ const LEAD = 'the opening text'
 
 function parts(markdown: string): Part[] {
   return parseSections(markdown).map((s) => ({ heading: s.level === 0 ? LEAD : s.heading, body: markdown.slice(s.start, s.end).replace(/^.*\n?/, (l) => (s.level === 0 ? l : '')).replace(/\s+/g, ' ').trim() }))
+}
+
+/**
+ * What was done to a section's text, from how much of its old words are still in it and how much longer or shorter it got: text where there was
+ * none was written, nearly nothing left of the old is a rewrite, the old kept and more around it is an addition, and so on.
+ */
+function kindOfEdit(before: string, after: string): SectionEdit {
+  if (!before) return 'wrote'
+  if (!after) return 'cleared'
+  // A word is its letters and digits: a comma or full stop after it does not make it another word.
+  const isWordChar = (c: string): boolean => c.toLowerCase() !== c.toUpperCase() || (c >= '0' && c <= '9')
+  const wordsOf = (text: string): string[] => text.toLowerCase().split(' ').map((w) => { let a = 0; let z = w.length; while (a < z && !isWordChar(w[a])) a++; while (z > a && !isWordChar(w[z - 1])) z--; return w.slice(a, z) }).filter(Boolean)
+  const count = (text: string): Map<string, number> => { const m = new Map<string, number>(); for (const w of wordsOf(text)) m.set(w, (m.get(w) ?? 0) + 1); return m }
+  const was = count(before)
+  const now = count(after)
+  let kept = 0
+  for (const [w, n] of was) kept += Math.min(n, now.get(w) ?? 0)
+  const oldWords = Math.max(1, wordsOf(before).length)
+  const newWords = wordsOf(after).length
+  const left = kept / oldWords
+  if (left < 0.4) return 'rewrote'
+  if (left >= 0.8 && newWords >= oldWords * 1.3) return 'added to'
+  if (newWords <= oldWords * 0.75) return 'shortened'
+  return 'reworded'
 }
 
 /** The longest run of `a` that appears in the same order in `b` (headings only, by name). */
@@ -55,7 +83,9 @@ export function summarizeSectionChange(before: string, after: string): SectionCh
   const reworded = [...shared].filter((h) => bodyOf(b, h) !== bodyOf(a, h))
   // Document order, as the writer reads it.
   const pos = (h: string): number => a.findIndex((p) => p.heading === h)
-  return { outline: { added, removed, renamed, moved: moved.sort((x, y) => pos(x) - pos(y)) }, reworded: reworded.sort((x, y) => pos(x) - pos(y)) }
+  const how: Record<string, SectionEdit> = {}
+  for (const h of reworded) how[h] = kindOfEdit(bodyOf(b, h) ?? '', bodyOf(a, h) ?? '')
+  return { outline: { added, removed, renamed, moved: moved.sort((x, y) => pos(x) - pos(y)) }, reworded: reworded.sort((x, y) => pos(x) - pos(y)), how }
 }
 
 const SHOWN = 4
@@ -77,6 +107,11 @@ export function describeSectionChange(c: SectionChange): string {
   ].filter(Boolean)
   const lines: string[] = []
   if (outline.length > 0) lines.push(`• Outline: ${outline.join('; ')}.`)
-  if (c.reworded.length > 0) lines.push(`• Reworded: ${list(c.reworded)}.`)
+  // One line for each kind of edit, in the order the sections come, so "rewrote" is never said of a section that only had a word changed.
+  const kinds: SectionEdit[] = ['rewrote', 'wrote', 'added to', 'shortened', 'reworded', 'cleared']
+  for (const k of kinds) {
+    const names = c.reworded.filter((h) => (c.how[h] ?? 'reworded') === k)
+    if (names.length > 0) lines.push(`• ${k[0].toUpperCase()}${k.slice(1)}: ${list(names)}.`)
+  }
   return lines.join('\n')
 }

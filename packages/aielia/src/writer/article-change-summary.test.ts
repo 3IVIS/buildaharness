@@ -10,14 +10,22 @@ describe('summarizeSectionChange', () => {
 
   it('finds nothing in an unchanged article', () => {
     const c = summarizeSectionChange(before, before)
-    expect(c).toEqual({ outline: { added: [], removed: [], renamed: [], moved: [] }, reworded: [] })
+    expect(c).toEqual({ outline: { added: [], removed: [], renamed: [], moved: [] }, reworded: [], how: {} })
     expect(describe_(c)).toBe('')
   })
   it('names the sections whose wording changed, and leaves the outline alone', () => {
-    const c = summarizeSectionChange(before, doc(['Intro', 'Hello there.'], ['Latency', 'It is quick.'], ['Close', 'Goodbye.']))
+    const base = doc(['Intro', 'The p99 latency was measured over one week of traffic.'], ['Latency', 'It is quick.'], ['Close', 'The result held across every region we tried.'])
+    const c = summarizeSectionChange(base, doc(['Intro', 'The p99 latency was measured across one week of traffic.'], ['Latency', 'It is quick.'], ['Close', 'The result held across every region we tested.']))
     expect(c.outline).toEqual({ added: [], removed: [], renamed: [], moved: [] })
     expect(c.reworded).toEqual(['Intro', 'Close'])
     expect(describe_(c)).toBe('• Reworded: “Intro”, “Close”.')
+  })
+  it('says what was done to a section: rewrote, wrote, added to, shortened', () => {
+    const base = doc(['A', 'A brief description of what it is and the core problem it solves.'], ['B', ''], ['C', 'Short note on the result of the test run.'], ['D', 'One two three four five six seven eight nine ten eleven twelve.'])
+    const next = doc(['A', 'Who does not love free stuff? We wrote in ChatGPT and pasted into Word, and it worked until it did not.'], ['B', 'We measured it twice.'], ['C', 'Short note on the result of the test run. It held in every region we tried, including the slowest.'], ['D', 'One two three four five six seven.'])
+    const c = summarizeSectionChange(base, next)
+    expect(c.how).toEqual({ A: 'rewrote', B: 'wrote', C: 'added to', D: 'shortened' })
+    expect(describe_(c).split('\n')).toEqual(['• Rewrote: “A”.', '• Wrote: “B”.', '• Added to: “C”.', '• Shortened: “D”.'])
   })
   it('finds added and removed sections', () => {
     const c = summarizeSectionChange(before, doc(['Intro', 'Hello.'], ['Story', 'New.'], ['Latency', 'It is quick.'], ['Close', 'Bye.']))
@@ -36,8 +44,8 @@ describe('summarizeSectionChange', () => {
     const many = doc(['A', '1'], ['B', '1'], ['C', '1'], ['D', '1'], ['E', '1'], ['F', '1'])
     const text = describe_(summarizeSectionChange(before, many))
     expect(text).toContain('• Outline: added “A”, “B”, “C”, “D” and 2 more')
-    const both = describe_(summarizeSectionChange(before, doc(['Intro', 'Changed.'], ['Story', 'New.'], ['Latency', 'It is quick.'], ['Close', 'Bye.'])))
-    expect(both.split('\n')).toEqual(['• Outline: added “Story”.', '• Reworded: “Intro”.'])
+    const both = describe_(summarizeSectionChange(before, doc(['Intro', 'Hello there, friend.'], ['Story', 'New.'], ['Latency', 'It is quick.'], ['Close', 'Bye.'])))
+    expect(both.split('\n')).toEqual(['• Outline: added “Story”.', '• Added to: “Intro”.'])
   })
   it('counts text before the first heading as the opening text', () => {
     const c = summarizeSectionChange('Intro text.\n\n## A\n\nx\n', 'New intro.\n\n## A\n\nx\n')
