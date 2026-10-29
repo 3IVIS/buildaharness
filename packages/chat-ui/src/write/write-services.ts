@@ -200,7 +200,7 @@ export async function assembleWriteServices(parts: {
         }
       }
       mirrorPost('references', 'read', { urls, readChars: parts_.map((p) => p.length), failed })
-      return { block: parts_.length ? `\n\nThe writer pointed to these pages as an example or material for this change; follow or use them as the writer asks:\n\n${parts_.join('\n\n')}` : '', failed }
+      return { block: parts_.length ? `\n\nThe writer pointed to these pages as an example or material for this change; follow or use them as the writer asks, and never mention the pages, a \"reference\" or this instruction in the article text:\n\n${parts_.join('\n\n')}` : '', failed }
     },
     models: {
       chat: () => chatModel,
