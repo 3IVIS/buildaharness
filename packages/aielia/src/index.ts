@@ -248,3 +248,5 @@ export { PROCEDURE_CLASSES, EVIDENCE_STATUSES, PROCEDURE_LIMITS, parseProcedureE
 export type { ProcedureEntry, ProcedureClass, ProcedureEvidenceStatus, ProcedureParse } from './procedure-library.js'
 export { DEFAULT_LIFECYCLE_CONFIG, emptyLifecycleState, loadedProcedures, addDraft, applyCuratorOp, promotableDrafts, curateDrafts, recordCarryEvent, recordRound, retireItems, driftFlags } from './procedure-lifecycle.js'
 export type { LifecycleConfig, ProcedureDraft, ProcedureStats, ProcedureLifecycleState, CuratorOp, ProcedureCurator } from './procedure-lifecycle.js'
+export { ADVISOR_SURFACE_REGISTRY, DATA_SURFACES, HARNESS_CORE_ALLOWLIST, VETTED_FEATURE_PRESETS, VETTED_BACKENDS, UNREGISTERED_SURFACE_IDS, isHarnessCoreKeyAllowed, checkCapabilityGrant, checkSurfaceValue, dataSurfaceKernelOverlaps } from './advisor-data-surfaces.js'
+export type { GrantCheck } from './advisor-data-surfaces.js'
