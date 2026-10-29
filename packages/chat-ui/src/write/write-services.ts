@@ -281,7 +281,26 @@ export function createWriteServicesFor(config: AssistantConfig, platform: WriteP
 
 /** Articles kept in the webview's or browser's IndexedDB. Both hosts start with this. */
 export function indexedDbArticleStore(): ArticleStore {
-  return createMemoryAdapterArticleStore(new IndexedDBAdapter({ namespace: 'aielia-write' }))
+  const store = createMemoryAdapterArticleStore(new IndexedDBAdapter({ namespace: 'aielia-write' }))
+  return import.meta.env.DEV ? mirrorStore(store) : store
+}
+
+/** Dev server only: copies every save and removal to vite.write.config.ts's /__mirror so a watcher can read the article. */
+function mirrorStore(store: ArticleStore): ArticleStore {
+  const post = (kind: string, id: string, bundle?: unknown) => {
+    void fetch('/__mirror', { method: 'POST', body: JSON.stringify({ kind, id, bundle }) }).catch(() => undefined)
+  }
+  return {
+    ...store,
+    async save(id, bundle) {
+      await store.save(id, bundle)
+      post('save', id, bundle)
+    },
+    async remove(id) {
+      await store.remove(id)
+      post('remove', id)
+    },
+  }
 }
 
 /** A plain browser tab: IndexedDB storage, the visitor's own key, no file or shell tools. */
