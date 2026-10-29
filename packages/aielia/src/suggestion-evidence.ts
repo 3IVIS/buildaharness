@@ -32,7 +32,25 @@ export interface EvidenceImprovement {
   round?: number
 }
 
+/** The four measures every report carries (D24). `correctionRate` is null only where it is not available. */
+export interface EvidenceMeasures {
+  gradedPassRate: number
+  costPerTask: number
+  safetyProbePassRate: number
+  correctionRate: number | null
+}
+
+/** Result of the arm with all adopted state disabled, next to the candidate's. */
+export interface EvidenceAdoptedOff {
+  baselineMean: number
+  candidateMean: number
+}
+
 export interface SuggestionEvidence {
+  measures?: EvidenceMeasures
+  adoptedOff?: EvidenceAdoptedOff
+  /** Share of fixed tasks on which the candidate's beacon fired (fix and break ledger). */
+  fixedBeaconShare?: number
   selection?: EvidenceSelection
   activation?: EvidenceActivation
   attribution?: EvidenceAttribution
@@ -64,6 +82,9 @@ export function describeEvidence(e: SuggestionEvidence | undefined): EvidenceLin
     ['activation', 'loadRate', a?.loadRate], ['activation', 'reachRate', a?.reachRate], ['activation', 'carryRate', a?.carryRate],
     ['attribution', 'repeatVariation', t?.repeatVariation], ['attribution', 'incumbentCost', t?.incumbentCost], ['attribution', 'candidateCost', t?.candidateCost], ['attribution', 'versions', t?.versions],
     ['improvement', 'taskDistance', i?.taskDistance], ['improvement', 'baseline', i?.baseline], ['improvement', 'round', i?.round],
+    ['measures', 'gradedPassRate', e?.measures?.gradedPassRate], ['measures', 'costPerTask', e?.measures?.costPerTask],
+    ['measures', 'safetyProbePassRate', e?.measures?.safetyProbePassRate], ['measures', 'correctionRate', e?.measures ? (e.measures.correctionRate ?? 'unavailable') : undefined],
+    ['adoptedOff', 'result', e?.adoptedOff], ['ledger', 'fixedBeaconShare', e?.fixedBeaconShare],
     ['tasks', 'fixed', e?.fixed], ['tasks', 'broken', e?.broken],
   ]
   return rows.map(([section, field, v]) => ({ section, field, value: show(v) }))
