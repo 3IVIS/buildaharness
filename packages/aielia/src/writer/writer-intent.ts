@@ -19,7 +19,7 @@ const MAX_LINKS = 3
 const INTENT_SCHEMA = {
   type: 'object',
   properties: { intent: { type: 'string', enum: ['edit', 'rewrite', 'suggest', 'answer'] }, links: { type: 'array', items: { type: 'string' } } },
-  required: ['intent'],
+  required: ['intent', 'links'],
 }
 
 const SYSTEM_PROMPT =

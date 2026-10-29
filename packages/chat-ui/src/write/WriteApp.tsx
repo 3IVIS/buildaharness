@@ -1045,6 +1045,14 @@ function WriteAppBody({ services, connection, onDeleted, showPublish = false }: 
     const wantEdits = how === 'suggest'
     let ask = text
     let refNote = ''
+    if (links.length > 0) {
+      // Its own status line, so the writer sees the pages being read and not only the change that follows.
+      await chatRun('Reading the pages you pointed to', async () => {
+        const refs = await services.readReferences(links)
+        ask = text + refs.block
+        if (refs.failed.length > 0) refNote = `\n\nI could not read ${refs.failed.map((f) => `${f.url} (${f.reason})`).join('; ')}, so the change does not follow ${refs.failed.length === 1 ? 'it' : 'them'}.`
+      })
+    }
     const drafting = how === 'edit' && view !== 'outline' && (!activeId || !draft.trim() || rewriting)
     const kind: WorkKind = how === 'edit' ? (drafting ? 'draft' : 'edit') : wantEdits ? 'suggest' : 'answer'
     await chatRun(how === 'edit' ? 'Editing' : wantEdits ? 'Asking for edits' : 'Thinking', async (step) => {
@@ -1063,12 +1071,6 @@ function WriteAppBody({ services, connection, onDeleted, showPublish = false }: 
        return { model: r.model, tail: r.recorded ? '' : '\n\nAny comments or corrections in your message were not added to the article\'s notes.' }
      }
      try {
-      if (links.length > 0) {
-        step('Reading the pages you pointed to', 0)
-        const refs = await services.readReferences(links)
-        ask = text + refs.block
-        if (refs.failed.length > 0) refNote = `\n\nI could not read ${refs.failed.map((f) => `${f.url} (${f.reason})`).join('; ')}, so the change does not follow ${refs.failed.length === 1 ? 'it' : 'them'}.`
-      }
       step('', 0)
       if (activeId) await service.updateText(activeId, draft, { analyze: false })
       step('', 1)

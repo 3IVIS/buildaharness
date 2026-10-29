@@ -181,7 +181,11 @@ export async function assembleWriteServices(parts: {
       if (outcome === 'stopped') return { model: used, recorded: false, stopped: true }
       return { model: used, recorded: outcome.status === 'captured' || outcome.status === 'off' }
     },
-    intent: (message, context, live) => readWriterIntent({ message, ...context }, llm, autoModel, undefined, live?.signal),
+    async intent(message, context, live) {
+      const read = await readWriterIntent({ message, ...context }, llm, autoModel, undefined, live?.signal)
+      mirrorPost('intent', 'read', { message: message.slice(0, 200), ...read })
+      return read
+    },
     async readReferences(urls) {
       const failed: { url: string; reason: string }[] = []
       const parts_: string[] = []
