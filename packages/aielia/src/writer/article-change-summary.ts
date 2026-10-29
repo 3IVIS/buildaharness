@@ -28,6 +28,8 @@ function parts(markdown: string): Part[] {
  * What was done to a section's text, from how much of its old words are still in it and how much longer or shorter it got: text where there was
  * none was written, nearly nothing left of the old is a rewrite, the old kept and more around it is an addition, and so on.
  */
+const PLACEHOLDER_WORDS = 20
+
 function kindOfEdit(before: string, after: string): SectionEdit {
   if (!before) return 'wrote'
   if (!after) return 'cleared'
@@ -42,6 +44,8 @@ function kindOfEdit(before: string, after: string): SectionEdit {
   const oldWords = Math.max(1, wordsOf(before).length)
   const newWords = wordsOf(after).length
   const left = kept / oldWords
+  // A line or two of placeholder that grew into real text is text written where there was a prompt, even if a few small words are shared.
+  if (oldWords <= PLACEHOLDER_WORDS && newWords >= oldWords * 4 && left < 0.8) return 'wrote'
   if (left < 0.4) return 'rewrote'
   if (left >= 0.8 && newWords >= oldWords * 1.3) return 'added to'
   if (newWords <= oldWords * 0.75) return 'shortened'

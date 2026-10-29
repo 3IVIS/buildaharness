@@ -64,4 +64,9 @@ describe('summarizeSectionChange', () => {
     expect(c.outline.renamed).toEqual([{ from: 'Else', to: 'Existing solutions' }])
     expect(describe_(c).split('\n')).toEqual(['• Outline: renamed “Else” → “Existing solutions”.', '• Wrote: “Existing solutions”.'])
   })
+  it('reads a short placeholder replaced by real text as text written, not reworded', () => {
+    const base = doc(['A', 'The motivation or story behind creating the tool.'], ['B', 'Bye.'])
+    const next = doc(['A', 'The paste-and-pray workflow hid a bigger problem. Every time we patched a paragraph by hand we quietly trusted whatever the model had written, because none of the tools we tried kept a source behind a claim or told us when that source changed.'], ['B', 'Bye.'])
+    expect(summarizeSectionChange(base, next).how).toEqual({ A: 'wrote' })
+  })
 })
