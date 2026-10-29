@@ -64,6 +64,7 @@ import { planQuestionRoutingMode, renderPlanStateBlock, renderStuckPlanNudge, sh
 import { buildStepInstruction, planStepPromptEnabled } from './plan-step-prompt.js'
 import { withInstructionFragments, type InstructionFragments } from './instruction-fragments.js'
 import { decomposedAnswerOnceEnabled } from './decomposed-answer.js'
+import { withProcedureHint, type ProcedureEntry } from './procedure-library.js'
 import { PlanApprovalService, type PlanDecision, type PlanApprovalEdits } from './plan-approval-service.js'
 import { PlanSketchService } from './plan-sketch-service.js'
 import type { PlanRecord } from './plan-store.js'
@@ -315,6 +316,8 @@ export interface PersonalAssistantOptions {
   reminderStore?: ReminderStore
   /** Advisor-adopted instruction fragments, already loaded once at session start (see instruction-fragments.ts). Absent or empty: every prompt is unchanged. */
   instructionFragments?: InstructionFragments
+  /** Validated reusable procedures (see procedure-library.ts). Absent or empty: planning prompts are unchanged. */
+  procedureLibrary?: ProcedureEntry[]
   /** Structured turn telemetry — turn/risk/triviality/harness-node/tool-call/escalation/error events. Purely additive instrumentation; no behavior change when unset. */
   onTrace?: (event: TraceEvent) => void
   /**
@@ -435,6 +438,7 @@ export class PersonalAssistant {
   /** Whenever any of fileTools/webTools/shellTools is configured, `turn()` routes through AgentLoop instead of a single plain chat call — computed once here since it never changes for the lifetime of an instance. */
   private readonly toolLoopWillRun: boolean
   private readonly instructionFragments: InstructionFragments | undefined
+  private readonly procedureLibrary: ProcedureEntry[] | undefined
   /** R3 of the internal plan — mirrors the same flag HarnessBridge was given at construction, kept here too so runTurn can decide whether to defer the tool loop into a harness-driven proposer instead of precomputing draftReply. See PersonalAssistantOptions.oneLoopMode's doc comment. */
   private readonly oneLoopMode: OneLoopMode
   private readonly layerPolicyMode: LayerPolicyMode
@@ -503,6 +507,7 @@ export class PersonalAssistant {
     const reminderStore = options.reminderStore ?? new InMemoryReminderStore(new InMemoryAdapter({ scope: 'thread', namespace: 'personal-assistant-reminders' }))
     this.onTrace = options.onTrace
     this.instructionFragments = options.instructionFragments
+    this.procedureLibrary = options.procedureLibrary
     this.onDebugLog = options.onDebugLog
     this.dangerouslySkipPermissions = options.dangerouslySkipPermissions ?? false
     this.writerChat = options.writerChat
@@ -1606,7 +1611,7 @@ export class PersonalAssistant {
     const stepInstruction = planStepPromptEnabled()
       ? (taskId: string): string | undefined => {
           const description = planStepDescriptions?.get(taskId)
-          return description ? withInstructionFragments(buildStepInstruction(description), this.instructionFragments, 'plan_step') : undefined
+          return description ? withInstructionFragments(withProcedureHint(buildStepInstruction(description), this.procedureLibrary, 'decomposition', 'multi_step_plan'), this.instructionFragments, 'plan_step') : undefined
         }
       : undefined
     // The mutable array AgentLoop.createOneLoopProposer's proposer pushes to as it dispatches

@@ -244,3 +244,5 @@ export { SuggestionArchive, DEFAULT_ARCHIVE_RETENTION_MS, DEFAULT_ARCHIVE_MAX_EN
 export type { ArchiveEntry, NewArchiveEntry, ArchiveOptions } from './suggestion-archive.js'
 export { FRAGMENT_PHASES, FRAGMENT_SLOT_CAP, PROTECTED_BASE_PARAGRAPH, EMPTY_FRAGMENTS, loadInstructionFragments, parseFragments, renderFragmentBlock, withInstructionFragments } from './instruction-fragments.js'
 export type { InstructionFragments, FragmentPhase, FragmentLoader } from './instruction-fragments.js'
+export { PROCEDURE_CLASSES, EVIDENCE_STATUSES, PROCEDURE_LIMITS, parseProcedureEntry, parseProcedureLibrary, matchProcedures, renderProcedureHint, withProcedureHint, procedureBody } from './procedure-library.js'
+export type { ProcedureEntry, ProcedureClass, ProcedureEvidenceStatus, ProcedureParse } from './procedure-library.js'
