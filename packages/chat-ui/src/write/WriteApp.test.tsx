@@ -346,7 +346,7 @@ describe('spending is shown in the header, and each request says what it used', 
     const chat = (): HTMLElement => document.querySelector('.write__chat') as HTMLElement
     expect(await within(chat()).findByText(/I found 1 factual claim/)).toBeInTheDocument()
     const usage = await within(chat()).findByTitle('Tokens, time and cost of this request')
-    expect(usage.textContent).toMatch(/\d+ tokens \(\d+ in, \d+ out\) · \d+ calls? · .+ · \$/)
+    expect(usage.textContent).toMatch(/~?\d+ tokens \(~?\d+ in, \d+ out\) · \d+ calls? · .+ · \$/)
     expect(s.spentUsd()).toBeGreaterThan(before)
     expect(screen.getByLabelText(/Spent so far in this browser/).getAttribute('aria-label')).toContain(s.spentUsd().toFixed(2))
   })

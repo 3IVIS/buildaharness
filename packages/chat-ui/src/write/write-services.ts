@@ -177,7 +177,10 @@ export async function assembleWriteServices(parts: {
     async record(message, activeArticleId, live) {
       if (activeArticleId) await port.setActive(activeArticleId)
       const used = chatModel
-      const work = recordWriterMessage({ message, port }, llm, chatModel)
+      // In the dev mirror, what the note-capturing call answered (its size and start), since it runs before every change and its output is paid for.
+      const seen = Object.create(llm) as typeof llm
+      seen.callChatStructured = async (...args: Parameters<typeof llm.callChatStructured>) => { const r = await llm.callChatStructured(...args); mirrorPost('capture', 'raw', { chars: r.content.length, head: r.content.slice(0, 500) }); return r }
+      const work = recordWriterMessage({ message, port }, seen, chatModel)
       // A stop is honoured at once; the call itself finishes in the background and keeps what the writer said, which is harmless.
       const signal = live?.signal
       const outcome = signal

@@ -197,7 +197,7 @@ export { createMemoryAdapterArticleStore } from './writer/article-memory-store.j
 export { suggestEdits } from './writer/article-edit-suggest.js'
 export type { EditSuggestResult } from './writer/article-edit-suggest.js'
 export { WritePermissionsSchema, DEFAULT_WRITE_PERMISSIONS, loadPermissions, savePermissions, createSpendMeter, withSpendCap, SpendCapReachedError } from './writer/write-permissions.js'
-export type { WritePermissions, SpendMeter, SpendSnapshot, SettingsStore } from './writer/write-permissions.js'
+export type { WritePermissions, SpendMeter, SpendSnapshot, SettingsStore, CountedUsage } from './writer/write-permissions.js'
 export { diffForDisplay, inlineDiff, diffLines, compareVersions, addSnapshot, isLargeChange, MAX_CHECKPOINTS, MAX_AUTOSAVES, AUTOSAVE_LABEL } from './writer/article-history.js'
 export { autosaveStep, type AutosaveStep } from './writer/article-autosave.js'
 export type { DiffLine, DisplayLine, InlinePart, VersionComparison, VersionSide } from './writer/article-history.js'

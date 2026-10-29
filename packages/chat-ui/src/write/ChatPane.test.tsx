@@ -94,5 +94,6 @@ describe('usage line', () => {
     const { usageText } = await import('./WriteApp')
     expect(usageText(2000, { usd: 0.01, inputTokens: 1000, outputTokens: 50, calls: 2, cachedTokens: 600 })).toContain('1,000 in (60% cached), 50 out')
     expect(usageText(2000, { usd: 0.01, inputTokens: 1000, outputTokens: 50, calls: 2 })).toContain('1,000 in, 50 out')
+    expect(usageText(2000, { usd: 0.01, inputTokens: 1000, outputTokens: 50, calls: 2, cachedTokens: 600, estimatedInputTokens: 1000 })).toContain('~1,050 tokens (~1,000 in, 50 out)')
   })
 })

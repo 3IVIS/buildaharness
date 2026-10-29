@@ -4,7 +4,7 @@ import { ArticleService, createArticleChatPort, createMemoryArticleStore } from 
 import { processWriterMessage } from './writer-chat-turn.js'
 import { readWriterIntent } from './writer-intent.js'
 import { CALL_TYPES, CHAT_CALL, callTypeLabel, classifyCall } from './write-spend.js'
-import { createSpendMeter, withSpendCap } from './write-permissions.js'
+import { createSpendMeter, withSpendCap, withEstimatedInput } from './write-permissions.js'
 
 const NOW = '2026-10-16T10:00:00.000Z'
 const MD = '# Post\n\n## Latency\n\nThe p99 was 18 ms.\n\n## Conclusion\n\nSo p99 stays under 20 ms.\n'
@@ -107,5 +107,28 @@ describe('cached input', () => {
     expect(meter.snapshot().cachedTokens).toBeUndefined()
     await meter.record({ inputTokens: 100, outputTokens: 5, cachedInputTokens: 60 } as never, 'chat')
     expect(meter.snapshot().cachedTokens).toBe(60)
+  })
+})
+
+describe('input counts that cannot be believed', () => {
+  const long = [{ role: 'user' as const, content: 'x'.repeat(8000) }]
+  it('counts a request by its size when the backend reports a handful of input tokens for it, and marks the count as estimated', async () => {
+    const u = withEstimatedInput({ inputTokens: 2, outputTokens: 50, cachedInputTokens: 0 }, long)
+    expect(u).toMatchObject({ inputTokens: 2000, outputTokens: 50, estimated: true })
+    expect(u.cachedInputTokens).toBeUndefined()
+  })
+  it('leaves a plausible count, a small request and a count that already includes the cache as they were', () => {
+    const real = { inputTokens: 2100, outputTokens: 50 }
+    expect(withEstimatedInput(real, long)).toBe(real)
+    const small = { inputTokens: 3, outputTokens: 5 }
+    expect(withEstimatedInput(small, [{ role: 'user', content: 'hello there' }])).toBe(small)
+  })
+  it('keeps the estimated part apart in the meter, and prices the estimate', async () => {
+    const meter = await createSpendMeter(createMemoryArticleStore(), { model: 'claude-opus-5-5' })
+    const inner = { callChatStructured: async (_m: ChatMessage[], _t: unknown, o?: { onUsage?: (u: unknown) => void }) => { o?.onUsage?.({ inputTokens: 2, outputTokens: 10 }); return { content: '{}' } } } as unknown as ILLMClient
+    await withSpendCap(inner, meter, () => undefined).callChatStructured(long)
+    await Promise.resolve()
+    expect(meter.snapshot()).toMatchObject({ inputTokens: 2000, outputTokens: 10, estimatedInputTokens: 2000 })
+    expect(meter.spentUsd()).toBeGreaterThan(0.005)
   })
 })

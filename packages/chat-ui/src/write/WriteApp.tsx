@@ -85,11 +85,11 @@ export const textFingerprint = (text: string): string => { let h = 5381; for (le
 
 /** What the chat says when a model call fails: the reason, and what to try. Never an empty answer. */
 /** What one request used, for the small line after its last message. */
-export const usageText = (ms: number, d: { usd: number; inputTokens: number; outputTokens: number; calls: number; cachedTokens?: number }): string => {
+export const usageText = (ms: number, d: { usd: number; inputTokens: number; outputTokens: number; calls: number; cachedTokens?: number; estimatedInputTokens?: number }): string => {
   const time = ms < 1000 ? `${Math.max(0, Math.round(ms))} ms` : ms < 60000 ? `${(ms / 1000).toFixed(1)} s` : `${Math.floor(ms / 60000)} min ${Math.round((ms % 60000) / 1000)} s`
   if (d.calls === 0) return `no model call · ${time}`
   const total = d.inputTokens + d.outputTokens
-  return `${total.toLocaleString('en-US')} tokens (${d.inputTokens.toLocaleString('en-US')} in${d.cachedTokens !== undefined && d.inputTokens > 0 ? ` (${Math.round((100 * d.cachedTokens) / d.inputTokens)}% cached)` : ''}, ${d.outputTokens.toLocaleString('en-US')} out) · ${d.calls} call${d.calls === 1 ? '' : 's'} · ${time} · $${d.usd < 0.01 ? d.usd.toFixed(4) : d.usd.toFixed(2)}`
+  return `${d.estimatedInputTokens ? '~' : ''}${total.toLocaleString('en-US')} tokens (${d.estimatedInputTokens ? '~' : ''}${d.inputTokens.toLocaleString('en-US')} in${d.cachedTokens !== undefined && !d.estimatedInputTokens && d.inputTokens > 0 ? ` (${Math.round((100 * d.cachedTokens) / d.inputTokens)}% cached)` : ''}, ${d.outputTokens.toLocaleString('en-US')} out) · ${d.calls} call${d.calls === 1 ? '' : 's'} · ${time} · $${d.usd < 0.01 ? d.usd.toFixed(4) : d.usd.toFixed(2)}`
 }
 /** One lookup the repository search makes, in words. */
 export const stepText = (step: { tool: string; input: Record<string, unknown> }): string => {
@@ -375,7 +375,7 @@ function WriteAppBody({ services, connection, onDeleted, showPublish = false }: 
       jobTrace.current = null
       // A job that held its lines shows them in the chat only if it called the model after all.
       if (job?.mode === 'held' && after.calls > before.calls) { setChat((c) => [...c, ...job.held]); setBannerText(null) }
-      const usage = usageText(Date.now() - started, { usd: after.usd - before.usd, inputTokens: after.inputTokens - before.inputTokens, outputTokens: after.outputTokens - before.outputTokens, calls: after.calls - before.calls, cachedTokens: after.cachedTokens === undefined ? undefined : after.cachedTokens - (before.cachedTokens ?? 0) })
+      const usage = usageText(Date.now() - started, { usd: after.usd - before.usd, inputTokens: after.inputTokens - before.inputTokens, outputTokens: after.outputTokens - before.outputTokens, calls: after.calls - before.calls, cachedTokens: after.cachedTokens === undefined ? undefined : after.cachedTokens - (before.cachedTokens ?? 0), estimatedInputTokens: (after.estimatedInputTokens ?? 0) - (before.estimatedInputTokens ?? 0) })
       void services.activity.record({ at: new Date(started).toISOString(), kind, outcome, ms: Date.now() - started, usd: Math.max(0, after.usd - before.usd), calls: after.calls - before.calls }).then(() => setActivityTick((t) => t + 1))
       setChat((c) => { let i = -1; c.forEach((l, k) => { if (l.from === 'aielia' && l.id > mark) i = k }); return i < 0 ? c : c.map((l, k) => (k === i ? { ...l, usage } : l)) })
       if (stopRef.current === ctl) stopRef.current = null
