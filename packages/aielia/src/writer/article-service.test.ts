@@ -626,6 +626,26 @@ describe('the chat edits the article itself', () => {
     expect(b.markdown).toBe('# Post\n## Intro\nIt is quick.\n')
     expect(b.snapshots.some((x) => x.label === r.savedAs)).toBe(true)
   })
+  it('a rewrite gives the model the current text, saves a version first and replaces the text', async () => {
+    const seen: string[] = []
+    const { svc: s } = svc({ draft: (u: string) => { seen.push(u); return { name: 'N', markdown: '# Post\nA story.' } } })
+    const id = await s.create('Post', MD)
+    const before = (await s.get(id)).markdown
+    const r = await s.draftFromChat(id, 'Make it a story', undefined, false, undefined, undefined, undefined, true)
+    expect(r.status).toBe('drafted')
+    expect(r.savedAs).toMatch(/^Before a chat rewrite:/)
+    expect(JSON.parse(seen[0]).currentArticle).toBe(before.trim())
+    const b = await s.get(id)
+    expect(b.markdown).toBe('# Post\nA story.\n')
+    expect(b.snapshots.find((x) => x.label === r.savedAs)?.markdown).toBe(before)
+  })
+  it('a plain draft is not given any current text', async () => {
+    const seen: string[] = []
+    const { svc: s } = svc({ draft: (u: string) => { seen.push(u); return { name: 'N', markdown: '# N\n' } } })
+    const id = await s.create('Post', '')
+    await s.draftFromChat(id, 'Write it')
+    expect(JSON.parse(seen[0]).currentArticle).toBeUndefined()
+  })
   it('the draft, the edit suggestions and the chat all get the text of the stored sources', async () => {
     const seen: string[] = []
     const { svc: s, store } = svc({ draft: (u: string) => { seen.push(u); return { name: 'N', markdown: '# N\n' } }, edits: (u: string) => { seen.push(u); return { suggestions: [] } } })

@@ -80,6 +80,15 @@ describe('the chat mode: Auto reads the message', () => {
     expect(screen.queryByText(/suggested change/)).toBeNull()
     expect(screen.getByLabelText('When I ask for a change')).toHaveValue('auto')
   })
+  it('rewrites the whole article when the model reads the message as a wish to reshape all of it', async () => {
+    const s = await services({ intent: { intent: 'rewrite' }, capture: { articleId: null, ops: [] }, draft: { name: 'Story', markdown: '# Post\n## Once upon a time\nIt was quick.' } }, MD2)
+    render(<WriteApp services={s} />)
+    const box = await waitForText()
+    await userEvent.click(rail('Chat'))
+    await userEvent.type(chatBox(), 'make the whole thing read like a story{Enter}')
+    expect(await screen.findByText(/I rewrote the whole article/)).toBeInTheDocument()
+    await waitFor(() => expect(box.value).toContain('Once upon a time'))
+  })
   it('keeps a mode the writer picked, also after the page is opened again', async () => {
     const s = await services({ capture: { articleId: null, ops: [] } }, MD2)
     const first = render(<WriteApp services={s} />)

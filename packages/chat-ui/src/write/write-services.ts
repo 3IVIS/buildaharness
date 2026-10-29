@@ -56,7 +56,7 @@ export interface WriteServices {
    */
   record(message: string, activeArticleId: string | undefined, live?: { signal?: AbortSignal }): Promise<{ model: string; recorded: boolean; stopped?: boolean }>
   /** What a message asks for, read by the model (the automatic-checks model, which is the cheaper one): change the text, suggest changes, or just answer. A failure reads as an answer. */
-  intent(message: string, context: { articleHasText: boolean; lastReply?: string }, live?: { signal?: AbortSignal }): Promise<'edit' | 'suggest' | 'answer'>
+  intent(message: string, context: { articleHasText: boolean; lastReply?: string }, live?: { signal?: AbortSignal }): Promise<'edit' | 'rewrite' | 'suggest' | 'answer'>
   models: WriteModels
   permissions: { get(): Promise<WritePermissions>; set(p: WritePermissions): Promise<void> }
   /** Dollars spent on model calls in this browser so far (counts toward the cap). */

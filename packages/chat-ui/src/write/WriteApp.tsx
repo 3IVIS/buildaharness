@@ -1027,17 +1027,20 @@ function WriteAppBody({ services, connection, onDeleted, showPublish = false }: 
     if (override === undefined) setChatInput('')
     setChat((c) => [...c, { id: ++lineId, from: 'you', text }])
     let how: Exclude<ChatMode, 'auto'>
+    // The model read the message as a wish to reshape the whole article, which line edits cannot do: the text is written again from the old one.
+    let rewriting = false
     const asked = mode ?? effectiveMode
     if (asked === 'auto') {
       // The model reads the message (and what Aielia last said) to tell an edit from a question; a failure counts as a question.
-      let read: Exclude<ChatMode, 'auto'> | undefined
+      let read: Exclude<ChatMode, 'auto'> | 'rewrite' | undefined
       const lastReply = [...chat].reverse().find((l) => l.from === 'aielia' && !l.record)?.text
       await chatRun('Reading your message', async (step) => { read = await services.intent(text, { articleHasText: !!(activeId && draft.trim()), lastReply }, { signal: step.signal }) })
       if (!read) return
-      how = read
+      rewriting = read === 'rewrite'
+      how = read === 'rewrite' ? 'edit' : read
     } else how = asked
     const wantEdits = how === 'suggest'
-    const drafting = how === 'edit' && view !== 'outline' && (!activeId || !draft.trim())
+    const drafting = how === 'edit' && view !== 'outline' && (!activeId || !draft.trim() || rewriting)
     const kind: WorkKind = how === 'edit' ? (drafting ? 'draft' : 'edit') : wantEdits ? 'suggest' : 'answer'
     await chatRun(how === 'edit' ? 'Editing' : wantEdits ? 'Asking for edits' : 'Thinking', async (step) => {
      // The words of a plain answer appear as they are written; an edit or a suggestion shows its steps instead, since the reply is not what is shown.
@@ -1073,18 +1076,18 @@ function WriteAppBody({ services, connection, onDeleted, showPublish = false }: 
         // After the version is saved, the service says when it is asking the model and when it is applying the result.
         const chatStage: ChatStageListener = (stage, detail) => step.quiet(detail ?? '', stage === 'asking' ? 3 : 4)
         const outline = view === 'outline'
-        if (!outline && (fresh || !draft.trim())) {
+        if (!outline && (fresh || !draft.trim() || rewriting)) {
           // An empty article has no text to quote, so the chat writes the first draft instead of editing.
           // The draft is typed into the article as the model writes it; if it ends any other way than a finished draft, the stored text comes back below.
           const typed = typeInto()
           let d: Awaited<ReturnType<typeof service.draftFromChat>>
-          try { d = await service.draftFromChat(id, text, said, fresh, step.signal, typed.push, chatStage) } catch (e) { typed.end(); await reload(id); throw e } finally { typed.end() }
+          try { d = await service.draftFromChat(id, text, said, fresh, step.signal, typed.push, chatStage, rewriting) } catch (e) { typed.end(); await reload(id); throw e } finally { typed.end() }
           await reload(id)
           setViewing(null)
           setShowHistory(false)
           setVersionsTick((t) => t + 1)
           void refreshList()
-          setChat((c) => [...c, { id: ++lineId, from: 'aielia', text: (d.status === 'drafted' ? `I wrote the first draft${d.name ? ` and named the article “${d.name}”` : ''}, and the article now shows it. To go back, restore the earlier version in History.` : `I could not write the draft${d.reason ? `: ${d.reason}` : ''}, so the article is unchanged.`) + tail, model: said }])
+          setChat((c) => [...c, { id: ++lineId, from: 'aielia', text: (d.status === 'drafted' ? `${rewriting ? 'I rewrote the whole article from your request' : 'I wrote the first draft'}${d.name ? ` and named the article “${d.name}”` : ''}, and the article now shows it. To go back, restore the earlier version in History.` : `I could not ${rewriting ? 'rewrite the article' : 'write the draft'}${d.reason ? `: ${d.reason}` : ''}, so the article is unchanged.`) + tail, model: said }])
           return
         }
         const r = outline ? await service.editOutlineFromChat(id, text, said, step.signal, chatStage) : await service.editFromChat(id, text, said, step.signal, chatStage)

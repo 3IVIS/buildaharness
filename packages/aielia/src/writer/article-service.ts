@@ -781,14 +781,15 @@ export class ArticleService {
   /**
    * The chat writes the text of an article that has none: a version is saved first (as for any chat edit), then the draft becomes the text.
    * With `nameIt`, the article is also given the name the draft came with (for an article the chat has just made, which has no name of its own yet).
+   * With `rewrite`, the model is given the current text and reworks all of it as the instruction says (a change too wide for edits that quote text).
    */
-  async draftFromChat(id: string, instruction: string, modelOverride?: string, nameIt = false, signal?: AbortSignal, onText?: (markdownSoFar: string) => void, onStage?: ChatStageListener): Promise<{ status: 'drafted' | 'failed'; savedAs: string; name?: string; reason?: string }> {
-    const savedAs = `Before a chat draft: ${clipLabel(instruction)}`
+  async draftFromChat(id: string, instruction: string, modelOverride?: string, nameIt = false, signal?: AbortSignal, onText?: (markdownSoFar: string) => void, onStage?: ChatStageListener, rewrite = false): Promise<{ status: 'drafted' | 'failed'; savedAs: string; name?: string; reason?: string }> {
+    const savedAs = `Before a chat ${rewrite ? 'rewrite' : 'draft'}: ${clipLabel(instruction)}`
     await this.saveVersion(id, savedAs)
     onStage?.('asking')
     const b = await this.get(id)
     const { onUsage } = this.opts
-    const r = await draftArticle({ meta: b.meta, instruction }, stoppableLlmClient(this.opts.llm, signal), modelOverride ?? this.writer(), onUsage, onText)
+    const r = await draftArticle({ meta: b.meta, instruction, ...(rewrite ? { current: b.markdown } : {}) }, stoppableLlmClient(this.opts.llm, signal), modelOverride ?? this.writer(), onUsage, onText)
     if (signal?.aborted) throw new TurnAbortedError()
     if (r.status === 'failed') return { status: 'failed', savedAs, reason: r.reason }
     onStage?.('applying')

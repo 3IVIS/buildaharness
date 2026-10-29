@@ -17,6 +17,7 @@ const ask = (reply: string | Error, over: { message?: string; lastReply?: string
 describe('readWriterIntent', () => {
   it('returns what the model judged', async () => {
     expect(await ask('{"intent":"edit"}')).toBe('edit')
+    expect(await ask('{"intent":"rewrite"}')).toBe('rewrite')
     expect(await ask('{"intent":"suggest"}')).toBe('suggest')
     expect(await ask('{"intent":"answer"}')).toBe('answer')
   })
