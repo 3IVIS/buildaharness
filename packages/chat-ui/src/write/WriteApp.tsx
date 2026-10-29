@@ -80,6 +80,9 @@ function topOfPosition(ta: HTMLTextAreaElement, at: number): number {
   return top
 }
 
+/** A fingerprint of a text, to tell later whether it has changed (not for security). */
+export const textFingerprint = (text: string): string => { let h = 5381; for (let i = 0; i < text.length; i++) h = ((h * 33) ^ text.charCodeAt(i)) >>> 0; return `${text.length}:${h}` }
+
 /** What the chat says when a model call fails: the reason, and what to try. Never an empty answer. */
 /** What one request used, for the small line after its last message. */
 export const usageText = (ms: number, d: { usd: number; inputTokens: number; outputTokens: number; calls: number; cachedTokens?: number }): string => {
@@ -165,6 +168,7 @@ function WriteAppBody({ services, connection, onDeleted, showPublish = false }: 
   const [activeId, setActiveId] = useState<string | undefined>()
   const [bundle, setBundle] = useState<ArticleBundle | undefined>()
   const [draft, setDraft] = useState('')
+  const draftShown = draft
   const [tab, setTab] = useState<Tab>(() => (isWide() ? 'style' : 'text'))
   const [view, setView] = useState<TextView>('text')
   // Where to put the cursor once the text is on screen again (a section picked in the outline).
@@ -1026,7 +1030,7 @@ function WriteAppBody({ services, connection, onDeleted, showPublish = false }: 
   /**
    * Sends the last message again, as if it had not been sent: it and everything after it (the reply, the status lines) leave the chat, and
    * when a reply came from the conversation with the assistant the last exchange leaves what the assistant remembers too. A change the old
-   * reply made to the article stays; History has the version from before it.
+   * reply made to the article is undone first (the version saved before it comes back; the present text is kept in History).
    */
   async function resendLast(): Promise<void> {
     let at = -1
@@ -1034,12 +1038,27 @@ function WriteAppBody({ services, connection, onDeleted, showPublish = false }: 
     if (at < 0 || busy) return
     const kept = chat.slice(0, at)
     const text = chat[at].text
+    // A reply that changed the article: put it back as it was before that reply, unless the writer has changed it since.
+    const undo = chat.slice(at).find((l) => l.undo)?.undo
+    let restored: string | undefined
+    if (undo) {
+      try {
+        const now = await service.get(undo.articleId)
+        const mine = textFingerprint(now.markdown) === undo.after
+        if (mine || (await dialogs.confirm('You have changed the article since that reply. Put it back as it was before the reply anyway? What you have now is saved in History first. Choose Cancel to send the message again without putting it back.', { yes: 'Put it back' }))) {
+          const row = (await service.history(undo.articleId)).filter((v) => v.label === undo.label).at(-1)
+          if (row) { const back = await service.restore(undo.articleId, row.index); if (undo.articleId === activeId) { await reload(undo.articleId); restored = back.markdown }; void refreshList(); setVersionsTick((t) => t + 1) }
+        }
+      } catch { /* the message is sent again either way */ }
+    }
     if (chat.slice(at).some((l) => l.session)) { try { await services.undoLastTurn() } catch { /* the chat is cleared either way */ } }
     setChat(kept)
-    await sendChat(text, undefined, kept)
+    await sendChat(text, undefined, kept, restored)
   }
 
-  async function sendChat(override?: string, mode?: ChatMode, base?: ChatLine[]): Promise<void> {
+  async function sendChat(override?: string, mode?: ChatMode, base?: ChatLine[], textNow?: string): Promise<void> {
+    // The article text the page shows; a resend that has just put an earlier version back passes that text, as the page has not yet drawn it.
+    const draft = textNow ?? draftShown
     const text = (override ?? chatInput).trim()
     if (!text) return
     if (override === undefined) setChatInput('')
@@ -1125,7 +1144,7 @@ function WriteAppBody({ services, connection, onDeleted, showPublish = false }: 
           setShowHistory(false)
           setVersionsTick((t) => t + 1)
           void refreshList()
-          addLine({ from: 'aielia', text: (d.status === 'drafted' ? (rewriting ? `Rewrote the article.${d.change && describeSectionChange(d.change) ? `\n${describeSectionChange(d.change)}` : ''}\nUndo from History.` : `Wrote the first draft${d.name ? ` and named the article “${d.name}”` : ''}.`) : `I could not ${rewriting ? 'rewrite the article' : 'write the draft'}${d.reason ? `: ${d.reason}` : ''}. The article is unchanged.`) + tail + refNote, model: said })
+          addLine({ from: 'aielia', text: (d.status === 'drafted' ? (rewriting ? `Rewrote the article.${d.change && describeSectionChange(d.change) ? `\n${describeSectionChange(d.change)}` : ''}\nUndo from History.` : `Wrote the first draft${d.name ? ` and named the article “${d.name}”` : ''}.`) : `I could not ${rewriting ? 'rewrite the article' : 'write the draft'}${d.reason ? `: ${d.reason}` : ''}. The article is unchanged.`) + tail + refNote, model: said, ...(d.status === 'drafted' ? { undo: { articleId: id, label: d.savedAs, after: textFingerprint((await service.get(id)).markdown) } } : {}) })
           return
         }
         // A request for both is done in two steps: the headings first, then the wording on the article as it now stands.
@@ -1154,7 +1173,8 @@ function WriteAppBody({ services, connection, onDeleted, showPublish = false }: 
         else if (r.status === 'nothing') body = 'Nothing to change for that.'
         else if ('applied' in r) body = `Made ${r.applied.length} change${r.applied.length === 1 ? '' : 's'}${r.skipped > 0 ? ` (${r.skipped} did not fit)` : ''}.${what(r.change)}\n${undo}`
         else body = `Reworked the outline.${what(r.change)}\n${undo}`
-        addLine({ from: 'aielia', text: body + tail + refNote, model: said })
+        const changed = r.status === 'applied' || second?.status === 'applied'
+        addLine({ from: 'aielia', text: body + tail + refNote, model: said, ...(changed && 'savedAs' in r ? { undo: { articleId: id, label: r.savedAs, after: textFingerprint((await service.get(id)).markdown) } } : {}) })
       } else if (wantEdits && activeId) {
         // Record what the writer said (comments, corrections) the same way a chat turn does, then turn the request into suggestions.
         const { model: said, tail } = await noteIt(activeId)

@@ -703,6 +703,23 @@ describe('chat: model, check and adjust', () => {
     expect(screen.getAllByText('Noted.')).toHaveLength(1)
   })
 
+  it('sends an edit again after putting the article back as it was before the reply', async () => {
+    const s = await services({ intent: { intent: 'edit', links: [], scope: 'text' }, capture: { articleId: null, ops: [] }, edits: { suggestions: [{ quote: 'It is quick.', replacement: 'It is quick, and here is why.', reason: 'more' }] } }, MD2)
+    const id = (await s.service.list())[0].id
+    render(<WriteApp services={s} />)
+    await waitForText()
+    await userEvent.click(rail('Chat'))
+    await userEvent.type(screen.getByLabelText('Message'), 'say why it is quick{Enter}')
+    expect(await screen.findByText(/Made 1 change/)).toBeInTheDocument()
+    expect((await s.service.get(id)).markdown).toContain('It is quick, and here is why.')
+    await userEvent.click(await screen.findByRole('button', { name: /Send again/ }))
+    expect(await screen.findAllByText(/Made 1 change/)).toHaveLength(1)
+    // The edit was applied to the original text again, not on top of the first edit.
+    const md = (await s.service.get(id)).markdown
+    expect(md.split('and here is why.').length - 1).toBe(1)
+    expect((await s.service.history(id)).some((v) => v.label === 'Before restoring an earlier version')).toBe(true)
+  })
+
   it('the conversation is still there after the page is opened again', async () => {
     const s = await services({}, MD)
     const first = render(<WriteApp services={s} />)

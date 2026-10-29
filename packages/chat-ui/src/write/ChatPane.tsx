@@ -70,6 +70,8 @@ export interface ChatLine {
   record?: boolean
   /** The reply came from the conversation with the assistant, which remembers it. */
   session?: boolean
+  /** The reply changed the article: the version saved just before (by its label) and a fingerprint of the text after, so a resend can put the article back unless the writer has changed it since. */
+  undo?: { articleId: string; label: string; after: string }
 }
 
 interface Props {
@@ -137,7 +139,7 @@ export function ChatPane(p: Props): React.JSX.Element {
           <li key={l.id} className={`write__line write__line--${l.from}${l.record ? ' write__line--record' : ''}`} title={l.record ? RECORD_HINT : undefined}>
             <LineText text={l.text} />
             {l.id === lastYours && p.onResend && !p.busy && !working && (
-              <IconButton label="Send again: this message and the replies after it leave the chat (changes already made to the article stay; History has the version from before)" icon="restore" className="write__resend" onClick={p.onResend} />
+              <IconButton label="Send again: this message and the replies after it leave the chat (if the reply changed the article, it is put back as it was before; the present text is kept in History)" icon="restore" className="write__resend" onClick={p.onResend} />
             )}
             {l.usage && <div className="write__lineusage" title="Tokens, time and cost of this request">{l.usage}</div>}
             {l.from === 'aielia' && l.model !== undefined && (
