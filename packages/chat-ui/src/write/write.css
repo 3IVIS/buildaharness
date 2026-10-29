@@ -533,3 +533,6 @@ body.write--resizing { user-select: none; -webkit-user-select: none; cursor: col
 .write__lab { font-weight: 650; }
 .write__name { color: var(--accent); font-weight: 600; }
 .write__line--record .write__ln { line-height: 1.4; }
+
+.write__resend { margin-top: 4px; opacity: 0.55; }
+.write__resend:hover, .write__resend:focus-visible { opacity: 1; }

@@ -57,6 +57,8 @@ export interface WriteServices {
    */
   record(message: string, activeArticleId: string | undefined, live?: { signal?: AbortSignal }): Promise<{ model: string; recorded: boolean; stopped?: boolean }>
   /** What a message asks for, read by the model (the automatic-checks model, which is the cheaper one): change the text, suggest changes, or just answer. A failure reads as an answer. */
+  /** Removes the last exchange from what the assistant remembers of the conversation. */
+  undoLastTurn(): Promise<void>
   intent(message: string, context: { articleHasText: boolean; lastReply?: string }, live?: { signal?: AbortSignal }): Promise<WriterIntent>
   /** Reads the pages a message pointed to, for a change that should follow them. `block` is their text for the model's instruction; each page that could not be read is in `failed` with why. */
   readReferences(urls: string[]): Promise<{ block: string; failed: { url: string; reason: string }[] }>
@@ -181,6 +183,7 @@ export async function assembleWriteServices(parts: {
       if (outcome === 'stopped') return { model: used, recorded: false, stopped: true }
       return { model: used, recorded: outcome.status === 'captured' || outcome.status === 'off' }
     },
+    async undoLastTurn() { await assistant.undoLastTurn(SESSION_ID) },
     async intent(message, context, live) {
       const read = await readWriterIntent({ message, ...context }, llm, autoModel, undefined, live?.signal)
       mirrorPost('intent', 'read', { message: message.slice(0, 200), ...read })

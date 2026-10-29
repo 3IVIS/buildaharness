@@ -686,6 +686,23 @@ describe('chat: model, check and adjust', () => {
     expect(await screen.findByText(/with text/)).toBeInTheDocument()
   })
 
+  it('sends the last message again: it and its reply leave the chat and the assistant forgets the exchange', async () => {
+    const s = await services({ capture: { articleId: null, ops: [] } }, MD2)
+    let undone = 0
+    const real = s.undoLastTurn.bind(s)
+    s.undoLastTurn = async () => { undone++; await real() }
+    render(<WriteApp services={s} />)
+    await waitForText()
+    await userEvent.click(rail('Chat'))
+    await userEvent.type(screen.getByLabelText('Message'), 'is this clear?{Enter}')
+    expect(await screen.findByText('Noted.')).toBeInTheDocument()
+    await userEvent.click(await screen.findByRole('button', { name: /Send again/ }))
+    await waitFor(() => expect(undone).toBe(1))
+    expect(await screen.findByText('Noted.')).toBeInTheDocument()
+    expect(screen.getAllByText('is this clear?')).toHaveLength(1)
+    expect(screen.getAllByText('Noted.')).toHaveLength(1)
+  })
+
   it('the conversation is still there after the page is opened again', async () => {
     const s = await services({}, MD)
     const first = render(<WriteApp services={s} />)

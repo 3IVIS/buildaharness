@@ -1023,7 +1023,23 @@ function WriteAppBody({ services, connection, onDeleted, showPublish = false }: 
   }
 
   /** One chat message, the same path whether typed or composed by the Adjust control. `mode` overrides the chat's mode for this message. */
-  async function sendChat(override?: string, mode?: ChatMode): Promise<void> {
+  /**
+   * Sends the last message again, as if it had not been sent: it and everything after it (the reply, the status lines) leave the chat, and
+   * when a reply came from the conversation with the assistant the last exchange leaves what the assistant remembers too. A change the old
+   * reply made to the article stays; History has the version from before it.
+   */
+  async function resendLast(): Promise<void> {
+    let at = -1
+    chat.forEach((l, i) => { if (l.from === 'you' && !l.record) at = i })
+    if (at < 0 || busy) return
+    const kept = chat.slice(0, at)
+    const text = chat[at].text
+    if (chat.slice(at).some((l) => l.session)) { try { await services.undoLastTurn() } catch { /* the chat is cleared either way */ } }
+    setChat(kept)
+    await sendChat(text, undefined, kept)
+  }
+
+  async function sendChat(override?: string, mode?: ChatMode, base?: ChatLine[]): Promise<void> {
     const text = (override ?? chatInput).trim()
     if (!text) return
     if (override === undefined) setChatInput('')
@@ -1037,8 +1053,10 @@ function WriteAppBody({ services, connection, onDeleted, showPublish = false }: 
     // What the change is to: the headings, the wording or both. In Auto the model says so from the message; otherwise it is the view the writer has open.
     let scope: 'outline' | 'text' | 'both' = view === 'outline' ? 'outline' : 'text'
     // A change is asked for in the middle of a talk ("add the rest of those"), so the call that makes it is given the talk.
-    const history: ChatTurn[] = chat.filter((l) => !l.record).map((l) => ({ from: l.from, text: l.text.split(NAME_OPEN).join('').split(NAME_CLOSE).join('') }))
-    const lastReply = [...chat].reverse().find((l) => l.from === 'aielia' && !l.record)?.text?.split(NAME_OPEN).join('').split(NAME_CLOSE).join('')
+    // The conversation as it stood before this message (a resend passes it without the message it replaces).
+    const before = base ?? chat
+    const history: ChatTurn[] = before.filter((l) => !l.record).map((l) => ({ from: l.from, text: l.text.split(NAME_OPEN).join('').split(NAME_CLOSE).join('') }))
+    const lastReply = [...before].reverse().find((l) => l.from === 'aielia' && !l.record)?.text?.split(NAME_OPEN).join('').split(NAME_CLOSE).join('')
     if (asked === 'auto') {
       // The model reads the message (and what Aielia last said) to tell an edit from a question; a failure counts as a question.
       let read: { intent: 'edit' | 'rewrite' | 'suggest' | 'answer'; links: string[]; scope: 'outline' | 'text' | 'both' } | undefined
@@ -1152,7 +1170,7 @@ function WriteAppBody({ services, connection, onDeleted, showPublish = false }: 
       } else {
         const { reply, model: said } = await talk(activeId)
         if (activeId) setBundle(await service.get(activeId))
-        addLine({ from: 'aielia', text: reply, model: said })
+        addLine({ from: 'aielia', text: reply, model: said, session: true })
       }
      } catch (e) {
       if (isStopped(e)) throw e
@@ -1352,7 +1370,7 @@ function WriteAppBody({ services, connection, onDeleted, showPublish = false }: 
           busy={busy !== null}
           canAct={Boolean(activeId)}
           shown={tab === 'chat'}
-          onSend={() => void sendChat()} onStop={stopWork}
+          onSend={() => void sendChat()} onResend={() => void resendLast()} onStop={stopWork}
           onAdjust={(m) => { void sendChat(m, effectiveMode === 'edit' ? 'edit' : 'suggest') }}
           onAction={(a: ChatAction) => { if (a === 'check') checkFromChat(); else if (a === 'prepare') prepareFromChat(); else verifyFromChat() }}
           repos={activeId ? (void repoTick, service.attachedRepos(activeId)) : []}

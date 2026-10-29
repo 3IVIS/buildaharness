@@ -68,6 +68,8 @@ export interface ChatLine {
   usage?: string
   /** The line records an action taken in the interface (a button, a drop, a setting), not something said in the chat; it is drawn quieter and says so on hover. */
   record?: boolean
+  /** The reply came from the conversation with the assistant, which remembers it. */
+  session?: boolean
 }
 
 interface Props {
@@ -90,6 +92,8 @@ interface Props {
   canAct: boolean
   shown: boolean
   onSend: () => void
+  /** Sends the last message again in place of it and its reply. */
+  onResend?: () => void
   onAdjust: (message: string) => void
   onAction: (action: ChatAction) => void
   /** Repositories handed to the open article, and what the chat menu does with them: run the check against a typed address or the attached ones. */
@@ -110,6 +114,7 @@ export function ChatPane(p: Props): React.JSX.Element {
   const atBottom = useRef(true)
   const lastFrom = p.lines.at(-1)?.from
   const working = Boolean(p.progress)
+  const lastYours = [...p.lines].reverse().find((l) => l.from === 'you' && !l.record)?.id
   const { stage, detail, streamed, finishing } = p.progress ?? {}
   useLayoutEffect(() => {
     const el = list.current
@@ -131,6 +136,9 @@ export function ChatPane(p: Props): React.JSX.Element {
         {p.lines.map((l) => (
           <li key={l.id} className={`write__line write__line--${l.from}${l.record ? ' write__line--record' : ''}`} title={l.record ? RECORD_HINT : undefined}>
             <LineText text={l.text} />
+            {l.id === lastYours && p.onResend && !p.busy && !working && (
+              <IconButton label="Send again: this message and the replies after it leave the chat (changes already made to the article stay; History has the version from before)" icon="restore" className="write__resend" onClick={p.onResend} />
+            )}
             {l.usage && <div className="write__lineusage" title="Tokens, time and cost of this request">{l.usage}</div>}
             {l.from === 'aielia' && l.model !== undefined && (
               <div className="write__linemeta">
