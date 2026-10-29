@@ -2,6 +2,7 @@ import { describe, it, expect } from 'vitest'
 import type { ChatMessage, ILLMClient } from '@buildaharness/runtime'
 import { ArticleService, createArticleChatPort, createMemoryArticleStore } from './article-service.js'
 import { processWriterMessage } from './writer-chat-turn.js'
+import { readWriterIntent } from './writer-intent.js'
 import { CALL_TYPES, CHAT_CALL, callTypeLabel, classifyCall } from './write-spend.js'
 import { createSpendMeter, withSpendCap } from './write-permissions.js'
 
@@ -46,6 +47,7 @@ describe('call types', () => {
     await svc.suggestIdeas(id) // ideas
     await svc.editOutlineFromChat(id, 'rename a section') // outline
     await processWriterMessage({ port: createArticleChatPort(store), message: 'Dana says check the figure', now: NOW }, recording(seen)) // capture
+    await readWriterIntent({ message: 'revise the outline', articleHasText: true }, recording(seen)) // intent
     expect(new Set(seen)).toEqual(new Set(CALL_TYPES.map((t) => t.id)))
   })
   it('counts an unrecognised system prompt as chat, and names every type', () => {

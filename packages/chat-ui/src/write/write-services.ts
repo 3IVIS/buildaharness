@@ -9,6 +9,7 @@ import {
   buildAssistantOptions,
   modelFailureHint,
   recordWriterMessage,
+  readWriterIntent,
   createArticleChatPort,
   createLlmClient,
   createMemoryAdapterArticleStore,
@@ -54,6 +55,8 @@ export interface WriteServices {
    * `recorded` is false when the record could not be made (the edit goes ahead; the page says so).
    */
   record(message: string, activeArticleId: string | undefined, live?: { signal?: AbortSignal }): Promise<{ model: string; recorded: boolean; stopped?: boolean }>
+  /** What a message asks for, read by the model (the automatic-checks model, which is the cheaper one): change the text, suggest changes, or just answer. A failure reads as an answer. */
+  intent(message: string, context: { articleHasText: boolean; lastReply?: string }, live?: { signal?: AbortSignal }): Promise<'edit' | 'suggest' | 'answer'>
   models: WriteModels
   permissions: { get(): Promise<WritePermissions>; set(p: WritePermissions): Promise<void> }
   /** Dollars spent on model calls in this browser so far (counts toward the cap). */
@@ -175,6 +178,7 @@ export async function assembleWriteServices(parts: {
       if (outcome === 'stopped') return { model: used, recorded: false, stopped: true }
       return { model: used, recorded: outcome.status === 'captured' || outcome.status === 'off' }
     },
+    intent: (message, context, live) => readWriterIntent({ message, ...context }, llm, autoModel, undefined, live?.signal),
     models: {
       chat: () => chatModel,
       auto: () => autoModel,
@@ -290,6 +294,7 @@ function mirrorStore(store: ArticleStore): ArticleStore {
   const post = (kind: string, id: string, bundle?: unknown) => {
     void fetch('/__mirror', { method: 'POST', body: JSON.stringify({ kind, id, bundle }) }).catch(() => undefined)
   }
+  const SECRET = /token|key|secret|password/i
   return {
     ...store,
     async save(id, bundle) {
@@ -299,6 +304,10 @@ function mirrorStore(store: ArticleStore): ArticleStore {
     async remove(id) {
       await store.remove(id)
       post('remove', id)
+    },
+    async setSetting(key, value) {
+      await store.setSetting(key, value)
+      if (!SECRET.test(key)) post('setting', key, value)
     },
   }
 }

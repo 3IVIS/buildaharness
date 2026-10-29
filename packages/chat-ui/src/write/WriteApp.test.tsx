@@ -14,6 +14,7 @@ const MARK = {
   outline: 'You rework the outline of an article',
   draft: 'You write the first draft of an article',
   capture: 'A writer is working with an assistant',
+  intent: 'You read a writer\'s newest message to their writing assistant',
   ideas: 'You help a writer collect ideas',
   sourceLinks: 'A writer added a source to an article',
   support: 'You check whether a claim from an article',
@@ -55,6 +56,42 @@ async function services(replies: Parameters<typeof llm>[0], seed?: string, fetch
 }
 afterEach(() => {
   vi.restoreAllMocks()
+  localStorage.removeItem('aielia-write:chat-mode')
+})
+
+describe('the chat mode: Auto reads the message', () => {
+  const chatBox = () => screen.getByLabelText('Message')
+  it('starts on Auto, and a message the model reads as a request for changes gets suggestions without the writer picking anything', async () => {
+    const s = await services({ intent: { intent: 'suggest' }, capture: { articleId: null, ops: [] }, edits: { suggestions: [{ quote: 'It is quick.', replacement: 'It is, well, quick.', reason: 'warmer' }] } }, MD2)
+    render(<WriteApp services={s} />)
+    await waitForText()
+    await userEvent.click(rail('Chat'))
+    expect(screen.getByLabelText('When I ask for a change')).toHaveValue('auto')
+    await userEvent.type(chatBox(), 'make the second line warmer{Enter}')
+    expect(await screen.findByText(/added 1 suggested change/)).toBeInTheDocument()
+  })
+  it('answers in the chat when the model reads the message as a question, and leaves the mode on Auto', async () => {
+    const s = await services({ intent: { intent: 'answer' }, capture: { articleId: null, ops: [] } }, MD2)
+    render(<WriteApp services={s} />)
+    await waitForText()
+    await userEvent.click(rail('Chat'))
+    await userEvent.type(chatBox(), 'is this clear?{Enter}')
+    expect(await screen.findByText('Noted.')).toBeInTheDocument()
+    expect(screen.queryByText(/suggested change/)).toBeNull()
+    expect(screen.getByLabelText('When I ask for a change')).toHaveValue('auto')
+  })
+  it('keeps a mode the writer picked, also after the page is opened again', async () => {
+    const s = await services({ capture: { articleId: null, ops: [] } }, MD2)
+    const first = render(<WriteApp services={s} />)
+    await waitForText()
+    await userEvent.click(rail('Chat'))
+    await userEvent.selectOptions(screen.getByLabelText('When I ask for a change'), 'answer')
+    first.unmount()
+    render(<WriteApp services={s} />)
+    await waitForText()
+    await userEvent.click(rail('Chat'))
+    expect(screen.getByLabelText('When I ask for a change')).toHaveValue('answer')
+  })
 })
 
 describe('the chat turn: words as they come, and stopping', () => {
@@ -555,11 +592,11 @@ describe('chat: model, check and adjust', () => {
     expect(await screen.findByText(/I wrote the first draft/)).toBeInTheDocument()
     await waitFor(() => expect(box.value).toContain('It is quick.'))
   })
-  it('with no article at all, the chat makes one, writes it and names it, without the mode being picked', async () => {
-    const s = await services({ capture: { articleId: null, ops: [] }, draft: { name: 'Quick post', markdown: '# Post\n## Intro\nIt is quick.' } })
+  it('with no article at all, the chat makes one, writes it and names it, with the mode left on Auto', async () => {
+    const s = await services({ intent: { intent: 'edit' }, capture: { articleId: null, ops: [] }, draft: { name: 'Quick post', markdown: '# Post\n## Intro\nIt is quick.' } })
     render(<WriteApp services={s} />)
     await userEvent.click(rail('Chat'))
-    expect((screen.getByLabelText('When I ask for a change') as HTMLSelectElement).value).toBe('edit')
+    expect((screen.getByLabelText('When I ask for a change') as HTMLSelectElement).value).toBe('auto')
     await userEvent.type(screen.getByLabelText('Message'), 'Write an article about speed{Enter}')
     expect(await screen.findByText(/named the article “Quick post”/)).toBeInTheDocument()
     const box = await waitForText()

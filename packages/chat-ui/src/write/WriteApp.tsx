@@ -28,6 +28,7 @@ import './write.css'
 
 /** The kinds of job that can change the article's text, so that what they changed is lit afterwards. */
 /** The kinds of job that call the model; they leave a trace in the chat. Any other job does so only if it turns out to have made a call. */
+const CHAT_MODE_KEY = 'aielia-write:chat-mode'
 const MODEL_KINDS = new Set<WorkKind>(['edit', 'draft', 'suggest', 'answer', 'verify', 'check', 'resolve', 'prepare', 'style'])
 const CHANGES_TEXT = new Set<WorkKind>(['edit', 'draft', 'change', 'resolve', 'files', 'import', 'page'])
 /** How long a banner message stays before it clears itself. */
@@ -244,9 +245,12 @@ function WriteAppBody({ services, connection, onDeleted, showPublish = false }: 
   const [chat, setChat] = useState<ChatLine[]>([])
   const [activityTick, setActivityTick] = useState(0)
   const [chatInput, setChatInput] = useState('')
-  const [chatMode, setChatMode] = useState<ChatMode>('answer')
+  // Auto reads each message and decides; a mode the writer picks stays until they pick another (kept in this browser only).
+  const [chatMode, setChatModeState] = useState<ChatMode>(() => {
+    try { const v = localStorage.getItem(CHAT_MODE_KEY); return v === 'answer' || v === 'suggest' || v === 'edit' ? v : 'auto' } catch { return 'auto' }
+  })
+  const setChatMode = (m: ChatMode): void => { setChatModeState(m); try { localStorage.setItem(CHAT_MODE_KEY, m) } catch { /* private window: the choice lasts until the page closes */ } }
   // Until the writer picks a mode, a chat with no article, or an empty one, writes the article; otherwise it answers.
-  const [modePicked, setModePicked] = useState(false)
   // Where the cursor or selection is in the text: the comments and sources under it are for that text.
   const [selection, setSelection] = useState<{ start: number; end: number } | null>(null)
   const [notes, setNotes] = useState<ResolveNote[]>([])
@@ -1020,10 +1024,19 @@ function WriteAppBody({ services, connection, onDeleted, showPublish = false }: 
   async function sendChat(override?: string, mode?: ChatMode): Promise<void> {
     const text = (override ?? chatInput).trim()
     if (!text) return
-    const how = mode ?? effectiveMode
-    const wantEdits = how === 'suggest'
     if (override === undefined) setChatInput('')
     setChat((c) => [...c, { id: ++lineId, from: 'you', text }])
+    let how: Exclude<ChatMode, 'auto'>
+    const asked = mode ?? effectiveMode
+    if (asked === 'auto') {
+      // The model reads the message (and what Aielia last said) to tell an edit from a question; a failure counts as a question.
+      let read: Exclude<ChatMode, 'auto'> | undefined
+      const lastReply = [...chat].reverse().find((l) => l.from === 'aielia' && !l.record)?.text
+      await chatRun('Reading your message', async (step) => { read = await services.intent(text, { articleHasText: !!(activeId && draft.trim()), lastReply }, { signal: step.signal }) })
+      if (!read) return
+      how = read
+    } else how = asked
+    const wantEdits = how === 'suggest'
     const drafting = how === 'edit' && view !== 'outline' && (!activeId || !draft.trim())
     const kind: WorkKind = how === 'edit' ? (drafting ? 'draft' : 'edit') : wantEdits ? 'suggest' : 'answer'
     await chatRun(how === 'edit' ? 'Editing' : wantEdits ? 'Asking for edits' : 'Thinking', async (step) => {
@@ -1115,7 +1128,7 @@ function WriteAppBody({ services, connection, onDeleted, showPublish = false }: 
     }, kind)
   }
 
-  const effectiveMode: ChatMode = modePicked || (activeId && draft.trim()) ? chatMode : 'edit'
+  const effectiveMode: ChatMode = chatMode
   const meta = bundle?.meta
   const readiness = meta ? computeReadiness(meta) : undefined
   const issues = meta ? issueCount(collectIssues(meta)) : 0
@@ -1301,13 +1314,13 @@ function WriteAppBody({ services, connection, onDeleted, showPublish = false }: 
           input={chatInput}
           onInput={setChatInput}
           mode={effectiveMode}
-          onMode={(m) => { setModePicked(true); setChatMode(m) }}
+          onMode={setChatMode}
           editLabel={view === 'outline' ? 'Edit the outline' : 'Edit the article'}
           busy={busy !== null}
           canAct={Boolean(activeId)}
           shown={tab === 'chat'}
           onSend={() => void sendChat()} onStop={stopWork}
-          onAdjust={(m) => { const mode = effectiveMode === 'answer' ? 'suggest' : effectiveMode; setChatMode(mode); setModePicked(true); void sendChat(m, mode) }}
+          onAdjust={(m) => { void sendChat(m, effectiveMode === 'edit' ? 'edit' : 'suggest') }}
           onAction={(a: ChatAction) => { if (a === 'check') checkFromChat(); else if (a === 'prepare') prepareFromChat(); else verifyFromChat() }}
           repos={activeId ? (void repoTick, service.attachedRepos(activeId)) : []}
           progress={progress}

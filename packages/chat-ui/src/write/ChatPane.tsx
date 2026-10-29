@@ -25,7 +25,7 @@ export interface WorkProgress {
   finishing?: boolean
 }
 
-export type ChatMode = 'answer' | 'suggest' | 'edit'
+export type ChatMode = 'auto' | 'answer' | 'suggest' | 'edit'
 
 /** What hovering a record line says. */
 export const RECORD_HINT = 'A record of an action in the interface, not a chat message'
@@ -124,8 +124,9 @@ export function ChatPane(p: Props): React.JSX.Element {
           placeholder="Message Aielia. Enter sends, Shift+Enter starts a new line."
         />
         <div className="write__composebar">
-          <label className="write__switch2" title="What happens when you ask for a change to the text. Editing saves a version first, so it can be undone from History.">
+          <label className="write__switch2" title="What happens when you ask for a change to the text. Auto reads your message and decides. Editing saves a version first, so it can be undone from History.">
             <select aria-label="When I ask for a change" value={p.mode} onChange={(e) => p.onMode(e.target.value as ChatMode)}>
+              <option value="auto">Auto (from your message)</option>
               <option value="answer">Just answer</option>
               <option value="suggest">Suggest edits</option>
               <option value="edit">{p.editLabel}</option>

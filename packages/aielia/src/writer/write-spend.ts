@@ -25,6 +25,7 @@ export const CALL_TYPES: readonly CallType[] = [
   { id: 'edits', label: 'Suggesting edits', marker: 'You propose edits to an article' },
   { id: 'outline', label: 'Reworking the outline', marker: 'You rework the outline of an article' },
   { id: 'ideas', label: 'Suggesting ideas', marker: 'You help a writer collect ideas' },
+  { id: 'intent', label: 'Reading what a message asks for', marker: 'You read a writer\'s newest message to their writing assistant' },
   { id: 'capture', label: 'Remembering comments and corrections', marker: 'A writer is working with an assistant' },
 ]
 

@@ -159,6 +159,8 @@ export { WriterChatStateSchema, WriterCommentSchema, WriterCorrectionSchema, WRI
 export type { WriterChatState, WriterComment, WriterCorrection, ArticleRef, CaptureOp, ApplyResult } from './writer/writer-chat-state.js'
 export { ACTIVITY_KEY, MAX_ACTIVITY_RECORDS, addRecord, activityReport, createActivityLog, summarizeActivity, isJobRecord, typicalMs, usuallyText, MIN_RUNS_FOR_TYPICAL } from './writer/write-activity.js'
 export type { ActivityLog, ActivitySummary, JobOutcome, JobRecord, KindSummary } from './writer/write-activity.js'
+export { readWriterIntent } from './writer/writer-intent.js'
+export type { ChatIntent } from './writer/writer-intent.js'
 export { captureChatState } from './writer/writer-chat-capture.js'
 export type { CaptureResult, CaptureStatus } from './writer/writer-chat-capture.js'
 // Aielia Write: the article model, its rules, folder format and stored sources
