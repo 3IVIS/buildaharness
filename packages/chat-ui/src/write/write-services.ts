@@ -316,8 +316,10 @@ export function indexedDbArticleStore(): ArticleStore {
 }
 
 /** Dev server only: sends one event to the mirror (see vite.write.config.ts). */
+let mirrorQueue: Promise<unknown> = Promise.resolve()
 function mirrorPost(kind: string, id: string, bundle?: unknown): void {
-  if (import.meta.env.DEV) void fetch('/__mirror', { method: 'POST', body: JSON.stringify({ kind, id, bundle }) }).catch(() => undefined)
+  // One at a time and in order: two saves a few milliseconds apart must not reach the file swapped.
+  if (import.meta.env.DEV) mirrorQueue = mirrorQueue.then(() => fetch('/__mirror', { method: 'POST', body: JSON.stringify({ kind, id, bundle }) })).catch(() => undefined)
 }
 
 /** Dev server only: copies every save and removal to vite.write.config.ts's /__mirror so a watcher can read the article. */
