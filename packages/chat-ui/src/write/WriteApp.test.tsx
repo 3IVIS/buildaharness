@@ -89,6 +89,25 @@ describe('the chat mode: Auto reads the message', () => {
     expect(await screen.findByText(/I rewrote the whole article/)).toBeInTheDocument()
     await waitFor(() => expect(box.value).toContain('Once upon a time'))
   })
+  it('reads a page the message points to before rewriting, and says so when it cannot', async () => {
+    const reply = { intent: 'rewrite', links: ['https://example.test/story'] }
+    const fetched: string[] = []
+    const ok = await services({ intent: reply, capture: { articleId: null, ops: [] }, draft: { name: 'Story', markdown: '# Post\n## Once\nIt was quick.' } }, MD2, async (u) => { fetched.push(u); return 'A story-shaped post.' })
+    const first = render(<WriteApp services={ok} />)
+    await waitForText()
+    await userEvent.click(rail('Chat'))
+    await userEvent.type(chatBox(), 'make it like https://example.test/story{Enter}')
+    expect(await screen.findByText(/I rewrote the whole article/)).toBeInTheDocument()
+    expect(fetched).toEqual(['https://example.test/story'])
+    expect(screen.queryByText(/I could not read/)).toBeNull()
+    first.unmount()
+    const bad = await services({ intent: reply, capture: { articleId: null, ops: [] }, draft: { name: 'Story', markdown: '# Post\n## Once\nIt was quick.' } }, MD2, async () => { throw new Error('blocked') })
+    render(<WriteApp services={bad} />)
+    await waitForText()
+    await userEvent.click(rail('Chat'))
+    await userEvent.type(chatBox(), 'make it like https://example.test/story{Enter}')
+    expect(await screen.findByText(/I could not read https:\/\/example\.test\/story \(blocked\), so the change does not follow it/)).toBeInTheDocument()
+  })
   it('keeps a mode the writer picked, also after the page is opened again', async () => {
     const s = await services({ capture: { articleId: null, ops: [] } }, MD2)
     const first = render(<WriteApp services={s} />)

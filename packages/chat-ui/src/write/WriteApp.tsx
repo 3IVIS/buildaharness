@@ -1029,17 +1029,22 @@ function WriteAppBody({ services, connection, onDeleted, showPublish = false }: 
     let how: Exclude<ChatMode, 'auto'>
     // The model read the message as a wish to reshape the whole article, which line edits cannot do: the text is written again from the old one.
     let rewriting = false
+    // Pages the message points to; an answer reads them with its own tools, a change gets their text in its instruction.
+    let links: string[] = []
     const asked = mode ?? effectiveMode
     if (asked === 'auto') {
       // The model reads the message (and what Aielia last said) to tell an edit from a question; a failure counts as a question.
-      let read: Exclude<ChatMode, 'auto'> | 'rewrite' | undefined
+      let read: { intent: 'edit' | 'rewrite' | 'suggest' | 'answer'; links: string[] } | undefined
       const lastReply = [...chat].reverse().find((l) => l.from === 'aielia' && !l.record)?.text
       await chatRun('Reading your message', async (step) => { read = await services.intent(text, { articleHasText: !!(activeId && draft.trim()), lastReply }, { signal: step.signal }) })
       if (!read) return
-      rewriting = read === 'rewrite'
-      how = read === 'rewrite' ? 'edit' : read
+      rewriting = read.intent === 'rewrite'
+      how = read.intent === 'rewrite' ? 'edit' : read.intent
+      links = how === 'answer' ? [] : read.links
     } else how = asked
     const wantEdits = how === 'suggest'
+    let ask = text
+    let refNote = ''
     const drafting = how === 'edit' && view !== 'outline' && (!activeId || !draft.trim() || rewriting)
     const kind: WorkKind = how === 'edit' ? (drafting ? 'draft' : 'edit') : wantEdits ? 'suggest' : 'answer'
     await chatRun(how === 'edit' ? 'Editing' : wantEdits ? 'Asking for edits' : 'Thinking', async (step) => {
@@ -1058,6 +1063,12 @@ function WriteAppBody({ services, connection, onDeleted, showPublish = false }: 
        return { model: r.model, tail: r.recorded ? '' : '\n\nAny comments or corrections in your message were not added to the article\'s notes.' }
      }
      try {
+      if (links.length > 0) {
+        step('Reading the pages you pointed to', 0)
+        const refs = await services.readReferences(links)
+        ask = text + refs.block
+        if (refs.failed.length > 0) refNote = `\n\nI could not read ${refs.failed.map((f) => `${f.url} (${f.reason})`).join('; ')}, so the change does not follow ${refs.failed.length === 1 ? 'it' : 'them'}.`
+      }
       step('', 0)
       if (activeId) await service.updateText(activeId, draft, { analyze: false })
       step('', 1)
@@ -1081,16 +1092,16 @@ function WriteAppBody({ services, connection, onDeleted, showPublish = false }: 
           // The draft is typed into the article as the model writes it; if it ends any other way than a finished draft, the stored text comes back below.
           const typed = typeInto()
           let d: Awaited<ReturnType<typeof service.draftFromChat>>
-          try { d = await service.draftFromChat(id, text, said, fresh, step.signal, typed.push, chatStage, rewriting) } catch (e) { typed.end(); await reload(id); throw e } finally { typed.end() }
+          try { d = await service.draftFromChat(id, ask, said, fresh, step.signal, typed.push, chatStage, rewriting) } catch (e) { typed.end(); await reload(id); throw e } finally { typed.end() }
           await reload(id)
           setViewing(null)
           setShowHistory(false)
           setVersionsTick((t) => t + 1)
           void refreshList()
-          setChat((c) => [...c, { id: ++lineId, from: 'aielia', text: (d.status === 'drafted' ? `${rewriting ? 'I rewrote the whole article from your request' : 'I wrote the first draft'}${d.name ? ` and named the article “${d.name}”` : ''}, and the article now shows it. To go back, restore the earlier version in History.` : `I could not ${rewriting ? 'rewrite the article' : 'write the draft'}${d.reason ? `: ${d.reason}` : ''}, so the article is unchanged.`) + tail, model: said }])
+          setChat((c) => [...c, { id: ++lineId, from: 'aielia', text: (d.status === 'drafted' ? `${rewriting ? 'I rewrote the whole article from your request' : 'I wrote the first draft'}${d.name ? ` and named the article “${d.name}”` : ''}, and the article now shows it. To go back, restore the earlier version in History.` : `I could not ${rewriting ? 'rewrite the article' : 'write the draft'}${d.reason ? `: ${d.reason}` : ''}, so the article is unchanged.`) + tail + refNote, model: said }])
           return
         }
-        const r = outline ? await service.editOutlineFromChat(id, text, said, step.signal, chatStage) : await service.editFromChat(id, text, said, step.signal, chatStage)
+        const r = outline ? await service.editOutlineFromChat(id, ask, said, step.signal, chatStage) : await service.editFromChat(id, ask, said, step.signal, chatStage)
         await reload(id)
         setViewing(null)
         setShowHistory(false)
@@ -1103,12 +1114,12 @@ function WriteAppBody({ services, connection, onDeleted, showPublish = false }: 
         else if (r.status === 'nothing') body = `${saved} I found nothing to change in the ${outline ? 'outline' : 'text'} for that, so it is unchanged.`
         else if ('applied' in r) body = `${saved} Then I made ${r.applied.length} change${r.applied.length === 1 ? '' : 's'}${r.skipped > 0 ? ` (${r.skipped} no longer fitted)` : ''}, and the article now shows the edited text. To go back, restore that version in History.\n${r.applied.slice(0, 4).map((x) => `• “${short(x.quote)}” → “${short(x.replacement)}”`).join('\n')}${r.applied.length > 4 ? `\n…and ${r.applied.length - 4} more.` : ''}`
         else body = `${saved} Then I reworked the outline, and the article now shows it. To go back, restore that version in History.\nThe outline is now:\n${(r.after ?? '').split('\n').slice(0, 20).join('\n')}`
-        setChat((c) => [...c, { id: ++lineId, from: 'aielia', text: body + tail, model: said }])
+        setChat((c) => [...c, { id: ++lineId, from: 'aielia', text: body + tail + refNote, model: said }])
       } else if (wantEdits && activeId) {
         // Record what the writer said (comments, corrections) the same way a chat turn does, then turn the request into suggestions.
         const { model: said, tail } = await noteIt(activeId)
         step('', 2)
-        const r = await service.suggest(activeId, text, said, {}, step.signal)
+        const r = await service.suggest(activeId, ask, said, {}, step.signal)
         const now = await service.get(activeId)
         setBundle(now)
         const added = now.meta.suggestions.filter((x) => r.added.includes(x.id))
@@ -1118,7 +1129,7 @@ function WriteAppBody({ services, connection, onDeleted, showPublish = false }: 
         const body = r.status === 'failed' ? 'I could not turn that into edits.'
           : added.length === 0 ? 'I found nothing to change in the text for that.'
           : `I added ${added.length} suggested change${added.length === 1 ? '' : 's'}. Open Issues to accept or reject ${added.length === 1 ? 'it' : 'them'}:\n${added.slice(0, 4).map((x) => `• “${short(x.span.quote)}” → “${short(x.replacement)}”`).join('\n')}${added.length > 4 ? `\n…and ${added.length - 4} more.` : ''}`
-        setChat((c) => [...c, { id: ++lineId, from: 'aielia', text: body + tail, model: said }])
+        setChat((c) => [...c, { id: ++lineId, from: 'aielia', text: body + tail + refNote, model: said }])
       } else {
         const { reply, model: said } = await talk(activeId)
         if (activeId) setBundle(await service.get(activeId))

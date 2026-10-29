@@ -10,6 +10,7 @@ import {
   modelFailureHint,
   recordWriterMessage,
   readWriterIntent,
+  type WriterIntent,
   createArticleChatPort,
   createLlmClient,
   createMemoryAdapterArticleStore,
@@ -56,7 +57,9 @@ export interface WriteServices {
    */
   record(message: string, activeArticleId: string | undefined, live?: { signal?: AbortSignal }): Promise<{ model: string; recorded: boolean; stopped?: boolean }>
   /** What a message asks for, read by the model (the automatic-checks model, which is the cheaper one): change the text, suggest changes, or just answer. A failure reads as an answer. */
-  intent(message: string, context: { articleHasText: boolean; lastReply?: string }, live?: { signal?: AbortSignal }): Promise<'edit' | 'rewrite' | 'suggest' | 'answer'>
+  intent(message: string, context: { articleHasText: boolean; lastReply?: string }, live?: { signal?: AbortSignal }): Promise<WriterIntent>
+  /** Reads the pages a message pointed to, for a change that should follow them. `block` is their text for the model's instruction; each page that could not be read is in `failed` with why. */
+  readReferences(urls: string[]): Promise<{ block: string; failed: { url: string; reason: string }[] }>
   models: WriteModels
   permissions: { get(): Promise<WritePermissions>; set(p: WritePermissions): Promise<void> }
   /** Dollars spent on model calls in this browser so far (counts toward the cap). */
@@ -179,6 +182,21 @@ export async function assembleWriteServices(parts: {
       return { model: used, recorded: outcome.status === 'captured' || outcome.status === 'off' }
     },
     intent: (message, context, live) => readWriterIntent({ message, ...context }, llm, autoModel, undefined, live?.signal),
+    async readReferences(urls) {
+      const failed: { url: string; reason: string }[] = []
+      const parts_: string[] = []
+      for (const url of urls) {
+        if (!parts.fetchWeb) { failed.push({ url, reason: 'no web proxy is set up for reading pages (Settings, Connection)' }); continue }
+        try {
+          const text = (await parts.fetchWeb(url)).trim()
+          if (text) parts_.push(`Page ${url}:\n${text.slice(0, MAX_REFERENCE_CHARS)}`)
+          else failed.push({ url, reason: 'the page had no text' })
+        } catch (e) {
+          failed.push({ url, reason: e instanceof Error ? e.message : String(e) })
+        }
+      }
+      return { block: parts_.length ? `\n\nThe writer pointed to these pages as an example or material for this change; follow or use them as the writer asks:\n\n${parts_.join('\n\n')}` : '', failed }
+    },
     models: {
       chat: () => chatModel,
       auto: () => autoModel,
@@ -282,6 +300,9 @@ export function createWriteServicesFor(config: AssistantConfig, platform: WriteP
     buildAssistant: (port, capped, model) => PersonalAssistant.create({ ...buildAssistantOptions({ ...config, model }, { llmClient: capped, features: WEB_FEATURES }), writerChat: port }),
   })
 }
+
+/** How much of a page the writer pointed to goes into the instruction. */
+const MAX_REFERENCE_CHARS = 8000
 
 /** Articles kept in the webview's or browser's IndexedDB. Both hosts start with this. */
 export function indexedDbArticleStore(): ArticleStore {

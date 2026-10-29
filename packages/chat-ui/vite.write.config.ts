@@ -20,6 +20,7 @@ const mirror = {
         try {
           const { id, bundle, kind } = JSON.parse(body)
           const safe = String(id).replace(/[^\w-]/g, '_')
+          if (kind === 'setting') writeFileSync(resolve(mirrorDir, `setting-${safe}.json`), JSON.stringify(bundle, null, 2))
           if (kind === 'save') writeFileSync(resolve(mirrorDir, `${safe}.json`), JSON.stringify(bundle, null, 2))
           appendFileSync(resolve(mirrorDir, 'changes.jsonl'), JSON.stringify({ at: new Date().toISOString(), kind, id, bundle }) + '\n')
         } catch { /* a bad post must never break the page */ }

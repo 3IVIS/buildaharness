@@ -11,8 +11,8 @@ function client(reply: string | Error, seen: unknown[] = []): ILLMClient {
     },
   } as unknown as ILLMClient
 }
-const ask = (reply: string | Error, over: { message?: string; lastReply?: string } = {}) =>
-  readWriterIntent({ message: over.message ?? 'revise the outline', articleHasText: true, lastReply: over.lastReply }, client(reply))
+const ask = async (reply: string | Error, over: { message?: string; lastReply?: string } = {}) =>
+  (await readWriterIntent({ message: over.message ?? 'revise the outline', articleHasText: true, lastReply: over.lastReply }, client(reply))).intent
 
 describe('readWriterIntent', () => {
   it('returns what the model judged', async () => {
@@ -26,6 +26,19 @@ describe('readWriterIntent', () => {
     expect(await ask('not json')).toBe('answer')
     expect(await ask(new Error('503'))).toBe('answer')
     expect(await ask('{"intent":"edit"}', { message: '   ' })).toBe('answer')
+  })
+  it('returns the web addresses the model found, parsed and without repeats, and drops anything else', async () => {
+    const r = await readWriterIntent(
+      { message: 'like https://a.test/post', articleHasText: true },
+      client(JSON.stringify({ intent: 'rewrite', links: ['https://a.test/post', ' https://a.test/post ', 'not a link', 'ftp://x.test/f', 7, 'http://b.test/x'] })),
+    )
+    expect(r).toEqual({ intent: 'rewrite', links: ['https://a.test/post', 'http://b.test/x'] })
+  })
+  it('keeps at most three addresses and none when the model gives none or the call fails', async () => {
+    const many = JSON.stringify({ intent: 'edit', links: ['https://1.test/', 'https://2.test/', 'https://3.test/', 'https://4.test/'] })
+    expect((await readWriterIntent({ message: 'm', articleHasText: true }, client(many))).links).toHaveLength(3)
+    expect((await readWriterIntent({ message: 'm', articleHasText: true }, client('{"intent":"edit"}'))).links).toEqual([])
+    expect(await readWriterIntent({ message: 'm', articleHasText: true }, client(new Error('x')))).toEqual({ intent: 'answer', links: [] })
   })
   it('gives the model the last reply, clipped, and whether the article has text', async () => {
     const seen: { content: string }[][] = []
