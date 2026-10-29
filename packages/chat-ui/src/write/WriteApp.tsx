@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { SpendBadge } from './SpendBadge'
-import { type WorkKind, NAME_CLOSE, NAME_OPEN, describeSectionChange, workPlan, litRange, modelFailureHint, modelLabel, githubRepoReader, parseGithubRepoAddress, type FolderReader, expandSelection, summarizeVerify, summarizeArticleSources, type VerifyReport, textPieces, collectIssues, parseLineRange, sourceKindForFile, computeReadiness, effectiveSourceStatus, issueCount, textUnitAt, autosaveStep, outlineOf, issuesInRange, unitOfSelection, shouldDeriveStyle, type ArticleBundle, type ChangeSummary, type DependencyKind, type IssueCategory, type Section, type WritePermissions, type JobOutcome, type ResultLine, type ChatStageListener, claimResultLine, recentResults, typicalMs, usuallyText } from '@buildaharness/aielia'
+import { type WorkKind, NAME_CLOSE, NAME_OPEN, describeSectionChange, workPlan, litRange, modelFailureHint, modelLabel, githubRepoReader, parseGithubRepoAddress, type FolderReader, expandSelection, summarizeVerify, summarizeArticleSources, type VerifyReport, textPieces, collectIssues, parseLineRange, sourceKindForFile, computeReadiness, effectiveSourceStatus, issueCount, textUnitAt, autosaveStep, outlineOf, issuesInRange, unitOfSelection, shouldDeriveStyle, type ArticleBundle, type ChangeSummary, type DependencyKind, type IssueCategory, type Section, type WritePermissions, type JobOutcome, type ResultLine, type ChatStageListener, type ChatTurn, claimResultLine, recentResults, typicalMs, usuallyText } from '@buildaharness/aielia'
 import type { ChatAction } from './AdjustBar'
 import { ArticleSwitcher, type ArticleItem } from './ArticleSwitcher'
 import { readFileText } from './file-text'
@@ -29,7 +29,6 @@ import './write.css'
 /** The kinds of job that can change the article's text, so that what they changed is lit afterwards. */
 /** The kinds of job that call the model; they leave a trace in the chat. Any other job does so only if it turns out to have made a call. */
 const CHAT_MODE_KEY = 'aielia-write:chat-mode'
-const MAX_LAST_REPLY_CHARS = 3000
 const MODEL_KINDS = new Set<WorkKind>(['edit', 'draft', 'suggest', 'answer', 'verify', 'check', 'resolve', 'prepare', 'style'])
 const CHANGES_TEXT = new Set<WorkKind>(['edit', 'draft', 'change', 'resolve', 'files', 'import', 'page'])
 /** How long a banner message stays before it clears itself. */
@@ -83,11 +82,11 @@ function topOfPosition(ta: HTMLTextAreaElement, at: number): number {
 
 /** What the chat says when a model call fails: the reason, and what to try. Never an empty answer. */
 /** What one request used, for the small line after its last message. */
-export const usageText = (ms: number, d: { usd: number; inputTokens: number; outputTokens: number; calls: number }): string => {
+export const usageText = (ms: number, d: { usd: number; inputTokens: number; outputTokens: number; calls: number; cachedTokens?: number }): string => {
   const time = ms < 1000 ? `${Math.max(0, Math.round(ms))} ms` : ms < 60000 ? `${(ms / 1000).toFixed(1)} s` : `${Math.floor(ms / 60000)} min ${Math.round((ms % 60000) / 1000)} s`
   if (d.calls === 0) return `no model call · ${time}`
   const total = d.inputTokens + d.outputTokens
-  return `${total.toLocaleString('en-US')} tokens (${d.inputTokens.toLocaleString('en-US')} in, ${d.outputTokens.toLocaleString('en-US')} out) · ${d.calls} call${d.calls === 1 ? '' : 's'} · ${time} · $${d.usd < 0.01 ? d.usd.toFixed(4) : d.usd.toFixed(2)}`
+  return `${total.toLocaleString('en-US')} tokens (${d.inputTokens.toLocaleString('en-US')} in${d.cachedTokens !== undefined && d.inputTokens > 0 ? `, ${Math.round((100 * d.cachedTokens) / d.inputTokens)}% of it cached` : ''}, ${d.outputTokens.toLocaleString('en-US')} out) · ${d.calls} call${d.calls === 1 ? '' : 's'} · ${time} · $${d.usd < 0.01 ? d.usd.toFixed(4) : d.usd.toFixed(2)}`
 }
 /** One lookup the repository search makes, in words. */
 export const stepText = (step: { tool: string; input: Record<string, unknown> }): string => {
@@ -372,7 +371,7 @@ function WriteAppBody({ services, connection, onDeleted, showPublish = false }: 
       jobTrace.current = null
       // A job that held its lines shows them in the chat only if it called the model after all.
       if (job?.mode === 'held' && after.calls > before.calls) { setChat((c) => [...c, ...job.held]); setBannerText(null) }
-      const usage = usageText(Date.now() - started, { usd: after.usd - before.usd, inputTokens: after.inputTokens - before.inputTokens, outputTokens: after.outputTokens - before.outputTokens, calls: after.calls - before.calls })
+      const usage = usageText(Date.now() - started, { usd: after.usd - before.usd, inputTokens: after.inputTokens - before.inputTokens, outputTokens: after.outputTokens - before.outputTokens, calls: after.calls - before.calls, cachedTokens: after.cachedTokens === undefined ? undefined : after.cachedTokens - (before.cachedTokens ?? 0) })
       void services.activity.record({ at: new Date(started).toISOString(), kind, outcome, ms: Date.now() - started, usd: Math.max(0, after.usd - before.usd), calls: after.calls - before.calls }).then(() => setActivityTick((t) => t + 1))
       setChat((c) => { let i = -1; c.forEach((l, k) => { if (l.from === 'aielia' && l.id > mark) i = k }); return i < 0 ? c : c.map((l, k) => (k === i ? { ...l, usage } : l)) })
       if (stopRef.current === ctl) stopRef.current = null
@@ -1035,6 +1034,8 @@ function WriteAppBody({ services, connection, onDeleted, showPublish = false }: 
     // Pages the message points to; an answer reads them with its own tools, a change gets their text in its instruction.
     let links: string[] = []
     const asked = mode ?? effectiveMode
+    // A change is asked for in the middle of a talk ("add the rest of those"), so the call that makes it is given the talk.
+    const history: ChatTurn[] = chat.filter((l) => !l.record).map((l) => ({ from: l.from, text: l.text.split(NAME_OPEN).join('').split(NAME_CLOSE).join('') }))
     const lastReply = [...chat].reverse().find((l) => l.from === 'aielia' && !l.record)?.text?.split(NAME_OPEN).join('').split(NAME_CLOSE).join('')
     if (asked === 'auto') {
       // The model reads the message (and what Aielia last said) to tell an edit from a question; a failure counts as a question.
@@ -1047,8 +1048,6 @@ function WriteAppBody({ services, connection, onDeleted, showPublish = false }: 
     } else how = asked
     const wantEdits = how === 'suggest'
     let ask = text
-    // "Add the rest of those" points at what Aielia just said, which a change would otherwise not see.
-    if (how !== 'answer' && lastReply) ask += `\n\nWhat you last said to the writer, in case their message refers to it (follow only the writer's message, not this):\n${lastReply.slice(0, MAX_LAST_REPLY_CHARS)}`
     let refNote = ''
     if (links.length > 0) {
       // Its own status line, so the writer sees the pages being read and not only the change that follows.
@@ -1099,7 +1098,7 @@ function WriteAppBody({ services, connection, onDeleted, showPublish = false }: 
           // The draft is typed into the article as the model writes it; if it ends any other way than a finished draft, the stored text comes back below.
           const typed = typeInto()
           let d: Awaited<ReturnType<typeof service.draftFromChat>>
-          try { d = await service.draftFromChat(id, ask, said, fresh, step.signal, typed.push, chatStage, rewriting) } catch (e) { typed.end(); await reload(id); throw e } finally { typed.end() }
+          try { d = await service.draftFromChat(id, ask, said, fresh, step.signal, typed.push, chatStage, rewriting, history) } catch (e) { typed.end(); await reload(id); throw e } finally { typed.end() }
           await reload(id)
           setViewing(null)
           setShowHistory(false)
@@ -1108,7 +1107,7 @@ function WriteAppBody({ services, connection, onDeleted, showPublish = false }: 
           addLine({ from: 'aielia', text: (d.status === 'drafted' ? (rewriting ? `Rewrote the article.${d.change && describeSectionChange(d.change) ? `\n${describeSectionChange(d.change)}` : ''}\nUndo from History.` : `Wrote the first draft${d.name ? ` and named the article “${d.name}”` : ''}.`) : `I could not ${rewriting ? 'rewrite the article' : 'write the draft'}${d.reason ? `: ${d.reason}` : ''}. The article is unchanged.`) + tail + refNote, model: said })
           return
         }
-        const r = outline ? await service.editOutlineFromChat(id, ask, said, step.signal, chatStage) : await service.editFromChat(id, ask, said, step.signal, chatStage)
+        const r = outline ? await service.editOutlineFromChat(id, ask, said, step.signal, chatStage, history) : await service.editFromChat(id, ask, said, step.signal, chatStage, history)
         await reload(id)
         setViewing(null)
         setShowHistory(false)
@@ -1127,7 +1126,7 @@ function WriteAppBody({ services, connection, onDeleted, showPublish = false }: 
         // Record what the writer said (comments, corrections) the same way a chat turn does, then turn the request into suggestions.
         const { model: said, tail } = await noteIt(activeId)
         step('', 2)
-        const r = await service.suggest(activeId, ask, said, {}, step.signal)
+        const r = await service.suggest(activeId, ask, said, { history }, step.signal)
         const now = await service.get(activeId)
         setBundle(now)
         const added = now.meta.suggestions.filter((x) => r.added.includes(x.id))

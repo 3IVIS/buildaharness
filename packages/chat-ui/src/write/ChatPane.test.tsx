@@ -88,3 +88,11 @@ describe('chat lines', () => {
     expect(container.textContent).not.toContain(NAME_OPEN)
   })
 })
+
+describe('usage line', () => {
+  it('says how much of the input came from the cache, only when that is known', async () => {
+    const { usageText } = await import('./WriteApp')
+    expect(usageText(2000, { usd: 0.01, inputTokens: 1000, outputTokens: 50, calls: 2, cachedTokens: 600 })).toContain('1,000 in, 60% of it cached, 50 out')
+    expect(usageText(2000, { usd: 0.01, inputTokens: 1000, outputTokens: 50, calls: 2 })).toContain('1,000 in, 50 out')
+  })
+})

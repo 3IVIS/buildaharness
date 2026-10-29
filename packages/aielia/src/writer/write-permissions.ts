@@ -63,7 +63,8 @@ export interface SpendMeter {
   subscribe(listener: () => void): () => void
 }
 
-export interface SpendSnapshot { usd: number; inputTokens: number; outputTokens: number; calls: number }
+/** `cachedTokens` is the part of the input that came from the provider's cache; absent until some call has reported it (a backend that does not report it is not the same as none cached). */
+export interface SpendSnapshot { usd: number; inputTokens: number; outputTokens: number; calls: number; cachedTokens?: number }
 
 const SPEND_KEY = 'writer:spent-usd'
 const SPEND_BY_TYPE_KEY = 'writer:spent-by-type'
@@ -80,12 +81,13 @@ export async function createSpendMeter(store: SettingsStore, pricing: { backend?
   }
   let inputTokens = 0
   let outputTokens = 0
+  let cachedTokens: number | undefined
   let calls = 0
   const listeners = new Set<() => void>()
   const notify = (): void => { for (const l of listeners) { try { l() } catch { /* a listener's failure must not stop the count */ } } }
   return {
     spentUsd: () => total,
-    snapshot: () => ({ usd: total, inputTokens, outputTokens, calls }),
+    snapshot: () => ({ usd: total, inputTokens, outputTokens, calls, cachedTokens }),
     subscribe(listener) { listeners.add(listener); return () => { listeners.delete(listener) } },
     byType: () => ({ ...types }),
     async record(usage, callType, model) {
@@ -94,6 +96,7 @@ export async function createSpendMeter(store: SettingsStore, pricing: { backend?
       total += cost
       inputTokens += usage.inputTokens
       outputTokens += usage.outputTokens
+      if (usage.cachedInputTokens !== undefined) cachedTokens = (cachedTokens ?? 0) + usage.cachedInputTokens
       calls += 1
       notify()
       if (callType) types[callType] = { usd: (types[callType]?.usd ?? 0) + cost, calls: (types[callType]?.calls ?? 0) + 1 }
@@ -108,6 +111,7 @@ export async function createSpendMeter(store: SettingsStore, pricing: { backend?
       for (const k of Object.keys(types)) delete types[k]
       inputTokens = 0
       outputTokens = 0
+      cachedTokens = undefined
       calls = 0
       notify()
     },

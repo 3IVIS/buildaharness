@@ -163,6 +163,8 @@ export { summarizeSectionChange, describeSectionChange, NAME_OPEN, NAME_CLOSE } 
 export type { SectionChange } from './writer/article-change-summary.js'
 export { readWriterIntent } from './writer/writer-intent.js'
 export type { ChatIntent, WriterIntent } from './writer/writer-intent.js'
+export { chatHistoryMessages } from './writer/writer-chat-history.js'
+export type { ChatTurn } from './writer/writer-chat-history.js'
 export { captureChatState } from './writer/writer-chat-capture.js'
 export type { CaptureResult, CaptureStatus } from './writer/writer-chat-capture.js'
 // Aielia Write: the article model, its rules, folder format and stored sources

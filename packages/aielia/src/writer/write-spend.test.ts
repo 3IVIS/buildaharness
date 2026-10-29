@@ -99,3 +99,13 @@ describe('a model the price table does not know', () => {
     expect(meter.spentUsd()).toBeGreaterThan(0)
   })
 })
+
+describe('cached input', () => {
+  it('counts the cached part only when a call reports it', async () => {
+    const meter = await createSpendMeter(createMemoryArticleStore(), { model: 'claude-opus-5-5' })
+    await meter.record({ inputTokens: 100, outputTokens: 5 } as never, 'chat')
+    expect(meter.snapshot().cachedTokens).toBeUndefined()
+    await meter.record({ inputTokens: 100, outputTokens: 5, cachedInputTokens: 60 } as never, 'chat')
+    expect(meter.snapshot().cachedTokens).toBe(60)
+  })
+})
