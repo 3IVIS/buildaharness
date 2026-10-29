@@ -197,6 +197,8 @@ export interface AssistantConfig {
    * Presentation only — never added to LAYER_SETTINGS.
    */
   planGraphMode?: PlanGraphMode
+  /** Where the surface reads advisor instruction fragments from at session start (a file path on the CLI). Empty by default: no fragments. The loader is platform plumbing; the shared code takes the loaded set. */
+  instructionFragmentsPath?: string
   /**
    * AL7b of plans/adaptive_layer_selection_plan.html — 'static' (default; also the kill switch) |
    * 'shadow' (record what adaptive would decide, execute static) | 'adaptive'. Undefined falls back
@@ -256,6 +258,7 @@ export const CONFIG_KEYS: readonly (keyof AssistantConfig)[] = [
   'activeProject',
   'goalGraphMode',
   'planGraphMode',
+  'instructionFragmentsPath',
   'layerPolicyMode',
   'goalGraphSuggestMode',
   'layers',

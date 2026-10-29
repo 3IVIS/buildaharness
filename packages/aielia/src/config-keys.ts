@@ -121,6 +121,7 @@ export const ENV_KEYS: readonly EnvKeySpec[] = [
   { key: 'activeProject', cli: 'ASSISTANT_ACTIVE_PROJECT', fromEnv: str },
   { key: 'goalGraphMode', cli: 'ASSISTANT_GOAL_GRAPH', vite: 'VITE_ASSISTANT_GOAL_GRAPH', fromEnv: normalizeGoalGraphMode },
   { key: 'planGraphMode', cli: 'ASSISTANT_PLAN_GRAPH', vite: 'VITE_ASSISTANT_PLAN_GRAPH', fromEnv: normalizePlanGraphMode },
+  { key: 'instructionFragmentsPath', cli: 'ASSISTANT_INSTRUCTION_FRAGMENTS', fromEnv: str },
   { key: 'layerPolicyMode', cli: 'ASSISTANT_LAYER_POLICY', vite: 'VITE_ASSISTANT_LAYER_POLICY', fromEnv: normalizeLayerPolicyMode },
   { key: 'goalGraphSuggestMode', cli: 'ASSISTANT_GOAL_GRAPH_SUGGEST', vite: 'VITE_ASSISTANT_GOAL_GRAPH_SUGGEST', fromEnv: normalizeGoalGraphSuggestMode },
 ]

@@ -62,6 +62,7 @@ import { PlanService } from './plan-service.js'
 import { PlanDraftingService } from './plan-drafting-service.js'
 import { planQuestionRoutingMode, renderPlanStateBlock, renderStuckPlanNudge, shouldRoutePlanQuestion, shouldSetAsideStuckPlan, stuckPlanResumeEnabled } from './plan-question.js'
 import { buildStepInstruction, planStepPromptEnabled } from './plan-step-prompt.js'
+import { withInstructionFragments, type InstructionFragments } from './instruction-fragments.js'
 import { decomposedAnswerOnceEnabled } from './decomposed-answer.js'
 import { PlanApprovalService, type PlanDecision, type PlanApprovalEdits } from './plan-approval-service.js'
 import { PlanSketchService } from './plan-sketch-service.js'
@@ -312,6 +313,8 @@ export interface PersonalAssistantOptions {
   actionTools?: ActionToolsContext
   /** Stores reminders detected from "remind me"/"set a reminder"-shaped requests — defaults to an in-process store. See ReminderStore's `dueAt` doc: v1 stores raw text only, no time parsing, so `listDue()` won't return these yet. */
   reminderStore?: ReminderStore
+  /** Advisor-adopted instruction fragments, already loaded once at session start (see instruction-fragments.ts). Absent or empty: every prompt is unchanged. */
+  instructionFragments?: InstructionFragments
   /** Structured turn telemetry — turn/risk/triviality/harness-node/tool-call/escalation/error events. Purely additive instrumentation; no behavior change when unset. */
   onTrace?: (event: TraceEvent) => void
   /**
@@ -431,6 +434,7 @@ export class PersonalAssistant {
   private readonly writerChat: WriterChatPort | undefined
   /** Whenever any of fileTools/webTools/shellTools is configured, `turn()` routes through AgentLoop instead of a single plain chat call — computed once here since it never changes for the lifetime of an instance. */
   private readonly toolLoopWillRun: boolean
+  private readonly instructionFragments: InstructionFragments | undefined
   /** R3 of the internal plan — mirrors the same flag HarnessBridge was given at construction, kept here too so runTurn can decide whether to defer the tool loop into a harness-driven proposer instead of precomputing draftReply. See PersonalAssistantOptions.oneLoopMode's doc comment. */
   private readonly oneLoopMode: OneLoopMode
   private readonly layerPolicyMode: LayerPolicyMode
@@ -498,6 +502,7 @@ export class PersonalAssistant {
     const actionTools = options.actionTools
     const reminderStore = options.reminderStore ?? new InMemoryReminderStore(new InMemoryAdapter({ scope: 'thread', namespace: 'personal-assistant-reminders' }))
     this.onTrace = options.onTrace
+    this.instructionFragments = options.instructionFragments
     this.onDebugLog = options.onDebugLog
     this.dangerouslySkipPermissions = options.dangerouslySkipPermissions ?? false
     this.writerChat = options.writerChat
@@ -1397,7 +1402,8 @@ export class PersonalAssistant {
     const memoryStateBlock = (await this.memoryService.isMemoryOff())
       ? '\n\n[Memory state, set by the user: memory writes are OFF from now on. What the user says from this message on is not saved and will not be remembered after this conversation, so do not say it was or will be. Facts saved earlier (including earlier in this conversation, while memory was on) stay saved and readable: do not withdraw or contradict what you said about those before.]'
       : '\n\n[Memory state: memory writes are ON. The system saves what the user tells you about themselves, so do not say that nothing is being saved. Anything the user said while memory was off was NOT saved: do not say it was, and do not offer to keep or remember it unless they say it again now.]'
-    let systemPrompt = `${SYSTEM_PROMPT}${factsBlock}${recallBlock}${remindersBlock}${memoryStateBlock}${writerBlock}`
+    // The single insertion point for advisor instruction fragments (tool-use slot, only when a tool loop runs); empty slot = byte-identical prompt.
+    let systemPrompt = withInstructionFragments(`${SYSTEM_PROMPT}${factsBlock}${recallBlock}${remindersBlock}${memoryStateBlock}${writerBlock}`, this.toolLoopWillRun ? this.instructionFragments : undefined, 'tool_use')
 
     const interpretation = await this.turnInterpreter.interpretIntent({
       userMessage,
@@ -1600,7 +1606,7 @@ export class PersonalAssistant {
     const stepInstruction = planStepPromptEnabled()
       ? (taskId: string): string | undefined => {
           const description = planStepDescriptions?.get(taskId)
-          return description ? buildStepInstruction(description) : undefined
+          return description ? withInstructionFragments(buildStepInstruction(description), this.instructionFragments, 'plan_step') : undefined
         }
       : undefined
     // The mutable array AgentLoop.createOneLoopProposer's proposer pushes to as it dispatches
