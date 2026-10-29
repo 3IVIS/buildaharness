@@ -1,5 +1,5 @@
 import { FlowExecutionError } from './errors'
-import { buildAnthropicMessages, parseAnthropicContentBlocks } from './anthropic-message-shape'
+import { buildAnthropicMessages, markLastBlockCacheable, parseAnthropicContentBlocks } from './anthropic-message-shape'
 import { ANTHROPIC_DEFAULT_MODEL } from './model-defaults'
 
 export interface ChatMessage {
@@ -18,7 +18,7 @@ export interface ChatOptions {
   structuredOutput?: { schema: Record<string, unknown> }
   /**
    * Ask the provider to cache the prompt prefix (system text, tool definitions and the conversation so far) so the next call of a growing
-   * conversation re-reads it at a fraction of the price. Honoured by AnthropicLLMClient; other backends ignore it (OpenAI-compatible APIs cache on their own).
+   * conversation re-reads it at a fraction of the price. Honoured by AnthropicLLMClient and, for claude-* models, by LLMClient's structured calls through the proxy; other backends ignore it (OpenAI-compatible APIs cache on their own).
    */
   cachePrompt?: boolean
   /**
@@ -108,6 +108,15 @@ export interface LLMStructuredResponse {
   toolCalls?: ToolCallResult[]
 }
 
+/**
+ * Anthropic's input_tokens leaves out the tokens read from or written to its prompt cache, which come in their own fields; TokenUsage counts
+ * them inside inputTokens (cached and written are subsets). With neither field reported the usage is as it was.
+ */
+export function withCacheCounts(usage: TokenUsage, read: number | undefined, written: number | undefined): TokenUsage {
+  if (read === undefined && written === undefined) return usage
+  return { ...usage, inputTokens: usage.inputTokens + (read ?? 0) + (written ?? 0), cachedInputTokens: read ?? 0, cacheWriteTokens: written ?? 0 }
+}
+
 export interface TokenUsage {
   inputTokens: number
   outputTokens: number
@@ -189,9 +198,11 @@ export class LLMClient implements ILLMClient {
     // always gets real usage regardless of provider.
     let inputTokens: number | undefined
     let outputTokens: number | undefined
+    let cacheRead: number | undefined
+    let cacheWritten: number | undefined
     const reportUsage = (): void => {
       if (inputTokens !== undefined || outputTokens !== undefined) {
-        options.onUsage?.({ inputTokens: inputTokens ?? 0, outputTokens: outputTokens ?? 0 })
+        options.onUsage?.(withCacheCounts({ inputTokens: inputTokens ?? 0, outputTokens: outputTokens ?? 0 }, cacheRead, cacheWritten))
       }
     }
 
@@ -209,6 +220,8 @@ export class LLMClient implements ILLMClient {
           try {
             const parsed = JSON.parse(data)
             if (typeof parsed?.message?.usage?.input_tokens === 'number') inputTokens = parsed.message.usage.input_tokens
+            if (typeof parsed?.message?.usage?.cache_read_input_tokens === 'number') cacheRead = parsed.message.usage.cache_read_input_tokens
+            if (typeof parsed?.message?.usage?.cache_creation_input_tokens === 'number') cacheWritten = parsed.message.usage.cache_creation_input_tokens
             if (typeof parsed?.usage?.output_tokens === 'number') outputTokens = parsed.usage.output_tokens
             // Anthropic
             const anthropicDelta = parsed?.delta?.text
@@ -249,17 +262,20 @@ export class LLMClient implements ILLMClient {
       })
     }
     const { system, messages: anthropicMessages } = buildAnthropicMessages(messages)
+    // With cachePrompt the system text and everything up to the last message are marked for the provider's prompt cache, as AnthropicLLMClient does.
+    const cache = options.cachePrompt === true
     const body: Record<string, unknown> = {
       model,
       messages: anthropicMessages,
       stream: false,
-      ...(system ? { system } : {}),
+      ...(system ? { system: cache ? [{ type: 'text', text: system, cache_control: { type: 'ephemeral' } }] : system } : {}),
       ...(options.maxTokens ? { max_tokens: options.maxTokens } : {}),
       ...(options.temperature !== undefined ? { temperature: options.temperature } : {}),
     }
     if (tools && tools.length > 0) {
       body.tools = tools.map(t => ({ name: t.name, description: t.description, input_schema: t.input_schema }))
     }
+    if (cache) markLastBlockCacheable(anthropicMessages)
     const response = await this.fetchImpl(`${this.proxyUrl}/llm/chat`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${this.authToken}` },
@@ -272,9 +288,11 @@ export class LLMClient implements ILLMClient {
     const { content, toolCalls } = parseAnthropicContentBlocks(json.content)
     // Anthropic's non-streaming response always includes usage — reliable regardless of
     // provider, unlike callChat's best-effort streaming capture above.
-    const usage = json.usage as { input_tokens?: number; output_tokens?: number } | undefined
+    const usage = json.usage as { input_tokens?: number; output_tokens?: number; cache_read_input_tokens?: number; cache_creation_input_tokens?: number } | undefined
     if (usage && typeof usage.input_tokens === 'number' && typeof usage.output_tokens === 'number') {
-      options.onUsage?.({ inputTokens: usage.input_tokens, outputTokens: usage.output_tokens })
+      // A proxy that runs the CLI can say what the request really cost (total_cost_usd); the API itself does not.
+      const reported = typeof json.total_cost_usd === 'number' ? { costUsd: json.total_cost_usd } : {}
+      options.onUsage?.({ ...withCacheCounts({ inputTokens: usage.input_tokens, outputTokens: usage.output_tokens }, usage.cache_read_input_tokens, usage.cache_creation_input_tokens), ...reported })
     }
     return { content, toolCalls }
   }

@@ -1,3 +1,4 @@
+import { summarizeSectionChange, type SectionChange } from './article-change-summary.js'
 import type { ILLMClient, TokenUsage } from '@buildaharness/runtime'
 import { TurnAbortedError, stoppableLlmClient } from '../turn-abort.js'
 import { dropLinksToMissingClaims, extractClaims, type ExtractionResult } from './article-claims.js'
@@ -11,6 +12,7 @@ import type { Brief, StyleProfile } from './article-model.js'
 import { addIdea, editIdea, removeIdea, setIdeaState, suggestIdeas, type IdeaSuggestion } from './article-ideas.js'
 import { attachSourceToText, proposeSourceLinks, textUnitAt, type SourceLinkProposal, type TextRange } from './article-source-links.js'
 import { addDrawnLink, proposeDependencies, type DependencyKind, type DependencyProposal } from './article-dependencies.js'
+import { type ChatTurn } from './writer-chat-history.js'
 import { addSnapshot, AUTOSAVE_LABEL, compareVersions, isLargeChange, summarizeChange, type ChangeSummary, type VersionComparison } from './article-history.js'
 import { checkIntegrity, computeReadiness, confirmLink, createSnapshot, removeLink, restoreSnapshot, setSectionReview, type Problem, type Readiness, type Snapshot } from './article-rules.js'
 import { applyOutlineText, outlineToText } from './article-outline.js'
@@ -732,7 +734,7 @@ export class ArticleService {
   }
 
   /** The assistant turns the writer\'s instruction into suggestions; nothing is applied until the writer accepts. */
-  async suggest(id: string, instruction: string, modelOverride?: string, refs: { ideaIds?: string[]; commentIds?: string[]; sectionIds?: string[]; focus?: { start: number; end: number } } = {}, signal?: AbortSignal): Promise<EditSuggestResult> {
+  async suggest(id: string, instruction: string, modelOverride?: string, refs: { ideaIds?: string[]; commentIds?: string[]; sectionIds?: string[]; focus?: { start: number; end: number }; history?: readonly ChatTurn[] } = {}, signal?: AbortSignal): Promise<EditSuggestResult> {
     const b = await this.get(id)
     const { onUsage } = this.opts
     const model = modelOverride ?? this.writer()
@@ -755,11 +757,11 @@ export class ArticleService {
    * The chat edits the article itself. The text as it is now is saved as a version first, always, so the edit can be undone from History; then
    * the edit is made, and only the changes this request produced are applied (suggestions waiting from before stay as they are).
    */
-  async editFromChat(id: string, instruction: string, modelOverride?: string, signal?: AbortSignal, onStage?: ChatStageListener): Promise<ChatEditResult> {
+  async editFromChat(id: string, instruction: string, modelOverride?: string, signal?: AbortSignal, onStage?: ChatStageListener, history?: readonly ChatTurn[]): Promise<ChatEditResult> {
     const savedAs = `Before a chat edit: ${clipLabel(instruction)}`
     await this.saveVersion(id, savedAs)
     onStage?.('asking')
-    const r = await this.suggest(id, instruction, modelOverride, {}, signal)
+    const r = await this.suggest(id, instruction, modelOverride, { history }, signal)
     if (r.status === 'failed') return { status: 'failed', savedAs, applied: [], skipped: 0 }
     onStage?.('applying', `${r.added.length} change${r.added.length === 1 ? '' : 's'} to apply`)
     const b = await this.get(id)
@@ -775,44 +777,45 @@ export class ArticleService {
     if (applied.length === 0) return { status: 'nothing', savedAs, applied, skipped }
     await this.store.save(id, { ...b, markdown: md, meta })
     await this.updateText(id, md, { analyze: false })
-    return { status: 'applied', savedAs, applied, skipped }
+    return { status: 'applied', savedAs, applied, skipped, change: summarizeSectionChange(b.markdown, md) }
   }
 
   /**
    * The chat writes the text of an article that has none: a version is saved first (as for any chat edit), then the draft becomes the text.
    * With `nameIt`, the article is also given the name the draft came with (for an article the chat has just made, which has no name of its own yet).
+   * With `rewrite`, the model is given the current text and reworks all of it as the instruction says (a change too wide for edits that quote text).
    */
-  async draftFromChat(id: string, instruction: string, modelOverride?: string, nameIt = false, signal?: AbortSignal, onText?: (markdownSoFar: string) => void, onStage?: ChatStageListener): Promise<{ status: 'drafted' | 'failed'; savedAs: string; name?: string; reason?: string }> {
-    const savedAs = `Before a chat draft: ${clipLabel(instruction)}`
+  async draftFromChat(id: string, instruction: string, modelOverride?: string, nameIt = false, signal?: AbortSignal, onText?: (markdownSoFar: string) => void, onStage?: ChatStageListener, rewrite = false, history?: readonly ChatTurn[]): Promise<{ status: 'drafted' | 'failed'; savedAs: string; name?: string; reason?: string; change?: SectionChange }> {
+    const savedAs = `Before a chat ${rewrite ? 'rewrite' : 'draft'}: ${clipLabel(instruction)}`
     await this.saveVersion(id, savedAs)
     onStage?.('asking')
     const b = await this.get(id)
     const { onUsage } = this.opts
-    const r = await draftArticle({ meta: b.meta, instruction }, stoppableLlmClient(this.opts.llm, signal), modelOverride ?? this.writer(), onUsage, onText)
+    const r = await draftArticle({ meta: b.meta, instruction, ...(rewrite ? { current: b.markdown } : {}), history }, stoppableLlmClient(this.opts.llm, signal), modelOverride ?? this.writer(), onUsage, onText)
     if (signal?.aborted) throw new TurnAbortedError()
     if (r.status === 'failed') return { status: 'failed', savedAs, reason: r.reason }
     onStage?.('applying')
     await this.updateText(id, r.markdown, { analyze: false })
     if (nameIt && r.name) await this.rename(id, r.name)
-    return { status: 'drafted', savedAs, name: nameIt && r.name ? r.name : undefined }
+    return { status: 'drafted', savedAs, name: nameIt && r.name ? r.name : undefined, ...(rewrite ? { change: summarizeSectionChange(b.markdown, r.markdown) } : {}) }
   }
 
   /** The same for the outline: saved first, then the headings are reworked (reworded, added, removed, moved) and each section's text follows its heading. */
-  async editOutlineFromChat(id: string, instruction: string, modelOverride?: string, signal?: AbortSignal, onStage?: ChatStageListener): Promise<OutlineEditResult> {
+  async editOutlineFromChat(id: string, instruction: string, modelOverride?: string, signal?: AbortSignal, onStage?: ChatStageListener, history?: readonly ChatTurn[]): Promise<OutlineEditResult> {
     const savedAs = `Before a chat edit of the outline: ${clipLabel(instruction)}`
     await this.saveVersion(id, savedAs)
     onStage?.('asking')
     const b = await this.get(id)
     const before = outlineToText(b.markdown)
     const { onUsage } = this.opts
-    const r = await editOutline({ meta: b.meta, outline: before, instruction }, stoppableLlmClient(this.opts.llm, signal), modelOverride ?? this.writer(), onUsage)
+    const r = await editOutline({ meta: b.meta, outline: before, instruction, history }, stoppableLlmClient(this.opts.llm, signal), modelOverride ?? this.writer(), onUsage)
     if (signal?.aborted) throw new TurnAbortedError()
     if (r.status === 'failed') return { status: 'failed', savedAs, reason: r.reason }
     onStage?.('applying')
     const next = applyOutlineText(b.markdown, r.outline)
     if (next === b.markdown) return { status: 'nothing', savedAs, before, after: before }
     await this.updateText(id, next, { analyze: false })
-    return { status: 'applied', savedAs, before, after: outlineToText(next) }
+    return { status: 'applied', savedAs, before, after: outlineToText(next), change: summarizeSectionChange(b.markdown, next) }
   }
 
   /** Accepts a suggestion (optionally with the writer\'s own wording): the Markdown changes, then the usual update runs. */
@@ -1416,6 +1419,8 @@ export interface ChatEditResult {
   applied: { quote: string; replacement: string }[]
   /** Changes that no longer fitted the text when they were made. */
   skipped: number
+  /** What the edit did to the outline and to the wording, section by section. */
+  change?: SectionChange
 }
 
 export interface OutlineEditResult {
@@ -1424,6 +1429,7 @@ export interface OutlineEditResult {
   before?: string
   after?: string
   reason?: string
+  change?: SectionChange
 }
 
 const clipLabel = (instruction: string): string => {

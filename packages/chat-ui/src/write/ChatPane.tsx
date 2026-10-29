@@ -1,7 +1,7 @@
 import { AdjustBar, type ChatAction } from './AdjustBar'
 import { ModelPicker } from './ModelPicker'
 import { useEffect, useLayoutEffect, useRef, useState } from 'react'
-import { CLI_DEFAULT_LABEL, modelLabel, checklistAt, elapsedText, stageSentence, workPlan, type WorkKind, type ResultLine } from '@buildaharness/aielia'
+import { CLI_DEFAULT_LABEL, NAME_CLOSE, NAME_OPEN, modelLabel, checklistAt, elapsedText, stageSentence, workPlan, type WorkKind, type ResultLine } from '@buildaharness/aielia'
 import { ICON_PATHS, Icon, IconButton } from './icons'
 
 /** A background model call as the chat shows it: its kind (which checklist), the stage it is at, and a finer step inside the stage. */
@@ -25,7 +25,36 @@ export interface WorkProgress {
   finishing?: boolean
 }
 
-export type ChatMode = 'answer' | 'suggest' | 'edit'
+export type ChatMode = 'auto' | 'answer' | 'suggest' | 'edit'
+
+/** What hovering the mode box says: what the mode does, and that picking anything but Auto turns the automatic reading of messages off. */
+const MODE_HINT: Record<ChatMode, string> = {
+  auto: 'Auto: Aielia reads each message and decides whether to edit the text, suggest changes or just answer. Choosing any other mode turns this automatic detection off until you change it back to Auto.',
+  answer: 'Automatic detection is off: every message is only answered, and the text is never changed. Choose Auto to let Aielia decide from each message.',
+  suggest: 'Automatic detection is off: every request for a change becomes suggestions to accept or reject. Choose Auto to let Aielia decide from each message.',
+  edit: 'Automatic detection is off: every request for a change is made in the text, after saving a version first so it can be undone from History. Choose Auto to let Aielia decide from each message.',
+}
+
+/** The text of one chat line: a paragraph for each line of text, section names (marked by the page) in a colour, and a bold label on the summary lines ("• Outline: …"). */
+function LineText({ text }: { text: string }): React.JSX.Element {
+  const names = (t: string): (string | React.JSX.Element)[] =>
+    t.split(NAME_OPEN).flatMap((piece, i) => {
+      if (i === 0) return [piece]
+      const end = piece.indexOf(NAME_CLOSE)
+      return end < 0 ? [piece] : [<span key={i} className="write__name">{piece.slice(0, end)}</span>, piece.slice(end + 1)]
+    })
+  return (
+    <div className="write__lines">
+      {text.split('\n').map((line, i) => {
+        if (!line.trim()) return <div key={i} className="write__ln write__ln--gap" />
+        const bullet = /^• ([A-Za-z ]{3,14}): (.*)$/.exec(line)
+        return bullet
+          ? <div key={i} className="write__ln write__ln--bullet"><b className="write__lab">{bullet[1]}:</b> {names(bullet[2])}</div>
+          : <div key={i} className="write__ln">{names(line)}</div>
+      })}
+    </div>
+  )
+}
 
 /** What hovering a record line says. */
 export const RECORD_HINT = 'A record of an action in the interface, not a chat message'
@@ -39,6 +68,10 @@ export interface ChatLine {
   usage?: string
   /** The line records an action taken in the interface (a button, a drop, a setting), not something said in the chat; it is drawn quieter and says so on hover. */
   record?: boolean
+  /** The reply came from the conversation with the assistant, which remembers it. */
+  session?: boolean
+  /** The reply changed the article: the version saved just before (by its label) and a fingerprint of the text after, so a resend can put the article back unless the writer has changed it since. */
+  undo?: { articleId: string; label: string; after: string }
 }
 
 interface Props {
@@ -61,6 +94,8 @@ interface Props {
   canAct: boolean
   shown: boolean
   onSend: () => void
+  /** Sends the last message again in place of it and its reply. */
+  onResend?: () => void
   onAdjust: (message: string) => void
   onAction: (action: ChatAction) => void
   /** Repositories handed to the open article, and what the chat menu does with them: run the check against a typed address or the attached ones. */
@@ -81,6 +116,7 @@ export function ChatPane(p: Props): React.JSX.Element {
   const atBottom = useRef(true)
   const lastFrom = p.lines.at(-1)?.from
   const working = Boolean(p.progress)
+  const lastYours = [...p.lines].reverse().find((l) => l.from === 'you' && !l.record)?.id
   const { stage, detail, streamed, finishing } = p.progress ?? {}
   useLayoutEffect(() => {
     const el = list.current
@@ -101,7 +137,10 @@ export function ChatPane(p: Props): React.JSX.Element {
       <ul className="write__chat" aria-live="polite" ref={list} onScroll={(e) => { const el = e.currentTarget; atBottom.current = el.scrollHeight - el.scrollTop - el.clientHeight < 60 }}>
         {p.lines.map((l) => (
           <li key={l.id} className={`write__line write__line--${l.from}${l.record ? ' write__line--record' : ''}`} title={l.record ? RECORD_HINT : undefined}>
-            <div>{l.text}</div>
+            <LineText text={l.text} />
+            {l.id === lastYours && p.onResend && !p.busy && !working && (
+              <IconButton label="Send again: this message and the replies after it leave the chat (if the reply changed the article, it is put back as it was before; the present text is kept in History)" icon="restore" className="write__resend" onClick={p.onResend} />
+            )}
             {l.usage && <div className="write__lineusage" title="Tokens, time and cost of this request">{l.usage}</div>}
             {l.from === 'aielia' && l.model !== undefined && (
               <div className="write__linemeta">
@@ -124,8 +163,9 @@ export function ChatPane(p: Props): React.JSX.Element {
           placeholder="Message Aielia. Enter sends, Shift+Enter starts a new line."
         />
         <div className="write__composebar">
-          <label className="write__switch2" title="What happens when you ask for a change to the text. Editing saves a version first, so it can be undone from History.">
-            <select aria-label="When I ask for a change" value={p.mode} onChange={(e) => p.onMode(e.target.value as ChatMode)}>
+          <label className="write__switch2" title={MODE_HINT[p.mode]}>
+            <select aria-label="When I ask for a change" title={MODE_HINT[p.mode]} value={p.mode} onChange={(e) => p.onMode(e.target.value as ChatMode)}>
+              <option value="auto">Auto (from your message)</option>
               <option value="answer">Just answer</option>
               <option value="suggest">Suggest edits</option>
               <option value="edit">{p.editLabel}</option>

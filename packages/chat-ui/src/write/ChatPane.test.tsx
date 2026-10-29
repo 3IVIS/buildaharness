@@ -1,5 +1,6 @@
 import { render, screen } from '@testing-library/react'
 import { describe, expect, it } from 'vitest'
+import { NAME_CLOSE, NAME_OPEN } from '@buildaharness/aielia'
 import { ChatPane, RECORD_HINT, type WorkProgress } from './ChatPane'
 
 const base = { lines: [], model: 'm', suggestions: [], onModel: () => undefined, input: '', onInput: () => undefined, mode: 'edit' as const, onMode: () => undefined, editLabel: 'Edit', busy: true, canAct: true, shown: true, onSend: () => undefined, onAdjust: () => undefined, onAction: () => undefined, repos: [], onRepoVerify: () => undefined, onRemoveRepo: () => undefined, onDropFiles: () => undefined, onClose: () => undefined }
@@ -64,5 +65,35 @@ describe('ChatPane: the usual time', () => {
     expect(screen.getByText('Usually about 20 s')).toBeInTheDocument()
     rerender(<ChatPane {...base} progress={{ ...p, finishing: true }} />)
     expect(screen.queryByText('Usually about 20 s')).toBeNull()
+  })
+})
+
+describe('the mode box hint', () => {
+  it('says that choosing another mode turns automatic detection off, and in a manual mode that it is off', () => {
+    const { rerender } = render(<ChatPane {...base} mode="auto" progress={null} />)
+    expect(screen.getByLabelText('When I ask for a change')).toHaveAttribute('title', expect.stringMatching(/Choosing any other mode turns this automatic detection off until you change it back to Auto/))
+    rerender(<ChatPane {...base} mode="answer" progress={null} />)
+    expect(screen.getByLabelText('When I ask for a change')).toHaveAttribute('title', expect.stringMatching(/Automatic detection is off.*Choose Auto/))
+  })
+})
+
+describe('chat lines', () => {
+  it('shows section names in their own element, with a label on summary lines, and no quotation marks', () => {
+    const text = `Made 2 changes.\n• Outline: added ${NAME_OPEN}Story${NAME_CLOSE}; removed ${NAME_OPEN}Close${NAME_CLOSE}.\n• Reworded: ${NAME_OPEN}Intro${NAME_CLOSE}.\nUndo from History.`
+    const { container } = render(<ChatPane {...base} lines={[{ id: 1, from: 'aielia', text, model: 'm' }]} progress={null} />)
+    expect([...container.querySelectorAll('.write__name')].map((n) => n.textContent)).toEqual(['Story', 'Close', 'Intro'])
+    expect([...container.querySelectorAll('.write__lab')].map((n) => n.textContent)).toEqual(['Outline:', 'Reworded:'])
+    expect(container.querySelectorAll('.write__ln')).toHaveLength(4)
+    expect(container.textContent).not.toMatch(/[“”]/)
+    expect(container.textContent).not.toContain(NAME_OPEN)
+  })
+})
+
+describe('usage line', () => {
+  it('says how much of the input came from the cache, only when that is known', async () => {
+    const { usageText } = await import('./WriteApp')
+    expect(usageText(2000, { usd: 0.01, inputTokens: 1000, outputTokens: 50, calls: 2, cachedTokens: 600 })).toContain('1,000 in (60% cached), 50 out')
+    expect(usageText(2000, { usd: 0.01, inputTokens: 1000, outputTokens: 50, calls: 2 })).toContain('1,000 in, 50 out')
+    expect(usageText(2000, { usd: 0.01, inputTokens: 1000, outputTokens: 50, calls: 2, cachedTokens: 600, estimatedInputTokens: 1000 })).toContain('~1,050 tokens (~1,000 in, 50 out)')
   })
 })

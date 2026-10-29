@@ -1,6 +1,7 @@
 import { StrictMode, useEffect, useState } from 'react'
 import { createRoot } from 'react-dom/client'
 import { envOverridesFromImportMetaEnv } from '../browser-config'
+import { applyBrowserLayerSettings } from '../layer-env'
 import { ConnectionSettings } from './ConnectionSettings'
 import { DialogProvider } from './dialogs'
 import { WriteApp } from './WriteApp'
@@ -27,6 +28,8 @@ function Root(): React.JSX.Element {
   useEffect(() => {
     if (!connection) { setServices(undefined); return }
     let live = true
+    // The shared flag readers in the assistant code read process.env, which a browser tab lacks ("process is not defined").
+    applyBrowserLayerSettings(undefined)
     const defaults = envOverridesFromImportMetaEnv(import.meta.env)
     createWriteServices(toAssistantConfig(connection, defaults), webProxyOf(connection, defaults), connection.githubToken).then((s) => { if (live) setServices(s) }, (e) => setError(String(e)))
     return () => { live = false }

@@ -9,6 +9,8 @@ import {
   buildAssistantOptions,
   modelFailureHint,
   recordWriterMessage,
+  readWriterIntent,
+  type WriterIntent,
   createArticleChatPort,
   createLlmClient,
   createMemoryAdapterArticleStore,
@@ -54,6 +56,12 @@ export interface WriteServices {
    * `recorded` is false when the record could not be made (the edit goes ahead; the page says so).
    */
   record(message: string, activeArticleId: string | undefined, live?: { signal?: AbortSignal }): Promise<{ model: string; recorded: boolean; stopped?: boolean }>
+  /** What a message asks for, read by the model (the automatic-checks model, which is the cheaper one): change the text, suggest changes, or just answer. A failure reads as an answer. */
+  /** Removes the last exchange from what the assistant remembers of the conversation. */
+  undoLastTurn(): Promise<void>
+  intent(message: string, context: { articleHasText: boolean; lastReply?: string }, live?: { signal?: AbortSignal }): Promise<WriterIntent>
+  /** Reads the pages a message pointed to, for a change that should follow them. `block` is their text for the model's instruction; each page that could not be read is in `failed` with why. */
+  readReferences(urls: string[]): Promise<{ block: string; failed: { url: string; reason: string }[] }>
   models: WriteModels
   permissions: { get(): Promise<WritePermissions>; set(p: WritePermissions): Promise<void> }
   /** Dollars spent on model calls in this browser so far (counts toward the cap). */
@@ -138,6 +146,9 @@ export async function assembleWriteServices(parts: {
   }
 
   const meter = await createSpendMeter(store, { backend, model: chatModel })
+  // In the dev mirror, each counted call's usage as the client reported it (so a count that looks wrong can be traced to the backend).
+  const recordUsage = meter.record.bind(meter)
+  meter.record = async (usage, callType, model) => { mirrorPost('usage', 'call', { backend, callType, model, ...usage }); return recordUsage(usage, callType, model) }
   let cap = (await loadPermissions(store)).spendCapUsd
   // Every model call, the article steps and the chat alike, goes through the cap.
   let lastModelError: string | undefined
@@ -166,7 +177,10 @@ export async function assembleWriteServices(parts: {
     async record(message, activeArticleId, live) {
       if (activeArticleId) await port.setActive(activeArticleId)
       const used = chatModel
-      const work = recordWriterMessage({ message, port }, llm, chatModel)
+      // In the dev mirror, what the note-capturing call answered (its size and start), since it runs before every change and its output is paid for.
+      const seen = Object.create(llm) as typeof llm
+      seen.callChatStructured = async (...args: Parameters<typeof llm.callChatStructured>) => { const r = await llm.callChatStructured(...args); mirrorPost('capture', 'raw', { chars: r.content.length, head: r.content.slice(0, 500) }); return r }
+      const work = recordWriterMessage({ message, port }, seen, chatModel)
       // A stop is honoured at once; the call itself finishes in the background and keeps what the writer said, which is harmless.
       const signal = live?.signal
       const outcome = signal
@@ -174,6 +188,28 @@ export async function assembleWriteServices(parts: {
         : await work
       if (outcome === 'stopped') return { model: used, recorded: false, stopped: true }
       return { model: used, recorded: outcome.status === 'captured' || outcome.status === 'off' }
+    },
+    async undoLastTurn() { await assistant.undoLastTurn(SESSION_ID) },
+    async intent(message, context, live) {
+      const read = await readWriterIntent({ message, ...context }, llm, autoModel, undefined, live?.signal)
+      mirrorPost('intent', 'read', { message: message.slice(0, 200), ...read })
+      return read
+    },
+    async readReferences(urls) {
+      const failed: { url: string; reason: string }[] = []
+      const parts_: string[] = []
+      for (const url of urls) {
+        if (!parts.fetchWeb) { failed.push({ url, reason: 'no web proxy is set up for reading pages (Settings, Connection)' }); continue }
+        try {
+          const text = (await parts.fetchWeb(url)).trim()
+          if (text) parts_.push(`Page ${url}:\n${text.slice(0, MAX_REFERENCE_CHARS)}`)
+          else failed.push({ url, reason: 'the page had no text' })
+        } catch (e) {
+          failed.push({ url, reason: e instanceof Error ? e.message : String(e) })
+        }
+      }
+      mirrorPost('references', 'read', { urls, readChars: parts_.map((p) => p.length), failed })
+      return { block: parts_.length ? `\n\nThe writer pointed to these pages as an example or material for this change; follow or use them as the writer asks, and never mention the pages, a \"reference\" or this instruction in the article text:\n\n${parts_.join('\n\n')}` : '', failed }
     },
     models: {
       chat: () => chatModel,
@@ -279,9 +315,41 @@ export function createWriteServicesFor(config: AssistantConfig, platform: WriteP
   })
 }
 
+/** How much of a page the writer pointed to goes into the instruction. */
+const MAX_REFERENCE_CHARS = 8000
+
 /** Articles kept in the webview's or browser's IndexedDB. Both hosts start with this. */
 export function indexedDbArticleStore(): ArticleStore {
-  return createMemoryAdapterArticleStore(new IndexedDBAdapter({ namespace: 'aielia-write' }))
+  const store = createMemoryAdapterArticleStore(new IndexedDBAdapter({ namespace: 'aielia-write' }))
+  return import.meta.env.DEV ? mirrorStore(store) : store
+}
+
+/** Dev server only: sends one event to the mirror (see vite.write.config.ts). */
+let mirrorQueue: Promise<unknown> = Promise.resolve()
+function mirrorPost(kind: string, id: string, bundle?: unknown): void {
+  // One at a time and in order: two saves a few milliseconds apart must not reach the file swapped.
+  if (import.meta.env.DEV) mirrorQueue = mirrorQueue.then(() => fetch('/__mirror', { method: 'POST', body: JSON.stringify({ kind, id, bundle }) })).catch(() => undefined)
+}
+
+/** Dev server only: copies every save and removal to vite.write.config.ts's /__mirror so a watcher can read the article. */
+function mirrorStore(store: ArticleStore): ArticleStore {
+  const post = mirrorPost
+  const SECRET = /token|key|secret|password/i
+  return {
+    ...store,
+    async save(id, bundle) {
+      await store.save(id, bundle)
+      post('save', id, bundle)
+    },
+    async remove(id) {
+      await store.remove(id)
+      post('remove', id)
+    },
+    async setSetting(key, value) {
+      await store.setSetting(key, value)
+      if (!SECRET.test(key)) post('setting', key, value)
+    },
+  }
 }
 
 /** A plain browser tab: IndexedDB storage, the visitor's own key, no file or shell tools. */

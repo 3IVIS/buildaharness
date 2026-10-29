@@ -2,8 +2,9 @@ import { describe, it, expect } from 'vitest'
 import type { ChatMessage, ILLMClient } from '@buildaharness/runtime'
 import { ArticleService, createArticleChatPort, createMemoryArticleStore } from './article-service.js'
 import { processWriterMessage } from './writer-chat-turn.js'
+import { readWriterIntent } from './writer-intent.js'
 import { CALL_TYPES, CHAT_CALL, callTypeLabel, classifyCall } from './write-spend.js'
-import { createSpendMeter, withSpendCap } from './write-permissions.js'
+import { createSpendMeter, withSpendCap, withEstimatedInput } from './write-permissions.js'
 
 const NOW = '2026-10-16T10:00:00.000Z'
 const MD = '# Post\n\n## Latency\n\nThe p99 was 18 ms.\n\n## Conclusion\n\nSo p99 stays under 20 ms.\n'
@@ -46,6 +47,7 @@ describe('call types', () => {
     await svc.suggestIdeas(id) // ideas
     await svc.editOutlineFromChat(id, 'rename a section') // outline
     await processWriterMessage({ port: createArticleChatPort(store), message: 'Dana says check the figure', now: NOW }, recording(seen)) // capture
+    await readWriterIntent({ message: 'revise the outline', articleHasText: true }, recording(seen)) // intent
     expect(new Set(seen)).toEqual(new Set(CALL_TYPES.map((t) => t.id)))
   })
   it('counts an unrecognised system prompt as chat, and names every type', () => {
@@ -95,5 +97,49 @@ describe('a model the price table does not know', () => {
     const meter = await createSpendMeter(createMemoryArticleStore(), { model: 'claude-opus-5-5' })
     await meter.record({ inputTokens: 1_000_000, outputTokens: 0 } as never, 'claims', 'some-new-model')
     expect(meter.spentUsd()).toBeGreaterThan(0)
+  })
+})
+
+describe('cached input', () => {
+  it('counts the cached part only when a call reports it', async () => {
+    const meter = await createSpendMeter(createMemoryArticleStore(), { model: 'claude-opus-5-5' })
+    await meter.record({ inputTokens: 100, outputTokens: 5 } as never, 'chat')
+    expect(meter.snapshot().cachedTokens).toBeUndefined()
+    await meter.record({ inputTokens: 100, outputTokens: 5, cachedInputTokens: 60 } as never, 'chat')
+    expect(meter.snapshot().cachedTokens).toBe(60)
+  })
+})
+
+describe('input counts that cannot be believed', () => {
+  const long = [{ role: 'user' as const, content: 'x'.repeat(8000) }]
+  it('counts a request by its size when the backend reports a handful of input tokens for it, and marks the count as estimated', async () => {
+    const u = withEstimatedInput({ inputTokens: 2, outputTokens: 50, cachedInputTokens: 0 }, long)
+    expect(u).toMatchObject({ inputTokens: 2000, outputTokens: 50, estimated: true })
+    expect(u.cachedInputTokens).toBeUndefined()
+  })
+  it('leaves a plausible count, a small request and a count that already includes the cache as they were', () => {
+    const real = { inputTokens: 2100, outputTokens: 50 }
+    expect(withEstimatedInput(real, long)).toBe(real)
+    const small = { inputTokens: 3, outputTokens: 5 }
+    expect(withEstimatedInput(small, [{ role: 'user', content: 'hello there' }])).toBe(small)
+  })
+  it('keeps the estimated part apart in the meter, and prices the estimate', async () => {
+    const meter = await createSpendMeter(createMemoryArticleStore(), { model: 'claude-opus-5-5' })
+    const inner = { callChatStructured: async (_m: ChatMessage[], _t: unknown, o?: { onUsage?: (u: unknown) => void }) => { o?.onUsage?.({ inputTokens: 2, outputTokens: 10 }); return { content: '{}' } } } as unknown as ILLMClient
+    await withSpendCap(inner, meter, () => undefined).callChatStructured(long)
+    await Promise.resolve()
+    expect(meter.snapshot()).toMatchObject({ inputTokens: 2000, outputTokens: 10, estimatedInputTokens: 2000 })
+    expect(meter.spentUsd()).toBeGreaterThan(0.005)
+  })
+})
+
+describe('prompt caching for the chat', () => {
+  it('asks for the chat to be cached, and for no other kind of call unless the caller did', async () => {
+    const seen: (boolean | undefined)[] = []
+    const inner = { callChatStructured: async (_m: ChatMessage[], _t: unknown, o?: { cachePrompt?: boolean }) => { seen.push(o?.cachePrompt); return { content: '{}' } } } as unknown as ILLMClient
+    const llm = withSpendCap(inner, await createSpendMeter(createMemoryArticleStore(), {}), () => undefined)
+    await llm.callChatStructured([{ role: 'system', content: 'You are Aielia.' }, { role: 'user', content: 'hi' }])
+    await llm.callChatStructured([{ role: 'system', content: `${CALL_TYPES[0].marker} in them.` }])
+    expect(seen).toEqual([true, undefined])
   })
 })

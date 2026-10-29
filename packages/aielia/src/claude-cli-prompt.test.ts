@@ -64,6 +64,13 @@ describe('parseClaudeCliOutput', () => {
     expect(parsed.usage).toEqual({ inputTokens: 312, outputTokens: 148, costUsd: 0.0019 })
   })
 
+  it('counts the cache reads and writes the CLI reports apart from input_tokens inside the input, and says how many', () => {
+    const parsed = parseClaudeCliOutput(
+      JSON.stringify({ result: 'hi', usage: { input_tokens: 2, output_tokens: 40, cache_read_input_tokens: 15000, cache_creation_input_tokens: 600 }, total_cost_usd: 0.01 }),
+    )
+    expect(parsed.usage).toEqual({ inputTokens: 15602, outputTokens: 40, cachedInputTokens: 15000, cacheWriteTokens: 600, costUsd: 0.01 })
+  })
+
   it('omits usage when the JSON has no usage field', () => {
     expect(parseClaudeCliOutput('{"result": "hi"}').usage).toBeUndefined()
   })

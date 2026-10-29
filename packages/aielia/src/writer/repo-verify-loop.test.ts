@@ -135,7 +135,7 @@ describe('through the proxy client', () => {
     const [r] = await verifyBatchWithTools({ claims: [{ id: 'k1', quote: 'The delay is 800 ms.' }], articleText: 'a' }, idx, client, { model: 'claude-sonnet-5-5', onUsage: (u) => { usage.push(u.inputTokens) } })
     expect(r).toMatchObject({ id: 'k1', verdict: 'supported' })
     expect(bodies[0].tools?.map((t) => t.name)).toEqual(['search', 'read', 'list'])
-    expect(bodies[0].system).toContain('You check claims')
+    expect(JSON.stringify(bodies[0].system)).toContain('You check claims')
     const sent = bodies[1].messages.at(-1)
     expect(sent?.role).toBe('user')
     expect(JSON.stringify(sent?.content)).toContain('"tool_use_id":"toolu_1"')

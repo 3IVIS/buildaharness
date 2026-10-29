@@ -46,7 +46,7 @@ test('an edit shows its steps, ticks them off, lights the changed passage and cl
   // The changed words are lit once the article has the edit, and the block is gone after its short "Done." hold.
   await expect(page.locator('.write__flash').first()).toBeVisible({ timeout: 15_000 })
   await expect(block).toHaveCount(0, { timeout: 15_000 })
-  await expect(page.getByText(/I saved a version first/)).toBeVisible()
+  await expect(page.getByText(/Made \d+ change/)).toBeVisible()
   expect(await page.title()).not.toContain('Working')
 })
 

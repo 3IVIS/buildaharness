@@ -138,7 +138,7 @@ export function parseClaudeCliOutput(stdout: string): ParsedClaudeCliOutput {
       total_cost_usd?: number
       model?: string
       modelUsage?: Record<string, unknown>
-      usage?: { input_tokens?: number; output_tokens?: number }
+      usage?: { input_tokens?: number; output_tokens?: number; cache_read_input_tokens?: number; cache_creation_input_tokens?: number }
     }
     const reply = data.result ?? data.content ?? stdout.trim()
     // `--output-format json`'s result object reports `model` directly on some CLIs; 2.1.x only
@@ -146,11 +146,16 @@ export function parseClaudeCliOutput(stdout: string): ParsedClaudeCliOutput {
     // primaryModelFromUsage).
     const model =
       typeof data.model === 'string' ? data.model : primaryModelFromUsage(data.modelUsage)
+    // The CLI caches its prompts on its own and reports what was read from and written to the cache apart from `input_tokens`, which leaves them out
+    // (a request that is almost all cached reports a handful of input tokens). TokenUsage counts them inside inputTokens, as the Anthropic client does.
+    const read = typeof data.usage?.cache_read_input_tokens === 'number' ? data.usage.cache_read_input_tokens : undefined
+    const written = typeof data.usage?.cache_creation_input_tokens === 'number' ? data.usage.cache_creation_input_tokens : undefined
     const usage =
       typeof data.usage?.input_tokens === 'number' && typeof data.usage.output_tokens === 'number'
         ? {
-            inputTokens: data.usage.input_tokens,
+            inputTokens: data.usage.input_tokens + (read ?? 0) + (written ?? 0),
             outputTokens: data.usage.output_tokens,
+            ...(read !== undefined || written !== undefined ? { cachedInputTokens: read ?? 0, cacheWriteTokens: written ?? 0 } : {}),
             ...(typeof data.total_cost_usd === 'number' ? { costUsd: data.total_cost_usd } : {}),
           }
         : undefined

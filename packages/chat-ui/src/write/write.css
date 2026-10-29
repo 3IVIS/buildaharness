@@ -520,3 +520,19 @@ body.write--resizing { user-select: none; -webkit-user-select: none; cursor: col
 .write__badge { display: inline-block; font-size: 10px; font-weight: 700; letter-spacing: 0.03em; padding: 1px 7px; border-radius: 999px; border: 1px solid var(--amber); color: var(--amber); text-transform: uppercase; cursor: default; margin-right: 8px; }
 .write__bar .site-nav { margin-left: auto; }
 @media (max-width: 639px) { .write__title { flex: 0 0 auto; } .write__badge { order: 1; margin-right: 0; } .write__bar .site-nav { order: 2; } }
+
+/* Chat text: smaller and airier. Short lines, section names in the accent colour, a label on summary lines. */
+.write__chat { gap: 12px; }
+.write__line { font-size: 0.9rem; line-height: 1.5; padding: 8px 12px; white-space: normal; max-width: 92%; }
+.write__line--aielia { justify-self: start; }
+.write__lines { display: grid; gap: 3px; }
+.write__ln--gap { height: 4px; }
+.write__ln { overflow-wrap: anywhere; white-space: pre-wrap; }
+.write__ln--bullet { padding-left: 1.1em; text-indent: -0.8em; }
+.write__ln--bullet::before { content: '•'; display: inline-block; width: 0.8em; text-indent: 0; color: var(--muted); }
+.write__lab { font-weight: 650; }
+.write__name { color: var(--accent); font-weight: 600; }
+.write__line--record .write__ln { line-height: 1.4; }
+
+.write__resend { margin-top: 4px; opacity: 0.55; }
+.write__resend:hover, .write__resend:focus-visible { opacity: 1; }

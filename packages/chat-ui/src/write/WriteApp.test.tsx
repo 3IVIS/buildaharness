@@ -14,6 +14,7 @@ const MARK = {
   outline: 'You rework the outline of an article',
   draft: 'You write the first draft of an article',
   capture: 'A writer is working with an assistant',
+  intent: 'You read a writer\'s newest message to their writing assistant',
   ideas: 'You help a writer collect ideas',
   sourceLinks: 'A writer added a source to an article',
   support: 'You check whether a claim from an article',
@@ -55,6 +56,70 @@ async function services(replies: Parameters<typeof llm>[0], seed?: string, fetch
 }
 afterEach(() => {
   vi.restoreAllMocks()
+  localStorage.removeItem('aielia-write:chat-mode')
+})
+
+describe('the chat mode: Auto reads the message', () => {
+  const chatBox = () => screen.getByLabelText('Message')
+  it('starts on Auto, and a message the model reads as a request for changes gets suggestions without the writer picking anything', async () => {
+    const s = await services({ intent: { intent: 'suggest' }, capture: { articleId: null, ops: [] }, edits: { suggestions: [{ quote: 'It is quick.', replacement: 'It is, well, quick.', reason: 'warmer' }] } }, MD2)
+    render(<WriteApp services={s} />)
+    await waitForText()
+    await userEvent.click(rail('Chat'))
+    expect(screen.getByLabelText('When I ask for a change')).toHaveValue('auto')
+    await userEvent.type(chatBox(), 'make the second line warmer{Enter}')
+    expect(await screen.findByText(/Added 1 suggestion/)).toBeInTheDocument()
+  })
+  it('answers in the chat when the model reads the message as a question, and leaves the mode on Auto', async () => {
+    const s = await services({ intent: { intent: 'answer' }, capture: { articleId: null, ops: [] } }, MD2)
+    render(<WriteApp services={s} />)
+    await waitForText()
+    await userEvent.click(rail('Chat'))
+    await userEvent.type(chatBox(), 'is this clear?{Enter}')
+    expect(await screen.findByText('Noted.')).toBeInTheDocument()
+    expect(screen.queryByText(/suggested change/)).toBeNull()
+    expect(screen.getByLabelText('When I ask for a change')).toHaveValue('auto')
+  })
+  it('rewrites the whole article when the model reads the message as a wish to reshape all of it', async () => {
+    const s = await services({ intent: { intent: 'rewrite' }, capture: { articleId: null, ops: [] }, draft: { name: 'Story', markdown: '# Post\n## Once upon a time\nIt was quick.' } }, MD2)
+    render(<WriteApp services={s} />)
+    const box = await waitForText()
+    await userEvent.click(rail('Chat'))
+    await userEvent.type(chatBox(), 'make the whole thing read like a story{Enter}')
+    expect(await screen.findByText(/Rewrote the article/)).toBeInTheDocument()
+    await waitFor(() => expect(box.value).toContain('Once upon a time'))
+  })
+  it('reads a page the message points to before rewriting, and says so when it cannot', async () => {
+    const reply = { intent: 'rewrite', links: ['https://example.test/story'] }
+    const fetched: string[] = []
+    const ok = await services({ intent: reply, capture: { articleId: null, ops: [] }, draft: { name: 'Story', markdown: '# Post\n## Once\nIt was quick.' } }, MD2, async (u) => { fetched.push(u); return 'A story-shaped post.' })
+    const first = render(<WriteApp services={ok} />)
+    await waitForText()
+    await userEvent.click(rail('Chat'))
+    await userEvent.type(chatBox(), 'make it like https://example.test/story{Enter}')
+    expect(await screen.findByText(/Rewrote the article/)).toBeInTheDocument()
+    expect(fetched).toEqual(['https://example.test/story'])
+    expect(screen.queryByText(/I could not read/)).toBeNull()
+    first.unmount()
+    const bad = await services({ intent: reply, capture: { articleId: null, ops: [] }, draft: { name: 'Story', markdown: '# Post\n## Once\nIt was quick.' } }, MD2, async () => { throw new Error('blocked') })
+    render(<WriteApp services={bad} />)
+    await waitForText()
+    await userEvent.click(rail('Chat'))
+    await userEvent.type(chatBox(), 'make it like https://example.test/story{Enter}')
+    expect(await screen.findByText(/I could not read https:\/\/example\.test\/story \(blocked\), so the change does not follow it/)).toBeInTheDocument()
+  })
+  it('keeps a mode the writer picked, also after the page is opened again', async () => {
+    const s = await services({ capture: { articleId: null, ops: [] } }, MD2)
+    const first = render(<WriteApp services={s} />)
+    await waitForText()
+    await userEvent.click(rail('Chat'))
+    await userEvent.selectOptions(screen.getByLabelText('When I ask for a change'), 'answer')
+    first.unmount()
+    render(<WriteApp services={s} />)
+    await waitForText()
+    await userEvent.click(rail('Chat'))
+    expect(screen.getByLabelText('When I ask for a change')).toHaveValue('answer')
+  })
 })
 
 describe('the chat turn: words as they come, and stopping', () => {
@@ -281,7 +346,7 @@ describe('spending is shown in the header, and each request says what it used', 
     const chat = (): HTMLElement => document.querySelector('.write__chat') as HTMLElement
     expect(await within(chat()).findByText(/I found 1 factual claim/)).toBeInTheDocument()
     const usage = await within(chat()).findByTitle('Tokens, time and cost of this request')
-    expect(usage.textContent).toMatch(/\d+ tokens \(\d+ in, \d+ out\) · \d+ calls? · .+ · \$/)
+    expect(usage.textContent).toMatch(/~?\d+ tokens \(~?\d+ in, \d+ out\) · \d+ calls? · .+ · \$/)
     expect(s.spentUsd()).toBeGreaterThan(before)
     expect(screen.getByLabelText(/Spent so far in this browser/).getAttribute('aria-label')).toContain(s.spentUsd().toFixed(2))
   })
@@ -512,7 +577,7 @@ describe('chat: model, check and adjust', () => {
     await userEvent.click(rail('Chat'))
     await userEvent.selectOptions(screen.getByLabelText('When I ask for a change'), 'edit')
     await userEvent.type(screen.getByLabelText('Message'), 'Make it stronger{Enter}')
-    expect(await screen.findByText(/I saved a version first/)).toBeInTheDocument()
+    expect(await screen.findByText(/Made 1 change/)).toBeInTheDocument()
     await waitFor(() => expect(box.value).toContain('It is very quick.'))
     expect(turns).toBe(0)
     expect(screen.queryByText(/were not added to the article/)).toBeNull()
@@ -526,7 +591,7 @@ describe('chat: model, check and adjust', () => {
     await userEvent.selectOptions(screen.getByLabelText('When I ask for a change'), 'edit')
     await userEvent.type(screen.getByLabelText('Message'), 'Make it stronger{Enter}')
     expect(await screen.findByText(/were not added to the article's notes/)).toBeInTheDocument()
-    expect(await screen.findByText(/I saved a version first/)).toBeInTheDocument()
+    expect(await screen.findByText(/Made 1 change/)).toBeInTheDocument()
   })
 
   it('"Edit the article" saves a version first, then edits, and the page shows the edited text', async () => {
@@ -537,8 +602,14 @@ describe('chat: model, check and adjust', () => {
     await userEvent.click(rail('Chat'))
     await userEvent.selectOptions(screen.getByLabelText('When I ask for a change'), 'edit')
     await userEvent.type(screen.getByLabelText('Message'), 'Make it stronger{Enter}')
-    expect(await screen.findByText(/I saved a version first/)).toBeInTheDocument()
+    expect(await screen.findByText(/Made 1 change/)).toBeInTheDocument()
+    const line = await screen.findByText((_, el) => !!el?.classList.contains('write__ln') && /Reworded: Latency/.test(el.textContent ?? ''))
+    expect(line.querySelector('.write__name')?.textContent).toBe('Latency') // which section, in a colour of its own, not only how many
     await waitFor(() => expect(box.value).toContain('It is very quick.')) // the edited text is on screen
+    // The reply carries what the request used; there is no separate "done" line when the reply already said it.
+    expect(screen.queryByText(/Editing: done/)).toBeNull()
+    const reply = screen.getByText(/Made 1 change/).closest('li') as HTMLElement
+    expect(within(reply).getByTitle('Tokens, time and cost of this request')).toBeInTheDocument()
     const b = await s.service.get(id)
     expect(b.markdown).toContain('It is very quick.')
     expect(b.snapshots.find((x) => x.label === 'Before a chat edit: Make it stronger')?.markdown).toBe(MD2) // the text as it was
@@ -552,14 +623,14 @@ describe('chat: model, check and adjust', () => {
     await userEvent.click(rail('Chat'))
     await userEvent.selectOptions(screen.getByLabelText('When I ask for a change'), 'edit')
     await userEvent.type(screen.getByLabelText('Message'), 'Write the article{Enter}')
-    expect(await screen.findByText(/I wrote the first draft/)).toBeInTheDocument()
+    expect(await screen.findByText(/Wrote the first draft/)).toBeInTheDocument()
     await waitFor(() => expect(box.value).toContain('It is quick.'))
   })
-  it('with no article at all, the chat makes one, writes it and names it, without the mode being picked', async () => {
-    const s = await services({ capture: { articleId: null, ops: [] }, draft: { name: 'Quick post', markdown: '# Post\n## Intro\nIt is quick.' } })
+  it('with no article at all, the chat makes one, writes it and names it, with the mode left on Auto', async () => {
+    const s = await services({ intent: { intent: 'edit' }, capture: { articleId: null, ops: [] }, draft: { name: 'Quick post', markdown: '# Post\n## Intro\nIt is quick.' } })
     render(<WriteApp services={s} />)
     await userEvent.click(rail('Chat'))
-    expect((screen.getByLabelText('When I ask for a change') as HTMLSelectElement).value).toBe('edit')
+    expect((screen.getByLabelText('When I ask for a change') as HTMLSelectElement).value).toBe('auto')
     await userEvent.type(screen.getByLabelText('Message'), 'Write an article about speed{Enter}')
     expect(await screen.findByText(/named the article “Quick post”/)).toBeInTheDocument()
     const box = await waitForText()
@@ -578,11 +649,75 @@ describe('chat: model, check and adjust', () => {
     await userEvent.selectOptions(screen.getByLabelText('When I ask for a change'), 'edit')
     expect(screen.getByRole('option', { name: 'Edit the outline' })).toBeInTheDocument()
     await userEvent.type(screen.getByLabelText('Message'), 'Conclusion first{Enter}')
-    expect(await screen.findByText(/I reworked the outline/)).toBeInTheDocument()
+    expect(await screen.findByText(/Reworked the outline/)).toBeInTheDocument()
     const b = await s.service.get(id)
     expect(b.markdown.indexOf('## Conclusion')).toBeLessThan(b.markdown.indexOf('## Latency'))
     expect(b.snapshots.some((x) => x.label === 'Before a chat edit of the outline: Conclusion first' && x.markdown === MD2)).toBe(true)
     expect((screen.getByLabelText('Outline', { exact: true }) as HTMLTextAreaElement).value).toBe('# Post\n## Conclusion\n## Latency')
+  })
+
+  it('in Auto, a request for wording is a text edit even with the Outline showing, and one for headings alone is an outline edit', async () => {
+    const wording = await services({ intent: { intent: 'edit', links: [], scope: 'text' }, capture: { articleId: null, ops: [] }, edits: { suggestions: [{ quote: 'It is quick.', replacement: 'It is quick, and here is why.', reason: 'more' }] }, outline: { outline: '# Post\n## Conclusion\n## Latency' } }, MD2)
+    const first = render(<WriteApp services={wording} />)
+    await waitForText()
+    await userEvent.click(screen.getByRole('button', { name: 'Outline view' }))
+    await userEvent.click(rail('Chat'))
+    await userEvent.type(screen.getByLabelText('Message'), 'say more about why it is quick{Enter}')
+    expect(await screen.findByText(/Made 1 change/)).toBeInTheDocument()
+    expect(screen.queryByText(/Reworked the outline/)).toBeNull()
+    first.unmount()
+    const headings = await services({ intent: { intent: 'edit', links: [], scope: 'outline' }, capture: { articleId: null, ops: [] }, outline: { outline: '# Post\n## Conclusion\n## Latency' } }, MD2)
+    render(<WriteApp services={headings} />)
+    await waitForText()
+    await userEvent.click(rail('Chat'))
+    await userEvent.type(screen.getByLabelText('Message'), 'conclusion first{Enter}')
+    expect(await screen.findByText(/Reworked the outline/)).toBeInTheDocument()
+  })
+  it('in Auto, a request for both a new section and what it says changes the outline and then the text, and the reply says so', async () => {
+    const s = await services({ intent: { intent: 'edit', links: [], scope: 'both' }, capture: { articleId: null, ops: [] }, outline: { outline: '# Post\n## Latency\n## Why not others\n## Conclusion' }, edits: { suggestions: [{ quote: '## Why not others', replacement: '## Why not others\n\nOther tools fall short.', reason: 'content' }] } }, MD2)
+    const id = (await s.service.list())[0].id
+    render(<WriteApp services={s} />)
+    await waitForText()
+    await userEvent.click(rail('Chat'))
+    await userEvent.type(screen.getByLabelText('Message'), 'add a section on why others fall short, and write it{Enter}')
+    expect(await screen.findByText(/Reworked the outline and made 1 text change/)).toBeInTheDocument()
+    const b = await s.service.get(id)
+    expect(b.markdown).toContain('## Why not others\n\nOther tools fall short.')
+    expect(await screen.findByText(/with text/)).toBeInTheDocument()
+  })
+
+  it('sends the last message again: it and its reply leave the chat and the assistant forgets the exchange', async () => {
+    const s = await services({ capture: { articleId: null, ops: [] } }, MD2)
+    let undone = 0
+    const real = s.undoLastTurn.bind(s)
+    s.undoLastTurn = async () => { undone++; await real() }
+    render(<WriteApp services={s} />)
+    await waitForText()
+    await userEvent.click(rail('Chat'))
+    await userEvent.type(screen.getByLabelText('Message'), 'is this clear?{Enter}')
+    expect(await screen.findByText('Noted.')).toBeInTheDocument()
+    await userEvent.click(await screen.findByRole('button', { name: /Send again/ }))
+    await waitFor(() => expect(undone).toBe(1))
+    expect(await screen.findByText('Noted.')).toBeInTheDocument()
+    expect(screen.getAllByText('is this clear?')).toHaveLength(1)
+    expect(screen.getAllByText('Noted.')).toHaveLength(1)
+  })
+
+  it('sends an edit again after putting the article back as it was before the reply', async () => {
+    const s = await services({ intent: { intent: 'edit', links: [], scope: 'text' }, capture: { articleId: null, ops: [] }, edits: { suggestions: [{ quote: 'It is quick.', replacement: 'It is quick, and here is why.', reason: 'more' }] } }, MD2)
+    const id = (await s.service.list())[0].id
+    render(<WriteApp services={s} />)
+    await waitForText()
+    await userEvent.click(rail('Chat'))
+    await userEvent.type(screen.getByLabelText('Message'), 'say why it is quick{Enter}')
+    expect(await screen.findByText(/Made 1 change/)).toBeInTheDocument()
+    expect((await s.service.get(id)).markdown).toContain('It is quick, and here is why.')
+    await userEvent.click(await screen.findByRole('button', { name: /Send again/ }))
+    expect(await screen.findAllByText(/Made 1 change/)).toHaveLength(1)
+    // The edit was applied to the original text again, not on top of the first edit.
+    const md = (await s.service.get(id)).markdown
+    expect(md.split('and here is why.').length - 1).toBe(1)
+    expect((await s.service.history(id)).some((v) => v.label === 'Before restoring an earlier version')).toBe(true)
   })
 
   it('the conversation is still there after the page is opened again', async () => {
@@ -654,8 +789,7 @@ describe('chat: model, check and adjust', () => {
     expect(screen.queryByRole('button', { name: /Send adjustment/ })).toBeNull() // no extra button: Enter sends
     await userEvent.type(screen.getByLabelText('How'), 'Tone of voice: Conversational{Enter}')
     expect(await screen.findByText(/tone of voice is: Conversational/)).toBeInTheDocument()
-    expect(await screen.findByText(/added 1 suggested change/)).toBeInTheDocument()
-    expect(await screen.findByText(/“It is quick\.” → “It is, well, quick\.”/)).toBeInTheDocument() // the chat states the suggestion that was stored
+    expect(await screen.findByText(/Added 1 suggestion/)).toBeInTheDocument()
   })
 
   it('lets the writer adjust something that is not listed', async () => {
@@ -1542,7 +1676,7 @@ describe('repositories on a host with its own network call', () => {
     await userEvent.selectOptions(screen.getByLabelText('Adjust', { selector: 'select' }), 'action:verify_repo')
     await userEvent.type(screen.getByLabelText('Repository address'), 'github.com/o/r{Enter}')
     await waitFor(() => expect(calls.some((u) => u.includes('/git/trees/'))).toBe(true))
-    expect(pageFetch).not.toHaveBeenCalled()
+    expect((pageFetch.mock.calls as unknown[][]).filter((c) => c[0] !== '/__mirror')).toEqual([])
     vi.unstubAllGlobals()
   })
 })
