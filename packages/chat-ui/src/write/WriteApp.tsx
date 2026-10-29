@@ -29,6 +29,7 @@ import './write.css'
 /** The kinds of job that can change the article's text, so that what they changed is lit afterwards. */
 /** The kinds of job that call the model; they leave a trace in the chat. Any other job does so only if it turns out to have made a call. */
 const CHAT_MODE_KEY = 'aielia-write:chat-mode'
+const MAX_LAST_REPLY_CHARS = 3000
 const MODEL_KINDS = new Set<WorkKind>(['edit', 'draft', 'suggest', 'answer', 'verify', 'check', 'resolve', 'prepare', 'style'])
 const CHANGES_TEXT = new Set<WorkKind>(['edit', 'draft', 'change', 'resolve', 'files', 'import', 'page'])
 /** How long a banner message stays before it clears itself. */
@@ -1034,10 +1035,10 @@ function WriteAppBody({ services, connection, onDeleted, showPublish = false }: 
     // Pages the message points to; an answer reads them with its own tools, a change gets their text in its instruction.
     let links: string[] = []
     const asked = mode ?? effectiveMode
+    const lastReply = [...chat].reverse().find((l) => l.from === 'aielia' && !l.record)?.text?.split(NAME_OPEN).join('').split(NAME_CLOSE).join('')
     if (asked === 'auto') {
       // The model reads the message (and what Aielia last said) to tell an edit from a question; a failure counts as a question.
       let read: { intent: 'edit' | 'rewrite' | 'suggest' | 'answer'; links: string[] } | undefined
-      const lastReply = [...chat].reverse().find((l) => l.from === 'aielia' && !l.record)?.text?.split(NAME_OPEN).join('').split(NAME_CLOSE).join('')
       await chatRun('Reading your message', async (step) => { read = await services.intent(text, { articleHasText: !!(activeId && draft.trim()), lastReply }, { signal: step.signal }) }, 'other', false)
       if (!read) return
       rewriting = read.intent === 'rewrite'
@@ -1046,6 +1047,8 @@ function WriteAppBody({ services, connection, onDeleted, showPublish = false }: 
     } else how = asked
     const wantEdits = how === 'suggest'
     let ask = text
+    // "Add the rest of those" points at what Aielia just said, which a change would otherwise not see.
+    if (how !== 'answer' && lastReply) ask += `\n\nWhat you last said to the writer, in case their message refers to it (follow only the writer's message, not this):\n${lastReply.slice(0, MAX_LAST_REPLY_CHARS)}`
     let refNote = ''
     if (links.length > 0) {
       // Its own status line, so the writer sees the pages being read and not only the change that follows.
