@@ -59,7 +59,11 @@ export function summarizeSectionChange(before: string, after: string): SectionCh
 }
 
 const SHOWN = 4
-const name = (h: string): string => (h === LEAD ? h : `“${h.length > 40 ? `${h.slice(0, 40)}…` : h}”`)
+
+/** Marks a section name inside chat text, so the chat can show names in a colour instead of between quotation marks. Private-use characters: they never occur in real text. */
+export const NAME_OPEN = '\uE000'
+export const NAME_CLOSE = '\uE001'
+const name = (h: string): string => `${NAME_OPEN}${h.length > 40 ? `${h.slice(0, 40)}…` : h}${NAME_CLOSE}`
 const list = (names: string[]): string => `${names.slice(0, SHOWN).map(name).join(', ')}${names.length > SHOWN ? ` and ${names.length - SHOWN} more` : ''}`
 
 /** The summary as lines for the chat: one for the outline (when it changed) and one for the wording. Empty when nothing changed. */
@@ -73,6 +77,6 @@ export function describeSectionChange(c: SectionChange): string {
   ].filter(Boolean)
   const lines: string[] = []
   if (outline.length > 0) lines.push(`• Outline: ${outline.join('; ')}.`)
-  if (c.reworded.length > 0) lines.push(`• Wording changed in ${list(c.reworded)}.`)
+  if (c.reworded.length > 0) lines.push(`• Reworded: ${list(c.reworded)}.`)
   return lines.join('\n')
 }

@@ -1,5 +1,6 @@
 import { render, screen } from '@testing-library/react'
 import { describe, expect, it } from 'vitest'
+import { NAME_CLOSE, NAME_OPEN } from '@buildaharness/aielia'
 import { ChatPane, RECORD_HINT, type WorkProgress } from './ChatPane'
 
 const base = { lines: [], model: 'm', suggestions: [], onModel: () => undefined, input: '', onInput: () => undefined, mode: 'edit' as const, onMode: () => undefined, editLabel: 'Edit', busy: true, canAct: true, shown: true, onSend: () => undefined, onAdjust: () => undefined, onAction: () => undefined, repos: [], onRepoVerify: () => undefined, onRemoveRepo: () => undefined, onDropFiles: () => undefined, onClose: () => undefined }
@@ -73,5 +74,17 @@ describe('the mode box hint', () => {
     expect(screen.getByLabelText('When I ask for a change')).toHaveAttribute('title', expect.stringMatching(/Choosing any other mode turns this automatic detection off until you change it back to Auto/))
     rerender(<ChatPane {...base} mode="answer" progress={null} />)
     expect(screen.getByLabelText('When I ask for a change')).toHaveAttribute('title', expect.stringMatching(/Automatic detection is off.*Choose Auto/))
+  })
+})
+
+describe('chat lines', () => {
+  it('shows section names in their own element, with a label on summary lines, and no quotation marks', () => {
+    const text = `Made 2 changes.\n• Outline: added ${NAME_OPEN}Story${NAME_CLOSE}; removed ${NAME_OPEN}Close${NAME_CLOSE}.\n• Reworded: ${NAME_OPEN}Intro${NAME_CLOSE}.\nUndo from History.`
+    const { container } = render(<ChatPane {...base} lines={[{ id: 1, from: 'aielia', text, model: 'm' }]} progress={null} />)
+    expect([...container.querySelectorAll('.write__name')].map((n) => n.textContent)).toEqual(['Story', 'Close', 'Intro'])
+    expect([...container.querySelectorAll('.write__lab')].map((n) => n.textContent)).toEqual(['Outline:', 'Reworded:'])
+    expect(container.querySelectorAll('.write__ln')).toHaveLength(4)
+    expect(container.textContent).not.toMatch(/[“”]/)
+    expect(container.textContent).not.toContain(NAME_OPEN)
   })
 })

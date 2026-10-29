@@ -159,7 +159,7 @@ export { WriterChatStateSchema, WriterCommentSchema, WriterCorrectionSchema, WRI
 export type { WriterChatState, WriterComment, WriterCorrection, ArticleRef, CaptureOp, ApplyResult } from './writer/writer-chat-state.js'
 export { ACTIVITY_KEY, MAX_ACTIVITY_RECORDS, addRecord, activityReport, createActivityLog, summarizeActivity, isJobRecord, typicalMs, usuallyText, MIN_RUNS_FOR_TYPICAL } from './writer/write-activity.js'
 export type { ActivityLog, ActivitySummary, JobOutcome, JobRecord, KindSummary } from './writer/write-activity.js'
-export { summarizeSectionChange, describeSectionChange } from './writer/article-change-summary.js'
+export { summarizeSectionChange, describeSectionChange, NAME_OPEN, NAME_CLOSE } from './writer/article-change-summary.js'
 export type { SectionChange } from './writer/article-change-summary.js'
 export { readWriterIntent } from './writer/writer-intent.js'
 export type { ChatIntent, WriterIntent } from './writer/writer-intent.js'

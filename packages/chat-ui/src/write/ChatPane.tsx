@@ -1,7 +1,7 @@
 import { AdjustBar, type ChatAction } from './AdjustBar'
 import { ModelPicker } from './ModelPicker'
 import { useEffect, useLayoutEffect, useRef, useState } from 'react'
-import { CLI_DEFAULT_LABEL, modelLabel, checklistAt, elapsedText, stageSentence, workPlan, type WorkKind, type ResultLine } from '@buildaharness/aielia'
+import { CLI_DEFAULT_LABEL, NAME_CLOSE, NAME_OPEN, modelLabel, checklistAt, elapsedText, stageSentence, workPlan, type WorkKind, type ResultLine } from '@buildaharness/aielia'
 import { ICON_PATHS, Icon, IconButton } from './icons'
 
 /** A background model call as the chat shows it: its kind (which checklist), the stage it is at, and a finer step inside the stage. */
@@ -33,6 +33,27 @@ const MODE_HINT: Record<ChatMode, string> = {
   answer: 'Automatic detection is off: every message is only answered, and the text is never changed. Choose Auto to let Aielia decide from each message.',
   suggest: 'Automatic detection is off: every request for a change becomes suggestions to accept or reject. Choose Auto to let Aielia decide from each message.',
   edit: 'Automatic detection is off: every request for a change is made in the text, after saving a version first so it can be undone from History. Choose Auto to let Aielia decide from each message.',
+}
+
+/** The text of one chat line: a paragraph for each line of text, section names (marked by the page) in a colour, and a bold label on the summary lines ("• Outline: …"). */
+function LineText({ text }: { text: string }): React.JSX.Element {
+  const names = (t: string): (string | React.JSX.Element)[] =>
+    t.split(NAME_OPEN).flatMap((piece, i) => {
+      if (i === 0) return [piece]
+      const end = piece.indexOf(NAME_CLOSE)
+      return end < 0 ? [piece] : [<span key={i} className="write__name">{piece.slice(0, end)}</span>, piece.slice(end + 1)]
+    })
+  return (
+    <div className="write__lines">
+      {text.split('\n').map((line, i) => {
+        if (!line.trim()) return <div key={i} className="write__ln write__ln--gap" />
+        const bullet = /^• ([A-Za-z ]{3,14}): (.*)$/.exec(line)
+        return bullet
+          ? <div key={i} className="write__ln write__ln--bullet"><b className="write__lab">{bullet[1]}:</b> {names(bullet[2])}</div>
+          : <div key={i} className="write__ln">{names(line)}</div>
+      })}
+    </div>
+  )
 }
 
 /** What hovering a record line says. */
@@ -109,7 +130,7 @@ export function ChatPane(p: Props): React.JSX.Element {
       <ul className="write__chat" aria-live="polite" ref={list} onScroll={(e) => { const el = e.currentTarget; atBottom.current = el.scrollHeight - el.scrollTop - el.clientHeight < 60 }}>
         {p.lines.map((l) => (
           <li key={l.id} className={`write__line write__line--${l.from}${l.record ? ' write__line--record' : ''}`} title={l.record ? RECORD_HINT : undefined}>
-            <div>{l.text}</div>
+            <LineText text={l.text} />
             {l.usage && <div className="write__lineusage" title="Tokens, time and cost of this request">{l.usage}</div>}
             {l.from === 'aielia' && l.model !== undefined && (
               <div className="write__linemeta">

@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { SpendBadge } from './SpendBadge'
-import { type WorkKind, describeSectionChange, workPlan, litRange, modelFailureHint, modelLabel, githubRepoReader, parseGithubRepoAddress, type FolderReader, expandSelection, summarizeVerify, summarizeArticleSources, type VerifyReport, textPieces, collectIssues, parseLineRange, sourceKindForFile, computeReadiness, effectiveSourceStatus, issueCount, textUnitAt, autosaveStep, outlineOf, issuesInRange, unitOfSelection, shouldDeriveStyle, type ArticleBundle, type ChangeSummary, type DependencyKind, type IssueCategory, type Section, type WritePermissions, type JobOutcome, type ResultLine, type ChatStageListener, claimResultLine, recentResults, typicalMs, usuallyText } from '@buildaharness/aielia'
+import { type WorkKind, NAME_CLOSE, NAME_OPEN, describeSectionChange, workPlan, litRange, modelFailureHint, modelLabel, githubRepoReader, parseGithubRepoAddress, type FolderReader, expandSelection, summarizeVerify, summarizeArticleSources, type VerifyReport, textPieces, collectIssues, parseLineRange, sourceKindForFile, computeReadiness, effectiveSourceStatus, issueCount, textUnitAt, autosaveStep, outlineOf, issuesInRange, unitOfSelection, shouldDeriveStyle, type ArticleBundle, type ChangeSummary, type DependencyKind, type IssueCategory, type Section, type WritePermissions, type JobOutcome, type ResultLine, type ChatStageListener, claimResultLine, recentResults, typicalMs, usuallyText } from '@buildaharness/aielia'
 import type { ChatAction } from './AdjustBar'
 import { ArticleSwitcher, type ArticleItem } from './ArticleSwitcher'
 import { readFileText } from './file-text'
@@ -1035,7 +1035,7 @@ function WriteAppBody({ services, connection, onDeleted, showPublish = false }: 
     if (asked === 'auto') {
       // The model reads the message (and what Aielia last said) to tell an edit from a question; a failure counts as a question.
       let read: { intent: 'edit' | 'rewrite' | 'suggest' | 'answer'; links: string[] } | undefined
-      const lastReply = [...chat].reverse().find((l) => l.from === 'aielia' && !l.record)?.text
+      const lastReply = [...chat].reverse().find((l) => l.from === 'aielia' && !l.record)?.text?.split(NAME_OPEN).join('').split(NAME_CLOSE).join('')
       await chatRun('Reading your message', async (step) => { read = await services.intent(text, { articleHasText: !!(activeId && draft.trim()), lastReply }, { signal: step.signal }) })
       if (!read) return
       rewriting = read.intent === 'rewrite'
