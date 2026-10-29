@@ -108,6 +108,15 @@ export interface LLMStructuredResponse {
   toolCalls?: ToolCallResult[]
 }
 
+/**
+ * Anthropic's input_tokens leaves out the tokens read from or written to its prompt cache, which come in their own fields; TokenUsage counts
+ * them inside inputTokens (cached and written are subsets). With neither field reported the usage is as it was.
+ */
+export function withCacheCounts(usage: TokenUsage, read: number | undefined, written: number | undefined): TokenUsage {
+  if (read === undefined && written === undefined) return usage
+  return { ...usage, inputTokens: usage.inputTokens + (read ?? 0) + (written ?? 0), cachedInputTokens: read ?? 0, cacheWriteTokens: written ?? 0 }
+}
+
 export interface TokenUsage {
   inputTokens: number
   outputTokens: number
@@ -189,9 +198,11 @@ export class LLMClient implements ILLMClient {
     // always gets real usage regardless of provider.
     let inputTokens: number | undefined
     let outputTokens: number | undefined
+    let cacheRead: number | undefined
+    let cacheWritten: number | undefined
     const reportUsage = (): void => {
       if (inputTokens !== undefined || outputTokens !== undefined) {
-        options.onUsage?.({ inputTokens: inputTokens ?? 0, outputTokens: outputTokens ?? 0 })
+        options.onUsage?.(withCacheCounts({ inputTokens: inputTokens ?? 0, outputTokens: outputTokens ?? 0 }, cacheRead, cacheWritten))
       }
     }
 
@@ -209,6 +220,8 @@ export class LLMClient implements ILLMClient {
           try {
             const parsed = JSON.parse(data)
             if (typeof parsed?.message?.usage?.input_tokens === 'number') inputTokens = parsed.message.usage.input_tokens
+            if (typeof parsed?.message?.usage?.cache_read_input_tokens === 'number') cacheRead = parsed.message.usage.cache_read_input_tokens
+            if (typeof parsed?.message?.usage?.cache_creation_input_tokens === 'number') cacheWritten = parsed.message.usage.cache_creation_input_tokens
             if (typeof parsed?.usage?.output_tokens === 'number') outputTokens = parsed.usage.output_tokens
             // Anthropic
             const anthropicDelta = parsed?.delta?.text
@@ -272,9 +285,9 @@ export class LLMClient implements ILLMClient {
     const { content, toolCalls } = parseAnthropicContentBlocks(json.content)
     // Anthropic's non-streaming response always includes usage — reliable regardless of
     // provider, unlike callChat's best-effort streaming capture above.
-    const usage = json.usage as { input_tokens?: number; output_tokens?: number } | undefined
+    const usage = json.usage as { input_tokens?: number; output_tokens?: number; cache_read_input_tokens?: number; cache_creation_input_tokens?: number } | undefined
     if (usage && typeof usage.input_tokens === 'number' && typeof usage.output_tokens === 'number') {
-      options.onUsage?.({ inputTokens: usage.input_tokens, outputTokens: usage.output_tokens })
+      options.onUsage?.(withCacheCounts({ inputTokens: usage.input_tokens, outputTokens: usage.output_tokens }, usage.cache_read_input_tokens, usage.cache_creation_input_tokens))
     }
     return { content, toolCalls }
   }

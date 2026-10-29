@@ -438,6 +438,15 @@ describe('LLMClient', () => {
       expect(onUsage).toHaveBeenCalledWith({ inputTokens: 100, outputTokens: 25 })
     })
 
+    it('counts the tokens read from and written to the prompt cache inside the input, and says how many', async () => {
+      mockFetchJson({ content: [{ type: 'text', text: 'ok' }], usage: { input_tokens: 4, output_tokens: 25, cache_read_input_tokens: 900, cache_creation_input_tokens: 96 } })
+      const onUsage = vi.fn()
+
+      await client.callChatStructured([{ role: 'user', content: 'hi' }], undefined, { onUsage })
+
+      expect(onUsage).toHaveBeenCalledWith({ inputTokens: 1000, outputTokens: 25, cachedInputTokens: 900, cacheWriteTokens: 96 })
+    })
+
     it('never calls onUsage when the response has no usage field', async () => {
       mockFetchJson({ content: [{ type: 'text', text: 'ok' }] })
       const onUsage = vi.fn()
