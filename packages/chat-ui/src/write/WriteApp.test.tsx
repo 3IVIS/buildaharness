@@ -68,7 +68,7 @@ describe('the chat mode: Auto reads the message', () => {
     await userEvent.click(rail('Chat'))
     expect(screen.getByLabelText('When I ask for a change')).toHaveValue('auto')
     await userEvent.type(chatBox(), 'make the second line warmer{Enter}')
-    expect(await screen.findByText(/added 1 suggested change/)).toBeInTheDocument()
+    expect(await screen.findByText(/Added 1 suggestion/)).toBeInTheDocument()
   })
   it('answers in the chat when the model reads the message as a question, and leaves the mode on Auto', async () => {
     const s = await services({ intent: { intent: 'answer' }, capture: { articleId: null, ops: [] } }, MD2)
@@ -86,7 +86,7 @@ describe('the chat mode: Auto reads the message', () => {
     const box = await waitForText()
     await userEvent.click(rail('Chat'))
     await userEvent.type(chatBox(), 'make the whole thing read like a story{Enter}')
-    expect(await screen.findByText(/I rewrote the whole article/)).toBeInTheDocument()
+    expect(await screen.findByText(/Rewrote the article/)).toBeInTheDocument()
     await waitFor(() => expect(box.value).toContain('Once upon a time'))
   })
   it('reads a page the message points to before rewriting, and says so when it cannot', async () => {
@@ -97,7 +97,7 @@ describe('the chat mode: Auto reads the message', () => {
     await waitForText()
     await userEvent.click(rail('Chat'))
     await userEvent.type(chatBox(), 'make it like https://example.test/story{Enter}')
-    expect(await screen.findByText(/I rewrote the whole article/)).toBeInTheDocument()
+    expect(await screen.findByText(/Rewrote the article/)).toBeInTheDocument()
     expect(fetched).toEqual(['https://example.test/story'])
     expect(screen.queryByText(/I could not read/)).toBeNull()
     first.unmount()
@@ -577,7 +577,7 @@ describe('chat: model, check and adjust', () => {
     await userEvent.click(rail('Chat'))
     await userEvent.selectOptions(screen.getByLabelText('When I ask for a change'), 'edit')
     await userEvent.type(screen.getByLabelText('Message'), 'Make it stronger{Enter}')
-    expect(await screen.findByText(/I saved a version first/)).toBeInTheDocument()
+    expect(await screen.findByText(/Made 1 change/)).toBeInTheDocument()
     await waitFor(() => expect(box.value).toContain('It is very quick.'))
     expect(turns).toBe(0)
     expect(screen.queryByText(/were not added to the article/)).toBeNull()
@@ -591,7 +591,7 @@ describe('chat: model, check and adjust', () => {
     await userEvent.selectOptions(screen.getByLabelText('When I ask for a change'), 'edit')
     await userEvent.type(screen.getByLabelText('Message'), 'Make it stronger{Enter}')
     expect(await screen.findByText(/were not added to the article's notes/)).toBeInTheDocument()
-    expect(await screen.findByText(/I saved a version first/)).toBeInTheDocument()
+    expect(await screen.findByText(/Made 1 change/)).toBeInTheDocument()
   })
 
   it('"Edit the article" saves a version first, then edits, and the page shows the edited text', async () => {
@@ -602,7 +602,7 @@ describe('chat: model, check and adjust', () => {
     await userEvent.click(rail('Chat'))
     await userEvent.selectOptions(screen.getByLabelText('When I ask for a change'), 'edit')
     await userEvent.type(screen.getByLabelText('Message'), 'Make it stronger{Enter}')
-    expect(await screen.findByText(/I saved a version first/)).toBeInTheDocument()
+    expect(await screen.findByText(/Made 1 change/)).toBeInTheDocument()
     await waitFor(() => expect(box.value).toContain('It is very quick.')) // the edited text is on screen
     const b = await s.service.get(id)
     expect(b.markdown).toContain('It is very quick.')
@@ -617,7 +617,7 @@ describe('chat: model, check and adjust', () => {
     await userEvent.click(rail('Chat'))
     await userEvent.selectOptions(screen.getByLabelText('When I ask for a change'), 'edit')
     await userEvent.type(screen.getByLabelText('Message'), 'Write the article{Enter}')
-    expect(await screen.findByText(/I wrote the first draft/)).toBeInTheDocument()
+    expect(await screen.findByText(/Wrote the first draft/)).toBeInTheDocument()
     await waitFor(() => expect(box.value).toContain('It is quick.'))
   })
   it('with no article at all, the chat makes one, writes it and names it, with the mode left on Auto', async () => {
@@ -643,7 +643,7 @@ describe('chat: model, check and adjust', () => {
     await userEvent.selectOptions(screen.getByLabelText('When I ask for a change'), 'edit')
     expect(screen.getByRole('option', { name: 'Edit the outline' })).toBeInTheDocument()
     await userEvent.type(screen.getByLabelText('Message'), 'Conclusion first{Enter}')
-    expect(await screen.findByText(/I reworked the outline/)).toBeInTheDocument()
+    expect(await screen.findByText(/Reworked the outline/)).toBeInTheDocument()
     const b = await s.service.get(id)
     expect(b.markdown.indexOf('## Conclusion')).toBeLessThan(b.markdown.indexOf('## Latency'))
     expect(b.snapshots.some((x) => x.label === 'Before a chat edit of the outline: Conclusion first' && x.markdown === MD2)).toBe(true)
@@ -719,8 +719,7 @@ describe('chat: model, check and adjust', () => {
     expect(screen.queryByRole('button', { name: /Send adjustment/ })).toBeNull() // no extra button: Enter sends
     await userEvent.type(screen.getByLabelText('How'), 'Tone of voice: Conversational{Enter}')
     expect(await screen.findByText(/tone of voice is: Conversational/)).toBeInTheDocument()
-    expect(await screen.findByText(/added 1 suggested change/)).toBeInTheDocument()
-    expect(await screen.findByText(/“It is quick\.” → “It is, well, quick\.”/)).toBeInTheDocument() // the chat states the suggestion that was stored
+    expect(await screen.findByText(/Added 1 suggestion/)).toBeInTheDocument()
   })
 
   it('lets the writer adjust something that is not listed', async () => {
