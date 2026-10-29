@@ -86,7 +86,7 @@ export const usageText = (ms: number, d: { usd: number; inputTokens: number; out
   const time = ms < 1000 ? `${Math.max(0, Math.round(ms))} ms` : ms < 60000 ? `${(ms / 1000).toFixed(1)} s` : `${Math.floor(ms / 60000)} min ${Math.round((ms % 60000) / 1000)} s`
   if (d.calls === 0) return `no model call · ${time}`
   const total = d.inputTokens + d.outputTokens
-  return `${total.toLocaleString('en-US')} tokens (${d.inputTokens.toLocaleString('en-US')} in${d.cachedTokens !== undefined && d.inputTokens > 0 ? `, ${Math.round((100 * d.cachedTokens) / d.inputTokens)}% of it cached` : ''}, ${d.outputTokens.toLocaleString('en-US')} out) · ${d.calls} call${d.calls === 1 ? '' : 's'} · ${time} · $${d.usd < 0.01 ? d.usd.toFixed(4) : d.usd.toFixed(2)}`
+  return `${total.toLocaleString('en-US')} tokens (${d.inputTokens.toLocaleString('en-US')} in${d.cachedTokens !== undefined && d.inputTokens > 0 ? ` (${Math.round((100 * d.cachedTokens) / d.inputTokens)}% cached)` : ''}, ${d.outputTokens.toLocaleString('en-US')} out) · ${d.calls} call${d.calls === 1 ? '' : 's'} · ${time} · $${d.usd < 0.01 ? d.usd.toFixed(4) : d.usd.toFixed(2)}`
 }
 /** One lookup the repository search makes, in words. */
 export const stepText = (step: { tool: string; input: Record<string, unknown> }): string => {
