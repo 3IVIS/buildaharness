@@ -1,5 +1,5 @@
 import { FlowExecutionError } from './errors'
-import { buildAnthropicMessages, parseAnthropicContentBlocks } from './anthropic-message-shape'
+import { buildAnthropicMessages, markLastBlockCacheable, parseAnthropicContentBlocks } from './anthropic-message-shape'
 import { ANTHROPIC_DEFAULT_MODEL } from './model-defaults'
 
 export interface ChatMessage {
@@ -18,7 +18,7 @@ export interface ChatOptions {
   structuredOutput?: { schema: Record<string, unknown> }
   /**
    * Ask the provider to cache the prompt prefix (system text, tool definitions and the conversation so far) so the next call of a growing
-   * conversation re-reads it at a fraction of the price. Honoured by AnthropicLLMClient; other backends ignore it (OpenAI-compatible APIs cache on their own).
+   * conversation re-reads it at a fraction of the price. Honoured by AnthropicLLMClient and, for claude-* models, by LLMClient's structured calls through the proxy; other backends ignore it (OpenAI-compatible APIs cache on their own).
    */
   cachePrompt?: boolean
   /**
@@ -262,17 +262,20 @@ export class LLMClient implements ILLMClient {
       })
     }
     const { system, messages: anthropicMessages } = buildAnthropicMessages(messages)
+    // With cachePrompt the system text and everything up to the last message are marked for the provider's prompt cache, as AnthropicLLMClient does.
+    const cache = options.cachePrompt === true
     const body: Record<string, unknown> = {
       model,
       messages: anthropicMessages,
       stream: false,
-      ...(system ? { system } : {}),
+      ...(system ? { system: cache ? [{ type: 'text', text: system, cache_control: { type: 'ephemeral' } }] : system } : {}),
       ...(options.maxTokens ? { max_tokens: options.maxTokens } : {}),
       ...(options.temperature !== undefined ? { temperature: options.temperature } : {}),
     }
     if (tools && tools.length > 0) {
       body.tools = tools.map(t => ({ name: t.name, description: t.description, input_schema: t.input_schema }))
     }
+    if (cache) markLastBlockCacheable(anthropicMessages)
     const response = await this.fetchImpl(`${this.proxyUrl}/llm/chat`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${this.authToken}` },
@@ -287,7 +290,9 @@ export class LLMClient implements ILLMClient {
     // provider, unlike callChat's best-effort streaming capture above.
     const usage = json.usage as { input_tokens?: number; output_tokens?: number; cache_read_input_tokens?: number; cache_creation_input_tokens?: number } | undefined
     if (usage && typeof usage.input_tokens === 'number' && typeof usage.output_tokens === 'number') {
-      options.onUsage?.(withCacheCounts({ inputTokens: usage.input_tokens, outputTokens: usage.output_tokens }, usage.cache_read_input_tokens, usage.cache_creation_input_tokens))
+      // A proxy that runs the CLI can say what the request really cost (total_cost_usd); the API itself does not.
+      const reported = typeof json.total_cost_usd === 'number' ? { costUsd: json.total_cost_usd } : {}
+      options.onUsage?.({ ...withCacheCounts({ inputTokens: usage.input_tokens, outputTokens: usage.output_tokens }, usage.cache_read_input_tokens, usage.cache_creation_input_tokens), ...reported })
     }
     return { content, toolCalls }
   }

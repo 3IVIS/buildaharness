@@ -132,3 +132,14 @@ describe('input counts that cannot be believed', () => {
     expect(meter.spentUsd()).toBeGreaterThan(0.005)
   })
 })
+
+describe('prompt caching for the chat', () => {
+  it('asks for the chat to be cached, and for no other kind of call unless the caller did', async () => {
+    const seen: (boolean | undefined)[] = []
+    const inner = { callChatStructured: async (_m: ChatMessage[], _t: unknown, o?: { cachePrompt?: boolean }) => { seen.push(o?.cachePrompt); return { content: '{}' } } } as unknown as ILLMClient
+    const llm = withSpendCap(inner, await createSpendMeter(createMemoryArticleStore(), {}), () => undefined)
+    await llm.callChatStructured([{ role: 'system', content: 'You are Aielia.' }, { role: 'user', content: 'hi' }])
+    await llm.callChatStructured([{ role: 'system', content: `${CALL_TYPES[0].marker} in them.` }])
+    expect(seen).toEqual([true, undefined])
+  })
+})

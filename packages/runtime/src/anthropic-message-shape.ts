@@ -75,3 +75,14 @@ export function parseAnthropicContentBlocks(content: unknown): { content: string
   }
   return { content: contentParts.join(''), toolCalls: toolCalls.length > 0 ? toolCalls : undefined }
 }
+
+/** Puts a cache breakpoint on the last content block of the last message, so everything before it is cached for the next call. */
+export function markLastBlockCacheable(messages: AnthropicMessage[]): void {
+  const last = messages[messages.length - 1]
+  if (!last) return
+  if (typeof last.content === 'string') {
+    last.content = [{ type: 'text', text: last.content, cache_control: { type: 'ephemeral' } }]
+  } else if (last.content.length > 0) {
+    last.content[last.content.length - 1] = { ...last.content[last.content.length - 1], cache_control: { type: 'ephemeral' } }
+  }
+}

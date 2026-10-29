@@ -438,6 +438,30 @@ describe('LLMClient', () => {
       expect(onUsage).toHaveBeenCalledWith({ inputTokens: 100, outputTokens: 25 })
     })
 
+    it('takes the cost a proxy reports for the request as the real cost', async () => {
+      mockFetchJson({ content: [{ type: 'text', text: 'ok' }], usage: { input_tokens: 2, output_tokens: 25, cache_read_input_tokens: 900 }, total_cost_usd: 0.004 })
+      const onUsage = vi.fn()
+
+      await client.callChatStructured([{ role: 'user', content: 'hi' }], undefined, { onUsage })
+
+      expect(onUsage).toHaveBeenCalledWith({ inputTokens: 902, outputTokens: 25, cachedInputTokens: 900, cacheWriteTokens: 0, costUsd: 0.004 })
+    })
+
+    it('marks the system text and the last block for the provider cache when cachePrompt is set, and not otherwise', async () => {
+      const bodies: Record<string, unknown>[] = []
+      const fetchImpl = vi.fn(async (_u: unknown, init?: { body?: string }) => {
+        bodies.push(JSON.parse(init?.body ?? '{}'))
+        return new Response(JSON.stringify({ content: [{ type: 'text', text: 'ok' }], usage: { input_tokens: 1, output_tokens: 1 } }), { status: 200 })
+      }) as unknown as typeof fetch
+      const c = new LLMClient({ proxyUrl: 'https://p.test', authToken: 't', fetchImpl })
+      const msgs = [{ role: 'system' as const, content: 'rules' }, { role: 'user' as const, content: 'hi' }]
+      await c.callChatStructured(msgs, undefined, { model: 'claude-sonnet-5', cachePrompt: true })
+      await c.callChatStructured(msgs, undefined, { model: 'claude-sonnet-5' })
+      expect(JSON.stringify(bodies[0])).toContain('"cache_control":{"type":"ephemeral"}')
+      expect((bodies[0].system as { cache_control: unknown }[])[0].cache_control).toEqual({ type: 'ephemeral' })
+      expect(JSON.stringify(bodies[1])).not.toContain('cache_control')
+    })
+
     it('counts the tokens read from and written to the prompt cache inside the input, and says how many', async () => {
       mockFetchJson({ content: [{ type: 'text', text: 'ok' }], usage: { input_tokens: 4, output_tokens: 25, cache_read_input_tokens: 900, cache_creation_input_tokens: 96 } })
       const onUsage = vi.fn()

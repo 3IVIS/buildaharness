@@ -1,6 +1,6 @@
 import { FlowExecutionError } from './errors'
 import { DEFAULT_REQUEST_TIMEOUT_MS, DEFAULT_STRUCTURED_REQUEST_TIMEOUT_MS, withRequestTimeout, linkAbortSignal } from './request-timeout'
-import { buildAnthropicMessages, parseAnthropicContentBlocks, type AnthropicMessage } from './anthropic-message-shape'
+import { buildAnthropicMessages, markLastBlockCacheable, parseAnthropicContentBlocks } from './anthropic-message-shape'
 import { ANTHROPIC_DEFAULT_MODEL } from './model-defaults'
 import type { ChatMessage, ChatOptions, ILLMClient, LLMStructuredResponse, ToolDefinition } from './llm-client'
 
@@ -33,17 +33,6 @@ export interface AnthropicLLMClientOptions {
  * it's harmless from Node/Tauri too, keeping this one implementation instead of a
  * browser-only branch.
  */
-/** Puts a cache breakpoint on the last content block of the last message, so everything before it is cached for the next call. */
-function markLastBlockCacheable(messages: AnthropicMessage[]): void {
-  const last = messages[messages.length - 1]
-  if (!last) return
-  if (typeof last.content === 'string') {
-    last.content = [{ type: 'text', text: last.content, cache_control: { type: 'ephemeral' } }]
-  } else if (last.content.length > 0) {
-    last.content[last.content.length - 1] = { ...last.content[last.content.length - 1], cache_control: { type: 'ephemeral' } }
-  }
-}
-
 export class AnthropicLLMClient implements ILLMClient {
   private readonly apiKey: string
   private readonly fetchImpl: typeof fetch

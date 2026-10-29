@@ -149,7 +149,8 @@ export async function createSpendMeter(store: SettingsStore, pricing: { backend?
 export function withSpendCap(inner: ILLMClient, meter: SpendMeter, getCap: () => number | undefined): ILLMClient {
   const counted = (messages: ChatMessage[], o?: ChatOptions): ChatOptions => {
     const type = classifyCall(messages).id
-    return { ...o, onUsage: (u) => { void meter.record(withEstimatedInput(u, messages), type, o?.model); o?.onUsage?.(u) } }
+    // The chat is a loop that sends the same conversation again at each step, so the provider is asked to cache it (a client that cannot, ignores this).
+    return { ...(type === 'chat' ? { cachePrompt: true } : {}), ...o, onUsage: (u) => { void meter.record(withEstimatedInput(u, messages), type, o?.model); o?.onUsage?.(u) } }
   }
   return {
     // A client that cannot take tool definitions (the claude CLI) must still say so through the cap, or the repository search would call it with tools.
