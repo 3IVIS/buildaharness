@@ -606,6 +606,10 @@ describe('chat: model, check and adjust', () => {
     const line = await screen.findByText((_, el) => !!el?.classList.contains('write__ln') && /Reworded: Latency/.test(el.textContent ?? ''))
     expect(line.querySelector('.write__name')?.textContent).toBe('Latency') // which section, in a colour of its own, not only how many
     await waitFor(() => expect(box.value).toContain('It is very quick.')) // the edited text is on screen
+    // The reply carries what the request used; there is no separate "done" line when the reply already said it.
+    expect(screen.queryByText(/Editing: done/)).toBeNull()
+    const reply = screen.getByText(/Made 1 change/).closest('li') as HTMLElement
+    expect(within(reply).getByTitle('Tokens, time and cost of this request')).toBeInTheDocument()
     const b = await s.service.get(id)
     expect(b.markdown).toContain('It is very quick.')
     expect(b.snapshots.find((x) => x.label === 'Before a chat edit: Make it stronger')?.markdown).toBe(MD2) // the text as it was

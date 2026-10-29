@@ -219,6 +219,8 @@ function WriteAppBody({ services, connection, onDeleted, showPublish = false }: 
     job.held.push(line)
     if (from === 'aielia') setBannerText({ text, inChat: false })
   }, [])
+  /** Adds a line to the chat. Numbered now, not when React runs the update, so a job can tell at once whether it has said anything. */
+  const addLine = useCallback((line: Omit<ChatLine, 'id'>): void => { const id = ++lineId; setChat((c) => [...c, { id, ...line }]) }, [])
   /** A message from the interface itself: a trace in the chat only while a model job is running, otherwise the banner. */
   const sayInChat = useCallback((text: string): void => {
     if (jobTrace.current) trace('aielia', text)
@@ -325,7 +327,7 @@ function WriteAppBody({ services, connection, onDeleted, showPublish = false }: 
    * Every action is a short conversation in the chat: the writer's action as a line, the progress as the last line while it runs, then
    * what came of it, or what went wrong. `announce` is false when the writer's own words already opened the exchange (a typed message).
    */
-  async function run(label: string, work: (step: Step) => Promise<void>, announce = true, doneNote = '', kind: WorkKind = 'other'): Promise<void> {
+  async function run(label: string, work: (step: Step) => Promise<void>, announce = true, doneNote = '', kind: WorkKind = 'other', saysDone = true): Promise<void> {
     jobTrace.current = { mode: MODEL_KINDS.has(kind) ? 'chat' : 'held', held: [] }
     if (announce) trace('you', label)
     const mark = lineId
@@ -351,7 +353,7 @@ function WriteAppBody({ services, connection, onDeleted, showPublish = false }: 
       await work(step)
       ok = true
       // An action that had nothing to say still says it is done.
-      if (lineId === mark) sayInChat(`${label}: done.${doneNote}`)
+      if (lineId === mark && saysDone) sayInChat(`${label}: done.${doneNote}`)
       // Stop was pressed while the last step was already running (a model call cannot be taken back), so the work finished: say so, so it does not look ignored.
       if (ctl.signal.aborted) sayInChat('Stop came while the last step was already running, so it finished. If you did not want its result, the version saved before it is in History.')
     } catch (err) {
@@ -390,7 +392,7 @@ function WriteAppBody({ services, connection, onDeleted, showPublish = false }: 
     setProgress((p) => (p ? { ...p, stopping: true } : p))
   }
   /** A command the writer sent through the chat: the writer's line is already there, so it is not repeated. */
-  const chatRun = (label: string, work: (step: Step) => Promise<void>, kind: WorkKind = 'other'): Promise<void> => run(label, work, false, '', kind)
+  const chatRun = (label: string, work: (step: Step) => Promise<void>, kind: WorkKind = 'other', saysDone = true): Promise<void> => run(label, work, false, '', kind, saysDone)
 
   /** Saves what is in the text box now, so a comparison, a restore or a batch starts from what the writer sees, not from the last autosave. */
   async function flushDraft(): Promise<void> {
@@ -665,7 +667,7 @@ function WriteAppBody({ services, connection, onDeleted, showPublish = false }: 
       try {
         await flushDraft()
         const text = await prepareFromText(id, used, step)
-        setChat((c) => [...c, { id: ++lineId, from: 'aielia', text, model: used }])
+        addLine({ from: 'aielia', text, model: used })
       } catch (e) {
         if (isStopped(e)) throw e
         trace('aielia', failureText('I could not do that', e, services.backend))
@@ -907,7 +909,7 @@ function WriteAppBody({ services, connection, onDeleted, showPublish = false }: 
         await addSourceAndPlace({ kind, address: f.name, passage: text }, attach)
         lines.push(`${f.name}: added${kind === 'code' ? ' as code' : ''}.`)
       }
-      if (say) setChat((c) => [...c, { id: ++lineId, from: 'aielia', text: `${lines.join('\n')}\nI stored ${files.length === 1 ? 'it' : 'them'} and looked for the claims they bear on. Click in the text to see and confirm them under it.`, model: chatModel }])
+      if (say) addLine({ from: 'aielia', text: `${lines.join('\n')}\nI stored ${files.length === 1 ? 'it' : 'them'} and looked for the claims they bear on. Click in the text to see and confirm them under it.`, model: chatModel })
       else setNotice(lines.join(' '))
     }, 'files')
   }
@@ -959,7 +961,7 @@ function WriteAppBody({ services, connection, onDeleted, showPublish = false }: 
         const fresh = await service.get(activeId)
         setBundle(fresh)
         const early = r.stopped ? `Stopped early: ${r.entries.length} claim${r.entries.length === 1 ? ' was' : 's were'} checked and ${r.leftOver} ${r.leftOver === 1 ? 'is' : 'are'} left for another run.\n` : ''
-        setChat((c) => [...c, { id: ++lineId, from: 'aielia', text: early + verifyText(r.stopped ? { ...r, leftOver: 0 } : r, fresh.meta), model: used }])
+        addLine({ from: 'aielia', text: early + verifyText(r.stopped ? { ...r, leftOver: 0 } : r, fresh.meta), model: used })
       } catch (e) {
         if (isStopped(e)) throw e
         trace('aielia', failureText('The check could not finish', e, services.backend))
@@ -990,7 +992,7 @@ function WriteAppBody({ services, connection, onDeleted, showPublish = false }: 
         const flagged = full.resolution?.flagged.length ?? 0
         text = `I found ${factual.length} factual claim${factual.length === 1 ? '' : 's'}: ${supported} supported, ${unsourced} without a checked source, ${statuses.length - supported - unsourced} to look at.${flagged > 0 ? ` ${flagged} other section${flagged === 1 ? '' : 's'} may need a look because of what changed.` : ''} Details are in Issues.`
       }
-      setChat((c) => [...c, { id: ++lineId, from: 'aielia', text, model: used }])
+      addLine({ from: 'aielia', text, model: used })
       } catch (e) {
         if (isStopped(e)) throw e
         trace('aielia', failureText('The check could not finish', e, services.backend))
@@ -1025,7 +1027,7 @@ function WriteAppBody({ services, connection, onDeleted, showPublish = false }: 
     const text = (override ?? chatInput).trim()
     if (!text) return
     if (override === undefined) setChatInput('')
-    setChat((c) => [...c, { id: ++lineId, from: 'you', text }])
+    addLine({ from: 'you', text })
     let how: Exclude<ChatMode, 'auto'>
     // The model read the message as a wish to reshape the whole article, which line edits cannot do: the text is written again from the old one.
     let rewriting = false
@@ -1036,7 +1038,7 @@ function WriteAppBody({ services, connection, onDeleted, showPublish = false }: 
       // The model reads the message (and what Aielia last said) to tell an edit from a question; a failure counts as a question.
       let read: { intent: 'edit' | 'rewrite' | 'suggest' | 'answer'; links: string[] } | undefined
       const lastReply = [...chat].reverse().find((l) => l.from === 'aielia' && !l.record)?.text?.split(NAME_OPEN).join('').split(NAME_CLOSE).join('')
-      await chatRun('Reading your message', async (step) => { read = await services.intent(text, { articleHasText: !!(activeId && draft.trim()), lastReply }, { signal: step.signal }) })
+      await chatRun('Reading your message', async (step) => { read = await services.intent(text, { articleHasText: !!(activeId && draft.trim()), lastReply }, { signal: step.signal }) }, 'other', false)
       if (!read) return
       rewriting = read.intent === 'rewrite'
       how = read.intent === 'rewrite' ? 'edit' : read.intent
@@ -1051,7 +1053,7 @@ function WriteAppBody({ services, connection, onDeleted, showPublish = false }: 
         const refs = await services.readReferences(links)
         ask = text + refs.block
         if (refs.failed.length > 0) refNote = `\n\nI could not read ${refs.failed.map((f) => `${f.url} (${f.reason})`).join('; ')}, so the change does not follow ${refs.failed.length === 1 ? 'it' : 'them'}.`
-      })
+      }, 'other', false)
     }
     const drafting = how === 'edit' && view !== 'outline' && (!activeId || !draft.trim() || rewriting)
     const kind: WorkKind = how === 'edit' ? (drafting ? 'draft' : 'edit') : wantEdits ? 'suggest' : 'answer'
@@ -1100,7 +1102,7 @@ function WriteAppBody({ services, connection, onDeleted, showPublish = false }: 
           setShowHistory(false)
           setVersionsTick((t) => t + 1)
           void refreshList()
-          setChat((c) => [...c, { id: ++lineId, from: 'aielia', text: (d.status === 'drafted' ? (rewriting ? `Rewrote the article.${d.change && describeSectionChange(d.change) ? `\n${describeSectionChange(d.change)}` : ''}\nUndo from History.` : `Wrote the first draft${d.name ? ` and named the article “${d.name}”` : ''}.`) : `I could not ${rewriting ? 'rewrite the article' : 'write the draft'}${d.reason ? `: ${d.reason}` : ''}. The article is unchanged.`) + tail + refNote, model: said }])
+          addLine({ from: 'aielia', text: (d.status === 'drafted' ? (rewriting ? `Rewrote the article.${d.change && describeSectionChange(d.change) ? `\n${describeSectionChange(d.change)}` : ''}\nUndo from History.` : `Wrote the first draft${d.name ? ` and named the article “${d.name}”` : ''}.`) : `I could not ${rewriting ? 'rewrite the article' : 'write the draft'}${d.reason ? `: ${d.reason}` : ''}. The article is unchanged.`) + tail + refNote, model: said })
           return
         }
         const r = outline ? await service.editOutlineFromChat(id, ask, said, step.signal, chatStage) : await service.editFromChat(id, ask, said, step.signal, chatStage)
@@ -1117,7 +1119,7 @@ function WriteAppBody({ services, connection, onDeleted, showPublish = false }: 
         else if (r.status === 'nothing') body = 'Nothing to change for that.'
         else if ('applied' in r) body = `Made ${r.applied.length} change${r.applied.length === 1 ? '' : 's'}${r.skipped > 0 ? ` (${r.skipped} did not fit)` : ''}.${what(r.change)}\n${undo}`
         else body = `Reworked the outline.${what(r.change)}\n${undo}`
-        setChat((c) => [...c, { id: ++lineId, from: 'aielia', text: body + tail + refNote, model: said }])
+        addLine({ from: 'aielia', text: body + tail + refNote, model: said })
       } else if (wantEdits && activeId) {
         // Record what the writer said (comments, corrections) the same way a chat turn does, then turn the request into suggestions.
         const { model: said, tail } = await noteIt(activeId)
@@ -1129,15 +1131,15 @@ function WriteAppBody({ services, connection, onDeleted, showPublish = false }: 
         const body = r.status === 'failed' ? 'I could not turn that into edits.'
           : added.length === 0 ? 'Nothing to change for that.'
           : `Added ${added.length} suggestion${added.length === 1 ? '' : 's'}. Review ${added.length === 1 ? 'it' : 'them'} in Issues.`
-        setChat((c) => [...c, { id: ++lineId, from: 'aielia', text: body + tail + refNote, model: said }])
+        addLine({ from: 'aielia', text: body + tail + refNote, model: said })
       } else {
         const { reply, model: said } = await talk(activeId)
         if (activeId) setBundle(await service.get(activeId))
-        setChat((c) => [...c, { id: ++lineId, from: 'aielia', text: reply, model: said }])
+        addLine({ from: 'aielia', text: reply, model: said })
       }
      } catch (e) {
       if (isStopped(e)) throw e
-      setChat((c) => [...c, { id: ++lineId, from: 'aielia', text: failureText('The model call failed', e, services.backend) }])
+      addLine({ from: 'aielia', text: failureText('The model call failed', e, services.backend) })
      }
     }, kind)
   }
