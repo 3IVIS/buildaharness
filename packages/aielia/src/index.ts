@@ -246,3 +246,5 @@ export { FRAGMENT_PHASES, FRAGMENT_SLOT_CAP, PROTECTED_BASE_PARAGRAPH, EMPTY_FRA
 export type { InstructionFragments, FragmentPhase, FragmentLoader } from './instruction-fragments.js'
 export { PROCEDURE_CLASSES, EVIDENCE_STATUSES, PROCEDURE_LIMITS, parseProcedureEntry, parseProcedureLibrary, matchProcedures, renderProcedureHint, withProcedureHint, procedureBody } from './procedure-library.js'
 export type { ProcedureEntry, ProcedureClass, ProcedureEvidenceStatus, ProcedureParse } from './procedure-library.js'
+export { DEFAULT_LIFECYCLE_CONFIG, emptyLifecycleState, loadedProcedures, addDraft, applyCuratorOp, promotableDrafts, curateDrafts, recordCarryEvent, recordRound, retireItems, driftFlags } from './procedure-lifecycle.js'
+export type { LifecycleConfig, ProcedureDraft, ProcedureStats, ProcedureLifecycleState, CuratorOp, ProcedureCurator } from './procedure-lifecycle.js'
