@@ -236,6 +236,9 @@ export class ArticleService {
     // The article's title is its first top-level heading, so the writer edits it in the text and nowhere else.
     const heading = rec.sections.find((x) => x.level === 1 && x.heading.trim() !== '')?.heading.trim()
     let meta = refreshComments(refreshSuggestions({ ...before.meta, sections: rec.sections, title: heading ?? before.meta.title }, markdown), markdown)
+    // A suggested link between sections carries a reason written about the text as it was; once either section changes, that reason may be false, so it goes and the resolver proposes it again if it still holds. Confirmed links stay.
+    const changedIds = new Set(changedSectionIds)
+    meta = { ...meta, links: meta.links.filter((l) => !(l.origin === 'proposed' && l.from.type === 'section' && l.to.type === 'section' && (changedIds.has(l.from.id) || changedIds.has(l.to.id)))) }
     // A rewrite is a natural point to be able to go back to: keep the text as it was.
     const snapshots = isLargeChange(before.markdown, markdown) ? addSnapshot(before.snapshots, createSnapshot('checkpoint', before.markdown, before.meta, this.now(), 'Before a large change')) : before.snapshots
     let bundle: ArticleBundle = { ...before, markdown, meta, snapshots }

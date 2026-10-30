@@ -296,6 +296,23 @@ describe('dependencies through the service', () => {
   })
 })
 
+describe('suggested links after an edit', () => {
+  it('drops a suggested link whose section changed, keeps one the writer confirmed, and leaves other sections\' links alone', async () => {
+    const store = createMemoryArticleStore()
+    const reply = { links: [{ from: 's3', to: 's2', kind: 'repeats', reason: 'repeats the 18 ms bound', confidence: 0.8 }] }
+    const s = new ArticleService({ store, llm: routedLinks(reply), now: () => NOW, newId: () => 'a1' })
+    const id = await s.create('Post', MD)
+    const found = await s.findDependencies(id)
+    const b = await s.get(id)
+    await store.save(id, { ...b, meta: { ...b.meta, links: [...b.meta.links, { id: 'lk9', from: { type: 'section', id: 's3' }, to: { type: 'section', id: 's2' }, kind: 'rests_on', origin: 'confirmed', at: NOW }] } })
+    expect(found.added).toHaveLength(1)
+    const out = await s.updateText(id, MD.replace('18 ms', '20 ms'), { analyze: false })
+    expect(out.bundle.meta.links.map((l) => l.id)).toEqual(['lk9'])
+    const same = await s.updateText(id, MD.replace('18 ms', '20 ms'), { analyze: false })
+    expect(same.bundle.meta.links.map((l) => l.id)).toEqual(['lk9'])
+  })
+})
+
 function routedLinks(reply: unknown): ILLMClient {
   return { callChatStructured: async () => ({ content: JSON.stringify(reply) }) } as unknown as ILLMClient
 }

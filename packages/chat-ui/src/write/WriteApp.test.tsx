@@ -204,6 +204,15 @@ describe('header and article menu', () => {
     for (const item of [/New article/, /Rename this article/, /Export this article/, /Open or import a file/]) expect(within(menu).getByRole('button', { name: item })).toBeInTheDocument()
   })
 
+  it('does not read "0 unsourced" before any claims have been found, and counts them once they have', async () => {
+    const s = await services({}, MD)
+    render(<WriteApp services={s} />)
+    await waitForText()
+    const status = await screen.findByRole('group', { name: /How close the article is to publishable/ })
+    expect(status).toHaveTextContent('claims not found yet')
+    expect(status).not.toHaveTextContent('0 unsourced')
+  })
+
   it('starts empty, creates an article from the menu, and shows its sections in the outline', async () => {
     render(<WriteApp services={await services({})} />)
     expect(screen.getByText(/Create an article, or import one/)).toBeInTheDocument()

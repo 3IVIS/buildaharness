@@ -1237,7 +1237,7 @@ function WriteAppBody({ services, connection, onDeleted, showPublish = false }: 
       onDrop={(e) => { setDropping(false); const files = Array.from(e.dataTransfer.files); if (files.length === 0) return; e.preventDefault(); dropFiles(files, false) }}
     >
       <header className="write__bar">
-        <h1 className="write__title">Aielia Write</h1>
+        <h1 className="write__title"><a className="brand-link" href="https://myaielia.com" target="_blank" rel="noopener noreferrer" title="Go to myaielia.com">Aielia</a> Write</h1>
         <span className="write__badge" title="Early-stage alpha software — expect rough edges and breaking changes.">Alpha</span>
         <ArticleSwitcher articles={articles} activeId={activeId} onSelect={(id) => void run('Opening the article', async () => { await select(id) }, true, ' It is open.')} onRename={() => void renameArticle()} onNew={() => void createArticle()} onExport={() => void exportArticle()} onImport={(f) => void importArticle(f)} onOpenPage={services.canReadPages ? () => void openPage() : undefined} />
         {showPublish && <button type="button" className="write__primary" onClick={() => void publish()} disabled={!activeId || busy !== null}>Publish</button>}
@@ -1246,7 +1246,7 @@ function WriteAppBody({ services, connection, onDeleted, showPublish = false }: 
       {((busy && !(isWide() || tab === 'chat')) || (banner && (!banner.inChat || !(isWide() || tab === 'chat')))) && <p className="write__notice" role="status">{busy && !(isWide() || tab === 'chat') ? `${busy}…` : banner?.text}</p>}
 
       <div className="write__status" role="group" aria-label="How close the article is to publishable, and what has been spent">
-        <span>{readiness && `${readiness.unsourcedFactualClaims} unsourced · ${readiness.staleOrUnsupportedClaims} stale or unsupported · ${readiness.openComments} open comment${readiness.openComments === 1 ? '' : 's'} · ${readiness.sectionsNeedingReview} section${readiness.sectionsNeedingReview === 1 ? '' : 's'} to review`}</span>
+        <span>{readiness && `${meta && meta.claims.length === 0 && bundle?.markdown.trim() ? 'claims not found yet' : `${readiness.unsourcedFactualClaims} unsourced · ${readiness.staleOrUnsupportedClaims} stale or unsupported`} · ${readiness.openComments} open comment${readiness.openComments === 1 ? '' : 's'} · ${readiness.sectionsNeedingReview} section${readiness.sectionsNeedingReview === 1 ? '' : 's'} to review`}</span>
         <SpendBadge usd={(void spendTick, services.spentUsd())} tokens={(void spendTick, services.spend.snapshot().inputTokens + services.spend.snapshot().outputTokens)} byType={(void spendTick, services.spendByType())} hostName={services.hostName} />
       </div>
 
