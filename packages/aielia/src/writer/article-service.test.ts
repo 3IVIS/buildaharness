@@ -296,6 +296,61 @@ describe('dependencies through the service', () => {
   })
 })
 
+describe('claims after an edit that does not extract again', () => {
+  it('drops a claim whose sentence is gone and that nothing hangs on, and keeps one still in the text or confirmed', async () => {
+    const { svc: s } = svc({ claims: { claims: [{ quote: 'The p99 was 18 ms.', kind: 'factual', matchesId: null, sure: true }, { quote: 'So p99 stays under 20 ms.', kind: 'factual', matchesId: null, sure: true }] }, resolve: { affected: [] } })
+    const id = await s.create('Post', MD)
+    await s.analyze(id)
+    expect((await s.get(id)).meta.claims).toHaveLength(2)
+    const out = await s.updateText(id, MD.replace('The p99 was 18 ms.', 'It was fast.'), { analyze: false })
+    expect(out.bundle.meta.claims.map((c) => c.quote)).toEqual(['So p99 stays under 20 ms.'])
+  })
+})
+
+describe('a source on a claim whose sentence a chat edit rewrote', () => {
+  it('goes with the claim, so the Sources list never shows text that is no longer in the article, and the source stays to attach again', async () => {
+    const { svc: s } = svc({ claims: { claims: [{ quote: 'The p99 was 18 ms.', kind: 'factual', matchesId: null, sure: true }] }, resolve: { affected: [] } })
+    const id = await s.create('Post', MD)
+    await s.analyze(id)
+    const b = await s.get(id)
+    const src = await s.addSource(id, { kind: 'upload', address: 'bench.txt', passage: 'p99 latency: 18 ms' })
+    await s.attachSource(id, b.meta.claims[0].id, src)
+    const out = await s.updateText(id, MD.replace('The p99 was 18 ms.', 'It was fast.'), { analyze: false })
+    expect(out.bundle.meta.claims).toEqual([])
+    expect(out.bundle.meta.links.filter((l) => l.kind === 'supported_by')).toEqual([])
+    expect(out.bundle.meta.sources.map((x) => x.id)).toEqual([src])
+    expect(s.readiness(out.bundle).problems).toEqual([])
+  })
+})
+
+describe('claim positions after an edit', () => {
+  it('moves each claim to where its sentence is now, so a range lookup finds the right one', async () => {
+    const { svc: s } = svc({ claims: { claims: [{ quote: 'The p99 was 18 ms.', kind: 'factual', matchesId: null, sure: true }, { quote: 'So p99 stays under 20 ms.', kind: 'factual', matchesId: null, sure: true }] }, resolve: { affected: [] } })
+    const id = await s.create('Post', MD)
+    await s.analyze(id)
+    const longer = MD.replace('Intro: p99 under 20 ms.', 'Intro: p99 under 20 ms, and this sentence has grown a good deal longer than it was before.')
+    const out = await s.updateText(id, longer, { analyze: false })
+    for (const c of out.bundle.meta.claims) expect(out.bundle.markdown.slice(c.position, c.position + c.quote.length)).toBe(c.quote)
+  })
+})
+
+describe('suggested links after an edit', () => {
+  it('drops a suggested link whose section changed, keeps one the writer confirmed, and leaves other sections\' links alone', async () => {
+    const store = createMemoryArticleStore()
+    const reply = { links: [{ from: 's3', to: 's2', kind: 'repeats', reason: 'repeats the 18 ms bound', confidence: 0.8 }] }
+    const s = new ArticleService({ store, llm: routedLinks(reply), now: () => NOW, newId: () => 'a1' })
+    const id = await s.create('Post', MD)
+    const found = await s.findDependencies(id)
+    const b = await s.get(id)
+    await store.save(id, { ...b, meta: { ...b.meta, links: [...b.meta.links, { id: 'lk9', from: { type: 'section', id: 's3' }, to: { type: 'section', id: 's2' }, kind: 'rests_on', origin: 'confirmed', at: NOW }] } })
+    expect(found.added).toHaveLength(1)
+    const out = await s.updateText(id, MD.replace('18 ms', '20 ms'), { analyze: false })
+    expect(out.bundle.meta.links.map((l) => l.id)).toEqual(['lk9'])
+    const same = await s.updateText(id, MD.replace('18 ms', '20 ms'), { analyze: false })
+    expect(same.bundle.meta.links.map((l) => l.id)).toEqual(['lk9'])
+  })
+})
+
 function routedLinks(reply: unknown): ILLMClient {
   return { callChatStructured: async () => ({ content: JSON.stringify(reply) }) } as unknown as ILLMClient
 }
@@ -601,6 +656,18 @@ describe('the chat edits the article itself', () => {
     const saved = b.snapshots.find((x) => x.label === r.savedAs)
     expect(saved?.markdown).toBe(MD) // the text as it was before the edit
     expect(r.savedAs).toMatch(/^Before a chat edit: Use the new p99/)
+  })
+  it('marks the reviewer comment the edit answers as addressed, and leaves the one it does not touch open', async () => {
+    const { store, svc: s } = svc({ edits: { suggestions: [{ quote: 'The p99 was 18 ms.', replacement: 'The p99 was 12 ms.', reason: 'new figure', commentIds: ['wc1'] }] } })
+    const id = await s.create('Post', MD)
+    const b = await s.get(id)
+    const c = (cid: string) => ({ id: cid, articleId: id, text: 'Fix the figure', state: 'open' as const, conflictsWith: [], origin: 'reviewer' as const, capturedAt: NOW })
+    await store.save(id, { ...b, meta: { ...b.meta, comments: [c('wc1'), c('wc2')] } })
+    const r = await s.editFromChat(id, 'Apply the first note')
+    expect(r.status).toBe('applied')
+    const after = (await s.get(id)).meta.comments
+    expect(after.find((x) => x.id === 'wc1')?.state).toBe('addressed')
+    expect(after.find((x) => x.id === 'wc2')?.state).toBe('open')
   })
   it('saves a version even when nothing changes, and leaves other waiting suggestions alone', async () => {
     const { svc: s } = svc({ edits: { suggestions: [] } })

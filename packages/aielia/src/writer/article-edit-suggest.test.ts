@@ -29,6 +29,14 @@ describe('suggestEdits', () => {
     expect(r.meta.suggestions[0]).toMatchObject({ state: 'pending', proposedBy: 'assistant', replacement: '41 ms' })
   })
 
+  it('marks an open comment the change does what it asks as addressed once the change is accepted, whether the model names it by id or by label, and not one it leaves out', async () => {
+    const c = (id: string, label: string) => ({ id, articleId: 'a1', label, text: 'Say the figure', state: 'open' as const, conflictsWith: [], origin: 'reviewer' as const, capturedAt: NOW })
+    const withComments = { ...meta, comments: [c('wc1', 'C1'), c('wc2', 'C2'), c('wc3', 'C3')] }
+    const reply = { suggestions: [{ quote: '18 ms', replacement: '41 ms', reason: 'x', commentIds: ['wc1', 'c2', 'wc9'] }] }
+    const r = await suggestEdits({ meta: withComments, markdown: MD, instruction: 'apply the notes', now: NOW }, client(reply))
+    expect(r.meta.suggestions[0].commentIds).toEqual(['wc1', 'wc2'])
+  })
+
   it('shows the model the writer\'s record, so "fix C1" can be understood', async () => {
     const seen = { users: [] as string[] }
     const withComment = { ...meta, comments: [{ id: 'wc1', articleId: 'a1', label: 'C1', text: 'Check the figure', state: 'open' as const, conflictsWith: [], origin: 'reviewer' as const, capturedAt: NOW }], corrections: [{ id: 'wx1', articleId: 'a1', kind: 'say_so' as const, trust: 'lower' as const, note: 'p99 is 41 ms', capturedAt: NOW }] }

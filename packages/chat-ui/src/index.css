@@ -1845,3 +1845,5 @@ body {
   opacity: 0.8;
   color: var(--muted);
 }
+
+.brand-link { color: inherit; text-decoration: none; }

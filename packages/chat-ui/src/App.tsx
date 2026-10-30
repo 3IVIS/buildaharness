@@ -1174,7 +1174,7 @@ export function App(): React.JSX.Element {
     <div className="app">
       <header className="app__header">
         <span className="app__header-brand">
-          <span className="app__header-title">Aielia Chat</span>
+          <span className="app__header-title"><a className="brand-link" href="https://myaielia.com" target="_blank" rel="noopener noreferrer" title="Go to myaielia.com">Aielia</a> Chat</span>
           <span className="app__header-badge" title="Early-stage alpha software — expect rough edges and breaking changes.">Alpha</span>
           {config.dangerouslySkipPermissions && (
             <button

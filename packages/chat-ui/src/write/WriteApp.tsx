@@ -973,9 +973,9 @@ function WriteAppBody({ services, connection, onDeleted, showPublish = false }: 
     }, 'verify')
   }
   /** A check started from the chat, with the model chosen there. The result is said in the chat, with the model's name. */
-  const checkFromChat = (): void => {
+  const checkFromChat = (announce = true): void => {
     const used = services.models.chat()
-    trace('you', 'Find the factual claims and check them against their sources')
+    if (announce) trace('you', 'Find the factual claims and check them against their sources')
     if (!activeId) { sayInChat('Open or create an article first.'); return }
     void chatRun(`Checking with ${modelLabel(used)}`, async (step) => {
       try {
@@ -1078,9 +1078,14 @@ function WriteAppBody({ services, connection, onDeleted, showPublish = false }: 
     const lastReply = [...before].reverse().find((l) => l.from === 'aielia' && !l.record)?.text?.split(NAME_OPEN).join('').split(NAME_CLOSE).join('')
     if (asked === 'auto') {
       // The model reads the message (and what Aielia last said) to tell an edit from a question; a failure counts as a question.
-      let read: { intent: 'edit' | 'rewrite' | 'suggest' | 'answer'; links: string[]; scope: 'outline' | 'text' | 'both' } | undefined
+      let read: { intent: 'edit' | 'rewrite' | 'suggest' | 'check' | 'answer'; links: string[]; scope: 'outline' | 'text' | 'both' } | undefined
       await chatRun('Reading your message', async (step) => { read = await services.intent(text, { articleHasText: !!(activeId && draft.trim()), lastReply }, { signal: step.signal }) }, 'other', false)
       if (!read) return
+      // A request to check the whole article's claims is the check itself, not a talk about it: the same action as in the chat's menu, so the page's claim list is filled and the status line counts them.
+      if (read.intent === 'check') {
+        void flushDraft().then(() => checkFromChat(false))
+        return
+      }
       rewriting = read.intent === 'rewrite'
       scope = read.scope
       how = read.intent === 'rewrite' ? 'edit' : read.intent
@@ -1237,7 +1242,7 @@ function WriteAppBody({ services, connection, onDeleted, showPublish = false }: 
       onDrop={(e) => { setDropping(false); const files = Array.from(e.dataTransfer.files); if (files.length === 0) return; e.preventDefault(); dropFiles(files, false) }}
     >
       <header className="write__bar">
-        <h1 className="write__title">Aielia Write</h1>
+        <h1 className="write__title"><a className="brand-link" href="https://myaielia.com" target="_blank" rel="noopener noreferrer" title="Go to myaielia.com">Aielia</a> Write</h1>
         <span className="write__badge" title="Early-stage alpha software — expect rough edges and breaking changes.">Alpha</span>
         <ArticleSwitcher articles={articles} activeId={activeId} onSelect={(id) => void run('Opening the article', async () => { await select(id) }, true, ' It is open.')} onRename={() => void renameArticle()} onNew={() => void createArticle()} onExport={() => void exportArticle()} onImport={(f) => void importArticle(f)} onOpenPage={services.canReadPages ? () => void openPage() : undefined} />
         {showPublish && <button type="button" className="write__primary" onClick={() => void publish()} disabled={!activeId || busy !== null}>Publish</button>}
@@ -1246,7 +1251,7 @@ function WriteAppBody({ services, connection, onDeleted, showPublish = false }: 
       {((busy && !(isWide() || tab === 'chat')) || (banner && (!banner.inChat || !(isWide() || tab === 'chat')))) && <p className="write__notice" role="status">{busy && !(isWide() || tab === 'chat') ? `${busy}…` : banner?.text}</p>}
 
       <div className="write__status" role="group" aria-label="How close the article is to publishable, and what has been spent">
-        <span>{readiness && `${readiness.unsourcedFactualClaims} unsourced · ${readiness.staleOrUnsupportedClaims} stale or unsupported · ${readiness.openComments} open comment${readiness.openComments === 1 ? '' : 's'} · ${readiness.sectionsNeedingReview} section${readiness.sectionsNeedingReview === 1 ? '' : 's'} to review`}</span>
+        <span>{readiness && `${meta && meta.claims.length === 0 && bundle?.markdown.trim() ? 'claims not found yet' : `${readiness.unsourcedFactualClaims} unsourced · ${readiness.staleOrUnsupportedClaims} stale or unsupported`} · ${readiness.openComments} open comment${readiness.openComments === 1 ? '' : 's'} · ${readiness.sectionsNeedingReview} section${readiness.sectionsNeedingReview === 1 ? '' : 's'} to review`}</span>
         <SpendBadge usd={(void spendTick, services.spentUsd())} tokens={(void spendTick, services.spend.snapshot().inputTokens + services.spend.snapshot().outputTokens)} byType={(void spendTick, services.spendByType())} hostName={services.hostName} />
       </div>
 

@@ -26,8 +26,9 @@ test('the page header and the chat box keep their layout', async ({ page }) => {
   // A new class that reuses the header's own (it once did) turned the header's children into tall blocks.
   const bar = await page.locator('.write__bar').first().boundingBox()
   expect(bar?.height ?? 999).toBeLessThan(100)
-  const publish = await page.getByRole('button', { name: 'Publish' }).boundingBox()
-  expect(publish?.height ?? 999).toBeLessThan(80)
+  // The header's other children (the article switcher, the badge) keep a single line too. (The Publish button is hidden for now, so it is not looked for.)
+  const switcher = await page.locator('.write__bar button').first().boundingBox()
+  expect(switcher?.height ?? 999).toBeLessThan(80)
   // The whole chat box, down to the send button, is inside the window.
   const sendBtn = await page.getByRole('button', { name: 'Send' }).boundingBox()
   expect(sendBtn).not.toBeNull()

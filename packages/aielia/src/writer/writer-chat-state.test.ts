@@ -50,6 +50,14 @@ describe('applyCaptureOps', () => {
     expect(c1.state).toBe('open')
   })
 
+  it('ends a conflict, on both sides, when the writer decides on one of the comments in it', () => {
+    const s1 = applyCaptureOps(createEmptyWriterChatState(), 'bakery', FIVE, NOW).state
+    const r = applyCaptureOps(s1, 'bakery', [{ op: 'decide', ref: 'C4', decision: 'keep the short one' }], NOW)
+    expect(r.state.comments.find((c) => c.label === 'C4')!.conflictsWith).toEqual([])
+    expect(r.state.comments.find((c) => c.label === 'C5')!.conflictsWith).toEqual([])
+    expect(renderWriterChatBlock(r.state, 'bakery', [{ id: 'bakery', title: 'Bakery' }])).not.toContain('IN CONFLICT')
+  })
+
   it('keeps labels apart between articles', () => {
     let s = applyCaptureOps(createEmptyWriterChatState(), 'bakery', [{ op: 'add_comment', label: 'C1', text: 'bakery one' }], NOW).state
     s = applyCaptureOps(s, 'garden', [{ op: 'add_comment', label: 'C1', text: 'garden one' }], NOW).state

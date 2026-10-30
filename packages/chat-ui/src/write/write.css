@@ -536,3 +536,5 @@ body.write--resizing { user-select: none; -webkit-user-select: none; cursor: col
 
 .write__resend { margin-top: 4px; opacity: 0.55; }
 .write__resend:hover, .write__resend:focus-visible { opacity: 1; }
+
+.brand-link { color: inherit; text-decoration: none; }

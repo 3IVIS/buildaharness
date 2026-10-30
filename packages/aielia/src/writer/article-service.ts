@@ -165,6 +165,17 @@ export interface ResolveReport {
   note: string
 }
 
+/** Where a claim's sentence is now: the occurrence of the quote nearest to where it was, since an edit elsewhere moves it. Unchanged when the quote is gone. */
+function nearestOccurrence(markdown: string, quote: string, was: number): number {
+  let best = was
+  let bestGap = Number.POSITIVE_INFINITY
+  for (let at = markdown.indexOf(quote); at !== -1; at = markdown.indexOf(quote, at + 1)) {
+    const gap = Math.abs(at - was)
+    if (gap < bestGap) { best = at; bestGap = gap }
+  }
+  return best
+}
+
 export class ArticleService {
   private readonly store: ArticleStore
   private readonly now: () => string
@@ -236,6 +247,17 @@ export class ArticleService {
     // The article's title is its first top-level heading, so the writer edits it in the text and nowhere else.
     const heading = rec.sections.find((x) => x.level === 1 && x.heading.trim() !== '')?.heading.trim()
     let meta = refreshComments(refreshSuggestions({ ...before.meta, sections: rec.sections, title: heading ?? before.meta.title }, markdown), markdown)
+    // A suggested link between sections carries a reason written about the text as it was; once either section changes, that reason may be false, so it goes and the resolver proposes it again if it still holds. Confirmed links stay.
+    const changedIds = new Set(changedSectionIds)
+    meta = { ...meta, links: meta.links.filter((l) => !(l.origin === 'proposed' && l.from.type === 'section' && l.to.type === 'section' && (changedIds.has(l.from.id) || changedIds.has(l.to.id)))) }
+    // A claim whose sentence is no longer in the text and that the writer did not confirm is gone with it, and so is a source attached to it (a chat edit does not extract again, so it would otherwise show text that is no longer there); the next check finds the claims that are there, and the source stays in the list to attach again.
+    // Only when no extraction follows: one that does matches a reworded sentence to its old claim, which needs the old claim to be there.
+    const gone = new Set(options.analyze === false ? meta.claims.filter((c) => !c.confirmed && !markdown.includes(c.quote)).map((c) => c.id) : [])
+    meta = {
+      ...meta,
+      claims: meta.claims.filter((c) => !gone.has(c.id)).map((c) => ({ ...c, position: nearestOccurrence(markdown, c.quote, c.position) })),
+      links: meta.links.filter((l) => !gone.has(l.from.id) && !gone.has(l.to.id)),
+    }
     // A rewrite is a natural point to be able to go back to: keep the text as it was.
     const snapshots = isLargeChange(before.markdown, markdown) ? addSnapshot(before.snapshots, createSnapshot('checkpoint', before.markdown, before.meta, this.now(), 'Before a large change')) : before.snapshots
     let bundle: ArticleBundle = { ...before, markdown, meta, snapshots }
