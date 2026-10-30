@@ -108,7 +108,7 @@ export function issueCount(batches: readonly IssueBatch[]): number {
  * What is left before the article is ready, as plain lines for the answering model, so "what is left?" is answered from the article's own
  * records and not from a guess. At most a few items per group; empty when nothing is open.
  */
-export function renderIssuesForChat(meta: ArticleMeta, perGroup = 5): string {
+export function renderIssuesForChat(meta: ArticleMeta, perGroup = 15): string {
   const lines: string[] = []
   for (const batch of collectIssues(meta)) {
     if (batch.items.length === 0 && !batch.needsYourChoice?.length) continue

@@ -120,6 +120,8 @@ export function applyCaptureOps(state: WriterChatState, articleId: string, ops: 
         continue
       }
       c.decision = op.decision.trim()
+      // The writer's choice ends a conflict this comment was in, on both sides: it is no longer one the writer has yet to settle.
+      for (const other of comments) if (other.id === c.id || other.conflictsWith.includes(c.id)) other.conflictsWith = other.conflictsWith.filter((x) => x !== c.id && other.id !== c.id)
       applied.push(`recorded decision on ${c.label ?? c.id}`)
     } else if (op.op === 'set_state') {
       const c = findComment(comments, articleId, op.ref)
