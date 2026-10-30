@@ -17,8 +17,8 @@
     "build:write:e2e": "VITE_E2E=1 vite build --config vite.write.config.ts --outDir dist-write-e2e"
   },
   "dependencies": {
-    "@buildaharness/aielia": "^0.3.6",
-    "@buildaharness/runtime": "^0.3.3",
+    "@buildaharness/aielia": "^0.3.10",
+    "@buildaharness/runtime": "^0.3.4",
     "@dagrejs/dagre": "^3.0.0",
     "@tauri-apps/api": "^2.0.0",
     "@tauri-apps/plugin-fs": "^2.0.0",
