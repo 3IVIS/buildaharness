@@ -307,6 +307,17 @@ describe('claims after an edit that does not extract again', () => {
   })
 })
 
+describe('claim positions after an edit', () => {
+  it('moves each claim to where its sentence is now, so a range lookup finds the right one', async () => {
+    const { svc: s } = svc({ claims: { claims: [{ quote: 'The p99 was 18 ms.', kind: 'factual', matchesId: null, sure: true }, { quote: 'So p99 stays under 20 ms.', kind: 'factual', matchesId: null, sure: true }] }, resolve: { affected: [] } })
+    const id = await s.create('Post', MD)
+    await s.analyze(id)
+    const longer = MD.replace('Intro: p99 under 20 ms.', 'Intro: p99 under 20 ms, and this sentence has grown a good deal longer than it was before.')
+    const out = await s.updateText(id, longer, { analyze: false })
+    for (const c of out.bundle.meta.claims) expect(out.bundle.markdown.slice(c.position, c.position + c.quote.length)).toBe(c.quote)
+  })
+})
+
 describe('suggested links after an edit', () => {
   it('drops a suggested link whose section changed, keeps one the writer confirmed, and leaves other sections\' links alone', async () => {
     const store = createMemoryArticleStore()

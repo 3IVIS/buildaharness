@@ -165,6 +165,17 @@ export interface ResolveReport {
   note: string
 }
 
+/** Where a claim's sentence is now: the occurrence of the quote nearest to where it was, since an edit elsewhere moves it. Unchanged when the quote is gone. */
+function nearestOccurrence(markdown: string, quote: string, was: number): number {
+  let best = was
+  let bestGap = Number.POSITIVE_INFINITY
+  for (let at = markdown.indexOf(quote); at !== -1; at = markdown.indexOf(quote, at + 1)) {
+    const gap = Math.abs(at - was)
+    if (gap < bestGap) { best = at; bestGap = gap }
+  }
+  return best
+}
+
 export class ArticleService {
   private readonly store: ArticleStore
   private readonly now: () => string
@@ -240,7 +251,7 @@ export class ArticleService {
     const changedIds = new Set(changedSectionIds)
     meta = { ...meta, links: meta.links.filter((l) => !(l.origin === 'proposed' && l.from.type === 'section' && l.to.type === 'section' && (changedIds.has(l.from.id) || changedIds.has(l.to.id)))) }
     // A claim the model found whose sentence is no longer in the text, and that nothing was attached to and the writer did not confirm, is only a count that has gone stale (a chat edit does not extract again); the next check finds the claims that are there.
-    meta = { ...meta, claims: meta.claims.filter((c) => c.confirmed || markdown.includes(c.quote) || meta.links.some((l) => l.from.id === c.id || l.to.id === c.id)) }
+    meta = { ...meta, claims: meta.claims.filter((c) => c.confirmed || markdown.includes(c.quote) || meta.links.some((l) => l.from.id === c.id || l.to.id === c.id)).map((c) => ({ ...c, position: nearestOccurrence(markdown, c.quote, c.position) })) }
     // A rewrite is a natural point to be able to go back to: keep the text as it was.
     const snapshots = isLargeChange(before.markdown, markdown) ? addSnapshot(before.snapshots, createSnapshot('checkpoint', before.markdown, before.meta, this.now(), 'Before a large change')) : before.snapshots
     let bundle: ArticleBundle = { ...before, markdown, meta, snapshots }
