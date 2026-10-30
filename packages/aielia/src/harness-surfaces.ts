@@ -3,7 +3,7 @@
  * suggestion may change; the kernel is everything a suggestion can never reach. Floor layers are not representable:
  * `AdvisorLayerId` excludes them, and the registry is derived from `LAYER_SETTINGS` groups `escalation`, `behaviour`
  * and `opt_in` only. The private part of the kernel (graders, judge, corpus, partition code) lives in
- * `eval/advisor/kernel-eval.json`; eval paths never appear in this file.
+ * the private overlay's advisor tooling; no private-tree paths appear in this file.
  */
 import { LAYER_SETTINGS } from './layer-settings.js'
 
