@@ -296,6 +296,17 @@ describe('dependencies through the service', () => {
   })
 })
 
+describe('claims after an edit that does not extract again', () => {
+  it('drops a claim whose sentence is gone and that nothing hangs on, and keeps one still in the text or confirmed', async () => {
+    const { svc: s } = svc({ claims: { claims: [{ quote: 'The p99 was 18 ms.', kind: 'factual', matchesId: null, sure: true }, { quote: 'So p99 stays under 20 ms.', kind: 'factual', matchesId: null, sure: true }] }, resolve: { affected: [] } })
+    const id = await s.create('Post', MD)
+    await s.analyze(id)
+    expect((await s.get(id)).meta.claims).toHaveLength(2)
+    const out = await s.updateText(id, MD.replace('The p99 was 18 ms.', 'It was fast.'), { analyze: false })
+    expect(out.bundle.meta.claims.map((c) => c.quote)).toEqual(['So p99 stays under 20 ms.'])
+  })
+})
+
 describe('suggested links after an edit', () => {
   it('drops a suggested link whose section changed, keeps one the writer confirmed, and leaves other sections\' links alone', async () => {
     const store = createMemoryArticleStore()
