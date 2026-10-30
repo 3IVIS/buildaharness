@@ -307,6 +307,22 @@ describe('claims after an edit that does not extract again', () => {
   })
 })
 
+describe('a source on a claim whose sentence a chat edit rewrote', () => {
+  it('goes with the claim, so the Sources list never shows text that is no longer in the article, and the source stays to attach again', async () => {
+    const { svc: s } = svc({ claims: { claims: [{ quote: 'The p99 was 18 ms.', kind: 'factual', matchesId: null, sure: true }] }, resolve: { affected: [] } })
+    const id = await s.create('Post', MD)
+    await s.analyze(id)
+    const b = await s.get(id)
+    const src = await s.addSource(id, { kind: 'upload', address: 'bench.txt', passage: 'p99 latency: 18 ms' })
+    await s.attachSource(id, b.meta.claims[0].id, src)
+    const out = await s.updateText(id, MD.replace('The p99 was 18 ms.', 'It was fast.'), { analyze: false })
+    expect(out.bundle.meta.claims).toEqual([])
+    expect(out.bundle.meta.links.filter((l) => l.kind === 'supported_by')).toEqual([])
+    expect(out.bundle.meta.sources.map((x) => x.id)).toEqual([src])
+    expect(s.readiness(out.bundle).problems).toEqual([])
+  })
+})
+
 describe('claim positions after an edit', () => {
   it('moves each claim to where its sentence is now, so a range lookup finds the right one', async () => {
     const { svc: s } = svc({ claims: { claims: [{ quote: 'The p99 was 18 ms.', kind: 'factual', matchesId: null, sure: true }, { quote: 'So p99 stays under 20 ms.', kind: 'factual', matchesId: null, sure: true }] }, resolve: { affected: [] } })
