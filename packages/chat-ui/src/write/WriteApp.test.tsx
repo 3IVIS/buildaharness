@@ -80,6 +80,17 @@ describe('the chat mode: Auto reads the message', () => {
     expect(screen.queryByText(/suggested change/)).toBeNull()
     expect(screen.getByLabelText('When I ask for a change')).toHaveValue('auto')
   })
+  it('runs the claim check, as the Adjust list does, when the model reads the message as a request to check the whole article, and the status line then counts the claims', async () => {
+    const s = await services({ intent: { intent: 'check' }, capture: { articleId: null, ops: [] }, claims: { claims: [{ quote: 'The p99 was 18 ms.', kind: 'factual', matchesId: null, sure: true }] }, resolve: { affected: [] } }, MD)
+    render(<WriteApp services={s} />)
+    await waitForText()
+    await userEvent.click(rail('Chat'))
+    await userEvent.type(chatBox(), 'find the factual claims and check what has a source{Enter}')
+    expect(await screen.findByText(/I found 1 factual claim/)).toBeInTheDocument()
+    expect(screen.queryByText('Noted.')).toBeNull()
+    expect(screen.getAllByText('find the factual claims and check what has a source')).toHaveLength(1)
+    expect(await screen.findByRole('group', { name: /How close the article is to publishable/ })).toHaveTextContent('1 unsourced')
+  })
   it('rewrites the whole article when the model reads the message as a wish to reshape all of it', async () => {
     const s = await services({ intent: { intent: 'rewrite' }, capture: { articleId: null, ops: [] }, draft: { name: 'Story', markdown: '# Post\n## Once upon a time\nIt was quick.' } }, MD2)
     render(<WriteApp services={s} />)

@@ -973,9 +973,9 @@ function WriteAppBody({ services, connection, onDeleted, showPublish = false }: 
     }, 'verify')
   }
   /** A check started from the chat, with the model chosen there. The result is said in the chat, with the model's name. */
-  const checkFromChat = (): void => {
+  const checkFromChat = (announce = true): void => {
     const used = services.models.chat()
-    trace('you', 'Find the factual claims and check them against their sources')
+    if (announce) trace('you', 'Find the factual claims and check them against their sources')
     if (!activeId) { sayInChat('Open or create an article first.'); return }
     void chatRun(`Checking with ${modelLabel(used)}`, async (step) => {
       try {
@@ -1078,9 +1078,14 @@ function WriteAppBody({ services, connection, onDeleted, showPublish = false }: 
     const lastReply = [...before].reverse().find((l) => l.from === 'aielia' && !l.record)?.text?.split(NAME_OPEN).join('').split(NAME_CLOSE).join('')
     if (asked === 'auto') {
       // The model reads the message (and what Aielia last said) to tell an edit from a question; a failure counts as a question.
-      let read: { intent: 'edit' | 'rewrite' | 'suggest' | 'answer'; links: string[]; scope: 'outline' | 'text' | 'both' } | undefined
+      let read: { intent: 'edit' | 'rewrite' | 'suggest' | 'check' | 'answer'; links: string[]; scope: 'outline' | 'text' | 'both' } | undefined
       await chatRun('Reading your message', async (step) => { read = await services.intent(text, { articleHasText: !!(activeId && draft.trim()), lastReply }, { signal: step.signal }) }, 'other', false)
       if (!read) return
+      // A request to check the whole article's claims is the check itself, not a talk about it: the same action as in the chat's menu, so the page's claim list is filled and the status line counts them.
+      if (read.intent === 'check') {
+        void flushDraft().then(() => checkFromChat(false))
+        return
+      }
       rewriting = read.intent === 'rewrite'
       scope = read.scope
       how = read.intent === 'rewrite' ? 'edit' : read.intent

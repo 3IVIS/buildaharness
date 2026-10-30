@@ -619,6 +619,18 @@ describe('the chat edits the article itself', () => {
     expect(saved?.markdown).toBe(MD) // the text as it was before the edit
     expect(r.savedAs).toMatch(/^Before a chat edit: Use the new p99/)
   })
+  it('marks the reviewer comment the edit answers as addressed, and leaves the one it does not touch open', async () => {
+    const { store, svc: s } = svc({ edits: { suggestions: [{ quote: 'The p99 was 18 ms.', replacement: 'The p99 was 12 ms.', reason: 'new figure', commentIds: ['wc1'] }] } })
+    const id = await s.create('Post', MD)
+    const b = await s.get(id)
+    const c = (cid: string) => ({ id: cid, articleId: id, text: 'Fix the figure', state: 'open' as const, conflictsWith: [], origin: 'reviewer' as const, capturedAt: NOW })
+    await store.save(id, { ...b, meta: { ...b.meta, comments: [c('wc1'), c('wc2')] } })
+    const r = await s.editFromChat(id, 'Apply the first note')
+    expect(r.status).toBe('applied')
+    const after = (await s.get(id)).meta.comments
+    expect(after.find((x) => x.id === 'wc1')?.state).toBe('addressed')
+    expect(after.find((x) => x.id === 'wc2')?.state).toBe('open')
+  })
   it('saves a version even when nothing changes, and leaves other waiting suggestions alone', async () => {
     const { svc: s } = svc({ edits: { suggestions: [] } })
     const id = await s.create('Post', MD)
