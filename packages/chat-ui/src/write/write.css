@@ -194,6 +194,8 @@
 .write__line--aielia { background: var(--surface); border: 1px solid var(--border); }
 .write__toggle { display: block; margin-bottom: 8px; color: var(--muted); }
 .write__compose { display: grid; gap: 8px; }
+/* The same line the chat shows under its composer. */
+.write__disclaimer { margin: 8px 0 0; font-size: 11px; line-height: 1.4; color: var(--muted); text-align: center; }
 .write__compose textarea { width: 100%; }
 .write__empty { color: var(--muted); }
 
