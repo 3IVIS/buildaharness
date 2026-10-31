@@ -1,8 +1,9 @@
-name: Deploy chat-ui to /try
+name: Deploy chat-ui to /chat
 
 # Builds the browser build of the Aielia assistant (packages/chat-ui) and publishes
-# it to the myaielia repo under /try/, which GitHub Pages serves at
-# https://myaielia.com/try. Bring-your-own-key for the LLM itself — the page keeps
+# it to the myaielia repo under /chat/, which GitHub Pages serves at
+# https://myaielia.com/chat. (myaielia.com/try is a hand-written page in the myaielia repo that lets a
+# visitor pick Chat or Write; this workflow must never write to try/.) Bring-your-own-key for the LLM itself — the page keeps
 # that API key in the visitor's browser (localStorage), nothing is proxied server-side
 # for it. Web search/fetch are the exception (see the Build chat-ui step below): they
 # default to routing through @buildaharness/proxy's SSRF-guarded /web/* endpoints, since
@@ -54,7 +55,7 @@ jobs:
 
       - name: Build chat-ui
         env:
-          CHAT_UI_BASE: /try/
+          CHAT_UI_BASE: /chat/
           # W8 of the internal plan: gives this build only a working
           # default web_search/fetch_url path via the deployed proxy Worker — DEFAULT_CONFIG
           # itself (every other build: dev, self-hosted, desktop) is untouched. These are
@@ -70,7 +71,9 @@ jobs:
           # "Bring your own AI key" notice and makes Send open key setup until a key is saved
           # (packages/chat-ui/src/key-gate.ts). Unset for every other build.
           VITE_ASSISTANT_REQUIRE_KEY: 'true'
-          # The three web values above are defaults, not pins: a visitor can point /try at a proxy of their own (a self-hosted one,
+          # The Chat/Write drop-down in the page title goes to the Write page on the same site.
+          VITE_APP_URL_WRITE: /write/
+          # The three web values above are defaults, not pins: a visitor can point /chat at a proxy of their own (a self-hosted one,
           # or the local Claude bridge) from Settings. Without this the proxy address and web backend are read-only on this build.
           VITE_ASSISTANT_DEFAULTS_ONLY: 'proxyUrl,enableWeb,webBackend'
         run: npm run build --workspace=packages/chat-ui
@@ -90,23 +93,23 @@ jobs:
           ssh-key: ${{ secrets.MYAIELIA_DEPLOY_KEY }}
           path: pages
 
-      - name: Sync build into pages/try
+      - name: Sync build into pages/chat
         run: |
-          rm -rf pages/try
-          mkdir -p pages/try
-          cp -R packages/chat-ui/dist/. pages/try/
+          rm -rf pages/chat
+          mkdir -p pages/chat
+          cp -R packages/chat-ui/dist/. pages/chat/
 
       - name: Commit and push if changed
         working-directory: pages
         run: |
           git config user.name  "buildaharness-ci"
           git config user.email "ci@buildaharness.com"
-          git add try
+          git add chat
           if git diff --cached --quiet; then
-            echo "No changes to /try — nothing to deploy."
+            echo "No changes to /chat — nothing to deploy."
             exit 0
           fi
-          git commit -m "deploy: chat-ui /try build from ${GITHUB_SHA::7}"
+          git commit -m "deploy: chat-ui /chat build from ${GITHUB_SHA::7}"
           # publish-aielia-manifest.yml also pushes to main (disjoint paths); if it won the
           # race, rebase and retry rather than failing non-fast-forward.
           for attempt in 1 2 3; do

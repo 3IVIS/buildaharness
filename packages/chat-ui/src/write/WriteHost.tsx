@@ -3,6 +3,7 @@ import type { AssistantConfig } from '@buildaharness/aielia'
 import { WriteApp } from './WriteApp'
 import { desktopWritePlatform } from './desktop-platform'
 import { createWriteServicesFor, type WriteServices } from './write-services'
+import { appSwitchHandler } from '../app-switch'
 
 /**
  * Write as a screen of the desktop app. It uses the app's own connection (the model, the key or the Claude CLI session, and the search key), so
@@ -23,10 +24,18 @@ export default function WriteHost({ config, onClose }: { config: AssistantConfig
     return () => { live = false }
   }, [config, fresh])
 
+  // Inside the desktop app the switch is in place: the chat screen takes over again.
+  const appSwitch = appSwitchHandler('write', { desktop: () => onClose(), desktopApp: true })
+
   return (
     <div className="write-host">
-      <div className="write-host__bar"><button type="button" onClick={onClose}>← Back to chat</button></div>
-      {error ? <p role="alert">Write could not start: {error}</p> : services ? <WriteApp services={services} onDeleted={() => { setServices(undefined); setFresh((n) => n + 1) }} /> : <p>Opening your articles…</p>}
+      {/* Once Write is open, the way back is the Chat/Write drop-down in its title; until then (opening, or failed to start) a plain button. */}
+      {services ? <WriteApp services={services} appSwitch={appSwitch} onDeleted={() => { setServices(undefined); setFresh((n) => n + 1) }} /> : (
+        <>
+          <div className="write-host__bar"><button type="button" onClick={onClose}>← Back to chat</button></div>
+          {error ? <p role="alert">Write could not start: {error}</p> : <p>Opening your articles…</p>}
+        </>
+      )}
     </div>
   )
 }

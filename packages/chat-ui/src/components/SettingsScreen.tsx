@@ -197,7 +197,7 @@ export function SettingsScreen({
       if (form[key] !== config[key]) Object.assign(patch, { [key]: form[key] })
     }
 
-    // Validate what the user changed, not what the build shipped with. The hosted /try build turns web
+    // Validate what the user changed, not what the build shipped with. The hosted /chat build turns web
     // search on by default but has no Brave key, so validating the untouched web fields blocked every
     // unrelated save (e.g. picking a model) with an error that sat far below the Save button. The web
     // rule still applies the moment the edit touches web search or the Brave key.

@@ -2,7 +2,7 @@ import { resolveConfig, type AssistantConfig } from '@buildaharness/aielia'
 
 /**
  * What the Write page needs to reach a model and the web, and nothing more. It has its own storage and its own screen: it does not read or
- * change the settings of the /try page, so the two can be set up, changed and cleared on their own.
+ * change the settings of the Chat page, so the two can be set up, changed and cleared on their own.
  */
 export interface WriteConnection {
   provider: 'anthropic' | 'openai' | 'openrouter' | 'proxy'
@@ -70,7 +70,7 @@ export function toAssistantConfig(c: WriteConnection | undefined, buildDefaults:
     ? {
         llmBackend: c.provider,
         ...(c.provider === 'proxy' ? { proxyUrl: c.modelUrl, authToken: c.apiKey } : { apiKey: c.apiKey }),
-        // No address of their own: the build's default stands (the hosted proxy on /write, as on /try), else pages are not read.
+        // No address of their own: the build's default stands (the hosted proxy on /write, as on /chat), else pages are not read.
         ...(c.pagesUrl && c.provider !== 'proxy' ? { webBackend: 'proxy' as const, proxyUrl: c.pagesUrl, authToken: c.pagesToken ?? '' } : {}),
         braveApiKey: c.searchKey,
       }

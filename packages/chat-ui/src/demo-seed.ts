@@ -1,5 +1,5 @@
 /**
- * First-load demo for the hosted browser trial (myaielia.com/try).
+ * First-load demo for the hosted browser trial (myaielia.com/chat).
  *
  * A visitor lands with no API key configured. Alongside the "add your key" notice (KeyNotice),
  * show the single most distinctive thing Aielia does: a consequential request

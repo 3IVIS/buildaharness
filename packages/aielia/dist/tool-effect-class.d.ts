@@ -1,0 +1,9 @@
+import { ToolEffectClass } from '@buildaharness/harness';
+/**
+ * AL5a: each tool's effect class — a non-linguistic source for which tools a turn may use to
+ * change the world. Feeds `deriveConsequentialTools` (write / execute are consequential; `network`
+ * here is outbound read-only egress and is not). Keep in step with the tool definitions in
+ * file-tools.ts, web-tools.ts, shell-tools.ts, reminder-tools.ts and action-tools.ts; a tool
+ * missing here is treated as consequential by `deriveConsequentialTools`.
+ */
+export declare const TOOL_EFFECT_CLASS: Record<string, ToolEffectClass>;

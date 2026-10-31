@@ -1,0 +1,13 @@
+declare const _default: {
+  "en": {
+    "statementLevelMarkers": ["line ", "line\t", ":line", " ln ", " l", "column ", "char ", "line:", "statement", "expression", "lineno"],
+    "functionLevelMarkers": ["function", "method", "def ", "procedure", "()"]
+  },
+  "zh": {
+    "statementLevelMarkers": ["行号", "语句", "表达式", "字符", "列"],
+    "functionLevelMarkers": ["函数", "方法", "过程"]
+  }
+}
+;
+
+export default _default;

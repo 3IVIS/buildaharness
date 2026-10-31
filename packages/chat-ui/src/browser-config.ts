@@ -32,7 +32,7 @@ export function llmBackendFromEnvValue(raw: string | null | undefined): Partial<
 /**
  * Splits the build-time values into pins and defaults. A key named in VITE_ASSISTANT_DEFAULTS_ONLY (comma separated) is a default that a
  * visitor's saved setting replaces and Settings can edit; every other build value stays a pin (read-only, wins over saved config), as before.
- * The hosted /try build uses it for its proxy address and web settings, so a visitor can point the page at a proxy of their own.
+ * The hosted /chat build uses it for its proxy address and web settings, so a visitor can point the page at a proxy of their own.
  */
 export function splitBuildDefaults(env: ImportMetaEnv, all: Partial<AssistantConfig>): { pins: Partial<AssistantConfig>; defaults: Partial<AssistantConfig> } {
   const soft = new Set(String(env.VITE_ASSISTANT_DEFAULTS_ONLY ?? '').split(',').map((s) => s.trim()).filter(Boolean))

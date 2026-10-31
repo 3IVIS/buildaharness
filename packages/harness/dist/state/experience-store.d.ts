@@ -1,0 +1,115 @@
+import { StrategyEvidence } from '../strategy-evidence.js';
+export type StrategyWeightKey = string;
+export interface DecompositionEntry {
+    task_type: string;
+    decomposition: string[];
+    success_rate: number;
+}
+export interface ToolWorkflowEntry {
+    tool_id: string;
+    workflow_steps: string[];
+    success_rate: number;
+}
+export interface VerificationPlanEntry {
+    task_type: string;
+    layers: string[];
+    success_rate: number;
+}
+export interface RecoverySequenceEntry {
+    failure_class: string;
+    strategy_sequence: string[];
+    success_rate: number;
+}
+/** Bumped only if a field here is renamed/restructured — appending a new optional field doesn't require a bump. */
+export declare const EXPERIENCE_STORE_SCHEMA_VERSION = 1;
+export interface ExperienceStoreData {
+    strategy_weights: Record<string, number>;
+    class_priors: Record<string, number>;
+    decompositions: DecompositionEntry[];
+    tool_workflows: ToolWorkflowEntry[];
+    verification_plans: VerificationPlanEntry[];
+    recovery_sequences: RecoverySequenceEntry[];
+    /** Evidence behind each strategy weight (optional field: no schema bump). */
+    strategy_evidence?: Record<string, StrategyEvidence>;
+    schemaVersion?: number;
+}
+export interface ExperienceStore {
+    readonly available: boolean;
+    getStrategyWeights(): Record<StrategyWeightKey, number>;
+    setStrategyWeight(key: StrategyWeightKey, weight: number): void;
+    getStrategyEvidence(): Record<StrategyWeightKey, StrategyEvidence>;
+    setStrategyEvidence(key: StrategyWeightKey, evidence: StrategyEvidence): void;
+    getClassPriors(): Record<string, number>;
+    setClassPrior(failureClass: string, prior: number): void;
+    getDecompositions(): DecompositionEntry[];
+    addDecomposition(entry: DecompositionEntry): void;
+    getToolWorkflows(): ToolWorkflowEntry[];
+    addToolWorkflow(entry: ToolWorkflowEntry): void;
+    getVerificationPlans(): VerificationPlanEntry[];
+    addVerificationPlan(entry: VerificationPlanEntry): void;
+    getRecoverySequences(): RecoverySequenceEntry[];
+    addRecoverySequence(entry: RecoverySequenceEntry): void;
+    updateExperienceStore(runId: string, outcome: Record<string, unknown>): void;
+    toJSON(): ExperienceStoreData;
+}
+export declare class InMemoryExperienceStore implements ExperienceStore {
+    private _strategyWeights;
+    private _strategyEvidence;
+    private _classPriors;
+    private _decompositions;
+    private _toolWorkflows;
+    private _verificationPlans;
+    private _recoverySequences;
+    private _runs;
+    get available(): boolean;
+    getStrategyWeights(): {
+        [x: string]: number;
+    };
+    setStrategyWeight(key: StrategyWeightKey, weight: number): void;
+    getStrategyEvidence(): {
+        [x: string]: StrategyEvidence;
+    };
+    setStrategyEvidence(key: StrategyWeightKey, evidence: StrategyEvidence): void;
+    getClassPriors(): {
+        [x: string]: number;
+    };
+    setClassPrior(failureClass: string, prior: number): void;
+    getDecompositions(): DecompositionEntry[];
+    addDecomposition(entry: DecompositionEntry): void;
+    getToolWorkflows(): ToolWorkflowEntry[];
+    addToolWorkflow(entry: ToolWorkflowEntry): void;
+    getVerificationPlans(): VerificationPlanEntry[];
+    addVerificationPlan(entry: VerificationPlanEntry): void;
+    getRecoverySequences(): RecoverySequenceEntry[];
+    addRecoverySequence(entry: RecoverySequenceEntry): void;
+    updateExperienceStore(runId: string, outcome: Record<string, unknown>): void;
+    toJSON(): ExperienceStoreData;
+    /**
+     * Never throws. Experience data is optional cross-run learning, not correctness-critical
+     * state (see the harness's "learning must never be on the critical correctness path"
+     * principle) — an unreadable or newer-than-known snapshot degrades to a fresh, empty
+     * store the same way an unavailable store already does, rather than crashing whatever
+     * called fromJSON(). Each field defaults independently so a partially-shaped legacy
+     * blob keeps whatever parts of it still parse instead of being discarded wholesale.
+     */
+    static fromJSON(json: ExperienceStoreData | null | undefined): InMemoryExperienceStore;
+}
+export declare class UnavailableExperienceStore implements ExperienceStore {
+    get available(): boolean;
+    getStrategyWeights(): {};
+    setStrategyWeight(): void;
+    getStrategyEvidence(): {};
+    setStrategyEvidence(): void;
+    getClassPriors(): {};
+    setClassPrior(): void;
+    getDecompositions(): never[];
+    addDecomposition(): void;
+    getToolWorkflows(): never[];
+    addToolWorkflow(): void;
+    getVerificationPlans(): never[];
+    addVerificationPlan(): void;
+    getRecoverySequences(): never[];
+    addRecoverySequence(): void;
+    updateExperienceStore(): void;
+    toJSON(): ExperienceStoreData;
+}

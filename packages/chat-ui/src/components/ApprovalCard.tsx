@@ -9,7 +9,7 @@ interface Props {
    * label the CLI prints (approvalLabels in turn-presentation.ts). */
   pendingActionKind?: 'write' | 'shell' | 'email' | 'batch' | 'revert'
   resolution?: 'approved' | 'denied'
-  /** Read-only sample (the /try first-load demo): render an explanatory line instead of
+  /** Read-only sample (the /chat first-load demo): render an explanatory line instead of
    * live Approve/Deny buttons — a visitor with no key configured can't actually resolve it. */
   illustrative?: boolean
   onApprove: () => void

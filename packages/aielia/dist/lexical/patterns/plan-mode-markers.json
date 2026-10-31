@@ -1,0 +1,10 @@
+{
+  "en": {
+    "cancelVerbs": "\\b(cancel|abort|stop|quit|exit)\\b",
+    "planningReferenceMarker": "\\b(plan|planning|draft|drafting)\\b"
+  },
+  "zh": {
+    "cancelVerbs": "(取消|中止|停止|退出)",
+    "planningReferenceMarker": "(计划|规划|草案|草拟)"
+  }
+}

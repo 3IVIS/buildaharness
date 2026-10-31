@@ -24,6 +24,8 @@ import { Icon } from './icons'
 import { DialogProvider, useDialogs } from './dialogs'
 import type { WriteServices } from './write-services'
 import { SiteNav } from '../components/SiteNav'
+import { AppSwitcher } from '../components/AppSwitcher'
+import type { AppId } from '../app-switch'
 import './write.css'
 
 /** The kinds of job that can change the article's text, so that what they changed is lit afterwards. */
@@ -153,6 +155,8 @@ type WriteAppProps = {
   connection?: { value: WriteConnection; onSave: (c: WriteConnection) => void; onForget: () => void }
   /** Called when the writer deleted all their data, so the host can start the page afresh (its models and spending were reset). */
   onDeleted?: () => void
+  /** Switches to the other screen (the chat). Set where there is one; the title then shows the Chat/Write drop-down. */
+  appSwitch?: (target: AppId) => void
   /** The Publish button is hidden for now; the publish flow itself is kept (and tested) for when it comes back. */
   showPublish?: boolean
 }
@@ -161,7 +165,7 @@ export function WriteApp(props: WriteAppProps): React.JSX.Element {
   return <DialogProvider><WriteAppBody {...props} /></DialogProvider>
 }
 
-function WriteAppBody({ services, connection, onDeleted, showPublish = false }: WriteAppProps): React.JSX.Element {
+function WriteAppBody({ services, connection, onDeleted, appSwitch, showPublish = false }: WriteAppProps): React.JSX.Element {
   const { service, port } = services
   const dialogs = useDialogs()
   const [articles, setArticles] = useState<ArticleItem[]>([])
@@ -1242,7 +1246,7 @@ function WriteAppBody({ services, connection, onDeleted, showPublish = false }: 
       onDrop={(e) => { setDropping(false); const files = Array.from(e.dataTransfer.files); if (files.length === 0) return; e.preventDefault(); dropFiles(files, false) }}
     >
       <header className="write__bar">
-        <h1 className="write__title"><a className="brand-link" href="https://myaielia.com" target="_blank" rel="noopener noreferrer" title="Go to myaielia.com">Aielia</a> Write</h1>
+        <h1 className="write__title"><a className="brand-link" href="https://myaielia.com" target="_blank" rel="noopener noreferrer" title="Go to myaielia.com">Aielia</a> {appSwitch ? <AppSwitcher current="write" disabled={busy !== null} onSelect={(target) => void flushDraft().then(() => appSwitch(target))} /> : 'Write'}</h1>
         <span className="write__badge" title="Early-stage alpha software — expect rough edges and breaking changes.">Alpha</span>
         <ArticleSwitcher articles={articles} activeId={activeId} onSelect={(id) => void run('Opening the article', async () => { await select(id) }, true, ' It is open.')} onRename={() => void renameArticle()} onNew={() => void createArticle()} onExport={() => void exportArticle()} onImport={(f) => void importArticle(f)} onOpenPage={services.canReadPages ? () => void openPage() : undefined} />
         {showPublish && <button type="button" className="write__primary" onClick={() => void publish()} disabled={!activeId || busy !== null}>Publish</button>}

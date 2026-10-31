@@ -1,0 +1,20 @@
+import { WorldModel } from '../state/world-model.js';
+import { EvidenceStore } from '../state/evidence-store.js';
+import { OutputContract } from '../state/output-contract.js';
+import { HypothesisSet } from '../state/hypothesis-set.js';
+import { RiskLevel } from '../state/task-graph.js';
+import { LAYER_TIER, LayerTier } from '../_core-generated.js';
+export type VerificationLayer = 'syntax' | 'unit' | 'integration' | 'consistency' | 'requirements' | 'assumptions' | 'goal_correctness' | 'evidence_sufficiency' | 'output_contract_partial';
+export interface LayerResult {
+    layer: VerificationLayer;
+    status: 'PASS' | 'FAIL' | 'SKIPPED';
+    detail: string;
+}
+export interface VerificationResult {
+    layer_results: LayerResult[];
+    has_critical_failure: boolean;
+    adversarial_passed: boolean | null;
+    critical_failure_tiers: LayerTier[];
+}
+export { LAYER_TIER, type LayerTier };
+export declare function verify(result: unknown, successCriteria: string[], assumptions: string[], toolManifest: EvidenceStore | null, riskLevel: RiskLevel, evidenceStore?: EvidenceStore | null, worldModel?: WorldModel | null, outputContract?: OutputContract | null, hypothesisSet?: HypothesisSet | null, scope?: 'local' | 'global'): VerificationResult;

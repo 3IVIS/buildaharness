@@ -1,0 +1,18 @@
+import { ControlState } from '../state/control-state.js';
+import { Diagnostics } from '../state/diagnostics.js';
+import { FailureDiagnostics } from '../state/failure-diagnostics.js';
+import { EvidenceStore } from '../state/evidence-store.js';
+import { HypothesisSet } from '../state/hypothesis-set.js';
+import { ControlStateResolverFn } from '../generation-id.js';
+import { WorldModel } from '../state/world-model.js';
+import { TaskGraph } from '../state/task-graph.js';
+export interface ParallelBranch {
+    worldModel: WorldModel;
+    controlState: ControlState;
+}
+export declare function mergeWorldModels(wm1: WorldModel, wm2: WorldModel): WorldModel;
+export interface ReconcileResult {
+    worldModel: WorldModel;
+    controlState: ControlState;
+}
+export declare function reconcileParallelBranches(branches: ParallelBranch[], taskGraph: TaskGraph, diagnostics: Diagnostics, failureDiagnostics: FailureDiagnostics, evidenceStore: EvidenceStore, hypothesisSet: HypothesisSet, resolver: ControlStateResolverFn, parallelDomainPairs?: Array<[string, string]>): ReconcileResult;

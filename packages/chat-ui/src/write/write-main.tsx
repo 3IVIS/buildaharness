@@ -8,6 +8,7 @@ import { WriteApp } from './WriteApp'
 import { clearConnection, loadConnection, saveConnection, toAssistantConfig, webProxyOf, type WriteConnection } from './write-config'
 import { markSettingsShared, writeConnectionFromChat } from '../shared-settings'
 import { createWriteServices, type WriteServices } from './write-services'
+import { appSwitchHandler } from '../app-switch'
 
 /** Write's first start: copies the chat page's connection when there is one (and saves it, as if the writer had entered it). */
 function seedFromChat(): WriteConnection | undefined {
@@ -17,7 +18,7 @@ function seedFromChat(): WriteConnection | undefined {
 }
 
 /**
- * The Write page's own connection (its own storage and settings, apart from /try): asks for a key if there is none, then opens the page.
+ * The Write page's own connection (its own storage and settings, apart from the Chat page): asks for a key if there is none, then opens the page.
  * Saving changed connection settings rebuilds the services; articles live in their own storage and are untouched.
  */
 function Root(): React.JSX.Element {
@@ -41,6 +42,7 @@ function Root(): React.JSX.Element {
   return (
     <WriteApp
       services={services}
+      appSwitch={appSwitchHandler('write')}
       onDeleted={() => { setServices(undefined); setConnection(loadConnection()) }}
       connection={{
         value: connection,

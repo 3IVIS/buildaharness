@@ -2,7 +2,7 @@ import type { AssistantConfig } from '@buildaharness/aielia'
 import type { WriteConnection } from './write/write-config'
 
 /**
- * /try and /write are served from the same origin and keep their settings apart. When one of them has a model connection and the other
+ * /chat and /write are served from the same origin and keep their settings apart. When one of them has a model connection and the other
  * has none yet, the other starts from a copy of it (once: after that each is changed and cleared on its own). A page that already has
  * its own connection is never touched. Search key, page-reading proxy and GitHub token travel with the connection.
  */
