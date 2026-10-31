@@ -275,6 +275,12 @@ runs:
 | `@buildaharness/chat-ui` | Browser | `IndexedDBAdapter`/`DexieExperienceStore` via `PersonalAssistant.create()` (best-effort — see `packages/runtime/README.md`'s persistence section) |
 | `@buildaharness/desktop` | Native window (Tauri, wraps chat-ui) | Same `FileSystemAdapter`/`FileSystemExperienceStore` classes as the CLI, but over `@tauri-apps/plugin-fs` instead of `node:fs`, under `appLocalDataDir()` |
 
+A second browser page, **Aielia Write** (`/write`), uses the same package for writing an
+article with Aielia beside it: it tracks the article's claims and their sources, verifies
+claims against web pages, code files and repositories, and only changes the text as
+suggestions you accept. Its logic lives in `src/writer/` (exported from this package) and the
+page in `@buildaharness/chat-ui`; see `packages/chat-ui/README.md`'s "Aielia Write" section.
+
 Both filesystem backends are the *same* `FileSystemAdapter`/`FileSystemExperienceStore`
 classes — see `packages/runtime/README.md`'s "Filesystem-backed storage"
 section for how the file-I/O seam that makes that possible works.
@@ -927,6 +933,8 @@ ends the session.
 | Command | What it does |
 |---|---|
 | `/help` | Show this list |
+| `/exit` (aliases `/quit`, `exit`, `quit`) | End the session |
+| `/config` | View or change persisted settings (`/config set <key> <value>`; see "Configuration" above) |
 | `/clear` (alias `/new`) | Start a fresh conversation — deletes this session's transcript, extracted facts, and active plan. Leaves learned reminders/experience untouched (those are durable, cross-conversation learning, not conversation-scoped state) |
 | `/status` | Show the resolved config (model, backend, workspace, enabled capabilities — same as the startup banner) plus this session's transcript length and whether a plan is active |
 | `/export [file]` | Save this session's transcript to a markdown file (default: `assistant-transcript-<timestamp>.md` in the current directory) |
