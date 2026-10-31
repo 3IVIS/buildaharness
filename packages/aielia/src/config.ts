@@ -182,7 +182,7 @@ export interface AssistantConfig {
    * Phase 8 of plans/hierarchical_goal_tree_and_steering_plan.html — the shared config seam for
    * the hierarchical goal-tree mechanism's Tier 0/1 gate (R1's mid-task steering, R4's scope×
    * urgency classifier). Undefined (the default, for the whole rollout window) means every
-   * surface falls back to `DEFAULT_GOAL_GRAPH_MODE` ('disabled') — today's behavior, byte-for-byte
+   * surface falls back to `DEFAULT_GOAL_GRAPH_MODE` ('enabled', on by default since 2026-09-23; 'disabled' restores the old queue-behind-the-turn behavior byte-for-byte)
    * (INV-43). Mirrors `oneLoopMode`/`askMode`/`planMode`'s exact chain: env override
    * (`ASSISTANT_GOAL_GRAPH`, cli-config.ts), build-time override (`VITE_ASSISTANT_GOAL_GRAPH`,
    * chat-ui's browser-config.ts), and a package-owned default kept out of DEFAULT_CONFIG so an

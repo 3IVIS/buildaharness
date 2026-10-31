@@ -127,6 +127,8 @@ await aielia.turn('给我老板发一封邮件说我辞职了。', { approved: t
 
 **[在浏览器中试用 → myaielia.com/try](https://myaielia.com/try)** —— 使用你自己的密钥（只保存在你的浏览器里），或在添加密钥之前先看看审批门是如何触发的。
 
+**[Aielia Write → myaielia.com/write](https://myaielia.com/write)** —— 第二个浏览器页面，在 Aielia 的陪伴下撰写文章。它会跟踪文章中的论断及其来源，对照网页、代码文件和代码仓库核查论断，并且只以建议的形式修改文本，由你决定是否接受。与 `/try` 一样使用你自己的密钥；详见 [`packages/chat-ui/README.md`](packages/chat-ui/README.md#aielia-write-write)。
+
 一套核心，三种前端：终端 CLI、浏览器（`@buildaharness/chat-ui`）、原生桌面应用（`@buildaharness/desktop`）。
 
 ---

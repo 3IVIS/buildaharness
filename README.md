@@ -158,6 +158,12 @@ await aielia.turn('Send an email to my boss saying I quit.', { approved: true })
 — bring your own key (stored only in your browser), or see the approval gate
 fire before you add one.
 
+**[Aielia Write → myaielia.com/write](https://myaielia.com/write)** — a second browser
+page for writing an article with Aielia beside it. It tracks the article's claims and their
+sources, checks claims against web pages, code files and repositories, and changes the text
+only as suggestions you accept. Same bring-your-own-key model as the chat page; see
+[`packages/chat-ui/README.md`](packages/chat-ui/README.md#aielia-write-write).
+
 One core, three front ends: terminal CLI, browser (`@buildaharness/chat-ui`),
 and native desktop (`@buildaharness/desktop`).
 
