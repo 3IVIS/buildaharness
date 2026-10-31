@@ -1,0 +1,84 @@
+import { FsBackend, ToolDefinition } from '@buildaharness/runtime';
+import { ShellExecutionResult } from './file-tools.js';
+/**
+ * Executes a previously staged, already-sandboxed command for real — see shell-executor.ts's
+ * runApprovedShellCommand for the Node implementation. Typed here (not in shell-executor.ts)
+ * so ShellToolsContext can reference it without this module — which assistant.ts/index.ts
+ * import unconditionally, including into the browser build — ever importing node:child_process.
+ */
+export type ShellCommandExecutor = (command: string, cwd: string, options?: {
+    timeoutMs?: number;
+    maxOutputBytes?: number;
+    networkAllowlist?: string[];
+}) => Promise<ShellExecutionResult>;
+/**
+ * Heuristic-only: flags a command whose text contains a literal `..` parent-directory path
+ * segment (e.g. `cd ..`, `mkdir ../foo`, `cat ../../etc/passwd`). Unlike write_file, there is no
+ * real filesystem containment for run_shell_command once approved — shell-executor.ts's
+ * runApprovedShellCommand validates only that the *starting* `cwd` resolves inside the workspace
+ * (assertRealPathInWorkspace below); the command text itself then runs with the process's real
+ * OS-level filesystem access, so `cd ..` or a `../`-relative path genuinely escapes the workspace
+ * root on disk (confirmed live — see the conv06 batch finding this heuristic exists to surface).
+ * This exists purely to append an honest heads-up to the approval prompt so a human approver
+ * isn't misled by write_file's "sandboxed workspace" framing into assuming the same containment
+ * applies here. It is NOT a guard: it doesn't block anything, and it cannot catch every escape
+ * vector (absolute paths, symlinks, `cd $(pwd)/..`, indirection through env vars, etc.) — treat a
+ * `false` result as "this particular heuristic didn't fire," not "this command is contained."
+ */
+export declare function commandMayLeaveWorkspace(command: string): boolean;
+/**
+ * Heuristic-only: flags a command that looks like it makes an outbound HTTP(S) request (curl,
+ * wget, or a bare http(s):// URL), the shape network-containment.ts's proxy actually intercepts.
+ * Used to decide whether an executed command's output needs an explicit note that a deny-all
+ * network allowlist (the default — see AssistantConfig.shellNetworkAllowlist's doc comment)
+ * turns any such request into an immediate local 403, indistinguishable in the raw output from a
+ * real server response — found live (conv B, 2026-08-18 batch): without this, the LLM call that
+ * synthesizes a reply from the raw output has no way to know containment was even in play (it
+ * never sees run_shell_command's tool description, only the command + its output) and reliably
+ * misattributes the block to the destination server. A tool-description-only fix does not reach
+ * this synthesis call, so this deterministic check is required in addition to it.
+ */
+export declare function commandLooksLikeNetworkRequest(command: string): boolean;
+export declare const RUN_SHELL_COMMAND_TOOL: ToolDefinition;
+export declare const SHELL_TOOLS: ToolDefinition[];
+/** Everything executeShellTool needs to validate + stage a proposal — no execution capability required. */
+export interface ShellStagingContext {
+    backend: FsBackend;
+    workspaceRoot: string;
+}
+/**
+ * Everything PersonalAssistant needs to both stage and, once approved, actually apply a shell
+ * action. `executeCommand` is required (not just an optional extra) because assistant.ts itself
+ * never imports node:child_process — it's bundled into the browser build (via index.ts) too, so
+ * the real Node implementation (shell-executor.ts's runApprovedShellCommand) is only ever wired
+ * in by a Node-only caller (cli.ts), exactly like node-fs-backend.ts already is.
+ */
+export interface ShellToolsContext extends ShellStagingContext {
+    /** Hard timeout for an approved command, in ms. Passed through to executeCommand at apply time. Default 30000. */
+    timeoutMs?: number;
+    /**
+     * Hostnames an approved command's HTTP(S)_PROXY traffic may reach (exact match or subdomain) —
+     * see network-containment.ts and shell-executor.ts's networkContainmentEnv. Passed through to
+     * executeCommand at apply time, same as timeoutMs. Undefined/empty denies all network access,
+     * the safe default (Decision 6, the internal plan Phase 4).
+     */
+    networkAllowlist?: string[];
+    executeCommand: ShellCommandExecutor;
+}
+export type ShellToolResult = {
+    kind: 'staged_shell';
+    id: string;
+    command: string;
+    cwd: string;
+};
+/**
+ * Executes run_shell_command by name. Never spawns anything itself — only stages, exactly like
+ * write_file does for file-tools, every time — no cached-result shortcut, since a command's real
+ * output can change from one run to the next regardless of whether its text is identical.
+ *
+ * The cwd validation above and the stagePendingAction call below both run unconditionally on this
+ * call's own concrete (command, cwd) arguments, regardless of what risk-classifier.ts concluded
+ * about the user's message text — see stagePendingAction's doc comment in file-tools.ts for the
+ * general "gate on the concrete tool call, not the free text" principle this follows.
+ */
+export declare function executeShellTool(ctx: ShellStagingContext, toolName: string, input: Record<string, unknown>): Promise<ShellToolResult>;

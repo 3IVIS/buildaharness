@@ -208,7 +208,7 @@ Decision 6. Reporting one of these as a vulnerability will get a pointer here.
   non-allowlisted host without the same staging + approval every other action
   gets. The `<untrusted_external_content>` tagging and injection heuristic are
   defense-in-depth, not a claimed filter.
-- **The browser build sends keys directly to the provider.** `/try` and `chat-ui`
+- **The browser build sends keys directly to the provider.** `/chat`, `/write` and `chat-ui`
   in a plain tab put the user's key in `localStorage` and call the provider's API
   from the page (`anthropic-dangerous-direct-browser-access`). That is the user's
   key on the user's machine talking to the user's provider — but it is not a

@@ -1,0 +1,12 @@
+.app-switcher { position: relative; display: inline-block; }
+/* Sits in the page title: looks like the word, with a small arrow, and gets a tint on hover. */
+.app-switcher .app-switcher__button { display: inline-flex; align-items: center; gap: 4px; min-height: 0; padding: 2px 6px; margin: 0 0 0 -2px; border: 1px solid transparent; border-radius: 6px; background: transparent; color: inherit; font: inherit; letter-spacing: inherit; cursor: pointer; }
+.app-switcher .app-switcher__button:hover:not(:disabled), .app-switcher .app-switcher__button[aria-expanded='true'] { background: var(--tint-2); border-color: var(--border); }
+.app-switcher .app-switcher__button:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
+.app-switcher .app-switcher__button:disabled { opacity: 0.6; cursor: default; }
+.app-switcher__caret { font-size: 0.7em; opacity: 0.75; }
+.app-switcher__menu { position: absolute; top: calc(100% + 6px); left: 0; z-index: 60; min-width: 11.5rem; display: flex; flex-direction: column; padding: 4px; background: var(--surface); border: 1px solid var(--border); border-radius: 8px; box-shadow: 0 8px 24px var(--shadow, rgba(0, 0, 0, 0.3)); font-weight: 500; letter-spacing: normal; }
+.app-switcher .app-switcher__item { display: flex; align-items: center; gap: 8px; width: 100%; min-height: 0; padding: 8px 10px; border: 0; border-radius: 6px; background: transparent; color: var(--text); font: inherit; text-align: left; cursor: pointer; white-space: nowrap; }
+.app-switcher .app-switcher__item:hover, .app-switcher .app-switcher__item:focus-visible { background: var(--tint-2); outline: none; }
+.app-switcher .app-switcher__item[aria-checked='true'] { color: var(--accent); }
+.app-switcher__check { display: inline-block; width: 1em; }

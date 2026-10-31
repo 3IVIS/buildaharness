@@ -5,7 +5,7 @@ import { appendFileSync, mkdirSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 
 // Aielia Write is served from myaielia.com/write, so its build needs base '/write/'. It is its own page (own entry,
-// own output folder) that shares the chat-ui sources; the /try build in vite.config.ts is untouched.
+// own output folder) that shares the chat-ui sources; the /chat build in vite.config.ts is untouched.
 // Dev only: the page posts every article save here so a person watching over ssh can read the article, outline and chat
 // as they change (see mirrorStore in src/write/write-services.ts). Files: <dir>/<id>.json (latest) and <dir>/changes.jsonl.
 const mirrorDir = process.env.WRITE_MIRROR_DIR || resolve(tmpdir(), 'write-mirror')

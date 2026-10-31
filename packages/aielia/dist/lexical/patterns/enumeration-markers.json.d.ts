@@ -1,0 +1,23 @@
+declare const _default: {
+  "en": {
+    "sequencingMarkers": "\\b(then|after that|and then|next,|step \\d|first[,:]|finally,)\\b|^first\\b(?!\\s*[,:])(?=.*\\band\\b)",
+    "oneCommaListMarker": ",[^,]*\\b(?:and|or)\\s+(?!(?:i|we|you|he|she|it|they|there|my|his|her|their|our|your|the|this|that|an?|no|any|some|every|each|someone|somebody|anybody|anyone|everybody|everyone|nobody|something|anything|everything|nothing)\\b)(\\S+)",
+    "twoCommaListMarker": "(?:,[^,]*){2,}\\b(?:and|or)\\s+(?!(?:i|we|you|he|she|it|they|there|my|his|her|their|our|your|the|this|that|an?|no|any|some|every|each|someone|somebody|anybody|anyone|everybody|everyone|nobody|something|anything|everything|nothing)\\b)",
+    "semicolonListMarker": ";.*;|;\\s*(?:also|additionally|plus)\\b",
+    "numberedListItem": "\\b\\d{1,2}[.)]\\s+\\S",
+    "factThenSingleReminder": ",\\s*(?:and|or)\\s+remind me\\b",
+    "remindWord": "\\bremind\\b"
+  },
+  "zh": {
+    "sequencingMarkers": "(然后|接着|下一步|首先|其次|最后|第\\d{1,2}步)",
+    "oneCommaListMarker": "、([^、]+)",
+    "twoCommaListMarker": "(?:、[^、]*){2,}",
+    "semicolonListMarker": "[;\\uFF1B].*[;\\uFF1B]|[;\\uFF1B]\\s*(?:而且|另外|此外|还|也)",
+    "numberedListItem": "\\d{1,2}[.、)]\\s*\\S",
+    "factThenSingleReminder": "[,\\uFF0C]\\s*(?:还要|记得|并)?提醒我",
+    "remindWord": "提醒"
+  }
+}
+;
+
+export default _default;

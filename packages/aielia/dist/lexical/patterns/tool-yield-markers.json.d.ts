@@ -1,0 +1,25 @@
+declare const _default: {
+  "en": {
+    "deadEndMarkers": [
+      "\\bno (specific )?date\\b",
+      "\\b(?:cannot|can'?t|couldn'?t|could not) find\\b",
+      "\\b(?:not|isn'?t|wasn'?t|aren'?t|weren'?t) (found|mentioned|listed)\\b",
+      "\\bno mention of\\b",
+      "\\bno event called\\b",
+      "\\bno results matching\\b"
+    ]
+  },
+  "zh": {
+    "deadEndMarkers": [
+      "没有(具体)?日期",
+      "找不到|无法找到",
+      "未(找到|提及|列出)",
+      "没有提到",
+      "没有找到相关(事件|活动)",
+      "搜不到结果"
+    ]
+  }
+}
+;
+
+export default _default;

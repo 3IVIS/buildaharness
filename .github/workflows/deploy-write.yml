@@ -1,7 +1,7 @@
 name: Deploy Aielia Write to /write
 
 # Builds the Aielia Write page (packages/chat-ui, vite.write.config.ts) and publishes it to the myaielia repo under
-# /write/, which GitHub Pages serves at https://myaielia.com/write. Like /try, it is bring-your-own-key: the visitor's key
+# /write/, which GitHub Pages serves at https://myaielia.com/write. Like /chat, it is bring-your-own-key: the visitor's key
 # stays in their browser. MANUAL ONLY (workflow_dispatch): it does not run on push, so merging code never publishes the
 # page by itself. Run it from the Actions tab when the page is ready to be public.
 #
@@ -44,6 +44,8 @@ jobs:
           VITE_ASSISTANT_PROXY_URL: https://buildaharness-proxy.buildaharness.workers.dev
           VITE_ASSISTANT_ENABLE_WEB: 'true'
           VITE_ASSISTANT_WEB_BACKEND: proxy
+          # The Chat/Write drop-down in the page title goes to the chat page on the same site.
+          VITE_APP_URL_CHAT: /chat/
         run: npm run build:write --workspace=packages/chat-ui
 
       - name: Check deploy key is present

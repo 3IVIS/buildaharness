@@ -1,0 +1,11 @@
+declare const _default: {
+  "en": {
+    "connectorWords": [
+      "a", "an", "the", "of", "and", "or", "in", "on", "at", "to", "for", "with",
+      "am", "im", "an", "der", "die", "das", "von", "zu", "de", "la", "le", "van", "al"
+    ]
+  }
+}
+;
+
+export default _default;

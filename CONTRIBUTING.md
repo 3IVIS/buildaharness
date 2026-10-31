@@ -94,7 +94,7 @@ before starting.
 | `[collab]` | Yjs real-time collaboration, presence, offline persistence |
 | `[canvas-pkg]` | `@buildaharness/canvas` npm package — props API, embedding, theming |
 | `[assistant]` | Aielia / `@buildaharness/aielia` — harness bridge, risk gate, tools, memory, CLI |
-| `[chat-ui]` | `@buildaharness/chat-ui` browser build — approval UI, settings, `/try` |
+| `[chat-ui]` | `@buildaharness/chat-ui` browser build — approval UI, settings, `/chat` |
 
 ---
 
@@ -240,7 +240,7 @@ printf 'what time zone is Tokyo in?\nexit\n' | \
 # or, without a build step:
 npm run cli --workspace=packages/aielia
 
-# Browser build (chat-ui / the /try page)
+# Browser build (chat-ui / the /chat page)
 npm run dev --workspace=packages/chat-ui           # → http://localhost:3010, paste a key in Settings
 
 npm test --workspace=packages/aielia   # must stay green

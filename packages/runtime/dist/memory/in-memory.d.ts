@@ -1,0 +1,17 @@
+import { MemoryAdapter, MemoryResult } from './adapter';
+export interface InMemoryAdapterOptions {
+    scope?: 'global' | 'thread' | 'resource';
+    instanceId?: string;
+    namespace?: string;
+}
+export declare class InMemoryAdapter implements MemoryAdapter {
+    private store;
+    private prefix;
+    constructor(opts?: InMemoryAdapterOptions);
+    private prefixed;
+    get(key: string): Promise<unknown>;
+    set(key: string, value: unknown, mode?: string): Promise<void>;
+    search(query: string, topK?: number, minScore?: number): Promise<MemoryResult[]>;
+    delete(key: string): Promise<void>;
+    clear(): Promise<void>;
+}

@@ -20,7 +20,10 @@ describe('Write opened from the desktop app', () => {
     render(<WriteHost config={config} onClose={onClose} />)
     expect(await screen.findByRole('heading', { name: 'Aielia Write' })).toBeInTheDocument()
     expect(platform).toHaveBeenCalledWith(config)
-    await userEvent.click(screen.getByRole('button', { name: '← Back to chat' }))
+    // Once Write is open, the way back is the Chat/Write drop-down in its title.
+    expect(screen.queryByRole('button', { name: '← Back to chat' })).toBeNull()
+    await userEvent.click(screen.getByRole('button', { name: /^Write/ }))
+    await userEvent.click(screen.getByRole('menuitemradio', { name: /Aielia Chat/ }))
     expect(onClose).toHaveBeenCalled()
   })
   it('says why when the desktop platform cannot start, and still offers the way back', async () => {

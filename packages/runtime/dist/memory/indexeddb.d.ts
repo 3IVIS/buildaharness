@@ -1,0 +1,20 @@
+import { MemoryAdapter, MemoryResult } from './adapter';
+export declare const _fallbackStores: Map<string, Map<string, unknown>>;
+export interface IndexedDBAdapterOptions {
+    namespace?: string;
+}
+/**
+ * Browser-persistent MemoryAdapter backed by IndexedDB via Dexie. Falls back to an
+ * in-memory Map (shared by namespace) in environments without IndexedDB, e.g. Node tests.
+ */
+export declare class IndexedDBAdapter implements MemoryAdapter {
+    private idbAvailable;
+    private db;
+    private fallback;
+    constructor(opts?: IndexedDBAdapterOptions);
+    get(key: string): Promise<unknown>;
+    set(key: string, value: unknown, mode?: string): Promise<void>;
+    search(query: string, topK?: number, minScore?: number): Promise<MemoryResult[]>;
+    delete(key: string): Promise<void>;
+    clear(): Promise<void>;
+}

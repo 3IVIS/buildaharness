@@ -12,7 +12,7 @@ interface Props {
   showWeb?: boolean
 }
 
-/** The few things this page needs to reach a model and the web. Stored in this browser only, apart from the /try page's settings. */
+/** The few things this page needs to reach a model and the web. Stored in this browser only, apart from the Chat page's settings. */
 export function ConnectionSettings({ value, onSave, onForget, showWeb = true }: Props): React.JSX.Element {
   const dialogs = useDialogs()
   const [draft, setDraft] = useState<WriteConnection>(value)
@@ -20,7 +20,7 @@ export function ConnectionSettings({ value, onSave, onForget, showWeb = true }: 
   const dirty = JSON.stringify(draft) !== JSON.stringify(value)
   return (
     <fieldset className="write__form write__connection">
-      <legend className="write__panehead">Connection<Hint text="Kept in this browser only, separate from the /try page. Aielia has no account of its own." /></legend>
+      <legend className="write__panehead">Connection<Hint text="Kept in this browser only, separate from the Chat page. Aielia has no account of its own." /></legend>
       <label>Provider
         <select aria-label="Provider" value={draft.provider} onChange={(e) => set({ provider: e.target.value as WriteConnection['provider'] })}>
           <option value="anthropic">Anthropic</option>

@@ -1,0 +1,23 @@
+declare const _default: {
+  "en": {
+    "injectionPatterns": [
+      { "source": "\\bignore (all )?(the )?(previous|prior|above) instructions\\b", "reason": "asks to ignore prior instructions" },
+      { "source": "\\byou are now\\b", "reason": "attempts to redefine the assistant's role" },
+      { "source": "\\bnew instructions?:", "reason": "presents itself as new instructions" },
+      { "source": "\\bsystem prompt\\b", "reason": "references the system prompt directly" },
+      { "source": "\\bdisregard (the |your )?(above|previous|prior)\\b", "reason": "asks to disregard prior context" }
+    ]
+  },
+  "zh": {
+    "injectionPatterns": [
+      { "source": "忽略(之前|以上|上面)(的)?(所有)?指令", "reason": "asks to ignore prior instructions" },
+      { "source": "你现在是(?!不是)|你现在的角色是", "reason": "attempts to redefine the assistant's role" },
+      { "source": "新(的)?指令[:：]", "reason": "presents itself as new instructions" },
+      { "source": "系统提示(词)?", "reason": "references the system prompt directly" },
+      { "source": "(无视|忽视)(之前|上面)(的)?", "reason": "asks to disregard prior context" }
+    ]
+  }
+}
+;
+
+export default _default;

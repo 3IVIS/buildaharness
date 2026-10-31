@@ -239,18 +239,28 @@ npm run typecheck --workspace=packages/chat-ui
 
 ## Aielia Write (`/write`)
 
-A second page in this package: writing an article with Aielia beside it. It has its own entry (`write/index.html`) and build config (`vite.write.config.ts`); the sources are shared with the chat app, and the `/try` build is not touched.
+A second page in this package: writing an article with Aielia beside it. It has its own entry (`write/index.html`) and build config (`vite.write.config.ts`); the sources are shared with the chat app, and the `/chat` build is not touched.
 
 ```bash
 npm run dev:write --workspace=packages/chat-ui     # http://localhost:3011
 CHAT_UI_BASE=/write/ npm run build:write --workspace=packages/chat-ui   # output: dist-write/
 ```
 
-- **Own key:** like `/try`, the visitor brings an Anthropic, OpenAI or OpenRouter key. It is kept in this browser (localStorage); articles are kept in IndexedDB (`aielia-write`).
+- **Own key:** like `/chat`, the visitor brings an Anthropic, OpenAI or OpenRouter key. It is kept in this browser (localStorage); articles are kept in IndexedDB (`aielia-write`).
 - **What it does:** the text is ordinary Markdown. The page tracks sections, claims and their sources, reviewer comments you paste into the chat, and corrections you state ("the re-run gives 41 ms"). The assistant changes the text only as suggestions you accept. Publishing is always allowed and freezes a dated snapshot that records what was still open.
 - **Settings tab:** remember comments and corrections from chat (on), check by itself after you stop typing (off), and a spending cap in dollars that stops all model calls once reached.
 - **Shared code:** everything that is not rendering lives in `packages/aielia/src/writer/` (exported from `@buildaharness/aielia`). Design: `plans/aielia_write_plan.html` and `plans/aielia_write_article_model_plan.html` (private repo).
 - **Deploy:** `.github/workflows/deploy-write.yml` publishes to `myaielia.com/write`. It runs only when started by hand, never on push.
+
+## Switching between Chat and Write
+
+The page title has a small drop-down after "Aielia" (`Chat ▾` / `Write ▾`, `src/components/AppSwitcher.tsx`) that lists Aielia Chat and Aielia Write.
+
+- **Desktop app:** switches the screen inside the app (`appSwitchHandler` in `src/app-switch.ts`). It is disabled while a turn or a Write command is running.
+- **Hosted web pages:** goes to the other page. The build says where it is: the chat build sets `VITE_APP_URL_WRITE=/write/` and the Write build sets `VITE_APP_URL_CHAT=/chat/` (set in `deploy-chat-ui.yml` and `deploy-write.yml`). Only a path on the same site is accepted. Write saves its draft before leaving. The two pages share the model connection through `src/shared-settings.ts`.
+- **Any other build** (dev, self-hosted): the variables are unset, there is no other page to go to, and the title is plain text.
+
+On myaielia.com, `/chat` is this chat build and `/write` the Write build; `/try` is a page in the myaielia repo that lets a visitor choose between them.
 
 ## Plan graph (optional)
 

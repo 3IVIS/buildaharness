@@ -76,6 +76,8 @@ import { MemoryPanel, type MemoryPanelData } from './components/MemoryPanel'
 import { NextStepChips } from './components/NextStepChips'
 import { BrowserConfigStore } from './browser-config-store'
 import { seedChatFromWrite } from './shared-settings'
+import { AppSwitcher } from './components/AppSwitcher'
+import { appSwitchHandler } from './app-switch'
 import { TauriConfigStore } from './tauri-config-store'
 import { envOverridesFromImportMetaEnv, llmBackendFromEnvValue, splitBuildDefaults } from './browser-config'
 import { applyBrowserLayerSettings } from './layer-env'
@@ -329,7 +331,7 @@ export function App(): React.JSX.Element {
   // comment). Default OFF: the composer/Send button stay disabled while busy, byte-identical to
   // today (INV-43).
   const goalGraphModeEnabled = isGoalGraphEnabled(config.goalGraphMode)
-  // Hosted /try only (VITE_ASSISTANT_REQUIRE_KEY): until the visitor adds their own key, steer them to add it
+  // Hosted /chat only (VITE_ASSISTANT_REQUIRE_KEY): until the visitor adds their own key, steer them to add it
   // instead of letting a message go to a model that can't answer. False on every other build.
   const keyMissing = isKeyMissing(requiresOwnKey(import.meta.env), isTauri(), config)
   // P4 of plans/plan_visualization_plan.html — read-only plan graph drawer. Default OFF: no button, no
@@ -1170,11 +1172,14 @@ export function App(): React.JSX.Element {
     )
   }
 
+  // The drop-down after "Aielia": on the desktop it opens Write inside the app, on the hosted pages it goes to /write/.
+  const appSwitch = appSwitchHandler('chat', { desktop: () => setView('write') })
+
   return (
     <div className="app">
       <header className="app__header">
         <span className="app__header-brand">
-          <span className="app__header-title"><a className="brand-link" href="https://myaielia.com" target="_blank" rel="noopener noreferrer" title="Go to myaielia.com">Aielia</a> Chat</span>
+          <span className="app__header-title"><a className="brand-link" href="https://myaielia.com" target="_blank" rel="noopener noreferrer" title="Go to myaielia.com">Aielia</a> {appSwitch ? <AppSwitcher current="chat" onSelect={appSwitch} disabled={busy} /> : 'Chat'}</span>
           <span className="app__header-badge" title="Early-stage alpha software — expect rough edges and breaking changes.">Alpha</span>
           {config.dangerouslySkipPermissions && (
             <button
@@ -1191,7 +1196,6 @@ export function App(): React.JSX.Element {
           <button type="button" aria-label="New chat" title="New chat" disabled={busy} onClick={() => void handleClearConversation()}>New chat</button>
           <button type="button" aria-label="Search" title="Search past messages" onClick={() => setView('search')}>Search</button>
           <button type="button" aria-label="Memory" title="Review, confirm, undo or switch off what Aielia remembers" onClick={() => void handleOpenMemory()}>Memory</button>
-          {isTauri() && <button type="button" aria-label="Write" title="Write and check an article with Aielia" disabled={busy} onClick={() => setView('write')}>Write</button>}
           <div className="app__header-more" ref={headerMoreRef}>
             <button
               type="button"

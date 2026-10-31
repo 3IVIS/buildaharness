@@ -8,7 +8,7 @@ export interface ModelCredentials {
 }
 
 /**
- * The hosted browser trial (myaielia.com/try) has no model of its own: a visitor has to bring an
+ * The hosted browser trial (myaielia.com/chat) has no model of its own: a visitor has to bring an
  * API key. The deploy workflow marks that build with VITE_ASSISTANT_REQUIRE_KEY=true; every other
  * build (dev, self-hosted proxy, desktop) leaves it unset and behaves exactly as before.
  *
