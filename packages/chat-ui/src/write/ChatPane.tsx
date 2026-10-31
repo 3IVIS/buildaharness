@@ -174,6 +174,7 @@ export function ChatPane(p: Props): React.JSX.Element {
           <button type="button" className={`write__iconbtn write__send${p.progress && !p.progress.finishing ? ' is-working' : ''}`} aria-label="Send" title="Send" onClick={p.onSend} disabled={p.busy || !p.input.trim()}><Icon d={ICON_PATHS.write} /></button>
         </div>
       </div>
+      <p className="write__disclaimer">Alpha software. Aielia uses AI models and can make mistakes — verify anything important.</p>
     </section>
   )
 }

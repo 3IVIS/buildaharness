@@ -97,3 +97,10 @@ describe('usage line', () => {
     expect(usageText(2000, { usd: 0.01, inputTokens: 1000, outputTokens: 50, calls: 2, cachedTokens: 600, estimatedInputTokens: 1000 })).toContain('~1,050 tokens (~1,000 in, 50 out)')
   })
 })
+
+describe('ChatPane disclaimer', () => {
+  it('says under the composer that this is alpha software that can make mistakes, as the chat does', () => {
+    render(<ChatPane {...base} busy={false} />)
+    expect(screen.getByText('Alpha software. Aielia uses AI models and can make mistakes — verify anything important.')).toBeInTheDocument()
+  })
+})
