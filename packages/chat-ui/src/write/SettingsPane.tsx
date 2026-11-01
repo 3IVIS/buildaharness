@@ -3,6 +3,7 @@ import { CLI_DEFAULT_LABEL, activityReport, summarizeActivity, type ActivityLog,
 import { ModelPicker } from './ModelPicker'
 import { ConnectionSettings } from './ConnectionSettings'
 import { Hint } from './Hint'
+import { ProxyNotice } from '../components/ProxyNotice'
 import type { WriteConnection } from './write-config'
 
 interface Props {
@@ -65,6 +66,7 @@ export function SettingsPane({ perms, autoModel, chatModel, suggestions, onAutoM
       <label>Spending cap, US$<Hint text="Stops using your key after this much. Leave blank for no limit." />
         <input aria-label="Spending cap" inputMode="decimal" value={cap} onChange={(e) => setCap(e.target.value)} onBlur={() => { const n = Number(cap); void save({ spendCapUsd: cap.trim() !== '' && Number.isFinite(n) && n > 0 ? n : undefined }) }} />
       </label>
+      <ProxyNotice bare />
       {onDeleteAll && (
         <div className="write__danger">
           <button type="button" className="write__dangerbtn" onClick={onDeleteAll} disabled={busy}>Delete all my data</button>
