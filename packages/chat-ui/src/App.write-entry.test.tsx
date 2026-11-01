@@ -35,7 +35,7 @@ describe('App: the Write entry', () => {
     const { App } = await import('./App')
     render(<App />)
     await screen.findByPlaceholderText('Message Aielia…')
-    expect(screen.getByRole('button', { name: 'Memory' })).toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: 'Memory' })).toBeNull()
     expect(screen.queryByRole('button', { name: 'Write' })).toBeNull()
     expect(screen.queryByRole('button', { name: /^Chat/ })).toBeNull()
   })
