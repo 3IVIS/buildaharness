@@ -74,10 +74,27 @@ interface Props {
   spendCapLine?: string
   /** Browser only: removes everything the chat keeps in this browser (conversation, memory, settings and keys). Absent on desktop, where the data lives in files. */
   onDeleteAll?: () => void
+  /** Open the Memory panel (what Aielia remembers about you). */
+  onOpenMemory?: () => void
+  /** Open the Goals panel (goal threads for this session). */
+  onOpenGoals?: () => void
+  /** Download this conversation as a Markdown file. */
+  onExport?: () => void
+  canExport?: boolean
 }
 
 function isPinned(overriddenKeys: ReadonlySet<keyof AssistantConfig>, key: keyof AssistantConfig): boolean {
   return overriddenKeys.has(key)
+}
+
+/** A labelled row whose control is a button: a div, not a label, so the button keeps its own name. */
+function ActionRow({ label, hint, children }: { label: string; hint: string; children: React.ReactNode }): React.JSX.Element {
+  return (
+    <div className="settings__field">
+      <span className="settings__field-label">{label}<Hint text={hint} /></span>
+      {children}
+    </div>
+  )
 }
 
 function FieldRow({ label, pinnedBy, hint, children }: { label: string; pinnedBy?: string; hint?: string; children: React.ReactNode }): React.JSX.Element {
@@ -168,6 +185,10 @@ export function SettingsScreen({
   healthChecks,
   spendCapLine,
   onDeleteAll,
+  onOpenMemory,
+  onOpenGoals,
+  onExport,
+  canExport,
 }: Props): React.JSX.Element {
   const [form, setForm] = useState<AssistantConfig>(config)
   const [error, setError] = useState<string | null>(null)
@@ -558,12 +579,37 @@ export function SettingsScreen({
           <HealthList checks={healthChecks} />
         </section>
 
-        {onDeleteAll && (
+        {(onOpenMemory || onOpenGoals) && (
+          <section className="settings__section">
+            <h2>Memory and goals</h2>
+            {onOpenMemory && (
+              <ActionRow hint="Review, confirm, undo or switch off what Aielia remembers about you." label="Memory">
+                <button type="button" onClick={onOpenMemory}>Review what Aielia remembers</button>
+              </ActionRow>
+            )}
+            {onOpenGoals && (
+              <ActionRow hint="The goals Aielia is tracking in this conversation." label="Goals">
+                <button type="button" onClick={onOpenGoals}>Review goals for this session</button>
+              </ActionRow>
+            )}
+          </section>
+        )}
+
+        {(onExport || onDeleteAll) && (
           <section className="settings__section">
             <h2>Your data</h2>
-            <p className="settings__info">Everything Aielia keeps lives in this browser: the conversation, what it remembers about you, your settings and your keys.</p>
-            <button type="button" className="settings__danger" onClick={onDeleteAll} disabled={disabled}>Delete all my data</button>
-            <p className="settings__hint">Removes it all from this browser and reloads the page. Articles in Aielia Write are kept. This cannot be undone.</p>
+            {onDeleteAll && <p className="settings__info">Everything Aielia keeps lives in this browser: the conversation, what it remembers about you, your settings and your keys.</p>}
+            {onExport && (
+              <ActionRow hint="Saves your messages and Aielia's replies from this conversation as a Markdown (.md) file." label="Conversation">
+                <button type="button" onClick={onExport} disabled={!canExport}>Download this conversation (.md)</button>
+              </ActionRow>
+            )}
+            {onDeleteAll && (
+              <>
+                <button type="button" className="settings__danger" onClick={onDeleteAll} disabled={disabled}>Delete all my data</button>
+                <p className="settings__hint">Removes it all from this browser and reloads the page. Articles in Aielia Write are kept. This cannot be undone.</p>
+              </>
+            )}
           </section>
         )}
 

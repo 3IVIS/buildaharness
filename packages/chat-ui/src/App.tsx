@@ -1013,60 +1013,6 @@ export function App(): React.JSX.Element {
     submitMessage()
   }
 
-  /**
-   * P9 of the internal plan — the lightweight plan-sketch delegate's
-   * chat-ui entry point: takes the composer text as the request and calls
-   * PersonalAssistant.sketchPlan directly, bypassing runTurn/assistant.turn() entirely (there is
-   * no approval/clarification/plan-approval branch to resolve — a sketch is advisory-only and
-   * never stages anything, INV-35), so the rendered assistant bubble has no approve/decline
-   * controls attached, same as any other plain `status: 'ok'` reply.
-   */
-  async function handleSketchPlan(): Promise<void> {
-    const request = input.trim()
-    if (!request || busy) return
-    if (keyMissing) {
-      setNeedsSetup(true)
-      return
-    }
-    const assistant = assistantRef.current
-    if (!assistant) {
-      setEntries((prev) => [...prev, { id: newId(), kind: 'error', content: 'Aielia is still starting up — try again in a moment.', retryable: false, retryMessage: request, retryApproved: false }])
-      return
-    }
-    setShowDemo(false)
-    setInput('')
-    if (composerRef.current) composerRef.current.style.height = 'auto'
-    setEntries((prev) => [...prev, { id: newId(), kind: 'user', content: `Sketch a plan: ${request}` }])
-    setBusy(true)
-    setProgress(null)
-    try {
-      const result = await assistant.sketchPlan(sessionIdRef.current, request)
-      setEntries((prev) => [
-        ...prev,
-        {
-          id: newId(),
-          kind: 'assistant',
-          content: result.reply ?? '',
-          riskLevel: result.riskLevel,
-          harnessSkipped: result.harnessSkipped,
-          proposerKind: result.proposerKind,
-        },
-      ])
-      if (result.usage) {
-        const withCost = priceUsage(result.usage)
-        setLastTurnUsage(withCost)
-        setSessionUsage((prev) => accumulateUsage(prev, withCost))
-      }
-    } catch (err) {
-      console.error('[plan sketch failed]', err)
-      const { message: errorMessage } = classifyError(err)
-      setEntries((prev) => [...prev, { id: newId(), kind: 'error', content: errorMessage, retryable: false, retryMessage: request, retryApproved: false }])
-    } finally {
-      setBusy(false)
-      setProgress(null)
-    }
-  }
-
   /** Enter submits (matching the old single-line <input>'s behavior); Shift+Enter inserts a real newline, which a plain <input> can never hold — see the <textarea> below. */
   function handleComposerKeyDown(e: React.KeyboardEvent<HTMLTextAreaElement>): void {
     if (e.key === 'Enter' && !e.shiftKey) {
@@ -1181,6 +1127,10 @@ export function App(): React.JSX.Element {
         healthChecks={healthChecks}
         spendCapLine={spendCapLine}
         onDeleteAll={isTauri() ? undefined : () => void handleDeleteAllData()}
+        onOpenMemory={() => void handleOpenMemory()}
+        onOpenGoals={() => void handleOpenGoals()}
+        onExport={() => void handleExportTranscript()}
+        canExport={entries.length > 0}
       />
     )
   }
@@ -1208,7 +1158,6 @@ export function App(): React.JSX.Element {
         <div className="app__header-actions">
           <button type="button" aria-label="New chat" title="New chat" disabled={busy} onClick={() => void handleClearConversation()}>New chat</button>
           <button type="button" aria-label="Search" title="Search past messages" onClick={() => setView('search')}>Search</button>
-          <button type="button" aria-label="Memory" title="Review, confirm, undo or switch off what Aielia remembers" onClick={() => void handleOpenMemory()}>Memory</button>
           <div className="app__header-more" ref={headerMoreRef}>
             <button
               type="button"
@@ -1223,18 +1172,7 @@ export function App(): React.JSX.Element {
             </button>
             {/* Wide windows show these inline; below 640px CSS folds them into the "⋯" menu. The real buttons stay in the DOM either way. */}
             <div className={`app__header-secondary${headerMenuOpen ? ' app__header-secondary--open' : ''}`} onClick={() => setHeaderMenuOpen(false)}>
-              <button type="button" aria-label="Export transcript" title="Export transcript" disabled={busy || entries.length === 0} onClick={() => void handleExportTranscript()}>Export</button>
               <button type="button" aria-label="Undo last exchange" title="Undo last exchange" disabled={busy || entries.length === 0} onClick={() => void handleUndoLastTurn()}>Undo</button>
-              <button type="button" aria-label="Goals" title="Review goal threads for this session" onClick={() => void handleOpenGoals()}>Goals</button>
-              <button
-                type="button"
-                aria-label="Sketch a plan"
-                title="One-shot, advisory plan sketch from the composer text — nothing staged, cannot execute"
-                disabled={busy || !input.trim()}
-                onClick={() => void handleSketchPlan()}
-              >
-                Sketch
-              </button>
               {planGraphModeEnabled && (planGraphSource || activePlanStatus || planState) && (
                 <button type="button" className="app__plan-graph-link" onClick={() => setPlanVizOpenPersisted(!planVizOpen)}>Plan graph</button>
               )}

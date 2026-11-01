@@ -398,7 +398,8 @@ describe('App', () => {
     await user.click(screen.getByRole('button', { name: 'Send' }))
     await waitFor(() => expect(screen.getByText('echo: hello there')).toBeInTheDocument())
 
-    await user.click(screen.getByRole('button', { name: 'Export transcript' }))
+    await user.click(screen.getByRole('button', { name: 'Settings' }))
+    await user.click(await screen.findByRole('button', { name: 'Download this conversation (.md)' }))
 
     await waitFor(() => expect(clickSpy).toHaveBeenCalledTimes(1))
     expect(URL.createObjectURL).toHaveBeenCalledTimes(1)
@@ -407,7 +408,8 @@ describe('App', () => {
 
   it('"Export" is disabled with no conversation yet', async () => {
     render(<App />)
-    expect(await screen.findByRole('button', { name: 'Export transcript' })).toBeDisabled()
+    await userEvent.setup().click(await screen.findByRole('button', { name: 'Settings' }))
+    expect(await screen.findByRole('button', { name: 'Download this conversation (.md)' })).toBeDisabled()
   })
 
   it('"Undo" removes the last exchange from the screen', async () => {
@@ -451,7 +453,7 @@ describe('App', () => {
       expect(screen.queryByRole('button', { name: 'Approve' })).not.toBeInTheDocument()
       expect(screen.queryByRole('button', { name: 'Deny' })).not.toBeInTheDocument()
       // Export/Undo still count it as an empty conversation.
-      expect(screen.getByRole('button', { name: 'Export transcript' })).toBeDisabled()
+      expect(screen.queryByRole('button', { name: 'Export transcript' })).toBeNull()
     })
 
     it('clears once the visitor sends their own first message', async () => {

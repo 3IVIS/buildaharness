@@ -147,6 +147,16 @@ describe('SettingsScreen', () => {
     expect(screen.queryByRole('button', { name: 'Delete all my data' })).not.toBeInTheDocument()
   })
 
+  it('opens Memory and Goals and downloads the conversation from Settings', async () => {
+    const user = userEvent.setup()
+    const onOpenMemory = vi.fn(); const onOpenGoals = vi.fn(); const onExport = vi.fn()
+    renderSettings({ onOpenMemory, onOpenGoals, onExport, canExport: true })
+    await user.click(screen.getByRole('button', { name: 'Review what Aielia remembers' }))
+    await user.click(screen.getByRole('button', { name: 'Review goals for this session' }))
+    await user.click(screen.getByRole('button', { name: 'Download this conversation (.md)' }))
+    expect([onOpenMemory, onOpenGoals, onExport].map((f) => f.mock.calls.length)).toEqual([1, 1, 1])
+  })
+
   it('explains the settings with hover hints', () => {
     renderSettings({ isDesktop: true })
     expect(screen.getByRole('img', { name: /Lets Aielia search the web/ })).toBeInTheDocument()
