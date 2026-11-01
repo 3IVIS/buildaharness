@@ -10,6 +10,10 @@ describe('ProxyNotice', () => {
     expect(screen.getByText(/never your IP or what you searched/)).toBeTruthy()
     expect(screen.getByRole('link', { name: 'Privacy' })).toBeTruthy()
   })
+  it('bare drops the links', () => {
+    render(<ProxyNotice env={env('proxy')} bare />)
+    expect(screen.queryByRole('link')).toBeNull()
+  })
   it('renders nothing on builds that do not use the proxy', () => {
     const { container } = render(<ProxyNotice env={env('direct')} />)
     expect(container.textContent).toBe('')
