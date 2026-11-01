@@ -986,3 +986,7 @@ npm run build --workspace=packages/aielia
 npm test --workspace=packages/aielia
 npm run typecheck --workspace=packages/aielia
 ```
+
+## Legal
+
+Aielia is Apache 2.0 software. By using it you agree to the [Terms of Use](https://myaielia.com/terms.html) and acknowledge the [Privacy Policy](https://myaielia.com/privacy.html). The CLI asks you to acknowledge them once on first run.

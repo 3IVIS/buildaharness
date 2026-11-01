@@ -321,4 +321,6 @@ Full props reference: [`packages/canvas/README.md`](packages/canvas/README.md)
 
 Apache 2.0 — see [LICENSE](LICENSE).
 
+The Aielia apps and the myaielia.com site are covered by the [Terms of Use](https://myaielia.com/terms.html) and the [Privacy Policy](https://myaielia.com/privacy.html).
+
 </div>

@@ -1,9 +1,10 @@
 /**
  * The wording and version of the first-run terms notice, shared by the CLI (terms-notice.ts) and
- * chat-ui's desktop gate. Browser-safe: no Node imports. Bump TERMS_VERSION whenever the Terms or
- * Privacy Policy change in a way people must re-acknowledge; every surface then asks again once.
+ * chat-ui's desktop gate. Browser-safe: no Node imports. TERMS_VERSION is the later of the "last
+ * updated" dates on myaielia.com's Terms and Privacy Policy; bump it whenever either changes in a way
+ * people must re-acknowledge, and every surface then asks again once.
  */
-export const TERMS_VERSION = '2026-10-31'
+export const TERMS_VERSION = '2026-11-01'
 export const TERMS_URL = 'https://myaielia.com/terms.html'
 export const PRIVACY_URL = 'https://myaielia.com/privacy.html'
 
