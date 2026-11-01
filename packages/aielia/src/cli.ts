@@ -60,6 +60,7 @@ import type { TaskStatus } from '@buildaharness/harness'
 import {  } from './goal-graph-suggest-flag.js'
 import type { NextStepSuggestion } from './next-step-proposer.js'
 import { maybeRunFirstRunSetup } from './first-run.js'
+import { maybeShowTermsNotice } from './terms-notice.js'
 import { testApiKey, type KeyedBackend, type KeyTestResult } from './provider-setup.js'
 import { DEFAULT_TUI_MODE, shouldLaunchTuiApp } from './tui-mode-flag.js'
 import { ICONS, toolStepIcon, PLAN_LINE_PREFIX } from './cli-icons.js'
@@ -249,6 +250,8 @@ export interface RunCliOptions {
   askSelect?: (question: string, options: SelectOption[]) => Promise<string>
   /** Test seam: skip the interactive first-run setup regardless of TTY state (also implied when `assistant` is passed). */
   skipFirstRunSetup?: boolean
+  /** Test seam: where the terms acknowledgement is stored (defaults to the data dir). */
+  termsDataDir?: string
   /** Test seam: script the first-run setup's line reads. */
   firstRunAsk?: (question: string) => Promise<string>
   /** Test seam: stub the live API-key check in the first-run setup (defaults to a real call to the provider). */
@@ -311,6 +314,12 @@ export async function runCli(options: RunCliOptions = {}): Promise<CliInstance> 
         })
       })
     try {
+      await maybeShowTermsNotice({
+        isInteractive,
+        ask: firstRunAsk,
+        log: (line) => outputStream.write(`${line}\n`),
+        dataDir: options.termsDataDir,
+      })
       persisted = await maybeRunFirstRunSetup({
         configStore,
         persisted,

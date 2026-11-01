@@ -1,5 +1,6 @@
 import { AdjustBar, type ChatAction } from './AdjustBar'
 import { ModelPicker } from './ModelPicker'
+import { ProxyNotice } from '../components/ProxyNotice'
 import { useEffect, useLayoutEffect, useRef, useState } from 'react'
 import { CLI_DEFAULT_LABEL, NAME_CLOSE, NAME_OPEN, modelLabel, checklistAt, elapsedText, stageSentence, workPlan, type WorkKind, type ResultLine } from '@buildaharness/aielia'
 import { ICON_PATHS, Icon, IconButton } from './icons'
@@ -175,6 +176,7 @@ export function ChatPane(p: Props): React.JSX.Element {
         </div>
       </div>
       <p className="write__disclaimer">Alpha software. Aielia uses AI models and can make mistakes — verify anything important.</p>
+      <ProxyNotice />
     </section>
   )
 }

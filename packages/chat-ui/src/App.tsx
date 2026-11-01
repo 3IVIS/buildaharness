@@ -67,6 +67,7 @@ import { EscalationBanner } from './components/EscalationBanner'
 import { SettingsScreen } from './components/SettingsScreen'
 import { SetupWizard } from './components/SetupWizard'
 import { KeyNotice } from './components/KeyNotice'
+import { ProxyNotice } from './components/ProxyNotice'
 // Loaded when Write is opened, so the chat does not carry it.
 const WriteHost = lazy(() => import('./write/WriteHost'))
 import { isKeyMissing, requiresOwnKey } from './key-gate'
@@ -1240,6 +1241,7 @@ export function App(): React.JSX.Element {
         />
       )}
       {keyMissing && <KeyNotice onAddKey={() => setNeedsSetup(true)} />}
+      {requiresOwnKey(import.meta.env) && <ProxyNotice />}
       <div className="app__messages">
         {showDemo && entries.length === 0 && (
           <div className="app__demo">

@@ -2,6 +2,7 @@ import { StrictMode } from 'react'
 import { createRoot } from 'react-dom/client'
 import './index.css'
 import { App } from './App'
+import { TermsGate } from './components/TermsGate'
 
 async function bootstrap(): Promise<void> {
   // E2E only: publish the scripted-client / in-memory-FS factories on window before <App/> mounts
@@ -14,7 +15,9 @@ async function bootstrap(): Promise<void> {
 
   createRoot(document.getElementById('root')!).render(
     <StrictMode>
-      <App />
+      <TermsGate>
+        <App />
+      </TermsGate>
     </StrictMode>,
   )
 }
