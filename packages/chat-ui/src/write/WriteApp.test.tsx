@@ -202,7 +202,7 @@ describe('header and article menu', () => {
     expect(screen.queryByRole('button', { name: 'Publish' })).toBeNull()
     expect(screen.getByText('Alpha')).toBeInTheDocument()
     await userEvent.click(screen.getByRole('button', { name: 'Open site menu' }))
-    expect(screen.getByRole('link', { name: 'Privacy' })).toHaveAttribute('href', 'https://myaielia.com/privacy.html')
+    expect(screen.getAllByRole('link', { name: 'Privacy' }).every((a) => a.getAttribute('href') === 'https://myaielia.com/privacy.html')).toBe(true)
   })
   it('has only Publish in the header; New, Rename, Export and Import are in the article menu', async () => {
     const s = await services({}, MD)
