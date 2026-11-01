@@ -2027,7 +2027,27 @@ async function mainInner(argv: readonly string[]): Promise<void> {
   }
 
   const persisted = await defaultConfigStore.load()
-  const { config } = resolveConfig(persisted, defaultEnvOverrides)
+  const { config, overriddenKeys } = resolveConfig(persisted, defaultEnvOverrides)
+
+  // First-run provider setup for the full-screen UI. runCli()'s own pass needs a TTY input stream, but the UI hands it an
+  // inert one (and mounts only after it returns), so the setup was silently skipped there and people landed on the
+  // default proxy backend. Plain readline on the real terminal runs it once here; the plain prompt keeps using runCli()'s.
+  if (shouldLaunchTuiApp(config.tuiMode ?? DEFAULT_TUI_MODE, Boolean(process.stdout.isTTY), Boolean(process.stdin.isTTY))) {
+    const rl = createInterface({ input: process.stdin, output: process.stdout })
+    try {
+      await maybeRunFirstRunSetup({
+        configStore: defaultConfigStore,
+        persisted,
+        overriddenKeys,
+        isInteractive: true,
+        ask: (question) => new Promise<string>((resolvePrompt) => rl.question(question, (answer) => resolvePrompt(answer.trim()))),
+        log: (line) => process.stdout.write(`${line}\n`),
+        testKey: (backend, key) => testApiKey(backend, key),
+      })
+    } finally {
+      rl.close()
+    }
+  }
 
   // Startup housekeeping + passive update check. Fire-and-forget: never awaited before the prompt
   // renders, never throws (checkForUpdate resolves null on any failure), and gated off entirely for
