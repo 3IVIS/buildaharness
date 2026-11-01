@@ -275,7 +275,8 @@ runs:
 | `@buildaharness/chat-ui` | Browser | `IndexedDBAdapter`/`DexieExperienceStore` via `PersonalAssistant.create()` (best-effort — see `packages/runtime/README.md`'s persistence section) |
 | `@buildaharness/desktop` | Native window (Tauri, wraps chat-ui) | Same `FileSystemAdapter`/`FileSystemExperienceStore` classes as the CLI, but over `@tauri-apps/plugin-fs` instead of `node:fs`, under `appLocalDataDir()` |
 
-A second browser page, **Aielia Write** (`/write`), uses the same package for writing an
+A second page, **Aielia Write** (`/write` in the browser; the desktop app switches to it from
+the Chat/Write drop-down in the title, alpha), uses the same package for writing an
 article with Aielia beside it: it tracks the article's claims and their sources, verifies
 claims against web pages, code files and repositories, and only changes the text as
 suggestions you accept. Its logic lives in `src/writer/` (exported from this package) and the
