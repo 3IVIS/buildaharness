@@ -48,6 +48,8 @@ import {
   isGoalGraphEnabled,
   isPlanGraphEnabled,
   planToSnapshot,
+  TERMS_URL,
+  PRIVACY_URL,
 } from '@buildaharness/aielia'
 import {
   FileSystemAdapter,
@@ -67,7 +69,6 @@ import { EscalationBanner } from './components/EscalationBanner'
 import { SettingsScreen } from './components/SettingsScreen'
 import { SetupWizard } from './components/SetupWizard'
 import { KeyNotice } from './components/KeyNotice'
-import { ProxyNotice } from './components/ProxyNotice'
 // Loaded when Write is opened, so the chat does not carry it.
 const WriteHost = lazy(() => import('./write/WriteHost'))
 import { isKeyMissing, requiresOwnKey } from './key-gate'
@@ -1241,7 +1242,6 @@ export function App(): React.JSX.Element {
         />
       )}
       {keyMissing && <KeyNotice onAddKey={() => setNeedsSetup(true)} />}
-      {requiresOwnKey(import.meta.env) && <ProxyNotice />}
       <div className="app__messages">
         {showDemo && entries.length === 0 && (
           <div className="app__demo">
@@ -1416,7 +1416,10 @@ export function App(): React.JSX.Element {
           <button type="submit" disabled={!keyMissing && ((!goalGraphModeEnabled && busy) || !input.trim())}>{keyMissing ? 'Add your key' : 'Send'}</button>
         )}
       </form>
-      <div className="app__composer-disclaimer">Alpha software. Aielia uses AI models and can make mistakes — verify anything important.</div>
+      <div className="app__composer-disclaimer">
+        Aielia uses AI models and can make mistakes — verify anything important.{' '}
+        <a href={TERMS_URL} target="_blank" rel="noreferrer">Terms</a> · <a href={PRIVACY_URL} target="_blank" rel="noreferrer">Privacy</a>
+      </div>
     </div>
   )
 }

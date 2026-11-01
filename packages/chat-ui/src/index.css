@@ -159,6 +159,7 @@ body {
   color: var(--muted);
   text-align: center;
 }
+.app__composer-disclaimer a { color: var(--accent); }
 
 .app__header-actions {
   margin-left: auto;
