@@ -162,7 +162,9 @@ fire before you add one.
 page for writing an article with Aielia beside it. It tracks the article's claims and their
 sources, checks claims against web pages, code files and repositories, and changes the text
 only as suggestions you accept. Same bring-your-own-key model as the chat page; see
-[`packages/chat-ui/README.md`](packages/chat-ui/README.md#aielia-write-write).
+[`packages/chat-ui/README.md`](packages/chat-ui/README.md#aielia-write-write). It is alpha
+software. The desktop app has it too: the drop-down next to "Aielia" in the title switches
+between Chat and Write, on the web pages as well.
 
 One core, three front ends: terminal CLI, browser (`@buildaharness/chat-ui`),
 and native desktop (`@buildaharness/desktop`).

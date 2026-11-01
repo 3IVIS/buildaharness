@@ -20,8 +20,8 @@ a logged-in `claude` CLI (no key needed), start it with
 Try a harmless question, then something consequential like *"send an email to my
 boss saying I quit"* to watch the approval gate stop it before anything is sent.
 
-Prefer a browser? Open **[myaielia.com/try](https://myaielia.com/try)**,
-paste a key in Settings (it stays in your browser), and go.
+Prefer a browser? Open **[myaielia.com/try](https://myaielia.com/try)**, choose Aielia Chat
+(or Aielia Write for articles, alpha), paste a key in Settings (it stays in your browser), and go.
 
 ---
 

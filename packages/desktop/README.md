@@ -7,6 +7,10 @@ dev server (`http://localhost:3010`) and `frontendDist` at its built
 `beforeDevCommand`/`beforeBuildCommand` (with `cwd` set to the repo root, since
 npm workspace commands need to run from there).
 
+The window holds both Aielia Chat and Aielia Write (alpha): the drop-down after "Aielia" in the
+title switches between them in place (`appSwitchHandler` in chat-ui's `src/app-switch.ts`; disabled while a turn
+or a Write command is running).
+
 Storage is filesystem-backed, not Dexie/IndexedDB: `packages/chat-ui/src/App.tsx`
 detects `isTauri()` and, if true, builds `FileSystemAdapter`/`FileSystemExperienceStore`
 (from `@buildaharness/runtime`) over a `@tauri-apps/plugin-fs`-backed `FsBackend`
