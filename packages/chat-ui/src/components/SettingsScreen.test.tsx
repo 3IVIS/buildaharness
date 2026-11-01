@@ -97,7 +97,7 @@ describe('SettingsScreen', () => {
   })
 
   it('shows the 30 s default shell timeout and a truthful approval-mode line', () => {
-    renderSettings({ config: { ...DEFAULT_CONFIG, enableShell: true, shellTimeoutMs: undefined, dangerouslySkipPermissions: false } })
+    renderSettings({ isDesktop: true, config: { ...DEFAULT_CONFIG, enableShell: true, shellTimeoutMs: undefined, dangerouslySkipPermissions: false } })
     expect(screen.getByDisplayValue('30000')).toBeInTheDocument()
     expect(screen.getByText(/Each command asks for your approval/)).toBeInTheDocument()
   })
@@ -126,9 +126,31 @@ describe('SettingsScreen', () => {
   it('Brave API key field is hidden unless enableWeb is on', async () => {
     const user = userEvent.setup()
     renderSettings({ config: { ...DEFAULT_CONFIG, enableWeb: false } })
-    expect(screen.queryByText('Brave API key')).not.toBeInTheDocument()
-    await user.click(screen.getByLabelText('Enable web search / fetch'))
-    expect(screen.getByText('Brave API key')).toBeInTheDocument()
+    expect(screen.queryByText(/Brave API key/)).not.toBeInTheDocument()
+    await user.click(screen.getByRole('checkbox', { name: /Enable web search/ }))
+    expect(screen.getByText(/Brave API key/)).toBeInTheDocument()
+  })
+
+  it('has no Shell section in a browser tab, which cannot run commands', () => {
+    renderSettings({ isDesktop: false })
+    expect(screen.queryByText('Shell')).not.toBeInTheDocument()
+    expect(screen.queryByLabelText('Enable shell commands')).not.toBeInTheDocument()
+  })
+
+  it('offers Delete all my data only when a handler is given (the browser), and calls it', async () => {
+    const onDeleteAll = vi.fn()
+    const { unmount } = renderSettings({ onDeleteAll })
+    await userEvent.setup().click(screen.getByRole('button', { name: 'Delete all my data' }))
+    expect(onDeleteAll).toHaveBeenCalledTimes(1)
+    unmount()
+    renderSettings({})
+    expect(screen.queryByRole('button', { name: 'Delete all my data' })).not.toBeInTheDocument()
+  })
+
+  it('explains the settings with hover hints', () => {
+    renderSettings({ isDesktop: true })
+    expect(screen.getByRole('img', { name: /Lets Aielia search the web/ })).toBeInTheDocument()
+    expect(screen.getByRole('img', { name: /Lets Aielia run terminal commands/ })).toBeInTheDocument()
   })
 
   it('an env-pinned field renders as a disabled input with a note', () => {

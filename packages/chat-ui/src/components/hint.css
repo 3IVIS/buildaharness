@@ -1,0 +1,4 @@
+/* "?" hints: the explanation shows on hover, keyboard focus or a tap, and stays inside the window. */
+.hint { display: inline-flex; align-items: center; justify-content: center; width: 16px; height: 16px; margin: 0 0 0 6px; border: 1px solid var(--muted); border-radius: 50%; font-size: 11px; font-weight: 400; line-height: 1; color: var(--muted); cursor: help; vertical-align: middle; flex: none; text-transform: none; letter-spacing: 0; }
+.hint:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
+.hint__tip { position: fixed; z-index: 1000; width: max-content; padding: 6px 8px; border-radius: 6px; background: #1f2937; color: #fff; font-size: 12px; font-weight: 400; line-height: 1.35; text-align: left; white-space: normal; box-shadow: 0 2px 8px rgba(0, 0, 0, 0.25); pointer-events: none; }
