@@ -36,3 +36,9 @@ This project includes or builds on the following third-party work.
    Licence: MIT
    Copyright (c) 2012-2014 Chris Pettitt
    Full text: node_modules/@dagrejs/dagre/LICENSE (shipped with the package).
+
+4. IBM Plex Sans and IBM Plex Mono (latin and latin-ext woff2 subsets, public/fonts/)
+   Licence: SIL Open Font License 1.1
+   Copyright © 2017 IBM Corp. with Reserved Font Name "Plex"
+   Self-hosted so the canvas app does not load fonts from Google's servers.
+   Licence text: https://openfontlicense.org/

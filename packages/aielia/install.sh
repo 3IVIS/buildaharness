@@ -256,6 +256,8 @@ main() {
   esac
   say ""
   say "Run: aielia        (updates later: aielia update)"
+  say ""
+  say "By using Aielia you agree to the Terms (https://myaielia.com/terms.html) and acknowledge the Privacy Policy (https://myaielia.com/privacy.html)."
 }
 
 main "$@"
