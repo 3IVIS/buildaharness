@@ -2011,6 +2011,21 @@ async function mainInner(argv: readonly string[]): Promise<void> {
     return
   }
 
+  // Terms notice, before either mode starts: the full-screen UI only mounts after runCli() returns, so a prompt
+  // raised inside runCli() could never be answered there. Plain readline on the real terminal does it once.
+  if (process.stdin.isTTY === true && process.stdout.isTTY === true) {
+    const rl = createInterface({ input: process.stdin, output: process.stdout })
+    try {
+      await maybeShowTermsNotice({
+        isInteractive: true,
+        ask: (question) => new Promise<string>((resolvePrompt) => rl.question(question, (answer) => resolvePrompt(answer.trim()))),
+        log: (line) => process.stdout.write(`${line}\n`),
+      })
+    } finally {
+      rl.close()
+    }
+  }
+
   const persisted = await defaultConfigStore.load()
   const { config } = resolveConfig(persisted, defaultEnvOverrides)
 
