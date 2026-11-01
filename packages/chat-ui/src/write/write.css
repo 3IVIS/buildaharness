@@ -195,8 +195,9 @@
 .write__toggle { display: block; margin-bottom: 8px; color: var(--muted); }
 .write__compose { display: grid; gap: 8px; }
 /* The same line the chat shows under its composer. */
+.write__disclaimer a { color: var(--accent); }
 .write__disclaimer { margin: 8px 0 0; font-size: 11px; line-height: 1.4; color: var(--muted); text-align: center; }
-.write .proxy-notice { margin: 4px 0 0; font-size: 11px; line-height: 1.4; color: var(--muted); text-align: center; }
+.write .proxy-notice { margin: 4px 0 0; font-size: 12px; line-height: 1.4; color: var(--muted); }
 .write .proxy-notice a { color: var(--accent); }
 .write__compose textarea { width: 100%; }
 .write__empty { color: var(--muted); }

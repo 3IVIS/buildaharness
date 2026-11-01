@@ -1,6 +1,6 @@
 import { AdjustBar, type ChatAction } from './AdjustBar'
 import { ModelPicker } from './ModelPicker'
-import { ProxyNotice } from '../components/ProxyNotice'
+import { PRIVACY_URL, TERMS_URL } from '@buildaharness/aielia'
 import { useEffect, useLayoutEffect, useRef, useState } from 'react'
 import { CLI_DEFAULT_LABEL, NAME_CLOSE, NAME_OPEN, modelLabel, checklistAt, elapsedText, stageSentence, workPlan, type WorkKind, type ResultLine } from '@buildaharness/aielia'
 import { ICON_PATHS, Icon, IconButton } from './icons'
@@ -175,8 +175,10 @@ export function ChatPane(p: Props): React.JSX.Element {
           <button type="button" className={`write__iconbtn write__send${p.progress && !p.progress.finishing ? ' is-working' : ''}`} aria-label="Send" title="Send" onClick={p.onSend} disabled={p.busy || !p.input.trim()}><Icon d={ICON_PATHS.write} /></button>
         </div>
       </div>
-      <p className="write__disclaimer">Alpha software. Aielia uses AI models and can make mistakes — verify anything important.</p>
-      <ProxyNotice />
+      <p className="write__disclaimer">
+        Aielia uses AI models and can make mistakes — verify anything important.{' '}
+        <a href={TERMS_URL} target="_blank" rel="noreferrer">Terms</a> · <a href={PRIVACY_URL} target="_blank" rel="noreferrer">Privacy</a>
+      </p>
     </section>
   )
 }

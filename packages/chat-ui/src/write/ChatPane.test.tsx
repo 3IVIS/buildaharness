@@ -101,6 +101,6 @@ describe('usage line', () => {
 describe('ChatPane disclaimer', () => {
   it('says under the composer that this is alpha software that can make mistakes, as the chat does', () => {
     render(<ChatPane {...base} busy={false} />)
-    expect(screen.getByText('Alpha software. Aielia uses AI models and can make mistakes — verify anything important.')).toBeInTheDocument()
+    expect(screen.getByText(/Aielia uses AI models and can make mistakes — verify anything important\./)).toBeInTheDocument()
   })
 })
