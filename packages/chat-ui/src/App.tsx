@@ -66,6 +66,8 @@ import { AskQuestionCard } from './components/AskQuestionCard'
 import { PlanVizPanel } from './components/PlanVizPanel'
 import { PlanApprovalCard } from './components/PlanApprovalCard'
 import { EscalationBanner } from './components/EscalationBanner'
+import { deleteChatData } from './delete-chat-data'
+import { CHAT_KEY } from './shared-settings'
 import { SettingsScreen } from './components/SettingsScreen'
 import { SetupWizard } from './components/SetupWizard'
 import { KeyNotice } from './components/KeyNotice'
@@ -582,6 +584,14 @@ export function App(): React.JSX.Element {
   function setPlanVizFullscreenPersisted(fullscreen: boolean): void {
     setPlanVizFullscreen(fullscreen)
     writePlanVizPref(PLAN_VIZ_FULLSCREEN_KEY, fullscreen)
+  }
+
+  /** Browser only: wipes everything the chat keeps in this browser, then reloads into a fresh start. */
+  async function handleDeleteAllData(): Promise<void> {
+    if (!window.confirm('Delete everything Aielia keeps in this browser? That is the conversation, what it remembers about you, your settings and your keys. Articles in Aielia Write are kept. This cannot be undone.')) return
+    try { await assistantRef.current?.clearSession(sessionIdRef.current) } catch { /* the databases are removed next anyway */ }
+    await deleteChatData({ localKeys: [CHAT_KEY, SESSION_ID_KEY, PLAN_VIZ_OPEN_KEY, PLAN_VIZ_FULLSCREEN_KEY] })
+    window.location.reload()
   }
 
   /** GUI equivalent of /clear — ends the conversation and resets every piece of derived UI state alongside it, so nothing shows stale data for the fresh session. */
@@ -1170,6 +1180,7 @@ export function App(): React.JSX.Element {
         sessionUsage={sessionUsage}
         healthChecks={healthChecks}
         spendCapLine={spendCapLine}
+        onDeleteAll={isTauri() ? undefined : () => void handleDeleteAllData()}
       />
     )
   }

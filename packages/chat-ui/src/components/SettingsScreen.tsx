@@ -1,3 +1,4 @@
+import { Hint } from './Hint'
 import { useRef, useState } from 'react'
 import {
   validateConfig,
@@ -71,17 +72,20 @@ interface Props {
   healthChecks: DoctorCheck[] | null
   /** The CLI's spend-cap status line (formatSpendCapStatus); undefined when no limit is set. */
   spendCapLine?: string
+  /** Browser only: removes everything the chat keeps in this browser (conversation, memory, settings and keys). Absent on desktop, where the data lives in files. */
+  onDeleteAll?: () => void
 }
 
 function isPinned(overriddenKeys: ReadonlySet<keyof AssistantConfig>, key: keyof AssistantConfig): boolean {
   return overriddenKeys.has(key)
 }
 
-function FieldRow({ label, pinnedBy, children }: { label: string; pinnedBy?: string; children: React.ReactNode }): React.JSX.Element {
+function FieldRow({ label, pinnedBy, hint, children }: { label: string; pinnedBy?: string; hint?: string; children: React.ReactNode }): React.JSX.Element {
   return (
     <label className="settings__field">
       <span className="settings__field-label">
         {label}
+        {hint ? <Hint text={hint} /> : null}
         {pinnedBy ? <span className="settings__pinned"> (pinned by {pinnedBy})</span> : null}
       </span>
       {children}
@@ -163,6 +167,7 @@ export function SettingsScreen({
   sessionUsage,
   healthChecks,
   spendCapLine,
+  onDeleteAll,
 }: Props): React.JSX.Element {
   const [form, setForm] = useState<AssistantConfig>(config)
   const [error, setError] = useState<string | null>(null)
@@ -238,7 +243,7 @@ export function SettingsScreen({
       <div className="settings__body">
         <section className="settings__section">
           <h2>Provider</h2>
-          <FieldRow label="LLM backend" pinnedBy={pinned('llmBackend') ? ENV_VAR_FOR_CONFIG_KEY.llmBackend : undefined}>
+          <FieldRow hint="The AI service that answers you. Direct options use your own key from that provider." label="LLM backend" pinnedBy={pinned('llmBackend') ? ENV_VAR_FOR_CONFIG_KEY.llmBackend : undefined}>
             <select
               aria-label="LLM backend"
               value={form.llmBackend}
@@ -256,10 +261,10 @@ export function SettingsScreen({
 
           {form.llmBackend === 'proxy' && (
             <>
-              <FieldRow label="Proxy URL" pinnedBy={pinned('proxyUrl') ? ENV_VAR_FOR_CONFIG_KEY.proxyUrl : undefined}>
+              <FieldRow hint="The address of a model proxy you run yourself (a self-hosted @buildaharness/proxy)." label="Proxy URL" pinnedBy={pinned('proxyUrl') ? ENV_VAR_FOR_CONFIG_KEY.proxyUrl : undefined}>
                 <input value={form.proxyUrl} disabled={disabled || pinned('proxyUrl')} onChange={(e) => set('proxyUrl', e.target.value)} />
               </FieldRow>
-              <FieldRow label="Auth token" pinnedBy={pinned('authToken') ? ENV_VAR_FOR_CONFIG_KEY.authToken : undefined}>
+              <FieldRow hint="The access token your proxy asks for, if it asks for one." label="Auth token" pinnedBy={pinned('authToken') ? ENV_VAR_FOR_CONFIG_KEY.authToken : undefined}>
                 <input type="password" value={form.authToken} disabled={disabled || pinned('authToken')} onChange={(e) => set('authToken', e.target.value)} />
               </FieldRow>
             </>
@@ -267,7 +272,7 @@ export function SettingsScreen({
 
           {DIRECT_API_BACKENDS.has(form.llmBackend) && (
             <>
-              <FieldRow label="API key" pinnedBy={pinned('apiKey') ? ENV_VAR_FOR_CONFIG_KEY.apiKey : undefined}>
+              <FieldRow hint="Your key from the provider. It is sent only to that provider." label="API key" pinnedBy={pinned('apiKey') ? ENV_VAR_FOR_CONFIG_KEY.apiKey : undefined}>
                 <input
                   type="password"
                   value={form.apiKey ?? ''}
@@ -296,7 +301,7 @@ export function SettingsScreen({
             </>
           )}
 
-          <FieldRow label="Model" pinnedBy={pinned('model') ? ENV_VAR_FOR_CONFIG_KEY.model : undefined}>
+          <FieldRow hint="Which model answers. Leave blank for the provider's default." label="Model" pinnedBy={pinned('model') ? ENV_VAR_FOR_CONFIG_KEY.model : undefined}>
             <input
               value={form.model ?? ''}
               disabled={disabled || pinned('model')}
@@ -308,7 +313,7 @@ export function SettingsScreen({
 
         <section className="settings__section">
           <h2>Web search</h2>
-          <FieldRow label="Enable web search / fetch">
+          <FieldRow hint="Lets Aielia search the web and read pages you point it to." label="Enable web search / fetch">
             <input type="checkbox" checked={form.enableWeb} disabled={disabled} onChange={(e) => set('enableWeb', e.target.checked)} />
           </FieldRow>
           {form.enableWeb && (
@@ -317,7 +322,7 @@ export function SettingsScreen({
                   direct path there regardless of this field) — only worth surfacing in the browser
                   build, where it actually picks which HTTP path web_search/fetch_url take. */}
               {!isDesktop && (
-                <FieldRow label="Backend">
+                <FieldRow hint="How searches and page reads are made. A browser tab needs the proxy; the desktop app reads pages directly." label="Backend">
                   <select
                     aria-label="Web backend"
                     value={form.webBackend}
@@ -343,7 +348,7 @@ export function SettingsScreen({
                   your Brave API key below, if set, is sent with each search request and never stored on the proxy.
                 </p>
               )}
-              <FieldRow label="Brave API key">
+              <FieldRow hint="Your own Brave Search key. It is sent with each search and never stored by the proxy." label="Brave API key">
                 <input
                   type="password"
                   value={form.braveApiKey ?? ''}
@@ -355,9 +360,11 @@ export function SettingsScreen({
           )}
         </section>
 
+        {/* A browser tab cannot run commands, so the Shell controls only exist in the desktop app. */}
+        {isDesktop && (
         <section className="settings__section">
           <h2>Shell</h2>
-          <FieldRow label="Enable shell commands">
+          <FieldRow hint="Lets Aielia run terminal commands on this computer, each one only after you approve it." label="Enable shell commands">
             <input type="checkbox" checked={form.enableShell} disabled={disabled} onChange={(e) => set('enableShell', e.target.checked)} />
           </FieldRow>
           <p className="settings__info">
@@ -366,7 +373,7 @@ export function SettingsScreen({
               : 'Each command asks for your approval before it runs.'}
           </p>
           {form.enableShell && (
-            <FieldRow label="Timeout (milliseconds)">
+            <FieldRow hint="A command that runs longer than this is stopped." label="Timeout (milliseconds)">
               <input
                 type="number"
                 min={1}
@@ -385,10 +392,11 @@ export function SettingsScreen({
             </FieldRow>
           )}
         </section>
+        )}
 
         <section className="settings__section">
           <h2>Appearance</h2>
-          <FieldRow label="Theme">
+          <FieldRow hint="Light, dark, or follow your device." label="Theme">
             <select
               aria-label="Theme"
               value={form.theme ?? 'system'}
@@ -404,7 +412,7 @@ export function SettingsScreen({
 
         <section className="settings__section">
           <h2>Advanced</h2>
-          <FieldRow label="⚠ Dangerously skip permissions">
+          <FieldRow hint="Skips every “ask first” step. Only turn this on if you trust everything you send." label="⚠ Dangerously skip permissions">
             <input
               type="checkbox"
               checked={form.dangerouslySkipPermissions}
@@ -423,7 +431,7 @@ export function SettingsScreen({
 
         <section className="settings__section">
           <h2>Limits</h2>
-          <FieldRow label="Session cost limit (USD)">
+          <FieldRow hint="Stops taking new messages once this session's estimated cost reaches the limit." label="Session cost limit (USD)">
             <input
               type="number"
               min={0}
@@ -438,7 +446,7 @@ export function SettingsScreen({
               }}
             />
           </FieldRow>
-          <FieldRow label="Session call limit">
+          <FieldRow hint="Stops taking new messages after this many model calls in one session." label="Session call limit">
             <input
               type="number"
               min={1}
@@ -454,7 +462,7 @@ export function SettingsScreen({
             />
           </FieldRow>
           <p className="settings__info">With a limit set, Aielia stops taking new messages once this session reaches it. Empty means no limit.</p>
-          <FieldRow label="Ask before guessing (ambiguity guard)">
+          <FieldRow hint="When a request is unclear, Aielia asks a question instead of guessing." label="Ask before guessing (ambiguity guard)">
             <select
               aria-label="Ambiguity guard"
               value={form.ambiguityGuardMode ?? 'default'}
@@ -549,6 +557,15 @@ export function SettingsScreen({
           <div className="settings__field-label">Health</div>
           <HealthList checks={healthChecks} />
         </section>
+
+        {onDeleteAll && (
+          <section className="settings__section">
+            <h2>Your data</h2>
+            <p className="settings__info">Everything Aielia keeps lives in this browser: the conversation, what it remembers about you, your settings and your keys.</p>
+            <button type="button" className="settings__danger" onClick={onDeleteAll} disabled={disabled}>Delete all my data</button>
+            <p className="settings__hint">Removes it all from this browser and reloads the page. Articles in Aielia Write are kept. This cannot be undone.</p>
+          </section>
+        )}
 
         {error && <div className="settings__error" role="alert" ref={errorRef}>{error}</div>}
         {busy && <p className="settings__info">Aielia is still replying. Changes are saved as soon as the reply finishes.</p>}

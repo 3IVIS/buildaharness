@@ -134,7 +134,6 @@
 .write__dockform { display: flex; flex-wrap: wrap; gap: 6px; align-items: flex-start; }
 .write__dockform textarea { flex: 1 1 180px; min-width: 0; min-height: 40px; resize: vertical; }
 .write__dockform select { flex: none; }
-.write__hint { margin: 6px 0 0; font-size: 0.8rem; }
 .write__filepick { position: relative; display: inline-flex; align-items: center; min-height: 40px; padding: 0 4px; color: var(--accent); font-size: 0.9rem; cursor: pointer; text-decoration: underline; }
 .write__filepick input { position: absolute; inset: 0; opacity: 0; cursor: pointer; width: 100%; }
 .write__dropzone { margin-top: 8px; padding: 8px; border: 1px dashed var(--border); border-radius: 8px; }
@@ -320,9 +319,6 @@
 .write__chip { display: inline-flex; align-items: center; gap: 4px; padding: 2px 8px; border: 1px solid var(--border); border-radius: 999px; font-size: 0.85rem; background: var(--surface, transparent); }
 .write__chipx { border: none; background: none; cursor: pointer; padding: 0 2px; color: var(--muted); font-size: 1rem; line-height: 1; }
 
-/* "?" hints: the explanation shows on hover or focus */
-.write__hint { display: inline-flex; align-items: center; justify-content: center; width: 16px; height: 16px; margin-left: 6px; border: 1px solid var(--muted); border-radius: 50%; font-size: 11px; line-height: 1; color: var(--muted); cursor: help; position: relative; vertical-align: middle; flex: none; }
-.write__hint:hover::after, .write__hint:focus::after { content: attr(data-tip); position: fixed; z-index: 30; margin: 22px 0 0 -6px; width: max-content; max-width: 240px; padding: 6px 8px; border-radius: 6px; background: #1f2937; color: #fff; font-size: 12px; font-weight: 400; line-height: 1.35; text-align: left; white-space: normal; box-shadow: 0 2px 8px rgba(0, 0, 0, 0.25); }
 
 /* Settings: a checkbox sits in line with its words; the connection buttons do not wrap */
 .write__form label:has(> input[type='checkbox']) { display: flex; align-items: center; gap: 8px; }

@@ -1120,6 +1120,33 @@ body {
   margin-bottom: 12px;
 }
 
+.settings__field:has(> input[type='checkbox']) {
+  flex-direction: row;
+  align-items: center;
+  gap: 8px;
+}
+
+.settings__field:has(> input[type='checkbox']) > input[type='checkbox'] {
+  order: -1;
+  width: auto;
+  flex: none;
+  margin: 0;
+}
+
+.settings__danger {
+  padding: 8px 14px;
+  border: 1px solid var(--danger, #b42318);
+  border-radius: 6px;
+  background: transparent;
+  color: var(--danger, #b42318);
+  cursor: pointer;
+}
+
+.settings__danger:disabled {
+  opacity: 0.5;
+  cursor: default;
+}
+
 .settings__field-label {
   font-size: 13px;
 }
@@ -1858,3 +1885,7 @@ body {
 .terms-gate__small { color: var(--muted); font-size: 12.5px; }
 .proxy-notice { margin: 8px 20px 0; color: var(--muted); font-size: 12.5px; line-height: 1.45; }
 .proxy-notice a { color: var(--accent); }
+
+.settings__danger + .settings__hint {
+  margin-top: 8px;
+}
