@@ -261,4 +261,6 @@ import '@buildaharness/canvas/styles.css'
 
 Apache 2.0 — 请参阅 [LICENSE](LICENSE)。
 
+Aielia 应用及 myaielia.com 网站适用[使用条款](https://myaielia.com/terms.html)和[隐私政策](https://myaielia.com/privacy.html)。
+
 </div>
