@@ -9,6 +9,9 @@ import { clearConnection, loadConnection, saveConnection, toAssistantConfig, web
 import { markSettingsShared, writeConnectionFromChat } from '../shared-settings'
 import { createWriteServices, type WriteServices } from './write-services'
 import { appSwitchHandler } from '../app-switch'
+import { AppSwitcher } from '../components/AppSwitcher'
+import { ProxyNotice } from '../components/ProxyNotice'
+import { PRIVACY_URL, TERMS_URL } from '@buildaharness/aielia'
 
 /** Write's first start: copies the chat page's connection when there is one (and saves it, as if the writer had entered it). */
 function seedFromChat(): WriteConnection | undefined {
@@ -56,10 +59,18 @@ function Root(): React.JSX.Element {
 /** First visit: just how to reach a model. Everything else is in Settings, when it is wanted. */
 function FirstRun({ onSave }: { onSave: (c: WriteConnection) => void }): React.JSX.Element {
   const [draft] = useState<WriteConnection>({ provider: 'anthropic', apiKey: '' })
+  // The same Chat/Write drop-down as inside the app, so a first-time visitor can still reach Chat from here.
+  const appSwitch = appSwitchHandler('write')
   return (
     <div style={{ maxWidth: 480, margin: '10vh auto', padding: 16, font: '16px system-ui' }}>
-      <h1>Aielia Write</h1>
+      <h1>Aielia {appSwitch ? <AppSwitcher current="write" onSelect={appSwitch} /> : 'Write'}</h1>
       <DialogProvider><ConnectionSettings value={draft} onSave={onSave} showWeb={false} /></DialogProvider>
+      <div style={{ marginTop: 12, fontSize: 12.5, lineHeight: 1.45, color: '#555' }}>
+        <ProxyNotice bare />
+        <p style={{ margin: '8px 0 0' }}>
+          By using Aielia you agree to the <a href={TERMS_URL} target="_blank" rel="noreferrer">Terms</a> and acknowledge the <a href={PRIVACY_URL} target="_blank" rel="noreferrer">Privacy Policy</a>.
+        </p>
+      </div>
     </div>
   )
 }

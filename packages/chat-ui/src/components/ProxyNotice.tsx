@@ -6,12 +6,18 @@ export function usesHostedProxy(env: ImportMetaEnv = import.meta.env): boolean {
 }
 
 /** One line on the hosted pages saying what the proxy logs. Renders nothing on builds that don't use it. */
-export function ProxyNotice({ env }: { env?: ImportMetaEnv }): React.JSX.Element | null {
+/** `bare` drops the links and the page margin, for a screen that already carries its own Terms and Privacy line. */
+export function ProxyNotice({ env, bare = false }: { env?: ImportMetaEnv; bare?: boolean }): React.JSX.Element | null {
   if (!usesHostedProxy(env)) return null
   return (
-    <p className="proxy-notice">
-      Searches and page fetches from this page pass through the 3IVIS proxy. It logs only the time, route, destination host, status and size; never your IP or what you searched.{' '}
-      <a href={TERMS_URL} target="_blank" rel="noreferrer">Terms</a> · <a href={PRIVACY_URL} target="_blank" rel="noreferrer">Privacy</a>
+    <p className="proxy-notice" style={bare ? { margin: 0 } : undefined}>
+      Searches and page fetches from this page pass through the 3IVIS proxy. It logs only the time, route, destination host, status and size; never your IP or what you searched.
+      {!bare && (
+        <>
+          {' '}
+          <a href={TERMS_URL} target="_blank" rel="noreferrer">Terms</a> · <a href={PRIVACY_URL} target="_blank" rel="noreferrer">Privacy</a>
+        </>
+      )}
     </p>
   )
 }
