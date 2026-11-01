@@ -236,3 +236,6 @@ export type { IssueBatch, IssueItem, IssueCategory } from './writer/article-issu
 export { workPlan, checklistAt, stageSentence, elapsedText, changedRange, litRange, claimResultLine, recentResults } from './writer/work-progress.js'
 export type { WorkKind, WorkPlan, StepState, ChecklistItem, ResultLine, ResultTone } from './writer/work-progress.js'
 export { modelFailureHint, DEFAULT_MODEL_HINT, CLAUDE_SIGN_IN_HINT } from './writer/model-failure-hint.js'
+
+// First-run terms notice wording + version, shared with chat-ui's desktop gate — browser-safe.
+export { TERMS_VERSION, TERMS_URL, PRIVACY_URL, DESKTOP_TERMS_BODY } from './terms-text.js'
