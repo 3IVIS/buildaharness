@@ -95,6 +95,8 @@ for (const shell of SHELLS) describe.skipIf(!supported)(`install.sh under ${shel
     expect(installedVersion()).toBe('0.4.0')
     expect(statSync(target()).mode & 0o111).not.toBe(0)
     expect(r.out).toContain('is not on your PATH')
+    expect(r.out).toContain('https://myaielia.com/terms.html')
+    expect(r.out).toContain('https://myaielia.com/privacy.html')
   })
 
   it('omits the PATH hint when the install dir is already on PATH', async () => {

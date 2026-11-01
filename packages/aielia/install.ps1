@@ -165,6 +165,8 @@ function Install-Aielia {
   }
   Write-Host ''
   Write-Host 'Run: aielia        (updates later: aielia update)'
+  Write-Host ''
+  Write-Host 'By using Aielia you agree to the Terms (https://myaielia.com/terms.html) and acknowledge the Privacy Policy (https://myaielia.com/privacy.html).'
 }
 
 Install-Aielia
