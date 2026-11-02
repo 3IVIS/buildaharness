@@ -4,7 +4,7 @@
  * updated" dates on myaielia.com's Terms and Privacy Policy; bump it whenever either changes in a way
  * people must re-acknowledge, and every surface then asks again once.
  */
-export const TERMS_VERSION = '2026-11-01'
+export const TERMS_VERSION = '2026-11-02'
 export const TERMS_URL = 'https://myaielia.com/terms.html'
 export const PRIVACY_URL = 'https://myaielia.com/privacy.html'
 
