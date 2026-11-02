@@ -1,6 +1,8 @@
 import { summarizeSectionChange, type SectionChange } from './article-change-summary.js'
 import type { ILLMClient, TokenUsage } from '@buildaharness/runtime'
 import { TurnAbortedError, stoppableLlmClient } from '../turn-abort.js'
+import { AI_PROVENANCE_FILE } from '../terms-text.js'
+import { CLI_VERSION } from '../version.js'
 import { dropLinksToMissingClaims, extractClaims, type ExtractionResult } from './article-claims.js'
 import { serializeArticle, loadArticleFolder, type ArticleBundle, type ArticleFolder } from './article-folder.js'
 import { createArticleMeta, type ArticleMeta, type Claim, type Idea, type Link, type Source } from './article-model.js'
@@ -1320,7 +1322,11 @@ export class ArticleService {
   }
 
   async exportArticle(id: string): Promise<ArticleFolder> {
-    return serializeArticle(await this.get(id))
+    const folder = serializeArticle(await this.get(id))
+    // Machine-readable mark that the text was generated in part by an AI system (EU AI Act Art. 50(2)). A separate file, so
+    // the article text and article.meta.json are untouched and importing ignores it.
+    folder[AI_PROVENANCE_FILE] = JSON.stringify({ aiGenerated: true, generator: 'Aielia Write', generatorVersion: CLI_VERSION, exportedAt: new Date().toISOString() }, null, 2)
+    return folder
   }
 
   /** Imports a folder under its own id. Refuses a folder it cannot read completely, and refuses to overwrite an existing article. */

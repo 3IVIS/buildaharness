@@ -61,6 +61,7 @@ import {  } from './goal-graph-suggest-flag.js'
 import type { NextStepSuggestion } from './next-step-proposer.js'
 import { maybeRunFirstRunSetup } from './first-run.js'
 import { maybeShowTermsNotice } from './terms-notice.js'
+import { AI_DISCLOSURE } from './terms-text.js'
 import { testApiKey, type KeyedBackend, type KeyTestResult } from './provider-setup.js'
 import { DEFAULT_TUI_MODE, shouldLaunchTuiApp } from './tui-mode-flag.js'
 import { ICONS, toolStepIcon, PLAN_LINE_PREFIX } from './cli-icons.js'
@@ -441,7 +442,7 @@ export async function runCli(options: RunCliOptions = {}): Promise<CliInstance> 
       `  backend   ${backendLine}${capabilityRow}${undoBanner}${totalUsageRow}${dangerBanner}${nonInteractiveBanner}`,
       ' ',
       '  /help commands   /config settings   Ctrl+C exit',
-      '  Alpha software: it can make mistakes, so verify anything important.',
+      `  ${AI_DISCLOSURE} (Alpha software.)`,
       ' ',
     ].join('\n'),
   )

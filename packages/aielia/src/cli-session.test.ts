@@ -314,7 +314,7 @@ describe('formatTranscriptMarkdown', () => {
       { role: 'user', content: 'Hello there' },
       { role: 'assistant', content: 'Hi! How can I help?' },
     ]
-    expect(formatTranscriptMarkdown(transcript)).toBe('**You:** Hello there\n\n**Assistant:** Hi! How can I help?')
+    expect(formatTranscriptMarkdown(transcript)).toBe('<!-- Generated in part by an AI assistant (Aielia, https://myaielia.com). -->\n\n**You:** Hello there\n\n**Assistant:** Hi! How can I help?')
   })
 
   it('filters out non-user/assistant roles defensively', () => {
@@ -322,7 +322,7 @@ describe('formatTranscriptMarkdown', () => {
       { role: 'system', content: 'system prompt' },
       { role: 'user', content: 'hi' },
     ]
-    expect(formatTranscriptMarkdown(transcript)).toBe('**You:** hi')
+    expect(formatTranscriptMarkdown(transcript)).toBe('<!-- Generated in part by an AI assistant (Aielia, https://myaielia.com). -->\n\n**You:** hi')
   })
 })
 

@@ -1,4 +1,5 @@
 import type { NextStepSuggestion } from './next-step-proposer.js'
+import { AI_PROVENANCE_COMMENT } from './terms-text.js'
 import type { ChatMessage, TokenUsage } from '@buildaharness/runtime'
 import type { AssistantConfig } from './config.js'
 import { formatConfigListing } from './cli-config.js'
@@ -335,10 +336,12 @@ export function formatUndoLogListing(entries: UndoLogEntry[]): string {
 
 /** Renders a transcript as markdown for /export — "You:"/"Assistant:" turns, oldest first. */
 export function formatTranscriptMarkdown(transcript: ChatMessage[]): string {
-  return transcript
+  const body = transcript
     .filter((m) => m.role === 'user' || m.role === 'assistant')
     .map((m) => `**${m.role === 'user' ? 'You' : 'Assistant'}:** ${m.content}`)
     .join('\n\n')
+  // An empty transcript stays empty; otherwise the first line marks the file as AI-generated (EU AI Act Art. 50(2)).
+  return body === '' ? body : `${AI_PROVENANCE_COMMENT}\n\n${body}`
 }
 
 /** Default /export filename when none is given — mirrors Claude Code's own /export default-name convention. Colons/dots are filesystem-unsafe on some platforms, so the ISO timestamp is sanitized. */

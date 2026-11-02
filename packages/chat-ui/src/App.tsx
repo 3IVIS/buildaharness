@@ -50,6 +50,7 @@ import {
   planToSnapshot,
   TERMS_URL,
   PRIVACY_URL,
+  AI_DISCLOSURE,
 } from '@buildaharness/aielia'
 import {
   FileSystemAdapter,
@@ -1366,7 +1367,7 @@ export function App(): React.JSX.Element {
         )}
       </form>
       <div className="app__composer-disclaimer">
-        Aielia uses AI models and can make mistakes — verify anything important.{' '}
+        {AI_DISCLOSURE}{' '}
         <a href={TERMS_URL} target="_blank" rel="noreferrer">Terms</a> · <a href={PRIVACY_URL} target="_blank" rel="noreferrer">Privacy</a>
       </div>
     </div>
