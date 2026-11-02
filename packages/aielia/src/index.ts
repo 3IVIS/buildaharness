@@ -238,4 +238,4 @@ export type { WorkKind, WorkPlan, StepState, ChecklistItem, ResultLine, ResultTo
 export { modelFailureHint, DEFAULT_MODEL_HINT, CLAUDE_SIGN_IN_HINT } from './writer/model-failure-hint.js'
 
 // First-run terms notice wording + version, shared with chat-ui's desktop gate — browser-safe.
-export { TERMS_VERSION, TERMS_URL, PRIVACY_URL, DESKTOP_TERMS_BODY } from './terms-text.js'
+export { TERMS_VERSION, TERMS_URL, PRIVACY_URL, DESKTOP_TERMS_BODY, AI_DISCLOSURE, AI_PROVENANCE_FILE, AI_PROVENANCE_COMMENT } from './terms-text.js'

@@ -8,9 +8,20 @@ export const TERMS_VERSION = '2026-11-02'
 export const TERMS_URL = 'https://myaielia.com/terms.html'
 export const PRIVACY_URL = 'https://myaielia.com/privacy.html'
 
+/**
+ * EU AI Act Art. 50(1): people must be told, clearly and from the first interaction, that they are dealing with an AI
+ * system. The Commission reads the "obvious" exception restrictively, so every surface states it plainly.
+ */
+export const AI_DISCLOSURE = 'You are talking to an AI assistant, not a person. It can make mistakes, so verify anything important.'
+
+/** Machine-readable provenance written next to exported AI-generated work (Art. 50(2)). */
+export const AI_PROVENANCE_FILE = 'ai-provenance.json'
+export const AI_PROVENANCE_COMMENT = '<!-- Generated in part by an AI assistant (Aielia, https://myaielia.com). -->'
+
 /** Printed by the CLI before the provider setup. */
 export const CLI_TERMS_LINES: readonly string[] = [
   'Before you start',
+  `  ${AI_DISCLOSURE}`,
   '  Aielia runs on your computer. Your conversations and files stay here, except what is sent to the',
   '  AI provider you choose (using your own API key).',
   '  Aielia also checks myaielia.com once a day for a new version (a plain request; no account, no',
@@ -23,4 +34,4 @@ export const CLI_TERMS_PROMPT = 'Press Enter to accept the Terms and continue, o
 
 /** Shown in the desktop app's first-launch dialog. */
 export const DESKTOP_TERMS_BODY =
-  'Aielia runs on your computer. What you type and the files you let it read go to the AI provider you choose, using your own API key, and nowhere else. Web search and page fetches go straight from this app to the services you configure.'
+  `${AI_DISCLOSURE} Aielia runs on your computer. What you type and the files you let it read go to the AI provider you choose, using your own API key, and nowhere else. Web search and page fetches go straight from this app to the services you configure.`

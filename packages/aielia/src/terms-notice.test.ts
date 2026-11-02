@@ -3,7 +3,7 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { describe, expect, it } from 'vitest'
 import { hasAcceptedTerms, maybeShowTermsNotice } from './terms-notice.js'
-import { PRIVACY_URL, TERMS_URL, TERMS_VERSION } from './terms-text.js'
+import { AI_DISCLOSURE, CLI_TERMS_LINES, DESKTOP_TERMS_BODY, PRIVACY_URL, TERMS_URL, TERMS_VERSION } from './terms-text.js'
 
 const fresh = (): string => mkdtempSync(join(tmpdir(), 'terms-'))
 
@@ -56,5 +56,13 @@ describe('maybeShowTermsNotice', () => {
     writeFileSync(blocker, 'x')
     const shown = await maybeShowTermsNotice({ isInteractive: true, dataDir: join(blocker, 'sub'), log: () => {}, ask: async () => '' })
     expect(shown).toBe(true)
+  })
+})
+
+describe('AI disclosure (EU AI Act Art. 50(1))', () => {
+  it('is stated plainly in the CLI first-run notice and the desktop dialog', () => {
+    expect(AI_DISCLOSURE).toMatch(/AI assistant, not a person/)
+    expect(CLI_TERMS_LINES.join('\n')).toContain(AI_DISCLOSURE)
+    expect(DESKTOP_TERMS_BODY).toContain(AI_DISCLOSURE)
   })
 })

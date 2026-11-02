@@ -2,7 +2,7 @@ import { AdjustBar, type ChatAction } from './AdjustBar'
 import { ModelPicker } from './ModelPicker'
 import { PRIVACY_URL, TERMS_URL } from '@buildaharness/aielia'
 import { useEffect, useLayoutEffect, useRef, useState } from 'react'
-import { CLI_DEFAULT_LABEL, NAME_CLOSE, NAME_OPEN, modelLabel, checklistAt, elapsedText, stageSentence, workPlan, type WorkKind, type ResultLine } from '@buildaharness/aielia'
+import { AI_DISCLOSURE, CLI_DEFAULT_LABEL, NAME_CLOSE, NAME_OPEN, modelLabel, checklistAt, elapsedText, stageSentence, workPlan, type WorkKind, type ResultLine } from '@buildaharness/aielia'
 import { ICON_PATHS, Icon, IconButton } from './icons'
 
 /** A background model call as the chat shows it: its kind (which checklist), the stage it is at, and a finer step inside the stage. */
@@ -176,7 +176,7 @@ export function ChatPane(p: Props): React.JSX.Element {
         </div>
       </div>
       <p className="write__disclaimer">
-        Aielia uses AI models and can make mistakes — verify anything important.{' '}
+        {AI_DISCLOSURE}{' '}
         <a href={TERMS_URL} target="_blank" rel="noreferrer">Terms</a> · <a href={PRIVACY_URL} target="_blank" rel="noreferrer">Privacy</a>
       </p>
     </section>

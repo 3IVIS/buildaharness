@@ -172,6 +172,8 @@ describe('ArticleService', () => {
     const id = await s.create('Post', MD)
     await s.addSource(id, { kind: 'upload', passage: 'a passage' })
     const folder = await s.exportArticle(id)
+    // Machine-readable AI mark (EU AI Act Art. 50(2)) travels with the export; importing ignores it.
+    expect(JSON.parse(folder['ai-provenance.json'])).toMatchObject({ aiGenerated: true, generator: 'Aielia Write' })
     const other = svc().svc
     expect(await other.importArticle(folder)).toEqual({ ok: true, id })
     expect((await other.get(id)).meta.sources[0].passage).toBe('a passage')
