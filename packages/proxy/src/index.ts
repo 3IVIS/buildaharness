@@ -1,6 +1,6 @@
 import { Hono } from 'hono'
 import { cors } from 'hono/cors'
-import { createAuthMiddleware, secretsMatch, signToken } from './auth'
+import { createAuthMiddleware, createWebAuthMiddleware, secretsMatch, signToken } from './auth'
 import { forwardToProvider } from './forward'
 import { handleWebSearch } from './web-search'
 import { handleWebFetch } from './web-fetch'
@@ -10,6 +10,8 @@ import { HOUR_MS, authFailCounter, clientIp } from './rate-limit'
 
 type Bindings = {
   ALLOWED_ORIGIN: string
+  /** Browser origins (comma-separated, exact) whose pages may call /web/* without a token. Unset: every /web/* call needs a token. */
+  ANONYMOUS_WEB_ORIGINS?: string
   ANTHROPIC_API_KEY: string
   OPENAI_API_KEY: string
   PROXY_SECRET: string
@@ -69,15 +71,15 @@ app.post('/llm/chat', createAuthMiddleware(), async (c) => {
   return forwardToProvider(c)
 })
 
-app.post('/web/search', createAuthMiddleware(), createWebQuotaMiddleware(), async (c) => {
+app.post('/web/search', createWebAuthMiddleware(), createWebQuotaMiddleware(), async (c) => {
   return handleWebSearch(c)
 })
 
-app.post('/web/fetch', createAuthMiddleware(), createWebQuotaMiddleware(), async (c) => {
+app.post('/web/fetch', createWebAuthMiddleware(), createWebQuotaMiddleware(), async (c) => {
   return handleWebFetch(c)
 })
 
-app.post('/web/grant', createAuthMiddleware(), createWebQuotaMiddleware(), async (c) => {
+app.post('/web/grant', createWebAuthMiddleware(), createWebQuotaMiddleware(), async (c) => {
   return handleWebGrant(c)
 })
 
