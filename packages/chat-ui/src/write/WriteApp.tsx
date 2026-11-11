@@ -1092,7 +1092,7 @@ function WriteAppBody({ services, connection, onDeleted, appSwitch, showPublish 
       }
       // A request to look for sources on the web for the claims is the menu's "Search the web for sources and verify the claims", not a count of the claims.
       if (read.intent === 'verify') {
-        if (!services.canSearch) { sayInChat('Web search is not set up here, so I cannot look for sources online. You can attach sources to the claims yourself, or set up web search in Settings.'); return }
+        if (!services.canSearch) { sayInChat('Web search is not set up here, so I cannot look for sources online. It needs a Brave search key and a page proxy address, both in Settings under "Web pages and sources". Until then you can attach a repository in the chat pane, or add sources to the claims yourself.'); return }
         void flushDraft().then(() => verifyFromChat(false, null))
         return
       }
