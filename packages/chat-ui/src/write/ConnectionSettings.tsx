@@ -1,4 +1,5 @@
 import { useState } from 'react'
+import { SETUP_GUIDES } from '@buildaharness/aielia'
 import { useDialogs } from './dialogs'
 import { Hint } from './Hint'
 import type { WriteConnection } from './write-config'
@@ -29,6 +30,9 @@ export function ConnectionSettings({ value, onSave, onForget, showWeb = true }: 
           <option value="proxy">A proxy I run (self-hosted)</option>
         </select>
       </label>
+      {draft.provider === 'openrouter' && (
+        <p className="write__muted">Need an OpenRouter key? <a href={SETUP_GUIDES.openrouter.url} target="_blank" rel="noreferrer">Step-by-step guide, with a spending limit</a></p>
+      )}
       {draft.provider === 'proxy' ? (
         <>
           <label>Model proxy<Hint text="Model calls go to a proxy you run, for example one on this computer. Your key, or your Claude login, stays on that machine and never reaches this page." />
@@ -57,6 +61,7 @@ export function ConnectionSettings({ value, onSave, onForget, showWeb = true }: 
         <label>Search key<Hint text="A Brave Search key, used to look for sources for a claim. Kept only in this browser." />
           <input aria-label="Search key" type="password" autoComplete="off" value={draft.searchKey ?? ''} onChange={(e) => set({ searchKey: e.target.value })} />
         </label>
+        <p className="write__muted">Need a Brave Search key? <a href={SETUP_GUIDES.braveSearch.url} target="_blank" rel="noreferrer">Step-by-step guide, with a monthly spending limit</a></p>
       </details>}
       <div className="write__rowacts">
         <button type="button" className="write__primary" disabled={!dirty || (draft.provider === 'proxy' ? !draft.modelUrl?.trim() : !draft.apiKey.trim())} onClick={() => onSave(draft)}>Save connection</button>

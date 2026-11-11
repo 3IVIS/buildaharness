@@ -95,6 +95,10 @@ export async function maybeRunFirstRunSetup(deps: FirstRunDeps): Promise<Partial
     picked.safety.steps.forEach((step, i) => log(`     ${i + 1}. ${step}`))
     log(`     (${picked.safety.urlLabel})`)
   }
+  if (picked.guide) {
+    log('')
+    log(`  Want every step spelled out, with the spending limit? See the step-by-step guide: ${picked.guide.label}`)
+  }
   log('')
   log(`The key starts with "${picked.keyPrefix}". Paste it below when you have it.`)
   log('')

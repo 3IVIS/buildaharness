@@ -1,3 +1,5 @@
+import { SETUP_GUIDES } from '@buildaharness/aielia'
+
 interface Props {
   /** Opens the key setup (the same wizard first-run uses). */
   onAddKey: () => void
@@ -14,7 +16,8 @@ export function KeyNotice({ onAddKey }: Props): React.JSX.Element {
       <div className="key-notice__text">
         <strong>Bring your own AI key to chat.</strong>
         <span>
-          Aielia has no account of its own. Add a key from Anthropic, OpenAI or OpenRouter to start; it stays in this browser.
+          Aielia has no account of its own. Add a key from Anthropic, OpenAI or OpenRouter to start; it stays in this browser.{' '}
+          <a href={SETUP_GUIDES.openrouter.url} target="_blank" rel="noopener noreferrer">New to this? Step-by-step OpenRouter guide</a>
         </span>
       </div>
       <button type="button" className="key-notice__button" onClick={onAddKey}>Add your key</button>

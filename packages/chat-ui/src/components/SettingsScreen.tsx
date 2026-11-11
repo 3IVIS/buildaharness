@@ -4,6 +4,7 @@ import {
   validateConfig,
   ConfigValidationError,
   CONFIG_KEYS,
+  SETUP_GUIDES,
   formatMemorySummary,
   LAYER_SETTINGS,
   isToggleable,
@@ -377,6 +378,10 @@ export function SettingsScreen({
                   onChange={(e) => set('braveApiKey', e.target.value || undefined)}
                 />
               </FieldRow>
+              <p className="settings__hint">
+                Need a Brave key? Step-by-step guide, with a monthly spending limit:{' '}
+                <a href={SETUP_GUIDES.braveSearch.url} target="_blank" rel="noopener noreferrer">{SETUP_GUIDES.braveSearch.label}</a>
+              </p>
             </>
           )}
         </section>
