@@ -132,6 +132,7 @@ describe('maybeRunFirstRunSetup', () => {
     expect(out).toContain('Set a spending limit')
     expect(out).toContain('New Guardrail')
     expect(out).toContain('openrouter.ai/workspaces/default/guardrails')
+    expect(out).toContain('step-by-step guide: myaielia.com/setup-openrouter')
   })
 
   it('never offers or mentions a Claude login', async () => {

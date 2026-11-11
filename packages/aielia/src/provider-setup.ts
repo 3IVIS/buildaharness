@@ -11,6 +11,19 @@ import type { AssistantConfig } from './config.js'
 
 export type KeyedBackend = Extract<AssistantConfig['llmBackend'], 'anthropic' | 'openai' | 'openrouter'>
 
+/** A step-by-step page on the website, shown after the short in-app directions for readers who want every step spelled out. */
+export interface SetupGuide {
+  url: string
+  /** Human-readable form of `url` for terminals and for the desktop app, which can only show the address to copy. */
+  label: string
+}
+
+/** The website's setup pages (myaielia.com). One place, so the CLI, the setup wizard, Settings and Write all point to the same pages. */
+export const SETUP_GUIDES = {
+  openrouter: { url: 'https://myaielia.com/setup-openrouter', label: 'myaielia.com/setup-openrouter' },
+  braveSearch: { url: 'https://myaielia.com/setup-brave-search', label: 'myaielia.com/setup-brave-search' },
+} as const satisfies Record<string, SetupGuide>
+
 export interface ProviderSetupInfo {
   backend: KeyedBackend
   /** Plain-language name shown to the user. */
@@ -25,6 +38,8 @@ export interface ProviderSetupInfo {
   steps: readonly string[]
   /** Optional "protect your wallet" walkthrough, shown alongside `steps`. */
   safety?: { title: string; url: string; urlLabel: string; steps: readonly string[] }
+  /** A longer, step-by-step page on the website for this provider, when there is one. */
+  guide?: SetupGuide
   /** What a valid key starts with — used for a fast, offline sanity check and as the input placeholder. */
   keyPrefix: string
 }
@@ -37,10 +52,11 @@ export const PROVIDER_SETUP: readonly ProviderSetupInfo[] = [
     keyUrl: 'https://openrouter.ai/keys',
     keyUrlLabel: 'openrouter.ai/keys',
     keyPrefix: 'sk-or-',
+    guide: SETUP_GUIDES.openrouter,
     steps: [
       'Go to openrouter.ai and sign up (Google, GitHub or email all work).',
       'Add a few dollars of credit at openrouter.ai/settings/credits. $5 goes a long way. Credits are prepaid, so you can’t spend more than you add — leave “auto top-up” off unless you want it.',
-      'Open openrouter.ai/keys, click “Create key”, name it “Aielia”, and copy it right away (it is only shown once).',
+      'Open openrouter.ai/keys, click “+ New key”, name it “Aielia”, choose an expiration, and copy the key right away.',
     ],
     safety: {
       title: 'Set a spending limit (recommended, 2 minutes)',

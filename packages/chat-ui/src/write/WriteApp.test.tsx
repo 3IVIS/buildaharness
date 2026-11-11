@@ -1280,6 +1280,32 @@ describe('finding sources', () => {
     expect((await s.service.get(id)).meta.sources[0]).toMatchObject({ address: 'https://example.com/report' })
     expect((await s.service.get(id)).meta.links[0]).toMatchObject({ origin: 'proposed' })
   })
+  it('searches the web for sources, as the Adjust list does, when the model reads a chat message as a request to find sources online for the claims', async () => {
+    const claims = { claims: [{ quote: 'The p99 was 18 ms.', kind: 'factual', matchesId: null, sure: true }] }
+    const searched: string[] = []
+    const s = await services({ intent: { intent: 'verify' }, claims, resolve: { affected: [] } }, MD, async () => 'x', async (q) => { searched.push(q); return [] })
+    const id = (await s.service.list())[0].id
+    await s.service.analyze(id)
+    render(<WriteApp services={s} />)
+    await waitForText()
+    await userEvent.click(rail('Chat'))
+    await userEvent.type(screen.getByLabelText('Message'), 'search the web to find sources for any claims in the article{Enter}')
+    expect(await screen.findByText(/Looked at 1 claim, none backed: 1 with no source found/)).toBeInTheDocument()
+    expect(searched.length).toBeGreaterThan(0)
+    expect(screen.queryByText(/I found \d+ factual claim/)).toBeNull()
+  })
+  it('says web search is not set up, and runs nothing, when asked to find sources online without it', async () => {
+    const claims = { claims: [{ quote: 'The p99 was 18 ms.', kind: 'factual', matchesId: null, sure: true }] }
+    const s = await services({ intent: { intent: 'verify' }, claims, resolve: { affected: [] } }, MD)
+    const id = (await s.service.list())[0].id
+    await s.service.analyze(id)
+    render(<WriteApp services={s} />)
+    await waitForText()
+    await userEvent.click(rail('Chat'))
+    await userEvent.type(screen.getByLabelText('Message'), 'search the web to find sources for any claims in the article{Enter}')
+    expect(await screen.findByText(/Web search is not set up here/)).toBeInTheDocument()
+    expect(screen.queryByText(/Looked at/)).toBeNull()
+  })
   it('says no source was found when the search comes back empty, and verifies every claim from the chat menu', async () => {
     const claims = { claims: [{ quote: 'The p99 was 18 ms.', kind: 'factual', matchesId: null, sure: true }] }
     const s = await services({ claims, resolve: { affected: [] } }, MD, async () => 'x', async () => [])

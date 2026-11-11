@@ -20,6 +20,7 @@ describe('readWriterIntent', () => {
     expect(await ask('{"intent":"rewrite"}')).toBe('rewrite')
     expect(await ask('{"intent":"suggest"}')).toBe('suggest')
     expect(await ask('{"intent":"check"}')).toBe('check')
+    expect(await ask('{"intent":"verify"}')).toBe('verify')
     expect(await ask('{"intent":"answer"}')).toBe('answer')
   })
   it('treats anything unusable as an answer', async () => {

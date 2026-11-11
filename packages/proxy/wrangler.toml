@@ -10,14 +10,17 @@ compatibility_flags = ["nodejs_compat"]
 
 [vars]
 ALLOWED_ORIGIN = "https://myaielia.com"   # the only browser origin that calls this Worker: the hosted Aielia /chat and /write builds
+# The hosted pages carry no token: /web/* (page reading and search) is open to this origin without one, limited per visitor IP. /llm/chat always needs a token.
+ANONYMOUS_WEB_ORIGINS = "https://myaielia.com"
 PORT = "8787"
 
-# /web/* quota tuning (all optional — see src/rate-limit.ts's DEFAULTS for fallbacks if unset)
+# /web/* quota tuning (all optional — see src/rate-limit.ts's DEFAULTS for fallbacks if unset).
+# Raised for the hosted pages: one "verify the claims" run in Write makes up to ~40 requests (a search and up to 3 page reads for each of up to 10 claims).
 # WEB_REQUESTS_PER_HOUR = "120"
-# WEB_BYTES_PER_HOUR = "2000000"
+WEB_BYTES_PER_HOUR = "6000000"
 # WEB_MAX_CONCURRENT_FETCHES = "4"
-# WEB_HOST_REQUESTS_PER_HOUR = "60"
-# WEB_PER_IP_REQUESTS_PER_HOUR = "30"
+WEB_HOST_REQUESTS_PER_HOUR = "240"
+WEB_PER_IP_REQUESTS_PER_HOUR = "120"
 # WEB_BRAVE_DAILY_CEILING = "2000"
 # WEB_GRANT_REQUESTS_PER_HOUR = "20"
 # WEB_GUARD_REJECT_ALERT_THRESHOLD = "5"

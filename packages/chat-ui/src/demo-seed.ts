@@ -10,11 +10,13 @@
  * message (see App.tsx's `showDemo`), and never shown on the desktop build.
  */
 
-export const DEMO_USER_MESSAGE = 'Send an email to my boss saying I quit.'
+// Something the browser build really holds: what Aielia remembers about you is kept in this browser. (The risk pass reads
+// this as a HIGH-risk delete, checked against classifyRisk.) No email or web search here, since the browser build has neither.
+export const DEMO_USER_MESSAGE = 'Delete everything you remember about me.'
 
 export const DEMO_APPROVAL_REASON =
-  'High-risk "send message" request. Aielia stopped here before making any model call — ' +
-  'a keyword risk pass runs first, and anything that sends, deletes, pays, or posts needs ' +
+  'High-risk "delete" request. Aielia stopped here before making any model call — ' +
+  'a keyword risk pass runs first, and anything that deletes, sends, pays, or posts needs ' +
   'your approval to proceed.'
 
 export const DEMO_NOTE =

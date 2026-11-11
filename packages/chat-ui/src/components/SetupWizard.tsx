@@ -119,6 +119,12 @@ export function SetupWizard({ isDesktop, onComplete, onSkip, testKey = testApiKe
               <ExternalLink url={info.safety.url} label={info.safety.urlLabel} isDesktop={isDesktop} copied={copied} onCopy={copyLink} />
             </details>
           )}
+          {info.guide && (
+            <>
+              <p className="setup__hint">Want every step spelled out, with the spending limit? See the step-by-step guide:</p>
+              <ExternalLink url={info.guide.url} label={info.guide.label} isDesktop={isDesktop} copied={copied} onCopy={copyLink} />
+            </>
+          )}
           <p className="setup__hint">
             An API key is like a password that lets Aielia use your {info.name} account. It is stored{' '}
             {isDesktop ? 'in your computer’s secure keychain' : 'only in this browser, on this device'} and is only ever sent to {info.name}.

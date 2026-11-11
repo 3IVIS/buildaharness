@@ -31,7 +31,7 @@ export function clientIpOptions(c: Context, env: Record<string, string | undefin
 /**
  * Pre-flight quota gate shared by every /web/* route: a per-token (JWT `sub`) requests/hour
  * ceiling, plus a stricter per-IP requests/hour ceiling layered in front of it. The per-IP layer
- * exists for the hosted /chat and /write builds, where every anonymous visitor shares one token (so the
+ * exists for the hosted /chat and /write builds, where visitors carry no token (each is counted under their own IP, so the
  * per-sub limit alone would be a single global ceiling shared by all of them) — see the plan's W4
  * scope and its "shared Brave key on hosted /chat" risk note.
  *

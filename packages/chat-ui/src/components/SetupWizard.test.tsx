@@ -93,6 +93,19 @@ describe('SetupWizard', () => {
     setup({ isDesktop: true })
     await userEvent.click(await screen.findByRole('button', { name: /OpenRouter/ }))
     expect(screen.queryByRole('link')).toBeNull()
-    expect(screen.getAllByRole('button', { name: 'Copy link' }).length).toBe(2)
+    // The key page, the guardrails page and the step-by-step guide.
+    expect(screen.getAllByRole('button', { name: 'Copy link' }).length).toBe(3)
+  })
+
+  it('points an OpenRouter user to the step-by-step guide on the website', async () => {
+    setup()
+    await userEvent.click(screen.getByRole('button', { name: /OpenRouter/ }))
+    expect(screen.getByRole('link', { name: 'myaielia.com/setup-openrouter' })).toHaveAttribute('href', 'https://myaielia.com/setup-openrouter')
+  })
+
+  it('shows no website guide for a provider that has none', async () => {
+    setup()
+    await userEvent.click(screen.getByRole('button', { name: /Anthropic/ }))
+    expect(screen.queryByRole('link', { name: /myaielia\.com\/setup-/ })).toBeNull()
   })
 })
