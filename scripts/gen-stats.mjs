@@ -156,13 +156,15 @@ function hasPrivateOverlay() {
 }
 
 function listPublicFiles() {
-  const tracked = spawnSync('git', ['ls-files', '-z'], { cwd: ROOT, encoding: 'utf8' })
+  // The file list is several MB (spawnSync's default 1 MB buffer ends the child with ENOBUFS and a null status).
+  const tracked = spawnSync('git', ['ls-files', '-z'], { cwd: ROOT, encoding: 'utf8', maxBuffer: 256 * 1024 * 1024 })
   if (tracked.status !== 0) {
-    throw new Error(`gen-stats: git ls-files failed:\n${tracked.stderr}`)
+    throw new Error(`gen-stats: git ls-files failed:\n${tracked.stderr || tracked.error}`)
   }
   const untracked = spawnSync('git', ['ls-files', '-z', '--others', '--exclude-standard'], {
     cwd: ROOT,
     encoding: 'utf8',
+    maxBuffer: 256 * 1024 * 1024,
   })
   if (untracked.status !== 0) {
     throw new Error(`gen-stats: git ls-files --others failed:\n${untracked.stderr}`)
