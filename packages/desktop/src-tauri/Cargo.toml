@@ -1,6 +1,6 @@
 [package]
 name = "aielia-desktop"
-version = "0.1.12"
+version = "0.1.13"
 description = "Aielia desktop app"
 authors = ["3IVIS"]
 license = ""
