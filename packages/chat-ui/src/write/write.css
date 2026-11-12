@@ -451,6 +451,9 @@ body.write--resizing { user-select: none; -webkit-user-select: none; cursor: col
 
 /* A file's mappings: the code line and, under it, the claim it backs; each is one line, cut with … when there is no room (the full text is the hover text). */
 .write__srccount { cursor: pointer; font: inherit; font-size: inherit; }
+/* The claim count is a button, not an alpha-style pill: normal case, compact, in the accent colour. */
+.write .write__srccount { min-height: 0; margin-right: 0; padding: 1px 9px; text-transform: none; letter-spacing: 0; font-size: 0.8rem; font-weight: 600; line-height: 1.4; color: var(--accent); border-color: var(--border); background: var(--surface, transparent); }
+.write .write__srccount:hover:not(:disabled) { background: var(--tint-2); }
 .write__srccount:disabled { cursor: default; opacity: 0.7; }
 .write__srcmap { list-style: none; margin: 6px 0 0; padding: 0; display: grid; gap: 6px; }
 .write__srcmap > li { min-width: 0; }
@@ -544,3 +547,29 @@ body.write--resizing { user-select: none; -webkit-user-select: none; cursor: col
 .write__resend:hover, .write__resend:focus-visible { opacity: 1; }
 
 .brand-link { color: inherit; text-decoration: none; }
+
+/* The key page (first visit, or "Add your key" from the sample): the app's own header over one centred card. */
+.write--setup { min-height: 100dvh; }
+.write__setup { width: 100%; max-width: 30rem; margin: 0 auto; padding: 32px 16px 48px; box-sizing: border-box; display: grid; gap: 16px; align-content: start; }
+.write__setupcard { display: grid; gap: 12px; padding: 24px; background: var(--surface); border: 1px solid var(--border); border-radius: 14px; box-shadow: 0 1px 2px rgba(0, 0, 0, 0.04), 0 8px 24px rgba(0, 0, 0, 0.06); }
+.write__setupcard h2 { margin: 0; font-size: 1.3rem; letter-spacing: -0.01em; }
+.write__setupcard .write__muted { margin: 0; }
+.write .write__setupback { justify-self: start; min-height: 0; padding: 0; color: var(--muted); font-size: 0.85rem; }
+.write__setupcard .write__connection { display: grid; gap: 14px; min-width: 0; margin: 0; padding: 0; border: 0; }
+.write__setupcard .write__connection > legend { display: none; }
+.write__setupcard .write__connection label { display: grid; gap: 6px; font-size: 0.9rem; font-weight: 600; }
+.write__setupcard .write__connection select, .write__setupcard .write__connection input { width: 100%; box-sizing: border-box; font-weight: 400; }
+.write__setupcard .write__connection p { margin: 0; font-size: 0.9rem; }
+.write__setupcard .write__rowacts { display: grid; }
+.write .write__setupcard .write__primary { width: 100%; }
+.write__setupfoot { font-size: 0.8rem; line-height: 1.5; color: var(--muted); }
+.write__setupfoot p { margin: 8px 0 0; }
+.write__setupfoot a { color: var(--accent); }
+.write__setupcard a { color: var(--accent); }
+.write__setupcard .write__muted a { font-weight: 600; }
+
+/* One size for form controls everywhere in Write: the same height and text size for a select, a text box and the like, so neighbours line up. */
+.write select, .write input:not([type='checkbox']):not([type='radio']):not([type='file']) { font-size: 0.9rem; min-height: 36px; box-sizing: border-box; }
+.write__bar .write__title, .write--setup .write__title { margin: 0 8px 0 0; }
+.write .write__primary { white-space: nowrap; }
+.write .write__title, .write .write__title .app-switcher__button { line-height: normal; }

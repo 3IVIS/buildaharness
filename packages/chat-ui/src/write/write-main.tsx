@@ -67,22 +67,29 @@ function Root(): React.JSX.Element {
   )
 }
 
-/** Adding a key (from the sample): just how to reach a model. Everything else is in Settings, when it is wanted. */
+/** Adding a key (from the sample): just how to reach a model. OpenRouter comes first, since one key there reaches many models. Everything else is in Settings, when it is wanted. */
 function FirstRun({ onSave, onBack }: { onSave: (c: WriteConnection) => void; onBack: () => void }): React.JSX.Element {
-  const [draft] = useState<WriteConnection>({ provider: 'anthropic', apiKey: '' })
+  const [draft] = useState<WriteConnection>({ provider: 'openrouter', apiKey: '' })
   // The same Chat/Write drop-down as inside the app, so a first-time visitor can still reach Chat from here.
   const appSwitch = appSwitchHandler('write')
   return (
-    <div style={{ maxWidth: 480, margin: '10vh auto', padding: 16, font: '16px system-ui' }}>
-      <h1>Aielia {appSwitch ? <AppSwitcher current="write" onSelect={appSwitch} /> : 'Write'}</h1>
-      <p style={{ margin: '0 0 12px' }}><button type="button" onClick={onBack} style={{ background: 'none', border: 0, padding: 0, color: '#2f5fc4', cursor: 'pointer', font: 'inherit' }}>← Back to the sample</button></p>
-      <DialogProvider><ConnectionSettings value={draft} onSave={onSave} showWeb={false} /></DialogProvider>
-      <div style={{ marginTop: 12, fontSize: 12.5, lineHeight: 1.45, color: '#555' }}>
-        <ProxyNotice bare />
-        <p style={{ margin: '8px 0 0' }}>
-          By using Aielia you agree to the <a href={TERMS_URL} target="_blank" rel="noreferrer">Terms</a> and acknowledge the <a href={PRIVACY_URL} target="_blank" rel="noreferrer">Privacy Policy</a>.
-        </p>
-      </div>
+    <div className="write write--setup">
+      <header className="write__bar">
+        <h1 className="write__title"><a className="brand-link" href="https://myaielia.com" target="_blank" rel="noopener noreferrer" title="Go to myaielia.com">Aielia</a> {appSwitch ? <AppSwitcher current="write" onSelect={appSwitch} /> : 'Write'}</h1>
+        <span className="write__badge" title="Early-stage alpha software — expect rough edges and breaking changes.">Alpha</span>
+      </header>
+      <main className="write__setup">
+        <div className="write__setupcard">
+          <button type="button" className="write__link write__setupback" onClick={onBack}>← Back to the sample</button>
+          <h2>Connect your AI</h2>
+          <p className="write__muted">Aielia has no account of its own. Add a key from a model provider to write with it; the key stays in this browser.</p>
+          <DialogProvider><ConnectionSettings value={draft} onSave={onSave} showWeb={false} /></DialogProvider>
+        </div>
+        <div className="write__setupfoot">
+          <ProxyNotice bare />
+          <p>By using Aielia you agree to the <a href={TERMS_URL} target="_blank" rel="noreferrer">Terms</a> and acknowledge the <a href={PRIVACY_URL} target="_blank" rel="noreferrer">Privacy Policy</a>.</p>
+        </div>
+      </main>
     </div>
   )
 }

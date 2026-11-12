@@ -24,9 +24,9 @@ export function ConnectionSettings({ value, onSave, onForget, showWeb = true }: 
       <legend className="write__panehead">Connection<Hint text="Kept in this browser only, separate from the Chat page. Aielia has no account of its own." /></legend>
       <label>Provider
         <select aria-label="Provider" value={draft.provider} onChange={(e) => set({ provider: e.target.value as WriteConnection['provider'] })}>
+          <option value="openrouter">OpenRouter (recommended)</option>
           <option value="anthropic">Anthropic</option>
           <option value="openai">OpenAI</option>
-          <option value="openrouter">OpenRouter</option>
           <option value="proxy">A proxy I run (self-hosted)</option>
         </select>
       </label>
