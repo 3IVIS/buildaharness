@@ -33,6 +33,13 @@
 .write__import { position: relative; cursor: pointer; min-height: 40px; display: inline-flex; align-items: center; }
 .write__import input { position: absolute; inset: 0; opacity: 0; cursor: pointer; }
 .write__notice { margin: 0; padding: 8px 16px; background: var(--accent-a10); border-bottom: 1px solid var(--accent-a35); }
+.write__sample { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 8px 16px; margin: 0; padding: 10px 16px; background: var(--accent-a10); border-bottom: 1px solid var(--accent-a35); font-size: 0.92rem; line-height: 1.45; }
+.write__sample-text { display: flex; flex-direction: column; gap: 2px; flex: 1 1 22rem; min-width: 0; }
+.write__sample-text a { color: var(--accent); }
+.write__sample-actions { display: flex; gap: 8px; flex: 0 0 auto; }
+.write__sample-add { background: var(--accent-solid); color: #fff; border: 1px solid var(--accent-solid); border-radius: 6px; padding: 6px 14px; font: inherit; font-weight: 600; cursor: pointer; }
+.write__sample-reset { background: transparent; color: var(--text); border: 1px solid var(--border); border-radius: 6px; padding: 6px 12px; font: inherit; cursor: pointer; }
+@media (max-width: 600px) { .write__sample { padding: 8px 12px; gap: 6px 12px; font-size: 0.85rem; } .write__sample-add, .write__sample-reset { padding: 4px 10px; } }
 .write__status { display: flex; justify-content: space-between; align-items: center; gap: 12px; margin: 0; padding: 6px 16px; color: var(--muted); font-size: 0.9rem; border-bottom: 1px solid var(--border); background: var(--tint-1); }
 
 /* The rail: one button per panel. */
