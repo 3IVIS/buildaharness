@@ -24,6 +24,7 @@ import { Icon } from './icons'
 import { DialogProvider, useDialogs } from './dialogs'
 import type { WriteServices } from './write-services'
 import { SiteNav } from '../components/SiteNav'
+import { SampleNotice } from './SampleNotice'
 import { AppSwitcher } from '../components/AppSwitcher'
 import type { AppId } from '../app-switch'
 import './write.css'
@@ -99,7 +100,7 @@ export const stepText = (step: { tool: string; input: Record<string, unknown> })
   const what = step.tool === 'search' ? `searching for “${arg('pattern') || arg('query')}”` : step.tool === 'read' ? `reading ${arg('path') || arg('file')}` : step.tool === 'list' ? 'listing files' : `using ${step.tool}`
   return what
 }
-export const failureText = (what: string, err: unknown, backend?: string): string => `${what}: ${err instanceof Error ? err.message : String(err)}. ${modelFailureHint(backend)}`
+export const failureText = (what: string, err: unknown, backend?: string): string => backend === 'sample' ? `${what}: ${err instanceof Error ? err.message : String(err)}.` : `${what}: ${err instanceof Error ? err.message : String(err)}. ${modelFailureHint(backend)}`
 
 const isDesktop = (): boolean => typeof window !== 'undefined' && window.matchMedia?.('(min-width: 960px)').matches === true
 const isWide = (): boolean => typeof window !== 'undefined' && window.matchMedia?.('(min-width: 640px)').matches === true
@@ -159,13 +160,15 @@ type WriteAppProps = {
   appSwitch?: (target: AppId) => void
   /** The Publish button is hidden for now; the publish flow itself is kept (and tested) for when it comes back. */
   showPublish?: boolean
+  /** Set when the page is the keyless sample: a note at the top says so, with a way to add a key and a way to start the sample over. */
+  sample?: { onAddKey: () => void; onReset: () => void }
 }
 
 export function WriteApp(props: WriteAppProps): React.JSX.Element {
   return <DialogProvider><WriteAppBody {...props} /></DialogProvider>
 }
 
-function WriteAppBody({ services, connection, onDeleted, appSwitch, showPublish = false }: WriteAppProps): React.JSX.Element {
+function WriteAppBody({ services, connection, onDeleted, appSwitch, showPublish = false, sample }: WriteAppProps): React.JSX.Element {
   const { service, port } = services
   const dialogs = useDialogs()
   const [articles, setArticles] = useState<ArticleItem[]>([])
@@ -1258,6 +1261,7 @@ function WriteAppBody({ services, connection, onDeleted, appSwitch, showPublish 
         {showPublish && <button type="button" className="write__primary" onClick={() => void publish()} disabled={!activeId || busy !== null}>Publish</button>}
         <SiteNav />
       </header>
+      {sample && <SampleNotice onAddKey={sample.onAddKey} onReset={sample.onReset} />}
       {((busy && !(isWide() || tab === 'chat')) || (banner && (!banner.inChat || !(isWide() || tab === 'chat')))) && <p className="write__notice" role="status">{busy && !(isWide() || tab === 'chat') ? `${busy}…` : banner?.text}</p>}
 
       <div className="write__status" role="group" aria-label="How close the article is to publishable, and what has been spent">
