@@ -1,99 +1,26 @@
-import { createArticleMeta, reconcileSections, type ArticleBundle, type Claim, type Link, type Source } from '@buildaharness/aielia'
+import type { ArticleBundle } from '@buildaharness/aielia'
+import recording from './sample-recording.json'
 
 /**
- * The article a first-time visitor sees in the sample (no key yet). A short version of "Introducing Aielia Write", written ahead of time:
- * its claims, sources, ideas and suggestion are recorded here, not produced by a model, so the side panels show what Aielia Write keeps
- * without any model call. Everything in it is ordinary article data in the real format.
+ * What a first-time visitor to Write sees before adding a key: a short version of "Introducing Aielia Write" with everything Aielia Write keeps
+ * for an article already in it (claims and what backs them, two sources read from the web, suggestions, ideas, a reviewer comment, a style sheet,
+ * how the sections depend on each other, versions) and the chat that produced it.
+ *
+ * None of it is made up here and none of it runs a model in the page: it was recorded from real cases run with a real model on this article
+ * (scripts/record-write-sample.ts writes sample-recording.json). Run that script again to refresh it.
  */
 
 export const SAMPLE_ARTICLE_ID = 'sample'
-const AT = '2026-11-12T09:00:00.000Z'
 
-export const SAMPLE_ARTICLE_MARKDOWN = `# Introducing Aielia Write
-
-## The problem that started it all
-
-For a while we wrote by drafting in a chat tool, copying the text into a word processor, and shuttling changes back and forth between the two. Every revision meant re-pasting the current draft so the model could see what had changed. Paragraphs drifted out of sync, and it got hard to tell which parts were AI-written and which version was current.
-
-## Why existing tools were not enough
-
-Claude, ChatGPT, Gemini and Notion AI all draft well, but in our experience none of them kept a source behind a claim or flagged it when that source changed. Jenni AI looked like the closest fit, but it is aimed at academic papers, with citation styles and a literature database most writers do not need. The blogging tools we looked at optimize for search rankings, not for whether what you wrote is true.
-
-## What Aielia Write does
-
-Aielia Write is built on Aielia, our system for tracking facts. It pulls out each claim in your draft sentence by sentence, checks each one against your sources, and keeps a record of which passages back it. Every chat edit can be undone, because a version is saved before any change. You bring your own key, and your articles stay on your own computer, with a spend meter and a cap.
-
-## Getting started
-
-Aielia Write does not run models of its own, so it needs an API key from a model provider. We suggest OpenRouter, which gives you one key that reaches models from many providers. Set a spending limit before you start, and you cannot be surprised later.
-`
-
-const PASSAGE_OPENROUTER = 'OpenRouter provides a unified API that gives you access to hundreds of AI models through a single endpoint, with one key and one account.'
-
-function claim(id: string, sectionId: string, quote: string, status: Claim['sourceStatus'], extra: Partial<Claim> = {}): Claim {
-  return {
-    id,
-    sectionId,
-    quote,
-    position: SAMPLE_ARTICLE_MARKDOWN.indexOf(quote),
-    kind: 'factual',
-    author: 'model',
-    authorAt: AT,
-    confirmed: false,
-    sourceStatus: status,
-    ...extra,
-  }
+/** The article, with its records and versions, as recorded. A fresh copy each time, so editing the sample never changes the recording. */
+export function buildSampleBundle(): ArticleBundle {
+  return structuredClone(recording.bundle) as unknown as ArticleBundle
 }
 
-export function buildSampleBundle(): ArticleBundle {
-  const markdown = SAMPLE_ARTICLE_MARKDOWN
-  const sections = reconcileSections([], markdown, (taken) => {
-    let n = taken.size + 1
-    while (taken.has(`s${n}`)) n++
-    return `s${n}`
-  }).sections
-  const section = (heading: string): string => sections.find((s) => s.heading === heading)?.id ?? sections[0].id
+export interface SampleChatLine { id: number; from: 'you' | 'aielia'; text: string; model?: string }
 
-  const jenni = 'Jenni AI looked like the closest fit, but it is aimed at academic papers'
-  const blogging = 'The blogging tools we looked at optimize for search rankings, not for whether what you wrote is true.'
-  const openrouter = 'We suggest OpenRouter, which gives you one key that reaches models from many providers.'
-  const undo = 'Every chat edit can be undone, because a version is saved before any change.'
-
-  const sources: Source[] = [
-    { id: 'src1', kind: 'web', address: 'https://openrouter.ai', passage: PASSAGE_OPENROUTER, readAt: AT, fingerprint: 'sample-openrouter', trust: 'normal', freshness: 'current' },
-  ]
-  const claims: Claim[] = [
-    claim('c1', section('Why existing tools were not enough'), jenni, 'none'),
-    claim('c2', section('Why existing tools were not enough'), blogging, 'none'),
-    claim('c3', section('Getting started'), openrouter, 'supported', {
-      confirmed: true,
-      check: { ranAt: AT, model: 'sample', reason: 'The page says one key and one account reach hundreds of models through a single endpoint.', claimText: openrouter, sourceFingerprints: { src1: 'sample-openrouter' } },
-    }),
-    claim('c4', section('What Aielia Write does'), undo, 'none', { kind: 'framing', author: 'writer', confirmed: true }),
-  ]
-  const links: Link[] = [{ id: 'l1', from: { type: 'claim', id: 'c3' }, to: { type: 'source', id: 'src1' }, kind: 'supported_by', origin: 'confirmed', at: AT }]
-  const meta = {
-    ...createArticleMeta(SAMPLE_ARTICLE_ID, 'Introducing Aielia Write'),
-    name: 'Sample: Introducing Aielia Write',
-    sections,
-    claims,
-    sources,
-    links,
-    ideas: [
-      { id: 'i1', text: 'Add a short example of a claim that lost its source after the source page changed.', origin: 'assistant' as const, model: 'sample', sectionId: section('What Aielia Write does'), state: 'open' as const, createdAt: AT },
-    ],
-    suggestions: [
-      {
-        id: 'sg1',
-        span: { start: markdown.indexOf('Paragraphs drifted out of sync'), end: markdown.indexOf('Paragraphs drifted out of sync') + 'Paragraphs drifted out of sync'.length, quote: 'Paragraphs drifted out of sync' },
-        replacement: 'Paragraphs drifted apart',
-        reason: 'Shorter, and it says the same thing.',
-        proposedBy: 'assistant' as const,
-        model: 'sample',
-        state: 'pending' as const,
-        createdAt: AT,
-      },
-    ],
-  }
-  return { markdown, meta, snapshots: [] }
+/** The chat of the recording, behind one line that says what it is. */
+export function buildSampleChat(): SampleChatLine[] {
+  const intro: SampleChatLine['text'] = 'These are real cases I ran on this article earlier, so you can see how Aielia Write works. They were recorded, so nothing here calls a model. Add your AI key to try your own.'
+  return [{ id: 1, from: 'aielia', text: intro }, ...(recording.chat as SampleChatLine[]).map((l, i) => ({ ...l, id: i + 2 }))]
 }

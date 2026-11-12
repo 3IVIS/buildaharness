@@ -127,7 +127,7 @@ function sectionAt(sections: Section[], markdown: string, selection: { start: nu
 let lineId = 0
 
 /** Where the chat lines are kept, so a reload does not erase the conversation. */
-const CHAT_LINES_KEY = 'chat-lines'
+export const CHAT_LINES_KEY = 'chat-lines'
 /** Everything the chat shows is stored; the cap only keeps a years-long chat from growing without end. */
 const MAX_SAVED_LINES = 5000
 /** The action running now, stored so that a page closed in the middle of it is told about it on the next start. */
@@ -160,8 +160,8 @@ type WriteAppProps = {
   appSwitch?: (target: AppId) => void
   /** The Publish button is hidden for now; the publish flow itself is kept (and tested) for when it comes back. */
   showPublish?: boolean
-  /** Set when the page is the keyless sample: a note at the top says so, with a way to add a key and a way to start the sample over. */
-  sample?: { onAddKey: () => void; onReset: () => void }
+  /** Set when the page is the keyless sample: a one-line note at the top says so, with a way to add a key. */
+  sample?: { onAddKey: () => void }
 }
 
 export function WriteApp(props: WriteAppProps): React.JSX.Element {
@@ -176,7 +176,7 @@ function WriteAppBody({ services, connection, onDeleted, appSwitch, showPublish 
   const [bundle, setBundle] = useState<ArticleBundle | undefined>()
   const [draft, setDraft] = useState('')
   const draftShown = draft
-  const [tab, setTab] = useState<Tab>(() => (isWide() ? 'style' : 'text'))
+  const [tab, setTab] = useState<Tab>(() => (isWide() ? (sample ? 'issues' : 'style') : 'text'))
   const [view, setView] = useState<TextView>('text')
   // Where to put the cursor once the text is on screen again (a section picked in the outline).
   const pendingJump = useRef<number | null>(null)
@@ -1261,7 +1261,7 @@ function WriteAppBody({ services, connection, onDeleted, appSwitch, showPublish 
         {showPublish && <button type="button" className="write__primary" onClick={() => void publish()} disabled={!activeId || busy !== null}>Publish</button>}
         <SiteNav />
       </header>
-      {sample && <SampleNotice onAddKey={sample.onAddKey} onReset={sample.onReset} />}
+      {sample && <SampleNotice onAddKey={sample.onAddKey} />}
       {((busy && !(isWide() || tab === 'chat')) || (banner && (!banner.inChat || !(isWide() || tab === 'chat')))) && <p className="write__notice" role="status">{busy && !(isWide() || tab === 'chat') ? `${busy}…` : banner?.text}</p>}
 
       <div className="write__status" role="group" aria-label="How close the article is to publishable, and what has been spent">
