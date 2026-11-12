@@ -2,7 +2,8 @@ import type { ILLMClient } from '@buildaharness/runtime'
 import { PersonalAssistant, WEB_FEATURES, buildAssistantOptions, createMemoryArticleStore } from '@buildaharness/aielia'
 import { toAssistantConfig } from './write-config'
 import { assembleWriteServices, type WriteServices } from './write-services'
-import { buildSampleBundle, SAMPLE_ARTICLE_ID } from './sample-article'
+import { buildSampleBundle, buildSampleChat, SAMPLE_ARTICLE_ID } from './sample-article'
+import { CHAT_LINES_KEY } from './WriteApp'
 
 /** The backend name of the sample: what a failed step reads to say "this is a sample" rather than "check your key". */
 export const SAMPLE_BACKEND = 'sample'
@@ -21,12 +22,14 @@ export function sampleLlm(): ILLMClient {
 }
 
 /**
- * Write with no key: the real editor on a sample article held in memory only (nothing is written to this browser), where hand edits work and
+ * Write with no key: the real editor on a recorded sample article held in memory only (nothing is written to this browser), where hand edits work and
  * everything that would call a model says it is a sample. Choosing to add a key leaves this and opens the visitor's own, empty workspace.
  */
 export async function createSampleServices(): Promise<WriteServices> {
   const store = createMemoryArticleStore()
   await store.save(SAMPLE_ARTICLE_ID, buildSampleBundle())
+  // The recorded chat is what the page loads as the earlier conversation.
+  await store.setSetting(CHAT_LINES_KEY, buildSampleChat())
   const config = toAssistantConfig(undefined, {})
   const base = await assembleWriteServices({
     store,

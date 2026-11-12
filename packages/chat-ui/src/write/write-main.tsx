@@ -30,9 +30,8 @@ function Root(): React.JSX.Element {
   const [connection, setConnection] = useState<WriteConnection | undefined>(() => loadConnection() ?? seedFromChat())
   const [services, setServices] = useState<WriteServices | undefined>()
   const [error, setError] = useState<string | undefined>()
-  // The visitor asked to add a key from the sample. `sampleRun` starts the sample over.
+  // The visitor asked to add a key from the sample.
   const [settingUp, setSettingUp] = useState(false)
-  const [sampleRun, setSampleRun] = useState(0)
 
   useEffect(() => {
     if (!connection) {
@@ -48,7 +47,7 @@ function Root(): React.JSX.Element {
     const defaults = envOverridesFromImportMetaEnv(import.meta.env)
     createWriteServices(toAssistantConfig(connection, defaults), webProxyOf(connection, defaults), connection.githubToken).then((s) => { if (live) setServices(s) }, (e) => setError(String(e)))
     return () => { live = false }
-  }, [connection, settingUp, sampleRun])
+  }, [connection, settingUp])
 
   if (error) return <p role="alert">Could not start: {error}</p>
   if (!connection && settingUp) return <FirstRun onSave={(c) => { saveConnection(c); setSettingUp(false); setConnection(loadConnection()) }} onBack={() => setSettingUp(false)} />
@@ -58,7 +57,7 @@ function Root(): React.JSX.Element {
       services={services}
       appSwitch={appSwitchHandler('write')}
       onDeleted={() => { setServices(undefined); setConnection(loadConnection()) }}
-      sample={connection ? undefined : { onAddKey: () => setSettingUp(true), onReset: () => { setServices(undefined); setSampleRun((n) => n + 1) } }}
+      sample={connection ? undefined : { onAddKey: () => setSettingUp(true) }}
       connection={connection ? {
         value: connection,
         onSave: (c) => { saveConnection(c); setServices(undefined); setConnection(loadConnection()) },

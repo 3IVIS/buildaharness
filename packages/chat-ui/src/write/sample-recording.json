@@ -1,0 +1,1062 @@
+{
+ "recordedAt": "2026-11-12T09:07:51.142Z",
+ "models": {
+  "chat": "sonnet",
+  "auto": "haiku"
+ },
+ "bundle": {
+  "markdown": "# Introducing Aielia Write\n\n## The problem that started it all\n\nWe used to draft in a chat tool, copy the text into a word processor, and shuttle changes between the two. Every revision meant re-pasting the draft so the model could see what had changed. Paragraphs drifted out of sync, and it became hard to tell which parts were AI-written and which version was current.\n\n## Why existing tools were not enough\n\nClaude, ChatGPT, Gemini and Notion AI all draft well, but in our experience none of them kept a source behind a claim or flagged it when that source changed. Jenni AI looked like the closest fit, but it is aimed at academic papers, with citation styles and a literature database most writers do not need. The blogging tools we looked at optimize for search rankings, not for whether what you wrote is true.\n\n## What Aielia Write does\n\nAielia Write is built on Aielia, our system for tracking facts. It pulls out each claim in your draft sentence by sentence, checks each one against your sources, and keeps a record of which passages back it. Every chat edit can be undone, because a version is saved before any change. You bring your own key, and your articles stay on your own computer, with a spend meter and a cap.\n\n## Getting started\n\nAielia Write does not run models of its own, so it needs an API key from a model provider. We suggest OpenRouter, which gives you one key that reaches models from many providers. Set a spending limit before you start, and you cannot be surprised later.\n",
+  "meta": {
+   "formatVersion": 1,
+   "id": "sample",
+   "title": "Introducing Aielia Write",
+   "status": "drafting",
+   "sections": [
+    {
+     "id": "s1",
+     "heading": "Introducing Aielia Write",
+     "level": 1,
+     "order": 0,
+     "span": {
+      "start": 0,
+      "end": 28
+     },
+     "review": {
+      "state": "clean"
+     }
+    },
+    {
+     "id": "s2",
+     "heading": "The problem that started it all",
+     "level": 2,
+     "order": 1,
+     "span": {
+      "start": 28,
+      "end": 373
+     },
+     "review": {
+      "state": "clean"
+     },
+     "parentId": "s1"
+    },
+    {
+     "id": "s3",
+     "heading": "Why existing tools were not enough",
+     "level": 2,
+     "order": 2,
+     "span": {
+      "start": 373,
+      "end": 820
+     },
+     "review": {
+      "state": "clean"
+     },
+     "parentId": "s1"
+    },
+    {
+     "id": "s4",
+     "heading": "What Aielia Write does",
+     "level": 2,
+     "order": 3,
+     "span": {
+      "start": 820,
+      "end": 1232
+     },
+     "review": {
+      "state": "needs_review",
+      "reason": "Does not fit the rest: The same section says checking runs through a model provider the user pays for with their own key, which means draft text is sent off the machine.",
+      "setBy": "resolver",
+      "at": "2026-11-12T09:05:17.337Z"
+     },
+     "parentId": "s1"
+    },
+    {
+     "id": "s5",
+     "heading": "Getting started",
+     "level": 2,
+     "order": 4,
+     "span": {
+      "start": 1232,
+      "end": 1505
+     },
+     "review": {
+      "state": "needs_review",
+      "reason": "Goes further than the sources: The OpenRouter source only says a monthly budget sends alerts at 80% and stops at 100%, which limits spend but does not guarantee no surprises.",
+      "setBy": "resolver",
+      "at": "2026-11-12T09:06:43.336Z"
+     },
+     "parentId": "s1"
+    }
+   ],
+   "claims": [
+    {
+     "id": "k13",
+     "sectionId": "s2",
+     "quote": "We used to draft in a chat tool, copy the text into a word processor, and shuttle changes between the two.",
+     "position": 64,
+     "kind": "factual",
+     "author": "model",
+     "authorAt": "2026-11-12T09:06:29.987Z",
+     "confirmed": false,
+     "sourceStatus": "none"
+    },
+    {
+     "id": "k12",
+     "sectionId": "s2",
+     "quote": "Every revision meant re-pasting the draft so the model could see what had changed. Paragraphs drifted out of sync, and it became hard to tell which parts were AI-written and which version was current.",
+     "position": 171,
+     "kind": "factual",
+     "author": "model",
+     "authorAt": "2026-11-12T09:06:29.987Z",
+     "confirmed": false,
+     "sourceStatus": "none"
+    },
+    {
+     "id": "k1",
+     "sectionId": "s3",
+     "quote": "Claude, ChatGPT, Gemini and Notion AI all draft well, but in our experience none of them kept a source behind a claim or flagged it when that source changed.",
+     "position": 412,
+     "kind": "factual",
+     "author": "model",
+     "authorAt": "2026-11-12T09:05:08.487Z",
+     "confirmed": false,
+     "sourceStatus": "none"
+    },
+    {
+     "id": "k2",
+     "sectionId": "s3",
+     "quote": "Jenni AI looked like the closest fit, but it is aimed at academic papers, with citation styles and a literature database most writers do not need.",
+     "position": 570,
+     "kind": "factual",
+     "author": "model",
+     "authorAt": "2026-11-12T09:05:08.487Z",
+     "confirmed": false,
+     "sourceStatus": "partly_supported",
+     "check": {
+      "ranAt": "2026-11-12T09:06:39.275Z",
+      "model": "haiku",
+      "reason": "The passage supports that Jenni targets academics and has a source library and citation tools, but it never mentions citation styles, and 'most writers do not need' is an unsourced judgment.",
+      "claimText": "Jenni AI looked like the closest fit, but it is aimed at academic papers, with citation styles and a literature database most writers do not need.",
+      "sourceFingerprints": {
+       "src2": "7809b23dc42"
+      }
+     }
+    },
+    {
+     "id": "k5",
+     "sectionId": "s3",
+     "quote": "The blogging tools we looked at optimize for search rankings, not for whether what you wrote is true.",
+     "position": 717,
+     "kind": "factual",
+     "author": "model",
+     "authorAt": "2026-11-12T09:05:08.487Z",
+     "confirmed": false,
+     "sourceStatus": "none"
+    },
+    {
+     "id": "k11",
+     "sectionId": "s4",
+     "quote": "Aielia Write is built on Aielia, our system for tracking facts.",
+     "position": 847,
+     "kind": "factual",
+     "author": "model",
+     "authorAt": "2026-11-12T09:05:08.487Z",
+     "confirmed": false,
+     "sourceStatus": "none"
+    },
+    {
+     "id": "k3",
+     "sectionId": "s4",
+     "quote": "It pulls out each claim in your draft sentence by sentence, checks each one against your sources, and keeps a record of which passages back it.",
+     "position": 911,
+     "kind": "factual",
+     "author": "model",
+     "authorAt": "2026-11-12T09:05:08.487Z",
+     "confirmed": false,
+     "sourceStatus": "none"
+    },
+    {
+     "id": "k10",
+     "sectionId": "s4",
+     "quote": "Every chat edit can be undone, because a version is saved before any change.",
+     "position": 1055,
+     "kind": "factual",
+     "author": "model",
+     "authorAt": "2026-11-12T09:05:08.487Z",
+     "confirmed": false,
+     "sourceStatus": "none"
+    },
+    {
+     "id": "k6",
+     "sectionId": "s4",
+     "quote": "You bring your own key, and your articles stay on your own computer, with a spend meter and a cap.",
+     "position": 1132,
+     "kind": "factual",
+     "author": "model",
+     "authorAt": "2026-11-12T09:05:08.487Z",
+     "confirmed": false,
+     "sourceStatus": "none"
+    },
+    {
+     "id": "k8",
+     "sectionId": "s5",
+     "quote": "Aielia Write does not run models of its own, so it needs an API key from a model provider.",
+     "position": 1252,
+     "kind": "factual",
+     "author": "model",
+     "authorAt": "2026-11-12T09:05:08.487Z",
+     "confirmed": false,
+     "sourceStatus": "none"
+    },
+    {
+     "id": "k9",
+     "sectionId": "s5",
+     "quote": "We suggest OpenRouter, which gives you one key that reaches models from many providers.",
+     "position": 1343,
+     "kind": "factual",
+     "author": "model",
+     "authorAt": "2026-11-12T09:05:08.487Z",
+     "confirmed": false,
+     "sourceStatus": "supported",
+     "check": {
+      "ranAt": "2026-11-12T09:05:24.008Z",
+      "model": "haiku",
+      "reason": "The passage states OpenRouter offers one API covering models from many providers, which matches the claim's meaning.",
+      "claimText": "We suggest OpenRouter, which gives you one key that reaches models from many providers.",
+      "sourceFingerprints": {
+       "src1": "1bf4a3befe6877"
+      }
+     }
+    }
+   ],
+   "sources": [
+    {
+     "id": "src1",
+     "kind": "web",
+     "address": "https://openrouter.ai",
+     "trust": "normal",
+     "freshness": "current",
+     "passage": "OpenRouter Skip to content Alpha Search ⌘ K Models Rankings Ori Docs Chat Chat Pricing Dashboard Talk to sales Sign in Sign up Sign Up The future is multi-model Run all your AI workloads securely on one neutral platform, with the best model at the best intelligence per dollar. Get API key Use your agent monthly tokens 800T+ users 10M+ models 600+ Teams that build on OpenRouter One API for every model 600+ models for text, images, video, audio, and more from 80+ providers. Discover models ⁠ Text 343 Image 65 Video 32 Speech 37 Transcription 31 Embeddings 35 Rerank 11 Decisions 30 Audio 4 More DeepSeek V4.1 Flash 1017 deepseek/deepseek-v4.1-flash-1017 Tokens this week 56.7T Change from last week -8% Hy4 tencent/hy4 Tokens this week 21.9T DeepSeek V4.1 Flash deepseek/deepseek-v4.1-flash Tokens this week 17.1T Change from last week +1% GLM 5.3 Flash z-ai/glm-5.3-flash Tokens this week 12.6T Change from last week -25% GPT-6 Luna openai/gpt-6-luna Tokens this week 7.6T Change from last week -20% Step 5 Preview stepfun/step-5-preview Tokens this week 7.3T Change from last week +2% Better, faster, cheaper. Get all three. OpenRouter picks the model and provider for each request using live data from across our marketplace, so your responses come back faster, fail less, and only cost what the task needs. Compare models ⁠ model: \"openrouter/auto\" Claude Opus 5.5 5% Grok 4.7 10% Gemini 3.8 Flash 25% DeepSeek V4.1 Flash 60% Saved this month $48,213.40 Stay up through outages and rate limits Failover is on by default, so you don&#x27;t write retry logic or pay for failed requests. You can also add your own provider keys for extra capacity. See how failover works ⁠ Providers Anthropic Amazon Bedrock Google Vertex Through OpenRouter Your usage, models, and spend all in one place Bring your own provider keys and keep the deals you&#x27;ve already negotiated. Every request, model, and dollar still shows up in one dashboard for your whole team. Learn more about dashboards ⁠ Production Last 14 days Requests 1.3M +12% Tokens 8.4B +9% Spend $0 Claude Opus 5.5 GPT-6.1 Sol Gemini 4 Argon Other Monthly budget $0 / $2,000 x Alerts at 80%, stops at 100%. Your data, your policies Choose which providers can see your prompts, whether they can keep them, and which region processes them. We enforce those rules on every request, whatever model you use. SSO and SCIM Zero data retention EU & US in-region routing Workspaces and budgets Bring your own keys Audit logs Private endpoints & provid",
+     "readAt": "2026-11-12T09:05:24.007Z",
+     "fingerprint": "1bf4a3befe6877"
+    },
+    {
+     "id": "src2",
+     "kind": "web",
+     "address": "https://jenni.ai",
+     "trust": "normal",
+     "freshness": "current",
+     "passage": "Jenni | AI Academic Writer & Research Tool for Students & Academics Pricing Teams About Blog Log In Start writing Sign up Pricing Teams About Blog Log In Start writing Meet Your Intelligent Research Assistant Jenni is the AI workspace where researchers read, write, and cite — with every claim traceable to the source. Start writing – it's free HC HC HC Loved by over 8 million academics Meet Your Intelligent Research Assistant Jenni is the AI workspace where researchers read, write, and cite — with every claim traceable to the source. Start writing – it's free HC HC HC Loved by over 8 million academics Meet Your Intelligent Research Assistant Jenni is the AI workspace where researchers read, write, and cite — with every claim traceable to the source. Start writing – it's free HC HC HC Loved by over 8 million academics Library Search 5,032 sources… Sources Collections Filters Article IF 15.00 OPEN ACCESS Maximal deadlift strength and its correlation with sprint velocity Schiemann, Warneke, Conan J. Strength & Conditioning · 2024 Deadlift Library Cite Details Open PDF Article IF 15.00 OPEN ACCESS Post-activation performance enhancement in elite athletes Abade, Sánchez, Pareja-Blanco Sports Medicine · 2023 Performance Cite Details Open PDF Article IF 3.70 OPEN ACCESS Strength training modalities for sprint performance Warneke, Lohmann, Keiner Sports · 2022 Performance Cite Details Open PDF Article IF 15.00 OPEN ACCESS Lower-body strength transfer to sprint: a meta-analysis Seitz, Reyes, Tran, Haff Sports Medicine · 2014 Sprint Mechanics Cite Details Open PDF Article IF 4.20 OPEN ACCESS Rate of force development in elite sprinters Morin, Gimenez, Edouard Frontiers in Physiology · 2019 Biomechanics Cite Details Open PDF Article IF 15.00 OPEN ACCESS Post-activation potentiation: physiological mechanisms Blazevich, Babault Sports Medicine · 2019 PAPE notes Cite Details Open PDF Article IF 3.80 OPEN ACCESS Plyometric training effects on vertical jump performance Markovic, Jaric J. Applied Physiology · 2007 Deadlift Library Cite Details Open PDF Maximum Deadlift Capacity of Elite Sprinters R… Text B I U Cite Autocomplete Abstract This investigation quantifies elite sprinters' maximal deadlift capacity, showing that elite cohorts lift up to three times their body weight and underscoring the role of lower-body strength in sprint performance (Schiemann et al., 2024) . This association holds across athletic populations, substantiating its contribution to explosive power",
+     "readAt": "2026-11-12T09:05:27.080Z",
+     "fingerprint": "7809b23dc42"
+    }
+   ],
+   "links": [
+    {
+     "id": "lk1",
+     "from": {
+      "type": "claim",
+      "id": "k9"
+     },
+     "to": {
+      "type": "source",
+      "id": "src1"
+     },
+     "kind": "supported_by",
+     "origin": "drawn",
+     "at": "2026-11-12T09:05:24.008Z"
+    },
+    {
+     "id": "lk2",
+     "from": {
+      "type": "claim",
+      "id": "k2"
+     },
+     "to": {
+      "type": "source",
+      "id": "src2"
+     },
+     "kind": "supported_by",
+     "origin": "drawn",
+     "at": "2026-11-12T09:05:27.080Z"
+    },
+    {
+     "id": "lk3",
+     "from": {
+      "type": "section",
+      "id": "s5"
+     },
+     "to": {
+      "type": "section",
+      "id": "s4"
+     },
+     "kind": "repeats",
+     "origin": "proposed",
+     "confidence": 0.6,
+     "reason": "Restates that users bring their own API key and that a spending meter and cap exist, both already stated in the what-it-does section.",
+     "at": "2026-11-12T09:07:46.194Z"
+    }
+   ],
+   "comments": [
+    {
+     "id": "wc1",
+     "articleId": "sample",
+     "text": "The Jenni AI point in the second section needs a source.",
+     "state": "open",
+     "conflictsWith": [],
+     "origin": "reviewer",
+     "capturedAt": "2026-11-12T09:06:55.034Z"
+    }
+   ],
+   "corrections": [],
+   "suggestions": [
+    {
+     "id": "sg1",
+     "span": {
+      "start": 64,
+      "end": 371,
+      "quote": "For a while we wrote by drafting in a chat tool, copying the text into a word processor, and shuttling changes back and forth between the two. Every revision meant re-pasting the current draft so the model could see what had changed. Paragraphs drifted out of sync, and it got hard to tell which parts were AI-written and which version was current."
+     },
+     "replacement": "We used to draft in a chat tool, copy the text into a word processor, and shuttle changes between the two. Every revision meant re-pasting the draft so the model could see what had changed. Paragraphs drifted out of sync, and it became hard to tell which parts were AI-written and which version was current.",
+     "reason": "Cuts filler such as 'For a while' and 'by drafting', and shortens a few phrases while keeping all the facts.",
+     "proposedBy": "assistant",
+     "model": "sonnet",
+     "state": "accepted",
+     "createdAt": "2026-11-12T09:06:17.999Z"
+    },
+    {
+     "id": "sg2",
+     "span": {
+      "start": 1252,
+      "end": 1342,
+      "quote": "Aielia Write does not run models of its own, so it needs an API key from a model provider."
+     },
+     "replacement": "Before you start, you need an API key from a model provider, because Aielia Write does not run models of its own.",
+     "reason": "Leads with what the reader must do, then gives the reason.",
+     "proposedBy": "assistant",
+     "model": "sonnet",
+     "state": "pending",
+     "createdAt": "2026-11-12T09:06:25.256Z"
+    }
+   ],
+   "ideas": [
+    {
+     "id": "id1",
+     "text": "Correct or soften the claim about Jenni AI: its own page says every claim is 'traceable to the source', so the article's statement that no existing tool keeps a source behind a claim needs qualifying. Say what Aielia Write does differently, such as flagging a claim when its source changes.",
+     "origin": "assistant",
+     "model": "sonnet",
+     "sectionId": "s3",
+     "state": "open",
+     "createdAt": "2026-11-12T09:07:34.038Z"
+    },
+    {
+     "id": "id2",
+     "text": "Give a short worked example: one sentence from a draft, the passage that backs it, and what the writer sees when the source changes. This makes the sentence-by-sentence checking concrete.",
+     "origin": "assistant",
+     "model": "sonnet",
+     "sectionId": "s4",
+     "state": "open",
+     "createdAt": "2026-11-12T09:07:34.038Z"
+    },
+    {
+     "id": "id3",
+     "text": "Explain what 'a source changed' means in practice and what the writer is asked to do about it, such as re-check the claim, keep it, or edit it.",
+     "origin": "assistant",
+     "model": "sonnet",
+     "sectionId": "s4",
+     "state": "open",
+     "createdAt": "2026-11-12T09:07:34.038Z"
+    },
+    {
+     "id": "id4",
+     "text": "Say why OpenRouter suits this tool. Its page describes one API for 600+ models from 80+ providers, failover on by default, and a single dashboard for usage and spend. This pairs well with the spend meter and cap.",
+     "origin": "assistant",
+     "model": "sonnet",
+     "sectionId": "s5",
+     "state": "open",
+     "createdAt": "2026-11-12T09:07:34.038Z"
+    },
+    {
+     "id": "id5",
+     "text": "Add concrete steps for getting started: create an OpenRouter key, set a spending limit, paste the key into Aielia Write, and add your first sources. Readers will want to know what to do in the first five minutes.",
+     "origin": "assistant",
+     "model": "sonnet",
+     "sectionId": "s5",
+     "state": "open",
+     "createdAt": "2026-11-12T09:07:34.038Z"
+    },
+    {
+     "id": "id6",
+     "text": "State who the tool is for, such as writers who must stand behind their facts, and what it is not for, such as academic citation formatting. This gives readers a quick way to decide whether it fits them.",
+     "origin": "assistant",
+     "model": "sonnet",
+     "sectionId": "s1",
+     "state": "open",
+     "createdAt": "2026-11-12T09:07:34.038Z"
+    }
+   ],
+   "name": "Sample: Introducing Aielia Write",
+   "brief": {
+    "audience": "Writers and content creators who draft with AI chat tools and want to check their claims against sources, plus people evaluating the product.",
+    "purpose": "Introduce Aielia Write, explain why it was built, and show readers how to set it up and what it does with their drafts and sources.",
+    "tone": "Plain, direct, confident product announcement with no hype.",
+    "length": "about 250 words",
+    "notes": "Use short markdown sections with H2 headings, each opening on the problem or the product's role before moving to features. Keep paragraphs brief. Name competing tools plainly and compare them by what they lack, without marketing language. Describe features in concrete terms of what the tool does and keeps. Do not cite external sources inline. End with practical setup guidance."
+   },
+   "style": {
+    "id": "derived",
+    "name": "From this article",
+    "voice": "Written in the first person plural, with a warm but factual, professional register. Sentences are mostly short to medium, and the author explains reasons and tradeoffs directly.",
+    "terms": [
+     {
+      "use": "Aielia Write"
+     },
+     {
+      "use": "Aielia"
+     },
+     {
+      "use": "claim"
+     },
+     {
+      "use": "source"
+     },
+     {
+      "use": "draft"
+     },
+     {
+      "use": "chat edit"
+     },
+     {
+      "use": "API key"
+     },
+     {
+      "use": "bring your own key"
+     },
+     {
+      "use": "model provider"
+     },
+     {
+      "use": "spend meter"
+     }
+    ]
+   }
+  },
+  "snapshots": [
+   {
+    "kind": "checkpoint",
+    "label": "First draft",
+    "at": "2026-11-12T09:05:23.843Z",
+    "markdown": "# Introducing Aielia Write\n\n## The problem that started it all\n\nFor a while we wrote by drafting in a chat tool, copying the text into a word processor, and shuttling changes back and forth between the two. Every revision meant re-pasting the current draft so the model could see what had changed. Paragraphs drifted out of sync, and it got hard to tell which parts were AI-written and which version was current.\n\n## Why existing tools were not enough\n\nClaude, ChatGPT, Gemini and Notion AI all draft well, but in our experience none of them kept a source behind a claim or flagged it when that source changed. Jenni AI looked like the closest fit, but it is aimed at academic papers, with citation styles and a literature database most writers do not need. The blogging tools we looked at optimize for search rankings, not for whether what you wrote is true.\n\n## What Aielia Write does\n\nAielia Write is built on Aielia, our system for tracking facts. It pulls out each claim in your draft sentence by sentence, checks each one against your sources, and keeps a record of which passages back it. Every chat edit can be undone, because a version is saved before any change. You bring your own key, and your articles stay on your own computer, with a spend meter and a cap.\n\n## Getting started\n\nAielia Write does not run models of its own, so it needs an API key from a model provider. We suggest OpenRouter, which gives you one key that reaches models from many providers. Set a spending limit before you start, and you cannot be surprised later.\n",
+    "meta": {
+     "formatVersion": 1,
+     "id": "sample",
+     "title": "Introducing Aielia Write",
+     "status": "drafting",
+     "sections": [
+      {
+       "id": "s1",
+       "heading": "Introducing Aielia Write",
+       "level": 1,
+       "order": 0,
+       "span": {
+        "start": 0,
+        "end": 28
+       },
+       "review": {
+        "state": "clean"
+       }
+      },
+      {
+       "id": "s2",
+       "heading": "The problem that started it all",
+       "level": 2,
+       "order": 1,
+       "span": {
+        "start": 28,
+        "end": 414
+       },
+       "review": {
+        "state": "clean"
+       },
+       "parentId": "s1"
+      },
+      {
+       "id": "s3",
+       "heading": "Why existing tools were not enough",
+       "level": 2,
+       "order": 2,
+       "span": {
+        "start": 414,
+        "end": 861
+       },
+       "review": {
+        "state": "clean"
+       },
+       "parentId": "s1"
+      },
+      {
+       "id": "s4",
+       "heading": "What Aielia Write does",
+       "level": 2,
+       "order": 3,
+       "span": {
+        "start": 861,
+        "end": 1273
+       },
+       "review": {
+        "state": "needs_review",
+        "reason": "Does not fit the rest: The same section says checking runs through a model provider the user pays for with their own key, which means draft text is sent off the machine.",
+        "setBy": "resolver",
+        "at": "2026-11-12T09:05:17.337Z"
+       },
+       "parentId": "s1"
+      },
+      {
+       "id": "s5",
+       "heading": "Getting started",
+       "level": 2,
+       "order": 4,
+       "span": {
+        "start": 1273,
+        "end": 1546
+       },
+       "review": {
+        "state": "needs_review",
+        "reason": "Goes further than the sources: A spending limit caps costs but does not guarantee there will be no surprises, so the promise goes further than anything the article supports.",
+        "setBy": "resolver",
+        "at": "2026-11-12T09:05:17.337Z"
+       },
+       "parentId": "s1"
+      }
+     ],
+     "claims": [
+      {
+       "id": "k7",
+       "sectionId": "s2",
+       "quote": "Every revision meant re-pasting the current draft so the model could see what had changed.",
+       "position": 207,
+       "kind": "factual",
+       "author": "model",
+       "authorAt": "2026-11-12T09:05:08.487Z",
+       "confirmed": false,
+       "sourceStatus": "none"
+      },
+      {
+       "id": "k4",
+       "sectionId": "s2",
+       "quote": "Paragraphs drifted out of sync, and it got hard to tell which parts were AI-written and which version was current.",
+       "position": 298,
+       "kind": "factual",
+       "author": "model",
+       "authorAt": "2026-11-12T09:05:08.487Z",
+       "confirmed": false,
+       "sourceStatus": "none"
+      },
+      {
+       "id": "k1",
+       "sectionId": "s3",
+       "quote": "Claude, ChatGPT, Gemini and Notion AI all draft well, but in our experience none of them kept a source behind a claim or flagged it when that source changed.",
+       "position": 453,
+       "kind": "factual",
+       "author": "model",
+       "authorAt": "2026-11-12T09:05:08.487Z",
+       "confirmed": false,
+       "sourceStatus": "none"
+      },
+      {
+       "id": "k2",
+       "sectionId": "s3",
+       "quote": "Jenni AI looked like the closest fit, but it is aimed at academic papers, with citation styles and a literature database most writers do not need.",
+       "position": 611,
+       "kind": "factual",
+       "author": "model",
+       "authorAt": "2026-11-12T09:05:08.487Z",
+       "confirmed": false,
+       "sourceStatus": "none"
+      },
+      {
+       "id": "k5",
+       "sectionId": "s3",
+       "quote": "The blogging tools we looked at optimize for search rankings, not for whether what you wrote is true.",
+       "position": 758,
+       "kind": "factual",
+       "author": "model",
+       "authorAt": "2026-11-12T09:05:08.487Z",
+       "confirmed": false,
+       "sourceStatus": "none"
+      },
+      {
+       "id": "k11",
+       "sectionId": "s4",
+       "quote": "Aielia Write is built on Aielia, our system for tracking facts.",
+       "position": 888,
+       "kind": "factual",
+       "author": "model",
+       "authorAt": "2026-11-12T09:05:08.487Z",
+       "confirmed": false,
+       "sourceStatus": "none"
+      },
+      {
+       "id": "k3",
+       "sectionId": "s4",
+       "quote": "It pulls out each claim in your draft sentence by sentence, checks each one against your sources, and keeps a record of which passages back it.",
+       "position": 952,
+       "kind": "factual",
+       "author": "model",
+       "authorAt": "2026-11-12T09:05:08.487Z",
+       "confirmed": false,
+       "sourceStatus": "none"
+      },
+      {
+       "id": "k10",
+       "sectionId": "s4",
+       "quote": "Every chat edit can be undone, because a version is saved before any change.",
+       "position": 1096,
+       "kind": "factual",
+       "author": "model",
+       "authorAt": "2026-11-12T09:05:08.487Z",
+       "confirmed": false,
+       "sourceStatus": "none"
+      },
+      {
+       "id": "k6",
+       "sectionId": "s4",
+       "quote": "You bring your own key, and your articles stay on your own computer, with a spend meter and a cap.",
+       "position": 1173,
+       "kind": "factual",
+       "author": "model",
+       "authorAt": "2026-11-12T09:05:08.487Z",
+       "confirmed": false,
+       "sourceStatus": "none"
+      },
+      {
+       "id": "k8",
+       "sectionId": "s5",
+       "quote": "Aielia Write does not run models of its own, so it needs an API key from a model provider.",
+       "position": 1293,
+       "kind": "factual",
+       "author": "model",
+       "authorAt": "2026-11-12T09:05:08.487Z",
+       "confirmed": false,
+       "sourceStatus": "none"
+      },
+      {
+       "id": "k9",
+       "sectionId": "s5",
+       "quote": "We suggest OpenRouter, which gives you one key that reaches models from many providers.",
+       "position": 1384,
+       "kind": "factual",
+       "author": "model",
+       "authorAt": "2026-11-12T09:05:08.487Z",
+       "confirmed": false,
+       "sourceStatus": "none"
+      }
+     ],
+     "sources": [],
+     "links": [],
+     "comments": [],
+     "corrections": [],
+     "suggestions": [],
+     "ideas": [],
+     "name": "Sample: Introducing Aielia Write"
+    },
+    "readiness": {
+     "unsourcedFactualClaims": 11,
+     "staleOrUnsupportedClaims": 0,
+     "openComments": 0,
+     "sectionsNeedingReview": 2
+    }
+   },
+   {
+    "kind": "checkpoint",
+    "label": "Before accepting a suggested change",
+    "at": "2026-11-12T09:06:27.557Z",
+    "markdown": "# Introducing Aielia Write\n\n## The problem that started it all\n\nFor a while we wrote by drafting in a chat tool, copying the text into a word processor, and shuttling changes back and forth between the two. Every revision meant re-pasting the current draft so the model could see what had changed. Paragraphs drifted out of sync, and it got hard to tell which parts were AI-written and which version was current.\n\n## Why existing tools were not enough\n\nClaude, ChatGPT, Gemini and Notion AI all draft well, but in our experience none of them kept a source behind a claim or flagged it when that source changed. Jenni AI looked like the closest fit, but it is aimed at academic papers, with citation styles and a literature database most writers do not need. The blogging tools we looked at optimize for search rankings, not for whether what you wrote is true.\n\n## What Aielia Write does\n\nAielia Write is built on Aielia, our system for tracking facts. It pulls out each claim in your draft sentence by sentence, checks each one against your sources, and keeps a record of which passages back it. Every chat edit can be undone, because a version is saved before any change. You bring your own key, and your articles stay on your own computer, with a spend meter and a cap.\n\n## Getting started\n\nAielia Write does not run models of its own, so it needs an API key from a model provider. We suggest OpenRouter, which gives you one key that reaches models from many providers. Set a spending limit before you start, and you cannot be surprised later.\n",
+    "meta": {
+     "formatVersion": 1,
+     "id": "sample",
+     "title": "Introducing Aielia Write",
+     "status": "drafting",
+     "sections": [
+      {
+       "id": "s1",
+       "heading": "Introducing Aielia Write",
+       "level": 1,
+       "order": 0,
+       "span": {
+        "start": 0,
+        "end": 28
+       },
+       "review": {
+        "state": "clean"
+       }
+      },
+      {
+       "id": "s2",
+       "heading": "The problem that started it all",
+       "level": 2,
+       "order": 1,
+       "span": {
+        "start": 28,
+        "end": 414
+       },
+       "review": {
+        "state": "clean"
+       },
+       "parentId": "s1"
+      },
+      {
+       "id": "s3",
+       "heading": "Why existing tools were not enough",
+       "level": 2,
+       "order": 2,
+       "span": {
+        "start": 414,
+        "end": 861
+       },
+       "review": {
+        "state": "clean"
+       },
+       "parentId": "s1"
+      },
+      {
+       "id": "s4",
+       "heading": "What Aielia Write does",
+       "level": 2,
+       "order": 3,
+       "span": {
+        "start": 861,
+        "end": 1273
+       },
+       "review": {
+        "state": "needs_review",
+        "reason": "Does not fit the rest: The same section says checking runs through a model provider the user pays for with their own key, which means draft text is sent off the machine.",
+        "setBy": "resolver",
+        "at": "2026-11-12T09:05:17.337Z"
+       },
+       "parentId": "s1"
+      },
+      {
+       "id": "s5",
+       "heading": "Getting started",
+       "level": 2,
+       "order": 4,
+       "span": {
+        "start": 1273,
+        "end": 1546
+       },
+       "review": {
+        "state": "needs_review",
+        "reason": "Goes further than the sources: A spending limit caps costs but does not guarantee there will be no surprises, so the promise goes further than anything the article supports.",
+        "setBy": "resolver",
+        "at": "2026-11-12T09:05:17.337Z"
+       },
+       "parentId": "s1"
+      }
+     ],
+     "claims": [
+      {
+       "id": "k7",
+       "sectionId": "s2",
+       "quote": "Every revision meant re-pasting the current draft so the model could see what had changed.",
+       "position": 207,
+       "kind": "factual",
+       "author": "model",
+       "authorAt": "2026-11-12T09:05:08.487Z",
+       "confirmed": false,
+       "sourceStatus": "none"
+      },
+      {
+       "id": "k4",
+       "sectionId": "s2",
+       "quote": "Paragraphs drifted out of sync, and it got hard to tell which parts were AI-written and which version was current.",
+       "position": 298,
+       "kind": "factual",
+       "author": "model",
+       "authorAt": "2026-11-12T09:05:08.487Z",
+       "confirmed": false,
+       "sourceStatus": "none"
+      },
+      {
+       "id": "k1",
+       "sectionId": "s3",
+       "quote": "Claude, ChatGPT, Gemini and Notion AI all draft well, but in our experience none of them kept a source behind a claim or flagged it when that source changed.",
+       "position": 453,
+       "kind": "factual",
+       "author": "model",
+       "authorAt": "2026-11-12T09:05:08.487Z",
+       "confirmed": false,
+       "sourceStatus": "none"
+      },
+      {
+       "id": "k2",
+       "sectionId": "s3",
+       "quote": "Jenni AI looked like the closest fit, but it is aimed at academic papers, with citation styles and a literature database most writers do not need.",
+       "position": 611,
+       "kind": "factual",
+       "author": "model",
+       "authorAt": "2026-11-12T09:05:08.487Z",
+       "confirmed": false,
+       "sourceStatus": "partly_supported",
+       "check": {
+        "ranAt": "2026-11-12T09:05:27.080Z",
+        "model": "haiku",
+        "reason": "The academic focus and literature database match the passage, but 'citation styles' is not stated and the 'most writers do not need' judgment is not something the passage addresses.",
+        "claimText": "Jenni AI looked like the closest fit, but it is aimed at academic papers, with citation styles and a literature database most writers do not need.",
+        "sourceFingerprints": {
+         "src2": "7809b23dc42"
+        }
+       }
+      },
+      {
+       "id": "k5",
+       "sectionId": "s3",
+       "quote": "The blogging tools we looked at optimize for search rankings, not for whether what you wrote is true.",
+       "position": 758,
+       "kind": "factual",
+       "author": "model",
+       "authorAt": "2026-11-12T09:05:08.487Z",
+       "confirmed": false,
+       "sourceStatus": "none"
+      },
+      {
+       "id": "k11",
+       "sectionId": "s4",
+       "quote": "Aielia Write is built on Aielia, our system for tracking facts.",
+       "position": 888,
+       "kind": "factual",
+       "author": "model",
+       "authorAt": "2026-11-12T09:05:08.487Z",
+       "confirmed": false,
+       "sourceStatus": "none"
+      },
+      {
+       "id": "k3",
+       "sectionId": "s4",
+       "quote": "It pulls out each claim in your draft sentence by sentence, checks each one against your sources, and keeps a record of which passages back it.",
+       "position": 952,
+       "kind": "factual",
+       "author": "model",
+       "authorAt": "2026-11-12T09:05:08.487Z",
+       "confirmed": false,
+       "sourceStatus": "none"
+      },
+      {
+       "id": "k10",
+       "sectionId": "s4",
+       "quote": "Every chat edit can be undone, because a version is saved before any change.",
+       "position": 1096,
+       "kind": "factual",
+       "author": "model",
+       "authorAt": "2026-11-12T09:05:08.487Z",
+       "confirmed": false,
+       "sourceStatus": "none"
+      },
+      {
+       "id": "k6",
+       "sectionId": "s4",
+       "quote": "You bring your own key, and your articles stay on your own computer, with a spend meter and a cap.",
+       "position": 1173,
+       "kind": "factual",
+       "author": "model",
+       "authorAt": "2026-11-12T09:05:08.487Z",
+       "confirmed": false,
+       "sourceStatus": "none"
+      },
+      {
+       "id": "k8",
+       "sectionId": "s5",
+       "quote": "Aielia Write does not run models of its own, so it needs an API key from a model provider.",
+       "position": 1293,
+       "kind": "factual",
+       "author": "model",
+       "authorAt": "2026-11-12T09:05:08.487Z",
+       "confirmed": false,
+       "sourceStatus": "none"
+      },
+      {
+       "id": "k9",
+       "sectionId": "s5",
+       "quote": "We suggest OpenRouter, which gives you one key that reaches models from many providers.",
+       "position": 1384,
+       "kind": "factual",
+       "author": "model",
+       "authorAt": "2026-11-12T09:05:08.487Z",
+       "confirmed": false,
+       "sourceStatus": "supported",
+       "check": {
+        "ranAt": "2026-11-12T09:05:24.008Z",
+        "model": "haiku",
+        "reason": "The passage states OpenRouter offers one API covering models from many providers, which matches the claim's meaning.",
+        "claimText": "We suggest OpenRouter, which gives you one key that reaches models from many providers.",
+        "sourceFingerprints": {
+         "src1": "1bf4a3befe6877"
+        }
+       }
+      }
+     ],
+     "sources": [
+      {
+       "id": "src1",
+       "kind": "web",
+       "address": "https://openrouter.ai",
+       "trust": "normal",
+       "freshness": "current",
+       "passage": "OpenRouter Skip to content Alpha Search ⌘ K Models Rankings Ori Docs Chat Chat Pricing Dashboard Talk to sales Sign in Sign up Sign Up The future is multi-model Run all your AI workloads securely on one neutral platform, with the best model at the best intelligence per dollar. Get API key Use your agent monthly tokens 800T+ users 10M+ models 600+ Teams that build on OpenRouter One API for every model 600+ models for text, images, video, audio, and more from 80+ providers. Discover models ⁠ Text 343 Image 65 Video 32 Speech 37 Transcription 31 Embeddings 35 Rerank 11 Decisions 30 Audio 4 More DeepSeek V4.1 Flash 1017 deepseek/deepseek-v4.1-flash-1017 Tokens this week 56.7T Change from last week -8% Hy4 tencent/hy4 Tokens this week 21.9T DeepSeek V4.1 Flash deepseek/deepseek-v4.1-flash Tokens this week 17.1T Change from last week +1% GLM 5.3 Flash z-ai/glm-5.3-flash Tokens this week 12.6T Change from last week -25% GPT-6 Luna openai/gpt-6-luna Tokens this week 7.6T Change from last week -20% Step 5 Preview stepfun/step-5-preview Tokens this week 7.3T Change from last week +2% Better, faster, cheaper. Get all three. OpenRouter picks the model and provider for each request using live data from across our marketplace, so your responses come back faster, fail less, and only cost what the task needs. Compare models ⁠ model: \"openrouter/auto\" Claude Opus 5.5 5% Grok 4.7 10% Gemini 3.8 Flash 25% DeepSeek V4.1 Flash 60% Saved this month $48,213.40 Stay up through outages and rate limits Failover is on by default, so you don&#x27;t write retry logic or pay for failed requests. You can also add your own provider keys for extra capacity. See how failover works ⁠ Providers Anthropic Amazon Bedrock Google Vertex Through OpenRouter Your usage, models, and spend all in one place Bring your own provider keys and keep the deals you&#x27;ve already negotiated. Every request, model, and dollar still shows up in one dashboard for your whole team. Learn more about dashboards ⁠ Production Last 14 days Requests 1.3M +12% Tokens 8.4B +9% Spend $0 Claude Opus 5.5 GPT-6.1 Sol Gemini 4 Argon Other Monthly budget $0 / $2,000 x Alerts at 80%, stops at 100%. Your data, your policies Choose which providers can see your prompts, whether they can keep them, and which region processes them. We enforce those rules on every request, whatever model you use. SSO and SCIM Zero data retention EU & US in-region routing Workspaces and budgets Bring your own keys Audit logs Private endpoints & provid",
+       "readAt": "2026-11-12T09:05:24.007Z",
+       "fingerprint": "1bf4a3befe6877"
+      },
+      {
+       "id": "src2",
+       "kind": "web",
+       "address": "https://jenni.ai",
+       "trust": "normal",
+       "freshness": "current",
+       "passage": "Jenni | AI Academic Writer & Research Tool for Students & Academics Pricing Teams About Blog Log In Start writing Sign up Pricing Teams About Blog Log In Start writing Meet Your Intelligent Research Assistant Jenni is the AI workspace where researchers read, write, and cite — with every claim traceable to the source. Start writing – it's free HC HC HC Loved by over 8 million academics Meet Your Intelligent Research Assistant Jenni is the AI workspace where researchers read, write, and cite — with every claim traceable to the source. Start writing – it's free HC HC HC Loved by over 8 million academics Meet Your Intelligent Research Assistant Jenni is the AI workspace where researchers read, write, and cite — with every claim traceable to the source. Start writing – it's free HC HC HC Loved by over 8 million academics Library Search 5,032 sources… Sources Collections Filters Article IF 15.00 OPEN ACCESS Maximal deadlift strength and its correlation with sprint velocity Schiemann, Warneke, Conan J. Strength & Conditioning · 2024 Deadlift Library Cite Details Open PDF Article IF 15.00 OPEN ACCESS Post-activation performance enhancement in elite athletes Abade, Sánchez, Pareja-Blanco Sports Medicine · 2023 Performance Cite Details Open PDF Article IF 3.70 OPEN ACCESS Strength training modalities for sprint performance Warneke, Lohmann, Keiner Sports · 2022 Performance Cite Details Open PDF Article IF 15.00 OPEN ACCESS Lower-body strength transfer to sprint: a meta-analysis Seitz, Reyes, Tran, Haff Sports Medicine · 2014 Sprint Mechanics Cite Details Open PDF Article IF 4.20 OPEN ACCESS Rate of force development in elite sprinters Morin, Gimenez, Edouard Frontiers in Physiology · 2019 Biomechanics Cite Details Open PDF Article IF 15.00 OPEN ACCESS Post-activation potentiation: physiological mechanisms Blazevich, Babault Sports Medicine · 2019 PAPE notes Cite Details Open PDF Article IF 3.80 OPEN ACCESS Plyometric training effects on vertical jump performance Markovic, Jaric J. Applied Physiology · 2007 Deadlift Library Cite Details Open PDF Maximum Deadlift Capacity of Elite Sprinters R… Text B I U Cite Autocomplete Abstract This investigation quantifies elite sprinters' maximal deadlift capacity, showing that elite cohorts lift up to three times their body weight and underscoring the role of lower-body strength in sprint performance (Schiemann et al., 2024) . This association holds across athletic populations, substantiating its contribution to explosive power",
+       "readAt": "2026-11-12T09:05:27.080Z",
+       "fingerprint": "7809b23dc42"
+      }
+     ],
+     "links": [
+      {
+       "id": "lk1",
+       "from": {
+        "type": "claim",
+        "id": "k9"
+       },
+       "to": {
+        "type": "source",
+        "id": "src1"
+       },
+       "kind": "supported_by",
+       "origin": "drawn",
+       "at": "2026-11-12T09:05:24.008Z"
+      },
+      {
+       "id": "lk2",
+       "from": {
+        "type": "claim",
+        "id": "k2"
+       },
+       "to": {
+        "type": "source",
+        "id": "src2"
+       },
+       "kind": "supported_by",
+       "origin": "drawn",
+       "at": "2026-11-12T09:05:27.080Z"
+      }
+     ],
+     "comments": [],
+     "corrections": [],
+     "suggestions": [
+      {
+       "id": "sg1",
+       "span": {
+        "start": 64,
+        "end": 412,
+        "quote": "For a while we wrote by drafting in a chat tool, copying the text into a word processor, and shuttling changes back and forth between the two. Every revision meant re-pasting the current draft so the model could see what had changed. Paragraphs drifted out of sync, and it got hard to tell which parts were AI-written and which version was current."
+       },
+       "replacement": "We used to draft in a chat tool, copy the text into a word processor, and shuttle changes between the two. Every revision meant re-pasting the draft so the model could see what had changed. Paragraphs drifted out of sync, and it became hard to tell which parts were AI-written and which version was current.",
+       "reason": "Cuts filler such as 'For a while' and 'by drafting', and shortens a few phrases while keeping all the facts.",
+       "proposedBy": "assistant",
+       "model": "sonnet",
+       "state": "pending",
+       "createdAt": "2026-11-12T09:06:17.999Z"
+      },
+      {
+       "id": "sg2",
+       "span": {
+        "start": 1293,
+        "end": 1383,
+        "quote": "Aielia Write does not run models of its own, so it needs an API key from a model provider."
+       },
+       "replacement": "Before you start, you need an API key from a model provider, because Aielia Write does not run models of its own.",
+       "reason": "Leads with what the reader must do, then gives the reason.",
+       "proposedBy": "assistant",
+       "model": "sonnet",
+       "state": "pending",
+       "createdAt": "2026-11-12T09:06:25.256Z"
+      }
+     ],
+     "ideas": [],
+     "name": "Sample: Introducing Aielia Write"
+    },
+    "readiness": {
+     "unsourcedFactualClaims": 9,
+     "staleOrUnsupportedClaims": 1,
+     "openComments": 0,
+     "sectionsNeedingReview": 2
+    }
+   }
+  ]
+ },
+ "chat": [
+  {
+   "id": 1,
+   "from": "you",
+   "text": "Which claim in this article is the one a reader is most likely to challenge?"
+  },
+  {
+   "id": 2,
+   "from": "aielia",
+   "text": "The claim a reader is most likely to challenge is **\"your articles stay on your own computer\"** in the \"What Aielia Write does\" section.\n\nThe article also says Aielia Write runs no models of its own and needs your API key from a provider such as OpenRouter. Claim-checking and chat edits go through that provider, so your draft text has to leave your machine. A careful reader will notice this within a few paragraphs, and privacy is a topic people watch closely. The article's own review notes already flag this section as not fitting the rest.\n\nTwo close runners-up:\n\n- **\"Set a spending limit... you cannot be surprised later.\"** A cap limits spend but doesn't guarantee there are no surprises, so it overpromises. This is also flagged for review in the article's records.\n- **The competitor comparison.** The claim that Claude, ChatGPT, Gemini and Notion AI don't keep a source behind a claim has no source in the article's records. Jenni's page, as provided, says \"every claim traceable to the source,\" so a reader could push back on the idea that this is a gap only Aielia Write fills.\n\nWhat I could and couldn't verify:\n\n- **Based on the article and its records:** the contradiction on local storage and the flagged review items. These come from the article text and its review notes, not from outside checking.\n- **Based on the supplied excerpts only:** the Jenni quote and the OpenRouter details. Both pages were cut off, so I haven't seen their full content, and I didn't read them fresh. To check, open jenni.ai and openrouter.ai directly.\n- **Not verified at all:** what Claude, ChatGPT, Gemini, Notion AI or the blogging tools actually do with sources, and how Aielia Write actually stores data or sends text. To check, look at each tool's current docs and at Aielia Write's own storage and network behavior.\n\nThe simplest fix for the first claim is to say that draft text is sent to your chosen model provider, while the articles and version history are stored locally, assuming that's true of the product.",
+   "model": "sonnet"
+  },
+  {
+   "id": 3,
+   "from": "you",
+   "text": "Suggest a tighter wording for the first section."
+  },
+  {
+   "id": 4,
+   "from": "aielia",
+   "text": "Added 1 suggestion. Review it in Issues.",
+   "model": "sonnet"
+  },
+  {
+   "id": 5,
+   "from": "you",
+   "text": "Suggest a clearer opening sentence for the Getting started section."
+  },
+  {
+   "id": 6,
+   "from": "aielia",
+   "text": "Added 1 suggestion. Review it in Issues.",
+   "model": "sonnet"
+  },
+  {
+   "id": 7,
+   "from": "you",
+   "text": "Check the claims in my article."
+  },
+  {
+   "id": 8,
+   "from": "aielia",
+   "text": "I found 11 factual claims: 1 supported, 9 without a checked source, 1 to look at. Details are in Issues.",
+   "model": "haiku"
+  },
+  {
+   "id": 9,
+   "from": "you",
+   "text": "A reviewer says the Jenni AI point in the second section needs a source."
+  },
+  {
+   "id": 10,
+   "from": "aielia",
+   "text": "Reviewer comment wc1 is still open, and you haven't decided how to handle it. The Jenni AI sentence in the second section has no citation, and the article's records mark it \"partly supported.\"\n\n**What the Jenni excerpt you supplied shows**\n- The page title calls it an \"AI Academic Writer & Research Tool for Students & Academics,\" and the tagline describes a workspace where researchers \"read, write, and cite.\" That fits \"aimed at academic papers.\"\n- The excerpt shows a library of 5,032 sources with Cite buttons. That fits the \"literature database\" part.\n\n**What I could not verify**\n- **Citation styles.** The excerpt shows citing but never names styles such as APA or MLA. It was also cut off, so they may appear elsewhere on the site.\n- **The live page.** I'm relying on the excerpt you supplied, not a fresh read of jenni.ai. The site may have changed, or may say more than the excerpt does.\n- **Your judgment calls.** \"Looked like the closest fit\" and \"most writers do not need\" are opinions, so no link will prove them. Presenting them as your view, as \"in our experience\" does elsewhere in the section, is the honest framing.\n\n**How to check:** open jenni.ai and look at its features and pricing pages for citation styles and the source library.\n\n**Ways to resolve the comment**\n1. Link jenni.ai where Jenni is first mentioned.\n2. Keep \"citation styles\" only if the site confirms it. Otherwise soften it to \"citations and a literature library.\"\n\nJenni's tagline, \"every claim traceable to the source,\" may also draw a reader's attention. The article says none of the four general-purpose tools keep a source behind a claim, and a reader who clicks through to Jenni will see it advertises something similar. Consider acknowledging that, for example by saying Jenni's traceability is built for academic work.\n\nI can draft revised wording for the sentence if you'd like.",
+   "model": "sonnet"
+  },
+  {
+   "id": 11,
+   "from": "you",
+   "text": "Give me ideas for what else to add to this article."
+  },
+  {
+   "id": 12,
+   "from": "aielia",
+   "text": "Added 6 ideas to Ideas. Write one in when you are ready.",
+   "model": "sonnet"
+  }
+ ]
+}
