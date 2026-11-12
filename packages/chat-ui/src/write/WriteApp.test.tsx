@@ -400,13 +400,15 @@ describe('the chat is stored as shown', () => {
 })
 
 describe('rail and panels', () => {
-  it('has a rail of buttons; on desktop the panel opens from the rail and closes when the same button is clicked again', () =>
+  it('has a rail of buttons; the panel starts closed on desktop too, opens from the rail and closes when the same button is clicked again', () =>
     wide(async () => {
       const s = await services({}, MD)
       const { container } = render(<WriteApp services={s} />)
       await waitForText()
       const main = container.querySelector('.write__main') as HTMLElement
       expect(within(screen.getByRole('navigation', { name: 'Panels' })).getAllByRole('button').map((b) => b.getAttribute('aria-label'))).toEqual(['Text', 'Style', 'Ideas', 'Issues', 'Sources', 'History', 'Chat', 'Settings'])
+      expect(main.dataset.open).toBe('false')
+      await userEvent.click(rail('Style'))
       expect(main.dataset.open).toBe('true')
       await userEvent.click(rail('Style'))
       expect(main.dataset.open).toBe('false')

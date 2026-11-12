@@ -176,13 +176,14 @@ function WriteAppBody({ services, connection, onDeleted, appSwitch, showPublish 
   const [bundle, setBundle] = useState<ArticleBundle | undefined>()
   const [draft, setDraft] = useState('')
   const draftShown = draft
-  const [tab, setTab] = useState<Tab>(() => (isWide() ? (sample ? 'issues' : 'style') : 'text'))
+  const [tab, setTab] = useState<Tab>(() => (isWide() ? 'style' : 'text'))
   const [view, setView] = useState<TextView>('text')
   // Where to put the cursor once the text is on screen again (a section picked in the outline).
   const pendingJump = useRef<number | null>(null)
   // Desktop: the side panel opens when a rail button is clicked and closes when it is clicked again.
   // On a tablet the panel floats over the text, so it starts closed there; on a desktop it has its own column and starts open.
-  const [railOpen, setRailOpen] = useState<boolean>(() => isDesktop())
+  // The side panel starts closed on every visit and refresh: the text and the chat get the room, and a click on a rail icon opens its pane.
+  const [railOpen, setRailOpen] = useState<boolean>(false)
   const [versions, setVersions] = useState<VersionRow[]>([])
   const [working, setWorking] = useState<ChangeSummary | undefined>(undefined)
   const [viewing, setViewing] = useState<Viewing | null>(null)
