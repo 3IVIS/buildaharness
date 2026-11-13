@@ -646,6 +646,26 @@
       "batch": null,
       "rationale": "URL scheme syntax, not natural language; nothing about the meaning of the text is decided",
       "class": "A"
+    },
+    {
+      "id": "mail-gmail-fixture-routing",
+      "file": "packages/aielia/src/email/providers/gmail-fixture-server.ts",
+      "line": 113,
+      "decides": "routes fixture-server requests by REST path shape and checks the Bearer header format",
+      "inputs": null,
+      "batch": null,
+      "rationale": "URL path and HTTP header syntax in a test fixture server, not natural language",
+      "class": "A"
+    },
+    {
+      "id": "mail-gmail-query-and-errors",
+      "file": "packages/aielia/src/email/providers/gmail.ts",
+      "line": 96,
+      "decides": "escapes search-query operator characters, checks a numeric timestamp, and maps Gmail API error reason codes",
+      "inputs": null,
+      "batch": null,
+      "rationale": "query-syntax escaping, digit check and API error-code names; nothing about message meaning is decided",
+      "class": "A"
     }
   ],
   "scanBaseline": {
@@ -667,6 +687,8 @@
     "packages/aielia/src/html-to-markdown.ts": 11,
     "packages/aielia/src/writer/repo-search.ts": 3,
     "packages/aielia/src/email/untrusted.ts": 1,
-    "packages/aielia/src/writer/text-tool-calls.ts": 2
+    "packages/aielia/src/writer/text-tool-calls.ts": 2,
+    "packages/aielia/src/email/providers/gmail-fixture-server.ts": 5,
+    "packages/aielia/src/email/providers/gmail.ts": 1
   }
 }
