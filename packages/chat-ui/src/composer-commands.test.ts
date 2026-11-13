@@ -8,8 +8,9 @@ describe('composer commands', () => {
   })
 
   it('each explain command is answered by explainCommand; /project and /undo-action have their own handlers', () => {
-    for (const command of COMPOSER_COMMANDS.filter((c) => c !== '/project' && c !== '/undo-action')) expect(explainCommand(command, {})).toBeDefined()
+    for (const command of COMPOSER_COMMANDS.filter((c) => c !== '/project' && c !== '/undo-action' && c !== '/email')) expect(explainCommand(command, {})).toBeDefined()
     expect(explainCommand('/project', {})).toBeUndefined()
     expect(explainCommand('/undo-action', {})).toBeUndefined()
+    expect(explainCommand('/email', {})).toBeUndefined()
   })
 })

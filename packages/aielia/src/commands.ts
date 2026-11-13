@@ -44,6 +44,7 @@ export const COMMAND_REGISTRY: CommandSpec[] = [
   { name: '/memory off', usage: '/memory off | on', description: 'Stop (or resume) all memory writes for this install; existing facts stay readable and removable', surfaces: 'cli-only', reason: `${APP_CONTROL} (Settings)` },
   { name: '/search', usage: '/search <query>', description: 'Search past messages by content — ranked, not just exact-match', surfaces: 'cli-only', reason: `${APP_CONTROL} (search box)` },
   { name: '/model', usage: '/model [name]', description: 'Show or switch the active model', surfaces: 'cli-only', reason: `${APP_CONTROL} (Settings)` },
+  { name: '/email', usage: '/email <review|todo|reply|file|rules|undo>', description: 'Work with your mail: review new mail, show the to-do list, draft a reply, propose filing, show rules, undo a change', surfaces: 'both' },
   { name: '/project', usage: '/project [name]', description: 'Show or switch which project new project-scoped facts are tagged with (/project clear reverts to the workspace default)', surfaces: 'both' },
   { name: '/cost', usage: '/cost', description: 'Show token usage for the last turn and this session', surfaces: 'cli-only', reason: `${APP_CONTROL} (cost line under each reply)` },
   { name: '/doctor', usage: '/doctor', description: 'Check proxy/claude-cli/workspace/data-dir health', surfaces: 'cli-only', reason: `${APP_CONTROL} (Settings diagnostics)` },
@@ -64,9 +65,7 @@ export const COMMAND_REGISTRY: CommandSpec[] = [
  * Capabilities that are CLI-only on purpose and are not slash commands, so they have no registry entry above.
  * Each is a decision of the owner (D5) and carries the reason.
  */
-export const CLI_ONLY_FEATURES: { name: string; reason: string }[] = [
-  { name: 'email', reason: 'sending needs credentials a browser or webview cannot hold safely' },
-]
+export const CLI_ONLY_FEATURES: { name: string; reason: string }[] = []
 
 /** First word of a command name: the key the CLI dispatch table and the composer match on. */
 export function commandKey(name: string): string {

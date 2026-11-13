@@ -17,6 +17,8 @@ import {
   presentTurnResult,
   DEFAULT_ESCALATION_REASON,
   parseProjectCommand,
+  parseEmailCommand,
+  formatEmailCommand,
   parseUndoActionCommand,
   formatUndoLogListing,
   formatMemoryExport,
@@ -950,6 +952,17 @@ export function App(): React.JSX.Element {
     return true
   }
 
+  /** /email <subcommand>: parsing and wording are shared with the CLI (email-command.ts). Returns whether `message` was one. */
+  function handleEmailCommand(message: string): boolean {
+    const [command, ...args] = message.trim().split(/\s+/)
+    if (command !== '/email') return false
+    setShowDemo(false)
+    setInput('')
+    if (composerRef.current) composerRef.current.style.height = 'auto'
+    setEntries((prev) => [...prev, { id: newId(), kind: 'explain', command: message.trim(), lines: formatEmailCommand(parseEmailCommand(args), false) }])
+    return true
+  }
+
   /** /undo-action [id]: lists revertible edits, or stages a revert that goes through the ordinary approval card (and resumes like any staged action). Parsing and listing text are the CLI's. Returns whether `message` was one. */
   function handleUndoActionCommand(message: string): boolean {
     const [command, ...args] = message.trim().split(/\s+/)
@@ -981,6 +994,7 @@ export function App(): React.JSX.Element {
     const message = input.trim()
     if (showExplanation(message)) return
     if (handleProjectCommand(message)) return
+    if (handleEmailCommand(message)) return
     if (handleUndoActionCommand(message)) return
     if (keyMissing) {
       setNeedsSetup(true)
