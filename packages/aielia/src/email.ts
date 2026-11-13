@@ -27,7 +27,7 @@ export interface EmailMessage {
 export interface SendEmailResult {
   /** Provider-assigned id for the delivered message, when the transport returns one. */
   id?: string
-  provider: 'resend' | 'smtp'
+  provider: 'resend' | 'smtp' | 'account'
 }
 
 /**
@@ -109,9 +109,13 @@ export function createResendSender(options: ResendSenderOptions): SendEmail {
  * recipient (Cc/Bcc included, since a hidden Bcc is a silent exfiltration channel) and the whole
  * body, never a truncated preview.
  */
-export function formatEmailApprovalReason(message: Pick<EmailMessage, 'to' | 'subject' | 'body' | 'cc' | 'bcc'>): string {
+export function formatEmailApprovalReason(
+  message: Pick<EmailMessage, 'to' | 'subject' | 'body' | 'cc' | 'bcc'>,
+  warnings: string[] = [],
+): string {
   const recipients = [`  To: ${message.to}`]
   if (message.cc) recipients.push(`  Cc: ${message.cc}`)
   if (message.bcc) recipients.push(`  Bcc: ${message.bcc}`)
-  return `Proposes sending an email:\n${recipients.join('\n')}\n  Subject: ${message.subject}\n\n${message.body}`
+  const warn = warnings.map((w) => `  WARNING: ${w}`)
+  return `Proposes sending an email:\n${[...recipients, ...warn].join('\n')}\n  Subject: ${message.subject}\n\n${message.body}`
 }

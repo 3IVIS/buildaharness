@@ -99,6 +99,7 @@ export function formatAddress(a: ParsedAddress): string {
 export interface RawDraft {
   to: ParsedAddress[]
   cc?: ParsedAddress[]
+  bcc?: ParsedAddress[]
   subject: string
   textBody: string
   from?: ParsedAddress
@@ -112,6 +113,7 @@ export function buildRawMessage(d: RawDraft): string {
   if (d.from) lines.push(`From: ${formatAddress(d.from)}`)
   lines.push(`To: ${d.to.map(formatAddress).join(', ')}`)
   if (d.cc?.length) lines.push(`Cc: ${d.cc.map(formatAddress).join(', ')}`)
+  if (d.bcc?.length) lines.push(`Bcc: ${d.bcc.map(formatAddress).join(', ')}`)
   lines.push(`Subject: ${encodeHeaderValue(d.subject)}`)
   if (d.inReplyTo) lines.push(`In-Reply-To: ${d.inReplyTo.replace(/[\r\n]+/g, ' ')}`)
   if (d.references) lines.push(`References: ${d.references.replace(/[\r\n]+/g, ' ')}`)

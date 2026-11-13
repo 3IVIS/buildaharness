@@ -43,6 +43,8 @@ export interface DraftInput {
   threadId?: string
   to: Array<{ address: string; name?: string }>
   cc?: Array<{ address: string; name?: string }>
+  /** Blind copies: sent to the provider, never stored on the message. */
+  bcc?: Array<{ address: string; name?: string }>
   subject: string
   textBody: string
 }

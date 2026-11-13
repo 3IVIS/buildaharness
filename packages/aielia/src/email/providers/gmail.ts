@@ -135,7 +135,7 @@ export class GmailEmailProvider implements EmailProvider {
       inReplyTo = last?.headers['message-id']
       references = [last?.headers['references'], inReplyTo].filter(Boolean).join(' ') || undefined
     }
-    const raw = buildRawMessage({ from: { address: this.account.address, name: this.account.displayName || undefined }, to: draft.to, cc: draft.cc, subject: draft.subject, textBody: draft.textBody, inReplyTo, references })
+    const raw = buildRawMessage({ from: { address: this.account.address, name: this.account.displayName || undefined }, to: draft.to, cc: draft.cc, bcc: draft.bcc, subject: draft.subject, textBody: draft.textBody, inReplyTo, references })
     const created = await this.call<{ id: string; message?: { id: string } }>('POST', '/drafts', undefined, {
       message: { raw: toBase64Url(raw), ...(draft.threadId ? { threadId: draft.threadId } : {}) },
     })
