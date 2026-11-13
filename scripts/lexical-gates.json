@@ -636,6 +636,16 @@
       "batch": null,
       "rationale": "Markup syntax of a tool call, not natural language; nothing about the meaning of the text is decided",
       "class": "A"
+    },
+    {
+      "id": "mail-link-scheme-strip",
+      "file": "packages/aielia/src/email/untrusted.ts",
+      "line": 54,
+      "decides": "strips the http(s):// scheme from a link's visible text before comparing hosts in the mail link-mismatch check",
+      "inputs": null,
+      "batch": null,
+      "rationale": "URL scheme syntax, not natural language; nothing about the meaning of the text is decided",
+      "class": "A"
     }
   ],
   "scanBaseline": {
@@ -656,6 +666,7 @@
     "packages/runtime/src/openai-compatible-client.ts": 3,
     "packages/aielia/src/html-to-markdown.ts": 11,
     "packages/aielia/src/writer/repo-search.ts": 3,
+    "packages/aielia/src/email/untrusted.ts": 1,
     "packages/aielia/src/writer/text-tool-calls.ts": 2
   }
 }
