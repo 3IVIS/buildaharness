@@ -10,7 +10,7 @@ export const EMAIL_MODEL_VERSION = 1
 
 const IsoString = z.string().min(1)
 
-export const ProviderKindSchema = z.enum(['gmail', 'imap', 'fake'])
+export const ProviderKindSchema = z.enum(['gmail', 'graph', 'imap', 'fake'])
 export type ProviderKind = z.infer<typeof ProviderKindSchema>
 
 export const AccountSchema = z.object({

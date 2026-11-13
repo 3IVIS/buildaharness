@@ -26,6 +26,20 @@ export const GOOGLE_OAUTH_ENDPOINTS: OAuthProviderEndpoints = {
   extraAuthParams: { access_type: 'offline', prompt: 'consent' },
 }
 
+/**
+ * Microsoft identity platform (v2.0) endpoints for a single-page app: authorisation code with PKCE, no client secret.
+ * `common` lets both work/school and personal accounts sign in. Refresh tokens for a single-page app rotate on every
+ * use (the token source already keeps the newest one) and expire after 24 hours, so a returning user may be asked to
+ * sign in again; the token source reports that as `SignInNeededError`. `response_mode=query` keeps the redirect shape
+ * the flow reads. The client id and redirect address come from build configuration.
+ */
+export const MICROSOFT_OAUTH_ENDPOINTS: OAuthProviderEndpoints = {
+  authorizationEndpoint: 'https://login.microsoftonline.com/common/oauth2/v2.0/authorize',
+  tokenEndpoint: 'https://login.microsoftonline.com/common/oauth2/v2.0/token',
+  scopes: ['https://graph.microsoft.com/Mail.ReadWrite', 'https://graph.microsoft.com/Mail.Send', 'offline_access'],
+  extraAuthParams: { response_mode: 'query', prompt: 'select_account' },
+}
+
 /** The part of WebCrypto the flow needs. */
 export interface OAuthCrypto {
   getRandomValues(array: Uint8Array): Uint8Array
