@@ -25,3 +25,20 @@
 .email button { min-height: 32px; }
 .email--phone button { min-height: 44px; }
 .email__todo { flex: 1; padding: 12px; overflow-y: auto; }
+
+/* Message list (U4) */
+.mlist__bar { display: flex; gap: 8px; align-items: center; padding: 6px 10px; background: #fff7e0; border-bottom: 1px solid #e0c97a; }
+.mlist__bar span { flex: 1; }
+.mlist__count { padding: 2px 10px; font-size: 12px; }
+.mlist__scroll { outline: none; }
+.mlist__scroll:focus-visible { box-shadow: inset 0 0 0 2px #3b6fd4; }
+.mlist__group { padding: 6px 10px; font-size: 12px; font-weight: 600; text-transform: uppercase; opacity: .65; box-sizing: border-box; }
+.mlist__row { display: flex; gap: 8px; align-items: center; padding: 0 10px; box-sizing: border-box; border-bottom: 1px solid rgba(0,0,0,.06); cursor: pointer; overflow: hidden; }
+.mlist__row.is-unread .mlist__from, .mlist__row.is-unread .mlist__subject { font-weight: 600; }
+.mlist__row.is-selected { background: rgba(59,111,212,.14); }
+.mlist__row.is-active { outline: 2px solid #3b6fd4; outline-offset: -2px; }
+.mlist__row.is-affected { background: #fff2c4; }
+.mlist__from { flex: 0 0 28%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.mlist__subject { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.mlist__tag, .mlist__mark { font-size: 11px; padding: 1px 6px; border-radius: 8px; background: rgba(0,0,0,.07); white-space: nowrap; }
+.mlist__mark button { margin-left: 4px; font-size: 11px; }

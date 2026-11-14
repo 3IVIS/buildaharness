@@ -1,6 +1,7 @@
 import { useState } from 'react'
 import type { SampleMailbox } from './sample-mode'
 import { EmailLayout } from './EmailLayout'
+import { MessageList } from './MessageList'
 
 /**
  * The sample mailbox: the Inbox of the invented mailbox, and a chat box whose every answer says this is a sample. The full layout (U3 onward) replaces
@@ -32,11 +33,7 @@ export function SampleMailboxView({ sample, onConnect }: { sample: SampleMailbox
         list={
           <>
             <h2>Inbox</h2>
-            <ul aria-label="Messages">
-              {sample.inbox.map((m) => (
-                <li key={m.id}><button type="button" onClick={() => setOpenId(m.id)}>{m.from.name ?? m.from.address} — {m.subject}</button></li>
-              ))}
-            </ul>
+            <MessageList messages={sample.inbox} onOpen={setOpenId} />
           </>
         }
         reader={open ? <article aria-label="Message"><h3>{open.subject}</h3><pre>{open.textBody}</pre></article> : <p>Select a message to read it.</p>}
