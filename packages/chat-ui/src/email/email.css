@@ -59,3 +59,17 @@
 .reply__approval { border: 2px solid #3b6fd4; border-radius: 8px; padding: 10px; background: var(--surface, #fff); }
 .reply__text { white-space: pre-wrap; max-height: 240px; overflow-y: auto; }
 .reply__warn, .reply__error { color: #8a1f11; background: #fdecea; padding: 4px 8px; border-radius: 4px; }
+
+/* Phone polish (U9) */
+.phone-sheet { position: fixed; left: 0; right: 0; bottom: 0; z-index: 15; background: var(--surface, #fff); border-radius: 14px 14px 0 0; box-shadow: 0 -2px 12px rgba(0,0,0,.2); overflow-y: auto; padding-bottom: env(safe-area-inset-bottom); }
+.phone-sheet--half { height: 50vh; }
+.phone-sheet--full { height: 100vh; border-radius: 0; }
+.phone-sheet__handle { height: 20px; touch-action: none; cursor: grab; }
+.phone-sheet__handle::after { content: ''; display: block; width: 40px; height: 4px; margin: 8px auto; border-radius: 2px; background: rgba(0,0,0,.3); }
+.phone-fab { position: fixed; right: 16px; bottom: calc(72px + env(safe-area-inset-bottom)); z-index: 14; border-radius: 28px; padding: 12px 18px; }
+.phone-swipe { position: relative; touch-action: pan-y; }
+.phone-swipe__buttons { display: none; }
+@media (hover: hover) { .phone-swipe:hover .phone-swipe__buttons { display: inline-flex; gap: 4px; } }
+.phone-confirm { position: fixed; left: 8px; right: 8px; bottom: calc(60px + env(safe-area-inset-bottom)); z-index: 16; display: flex; justify-content: space-between; align-items: center; padding: 8px 12px; border-radius: 8px; background: #222; color: #fff; }
+.phone-todo__actions { display: flex; gap: 8px; }
+.phone-todo__actions button { flex: 1; padding: 14px 0; }

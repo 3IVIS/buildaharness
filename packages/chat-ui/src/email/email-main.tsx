@@ -4,6 +4,7 @@ import { FirstRun } from './FirstRun'
 import { SampleMailboxView } from './SampleMailboxView'
 import { createSampleMailbox, type SampleMailbox } from './sample-mode'
 import { loadEmailConnection, saveEmailConnection, type EmailConnection } from './email-config'
+import { registerEmailServiceWorker } from './register-sw'
 import '../write/write.css'
 
 /**
@@ -37,4 +38,5 @@ function Root(): React.JSX.Element {
   return <SampleMailboxView sample={sample} onConnect={() => setSettingUp(true)} />
 }
 
+if (import.meta.env?.PROD) void registerEmailServiceWorker()
 createRoot(document.getElementById('root')!).render(<StrictMode><Root /></StrictMode>)
