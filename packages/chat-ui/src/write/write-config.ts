@@ -24,7 +24,7 @@ const STORAGE_KEY = 'aielia-write.connection'
 
 const PROVIDERS = ['anthropic', 'openai', 'openrouter', 'proxy']
 
-function clean(raw: unknown): WriteConnection | undefined {
+export function cleanConnection(raw: unknown): WriteConnection | undefined {
   if (typeof raw !== 'object' || raw === null) return undefined
   const r = raw as Record<string, unknown>
   const text = (v: unknown): string | undefined => (typeof v === 'string' && v.trim() ? v.trim() : undefined)
@@ -40,14 +40,14 @@ function clean(raw: unknown): WriteConnection | undefined {
 export function loadConnection(): WriteConnection | undefined {
   try {
     const raw = localStorage.getItem(STORAGE_KEY)
-    return raw ? clean(JSON.parse(raw)) : undefined
+    return raw ? cleanConnection(JSON.parse(raw)) : undefined
   } catch {
     return undefined
   }
 }
 
 export function saveConnection(c: WriteConnection): void {
-  const cleaned = clean(c)
+  const cleaned = cleanConnection(c)
   if (!cleaned) return
   try {
     localStorage.setItem(STORAGE_KEY, JSON.stringify(cleaned))
