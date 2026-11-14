@@ -47,3 +47,15 @@
 .mail-reader__warn { color: #8a1f11; background: #fdecea; padding: 4px 8px; border-radius: 4px; }
 .mail-reader__note { color: #555; }
 .mail-reader__attachments { list-style: none; padding: 0; }
+
+/* Inline reply and send approval (U7) */
+.reply { display: flex; flex-direction: column; gap: 6px; padding: 10px; border-top: 1px solid var(--border); }
+.reply--full { position: fixed; inset: 0; z-index: 20; background: var(--surface, #fff); overflow-y: auto; padding-bottom: calc(10px + env(safe-area-inset-bottom)); }
+.reply textarea { width: 100%; box-sizing: border-box; font: inherit; }
+.reply__suggestions { list-style: none; padding: 0; }
+.reply__suggestions del { background: #fdecea; }
+.reply__suggestions ins { background: #e6f4ea; text-decoration: none; }
+.reply__reason { margin: 0 8px; color: #555; font-size: 12px; }
+.reply__approval { border: 2px solid #3b6fd4; border-radius: 8px; padding: 10px; background: var(--surface, #fff); }
+.reply__text { white-space: pre-wrap; max-height: 240px; overflow-y: auto; }
+.reply__warn, .reply__error { color: #8a1f11; background: #fdecea; padding: 4px 8px; border-radius: 4px; }
