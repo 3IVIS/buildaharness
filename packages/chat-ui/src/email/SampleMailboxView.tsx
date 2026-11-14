@@ -2,6 +2,7 @@ import { useState } from 'react'
 import type { SampleMailbox } from './sample-mode'
 import { EmailLayout } from './EmailLayout'
 import { MessageList } from './MessageList'
+import { MailReader } from './MailReader'
 
 /**
  * The sample mailbox: the Inbox of the invented mailbox, and a chat box whose every answer says this is a sample. The full layout (U3 onward) replaces
@@ -36,7 +37,7 @@ export function SampleMailboxView({ sample, onConnect }: { sample: SampleMailbox
             <MessageList messages={sample.inbox} onOpen={setOpenId} />
           </>
         }
-        reader={open ? <article aria-label="Message"><h3>{open.subject}</h3><pre>{open.textBody}</pre></article> : <p>Select a message to read it.</p>}
+        reader={open ? <MailReader message={open} /> : <p>Select a message to read it.</p>}
         aielia={
           <>
             <ul>{lines.map((l, i) => <li key={i} data-from={l.from}>{l.text}</li>)}</ul>

@@ -42,3 +42,8 @@
 .mlist__subject { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .mlist__tag, .mlist__mark { font-size: 11px; padding: 1px 6px; border-radius: 8px; background: rgba(0,0,0,.07); white-space: nowrap; }
 .mlist__mark button { margin-left: 4px; font-size: 11px; }
+
+.mail-reader__frame { width: 100%; min-height: 320px; border: 0; background: #fff; }
+.mail-reader__warn { color: #8a1f11; background: #fdecea; padding: 4px 8px; border-radius: 4px; }
+.mail-reader__note { color: #555; }
+.mail-reader__attachments { list-style: none; padding: 0; }
