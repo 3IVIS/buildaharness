@@ -7,6 +7,8 @@ use std::time::SystemTime;
 use tauri::Emitter;
 use tauri_plugin_dialog::DialogExt;
 
+mod mail_keychain;
+
 /// The monorepo root, computed from this crate's compile-time location
 /// (`packages/desktop/src-tauri`) rather than the process's runtime cwd — dev-mode-only
 /// wiring so "what is this repo about"-style questions have something real to read via
@@ -1200,7 +1202,10 @@ pub fn run() {
       dns_lookup,
       keychain_set_api_key,
       keychain_get_api_key,
-      keychain_delete_api_key
+      keychain_delete_api_key,
+      mail_keychain::mail_secret_set,
+      mail_keychain::mail_secret_get,
+      mail_keychain::mail_secret_delete
     ])
     .setup(|app| {
       if cfg!(debug_assertions) {

@@ -1,9 +1,9 @@
 import { describe, it, expect, vi, afterEach } from 'vitest'
 import { render, screen, cleanup } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
-import { resolveConfig, SecretStoreError } from '@buildaharness/aielia'
+import { resolveConfig, SecretStoreError, SessionFallbackSecretStore } from '@buildaharness/aielia'
 import { availableApps, appSwitchHandler } from '../app-switch'
-import { EMAIL_CHAT_TOOLS, tauriNetworkPort, tauriSecretStore, type Invoke } from './desktop-platform'
+import { EMAIL_CHAT_TOOLS, tauriNetworkPort, tauriSecretStore, NO_KEYRING_PREFIX, type Invoke } from './desktop-platform'
 
 const config = resolveConfig({ llmBackend: 'anthropic', apiKey: 'k' }).config
 const platform = vi.fn()
@@ -74,6 +74,29 @@ describe('the desktop mail ports', () => {
     await expect(tauriNetworkPort(invoke)({ url: 'https://x', signal: { aborted: true } })).rejects.toThrow('aborted')
     expect(invoke).not.toHaveBeenCalled()
   })
+  it('maps the Rust no-keyring error to a typed error and keeps the token for the session only, never elsewhere', async () => {
+    const calls: string[] = []
+    const invoke = (async (c: string) => { calls.push(c); throw new Error(`${NO_KEYRING_PREFIX} no secret service`) }) as Invoke
+    await expect(tauriSecretStore(invoke).get('a')).rejects.toMatchObject({ code: 'no_keyring' })
+    let notices = 0
+    const store = new SessionFallbackSecretStore(tauriSecretStore(invoke), () => { notices++ })
+    await store.set('a', 'tok')
+    expect(await store.get('a')).toBe('tok')
+    await store.set('b', 'tok-b')
+    expect(store.sessionOnly).toBe(true)
+    expect(notices).toBe(1)
+    expect(calls).toEqual(['mail_secret_get', 'mail_secret_set']) // after the first miss the keychain is not asked again
+    await store.delete('a')
+    expect(await store.get('a')).toBeUndefined()
+  })
+
+  it('does not fall back on other keychain errors', async () => {
+    const invoke = (async () => { throw new Error('keychain error: locked') }) as Invoke
+    const store = new SessionFallbackSecretStore(tauriSecretStore(invoke))
+    await expect(store.set('a', 'x')).rejects.toMatchObject({ code: 'unavailable' })
+    expect(store.sessionOnly).toBe(false)
+  })
+
   it('keeps secrets by account id through the keychain commands, and reports a failure as unavailable', async () => {
     const calls: Array<[string, unknown]> = []
     const invoke = (async (c: string, a: unknown) => { calls.push([c, a]); if (c === 'mail_secret_get') return null; if (c === 'mail_secret_delete') throw new Error('locked'); return undefined }) as Invoke

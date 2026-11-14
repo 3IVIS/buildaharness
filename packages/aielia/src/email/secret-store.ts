@@ -13,7 +13,7 @@ export interface SecretStore {
 
 export class SecretStoreError extends Error {
   constructor(
-    public readonly code: 'undecryptable' | 'unavailable',
+    public readonly code: 'undecryptable' | 'unavailable' | 'no_keyring',
     message: string,
   ) {
     super(message)
@@ -31,6 +31,63 @@ export class InMemorySecretStore implements SecretStore {
   }
   async delete(accountId: string): Promise<void> {
     this.values.delete(accountId)
+  }
+}
+
+/**
+ * Wraps a durable store (the OS keychain) and, when it reports `no_keyring`, keeps the secret for this session only in
+ * memory and calls `onSessionOnly` once so the page can show the notice. Never writes anywhere else. Other errors
+ * (a locked or failing keychain) pass through unchanged.
+ */
+export class SessionFallbackSecretStore implements SecretStore {
+  private readonly session = new InMemorySecretStore()
+  private fellBack = false
+  constructor(
+    private readonly durable: SecretStore,
+    private readonly onSessionOnly?: () => void,
+  ) {}
+
+  /** True once the keyring was found missing: secrets now live in memory and are lost on quit. */
+  get sessionOnly(): boolean {
+    return this.fellBack
+  }
+
+  private fallBack(e: unknown): boolean {
+    if (!(e instanceof SecretStoreError) || e.code !== 'no_keyring') return false
+    if (!this.fellBack) {
+      this.fellBack = true
+      this.onSessionOnly?.()
+    }
+    return true
+  }
+
+  async get(accountId: string): Promise<string | undefined> {
+    if (this.fellBack) return this.session.get(accountId)
+    try {
+      return await this.durable.get(accountId)
+    } catch (e) {
+      if (this.fallBack(e)) return this.session.get(accountId)
+      throw e
+    }
+  }
+  async set(accountId: string, value: string): Promise<void> {
+    if (!this.fellBack) {
+      try {
+        return await this.durable.set(accountId, value)
+      } catch (e) {
+        if (!this.fallBack(e)) throw e
+      }
+    }
+    await this.session.set(accountId, value)
+  }
+  async delete(accountId: string): Promise<void> {
+    await this.session.delete(accountId)
+    if (this.fellBack) return
+    try {
+      await this.durable.delete(accountId)
+    } catch (e) {
+      if (!this.fallBack(e)) throw e
+    }
   }
 }
 

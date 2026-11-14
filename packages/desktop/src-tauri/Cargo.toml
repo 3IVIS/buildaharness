@@ -27,3 +27,12 @@ tauri-plugin-fs = "2.5.1"
 tauri-plugin-dialog = "2"
 tauri-plugin-http = "2"
 tauri-plugin-window-state = "2"
+
+# Account-keyed mail credentials (phase R2). MIT OR Apache-2.0, maintained by the open-source keyring-rs project.
+# One API over Keychain Services, Credential Manager and the Secret Service; no plain-file fallback.
+[target.'cfg(target_os = "macos")'.dependencies]
+keyring = { version = "3", features = ["apple-native"] }
+[target.'cfg(target_os = "windows")'.dependencies]
+keyring = { version = "3", features = ["windows-native"] }
+[target.'cfg(target_os = "linux")'.dependencies]
+keyring = { version = "3", features = ["sync-secret-service", "crypto-rust"] }

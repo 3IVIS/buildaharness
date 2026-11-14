@@ -1,6 +1,7 @@
 import {
   createLlmClient,
   SecretStoreError,
+  SessionFallbackSecretStore,
   type AssistantConfig,
   type NetworkPort,
   type NetworkRequest,
@@ -43,13 +44,19 @@ export function tauriNetworkPort(invoke: Invoke): NetworkPort {
   }
 }
 
+/** Prefix of the Rust error that means there is no usable keyring (typically Linux without a Secret Service). */
+export const NO_KEYRING_PREFIX = 'no_keyring:'
+
 /** A secret store over the Rust keychain commands, taking an account id. A failing command reads as unavailable, so the caller can fall back to a session-only store. */
 export function tauriSecretStore(invoke: Invoke): SecretStore {
   const wrap = async <T>(command: string, args: Record<string, unknown>): Promise<T> => {
     try {
       return await invoke<T>(command, args)
     } catch (e) {
-      throw new SecretStoreError('unavailable', e instanceof Error ? e.message : String(e))
+      const message = e instanceof Error ? e.message : String(e)
+      // Rust marks "no keyring on this machine" with this prefix; the caller then keeps the token for the session only.
+      if (message.startsWith(NO_KEYRING_PREFIX)) throw new SecretStoreError('no_keyring', message)
+      throw new SecretStoreError('unavailable', message)
     }
   }
   return {
@@ -60,12 +67,12 @@ export function tauriSecretStore(invoke: Invoke): SecretStore {
 }
 
 /** Email inside the desktop app. The Tauri modules are imported when this runs. */
-export async function desktopEmailPlatform(config: AssistantConfig, invokeFn?: Invoke): Promise<EmailDesktopPlatform> {
+export async function desktopEmailPlatform(config: AssistantConfig, invokeFn?: Invoke, onSessionOnly?: () => void): Promise<EmailDesktopPlatform> {
   const [{ TauriClaudeCliLLMClient }, core] = await Promise.all([import('../tauri-claude-cli-llm-client'), invokeFn ? Promise.resolve(undefined) : import('@tauri-apps/api/core')])
   const invoke = invokeFn ?? (core!.invoke as Invoke)
   return {
     network: tauriNetworkPort(invoke),
-    secrets: tauriSecretStore(invoke),
+    secrets: new SessionFallbackSecretStore(tauriSecretStore(invoke), onSessionOnly),
     llm: createLlmClient(config, { claudeCli: () => new TauriClaudeCliLLMClient() }),
     tools: EMAIL_CHAT_TOOLS,
     hostName: 'app',
