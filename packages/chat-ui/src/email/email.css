@@ -1,0 +1,27 @@
+/* Email layout. Breakpoints match Write: 640 px (tablet) and 960 px (desktop). */
+.email { display: flex; flex-direction: column; height: 100dvh; min-height: 0; }
+.email__body { position: relative; display: flex; flex: 1; min-height: 0; }
+.email__mail { display: flex; flex: 1; min-width: 0; min-height: 0; flex-direction: column; overflow: hidden; }
+.email__mail[hidden], .email__aielia[hidden], .email__list[hidden], .email__reader[hidden], .email__tree[hidden], .email__drawer[hidden] { display: none; }
+.email[data-reader='beside'] .email__mail { flex-direction: row; }
+.email[data-reader='beside'] .email__list { width: 340px; flex: none; overflow-y: auto; border-right: 1px solid var(--border); }
+.email[data-reader='below'] .email__list { max-height: 40%; overflow-y: auto; border-bottom: 1px solid var(--border); }
+.email__list, .email__reader { overflow-y: auto; min-width: 0; }
+.email__reader { flex: 1; }
+.email__rail { flex: none; width: 48px; overflow: hidden; border-right: 1px solid var(--border); background: var(--surface); transition: width 0.12s; }
+.email__rail.is-open { width: 220px; }
+.email__railbar { display: flex; gap: 4px; padding: 6px; }
+.email__tree { padding: 6px; overflow-y: auto; }
+.email__aielia { flex: none; display: flex; flex-direction: column; min-height: 0; border-left: 1px solid var(--border); background: var(--surface); }
+.email--phone .email__aielia { flex: 1; border-left: 0; }
+.email__aielia.is-slide { position: absolute; top: 0; right: 0; bottom: 0; width: min(340px, 90vw); z-index: 6; box-shadow: -4px 0 12px rgb(0 0 0 / 0.15); }
+.email__drawer { position: absolute; top: 0; left: 0; bottom: 0; width: min(260px, 85vw); z-index: 7; padding: 8px; background: var(--surface); border-right: 1px solid var(--border); overflow-y: auto; }
+.email__scrim { position: absolute; inset: 0; z-index: 6; background: rgb(0 0 0 / 0.3); }
+.email__bar { position: absolute; top: 4px; right: 8px; z-index: 5; display: flex; gap: 6px; }
+.email__split { flex: none; width: 6px; cursor: col-resize; }
+.email__tabs { display: grid; grid-auto-flow: column; grid-auto-columns: 1fr; gap: 1px; padding: 6px 2px calc(6px + env(safe-area-inset-bottom)); border-top: 1px solid var(--border); background: var(--surface); }
+.email__tabs button { display: flex; flex-direction: column; align-items: center; min-height: 44px; font-size: 0.7rem; background: none; border: 1px solid transparent; border-radius: 8px; }
+.email__tabs button.is-on { background: var(--accent-solid); color: var(--on-accent); }
+.email button { min-height: 32px; }
+.email--phone button { min-height: 44px; }
+.email__todo { flex: 1; padding: 12px; overflow-y: auto; }
