@@ -82,6 +82,7 @@ export const SIDE_CALL_MARKERS: Array<[string, string]> = [
   ['You triage email threads for their owner', '{"triage":[]}'],
   ['You summarise email for their owner', 'No summary available.'],
   ['You describe how an email writer writes', '{"voices":{}}'],
+  ['You write an email reply for its owner', '{"body":""}'],
   ['A writer is working with an assistant on one or more articles', '{"articleId":null,"ops":[]}'],
 ]
 
