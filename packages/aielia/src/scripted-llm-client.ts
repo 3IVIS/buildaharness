@@ -60,7 +60,7 @@ export interface ScriptedLLMClientScript {
 /**
  * Known auxiliary semantic-escalation system prompts and their safe, inert default answer — see
  * ScriptedLLMClientScript's doc comment. Kept in sync by hand with each check's own system prompt
- * (review-checker.ts, failure-mode-matcher.ts, trust-tagging.ts, grounding-check.ts, task-completion-check.ts, constraint-check.ts, semantic-compaction.ts, source-reliability.ts, semantic-hypotheses.ts, episodic-digest.ts, memory-consolidation.ts, memory-reviewer.ts, writer/writer-chat-capture.ts, email/triage.ts, email/mail-tools.ts) since there's no shared constant
+ * (review-checker.ts, failure-mode-matcher.ts, trust-tagging.ts, grounding-check.ts, task-completion-check.ts, constraint-check.ts, semantic-compaction.ts, source-reliability.ts, semantic-hypotheses.ts, episodic-digest.ts, memory-consolidation.ts, memory-reviewer.ts, writer/writer-chat-capture.ts, email/triage.ts, email/mail-tools.ts, email/voice.ts) since there's no shared constant
  * to import without a circular dependency back into this package's own public surface.
  */
 export const SIDE_CALL_MARKERS: Array<[string, string]> = [
@@ -81,6 +81,7 @@ export const SIDE_CALL_MARKERS: Array<[string, string]> = [
   ['You check proposed memory entries against what a user actually said', '{"verdicts":[]}'],
   ['You triage email threads for their owner', '{"triage":[]}'],
   ['You summarise email for their owner', 'No summary available.'],
+  ['You describe how an email writer writes', '{"voices":{}}'],
   ['A writer is working with an assistant on one or more articles', '{"articleId":null,"ops":[]}'],
 ]
 
