@@ -21,6 +21,7 @@ import type { AskAnswer, AskQuestion, AskResponse } from '@buildaharness/harness
 import { orderedOptions, draftToAnswer, emptyDraft, type QuestionDraft } from './ask-draft.js'
 import { parseProjectCommand } from './project-command.js'
 import { parseEmailCommand, formatEmailCommand } from './email/email-command.js'
+import { OfflineEmailSession } from './email/offline-session.js'
 import { parseUndoActionCommand } from './undo-action-command.js'
 import { createLlmClient } from './llm-client-factory.js'
 import type { GoalGraphState } from './goal-graph-service.js'
@@ -1777,8 +1778,13 @@ export async function runCli(options: RunCliOptions = {}): Promise<CliInstance> 
   }
 
   /** /email <subcommand>: parsing and wording are shared (email/email-command.ts); the CLI only prints. */
-  function handleEmail(args: string[]): void {
-    printSafe(`\n${formatEmailCommand(parseEmailCommand(args), false).join('\n')}\n`)
+  let offlineEmail: OfflineEmailSession | undefined
+  async function handleEmail(args: string[]): Promise<void> {
+    // No mail account can be connected from the CLI yet, so every run uses the sample mailbox over the fake provider (nothing leaves the machine).
+    const command = parseEmailCommand(args)
+    if (command.kind !== 'run') return printSafe(`\n${formatEmailCommand(command, true).join('\n')}\n`)
+    offlineEmail ??= new OfflineEmailSession()
+    printSafe(`\n(sample mailbox)\n${(await offlineEmail.run(args)).join('\n')}\n`)
   }
 
   // Phase 3 of plans/hierarchical_goal_tree_and_steering_plan.html (R1, mid-task steering).
