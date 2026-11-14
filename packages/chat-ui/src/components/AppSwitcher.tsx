@@ -2,13 +2,13 @@ import { useEffect, useRef, useState } from 'react'
 import { APP_LABEL, type AppId } from '../app-switch'
 import './app-switcher.css'
 
-const ORDER: AppId[] = ['chat', 'write']
+const ORDER: AppId[] = ['chat', 'write', 'email']
 
 /**
  * The small drop-down after "Aielia" in the page title: "Chat ▾" / "Write ▾". It lists both screens, marks the open one, and
  * calls onSelect for the other. Shown only where there is a place to switch to (see appSwitchHandler).
  */
-export function AppSwitcher({ current, onSelect, disabled = false }: { current: AppId; onSelect: (target: AppId) => void; disabled?: boolean }): React.JSX.Element {
+export function AppSwitcher({ current, onSelect, disabled = false, apps }: { current: AppId; onSelect: (target: AppId) => void; disabled?: boolean; /** The screens to list (default: all). */ apps?: AppId[] }): React.JSX.Element {
   const [open, setOpen] = useState(false)
   const root = useRef<HTMLSpanElement>(null)
   const button = useRef<HTMLButtonElement>(null)
@@ -48,7 +48,7 @@ export function AppSwitcher({ current, onSelect, disabled = false }: { current: 
         className="app-switcher__button"
         aria-haspopup="menu"
         aria-expanded={open}
-        title="Switch between Aielia Chat and Aielia Write"
+        title="Switch between Aielia Chat, Write and Email"
         disabled={disabled}
         onClick={() => setOpen((o) => !o)}
       >
@@ -56,7 +56,7 @@ export function AppSwitcher({ current, onSelect, disabled = false }: { current: 
       </button>
       {open && (
         <div className="app-switcher__menu" role="menu" aria-label="Switch app" onKeyDown={onMenuKey}>
-          {ORDER.map((id) => (
+          {ORDER.filter((id) => !apps || apps.includes(id)).map((id) => (
             <button
               key={id}
               type="button"

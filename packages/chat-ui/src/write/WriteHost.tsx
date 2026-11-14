@@ -10,7 +10,7 @@ import { appSwitchHandler } from '../app-switch'
  * there is no second sign-in; its articles, spending cap and permissions are its own. Loaded only when opened (see App.tsx), so the chat does
  * not carry the Write code.
  */
-export default function WriteHost({ config, onClose }: { config: AssistantConfig; onClose: () => void }): React.JSX.Element {
+export default function WriteHost({ config, onClose, onSwitch }: { config: AssistantConfig; onClose: () => void; onSwitch?: (target: 'email') => void }): React.JSX.Element {
   const [services, setServices] = useState<WriteServices | undefined>()
   const [error, setError] = useState<string | undefined>()
   // Bumped after all the data was deleted, so the services are built again from the empty store.
@@ -25,7 +25,7 @@ export default function WriteHost({ config, onClose }: { config: AssistantConfig
   }, [config, fresh])
 
   // Inside the desktop app the switch is in place: the chat screen takes over again.
-  const appSwitch = appSwitchHandler('write', { desktop: () => onClose(), desktopApp: true })
+  const appSwitch = appSwitchHandler('write', { desktop: (target) => (target === 'email' && onSwitch ? onSwitch('email') : onClose()), desktopApp: true })
 
   return (
     <div className="write-host">
