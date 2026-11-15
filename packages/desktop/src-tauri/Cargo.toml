@@ -28,6 +28,15 @@ tauri-plugin-dialog = "2"
 tauri-plugin-http = "2"
 tauri-plugin-window-state = "2"
 
+# Mail sign-in and reads (phase R4). All MIT or Apache-2.0. reqwest 0.12 is already in the tree through
+# tauri-plugin-http (blocking client, rustls, no system OpenSSL); sha2 and base64 for the PKCE challenge; url to parse
+# and check every address against the host allow-list; getrandom for the state and verifier.
+reqwest = { version = "0.12", default-features = false, features = ["blocking", "json", "rustls-tls"] }
+sha2 = "0.10"
+base64 = "0.22"
+url = "2"
+getrandom = "0.2"
+
 # Account-keyed mail credentials (phase R2). MIT OR Apache-2.0, maintained by the open-source keyring-rs project.
 # One API over Keychain Services, Credential Manager and the Secret Service; no plain-file fallback.
 [target.'cfg(target_os = "macos")'.dependencies]

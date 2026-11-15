@@ -9,6 +9,7 @@ use tauri_plugin_dialog::DialogExt;
 
 mod mail_cache;
 mod mail_keychain;
+mod mail_net;
 
 /// The monorepo root, computed from this crate's compile-time location
 /// (`packages/desktop/src-tauri`) rather than the process's runtime cwd — dev-mode-only
@@ -1207,6 +1208,11 @@ pub fn run() {
       mail_keychain::mail_secret_set,
       mail_keychain::mail_secret_get,
       mail_keychain::mail_secret_delete,
+      mail_net::mail_register_host,
+      mail_net::mail_oauth_sign_in,
+      mail_net::mail_sign_out,
+      mail_net::mail_list_folders,
+      mail_net::mail_list_messages,
       mail_cache::mail_cache_upsert_folders,
       mail_cache::mail_cache_upsert_threads,
       mail_cache::mail_cache_upsert_messages,

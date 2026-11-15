@@ -56,23 +56,44 @@ pub fn secret_delete_impl(account_id: &str) -> Result<(), String> {
   }
 }
 
+/// The page-facing commands refuse the entries Rust owns (OAuth tokens, phase R4), so a token never reaches the page.
+fn page_guard(account_id: &str) -> Result<(), String> {
+  if account_id.starts_with(crate::mail_net::RESERVED_PREFIX) {
+    return Err("keychain error: reserved account id".to_string());
+  }
+  Ok(())
+}
+
+pub fn secret_get_impl_for_page(account_id: &str) -> Result<Option<String>, String> {
+  page_guard(account_id)?;
+  secret_get_impl(account_id)
+}
+pub fn secret_set_impl_for_page(account_id: &str, value: &str) -> Result<(), String> {
+  page_guard(account_id)?;
+  secret_set_impl(account_id, value)
+}
+pub fn secret_delete_impl_for_page(account_id: &str) -> Result<(), String> {
+  page_guard(account_id)?;
+  secret_delete_impl(account_id)
+}
+
 #[tauri::command]
 pub async fn mail_secret_set(account_id: String, value: String) -> Result<(), String> {
-  tauri::async_runtime::spawn_blocking(move || secret_set_impl(&account_id, &value))
+  tauri::async_runtime::spawn_blocking(move || secret_set_impl_for_page(&account_id, &value))
     .await
     .map_err(|e| format!("keychain error: {e}"))?
 }
 
 #[tauri::command]
 pub async fn mail_secret_get(account_id: String) -> Result<Option<String>, String> {
-  tauri::async_runtime::spawn_blocking(move || secret_get_impl(&account_id))
+  tauri::async_runtime::spawn_blocking(move || secret_get_impl_for_page(&account_id))
     .await
     .map_err(|e| format!("keychain error: {e}"))?
 }
 
 #[tauri::command]
 pub async fn mail_secret_delete(account_id: String) -> Result<(), String> {
-  tauri::async_runtime::spawn_blocking(move || secret_delete_impl(&account_id))
+  tauri::async_runtime::spawn_blocking(move || secret_delete_impl_for_page(&account_id))
     .await
     .map_err(|e| format!("keychain error: {e}"))?
 }

@@ -1,0 +1,7 @@
+{
+  "$schema": "../gen/schemas/desktop-schema.json",
+  "identifier": "email",
+  "description": "Email: the page may call the mail_* commands (sign-in, folder and message reads, keychain, cache). It adds no HTTP, filesystem or shell scope: the network access for mail is done in Rust and limited to the provider hosts and the mail servers the user configured (mail_net.rs). Tokens stay in Rust.",
+  "windows": ["main"],
+  "permissions": ["core:default"]
+}
