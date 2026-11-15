@@ -8,8 +8,11 @@
 # checkout is never touched and nothing is written outside ~/bah-verify/. Only build and
 # test output is printed; no environment, key or token is read or echoed.
 #
+# A commit that is on no remote branch is sent to the Mac as a git bundle over ssh (nothing
+# is pushed); --bundle forces that, --no-bundle forces a plain checkout of a pushed commit.
+#
 # Usage: scripts/mac-verify.sh [--commit <sha>] [--repo <git-url>] [--poll <seconds>]
-#        [--max-polls <n>] [--steps <comma list>] [--help]
+#        [--max-polls <n>] [--steps <comma list>] [--bundle|--no-bundle] [--help]
 # Env:   MAC_VERIFY_SSH (ssh binary, default "ssh"), MAC_VERIFY_HOST, MAC_VERIFY_KEY.
 set -u
 
@@ -22,8 +25,9 @@ COMMIT=""
 POLL=20
 MAX_POLLS=360
 STEPS="install,runtime,harness,aielia,chat-ui,cargo-check,cargo-test"
+BUNDLE_MODE="auto" # auto | yes | no
 
-usage() { sed -n '2,13p' "$0" | sed 's/^# \{0,1\}//'; }
+usage() { sed -n '2,16p' "$0" | sed 's/^# \{0,1\}//'; }
 
 while [ $# -gt 0 ]; do
   case "$1" in
@@ -32,6 +36,8 @@ while [ $# -gt 0 ]; do
     --poll) POLL="${2:-}"; shift 2 ;;
     --max-polls) MAX_POLLS="${2:-}"; shift 2 ;;
     --steps) STEPS="${2:-}"; shift 2 ;;
+    --bundle) BUNDLE_MODE="yes"; shift ;;
+    --no-bundle) BUNDLE_MODE="no"; shift ;;
     -h|--help) usage; exit 0 ;;
     *) echo "mac-verify: unknown argument: $1" >&2; usage >&2; exit 2 ;;
   esac
@@ -45,6 +51,15 @@ case "$COMMIT" in
 esac
 case "$POLL$MAX_POLLS" in *[!0-9]*|"") echo "mac-verify: --poll and --max-polls must be numbers" >&2; exit 2 ;; esac
 case "$STEPS$REPO" in *[\'\"\;\&\|\$\`\ ]*) echo "mac-verify: unsafe characters in --steps or --repo" >&2; exit 2 ;; esac
+
+# Decide whether to ship the commit as a bundle: auto means it exists locally and no remote
+# branch contains it (so a clone on the Mac could not check it out).
+USE_BUNDLE=0
+case "$BUNDLE_MODE" in
+  yes) USE_BUNDLE=1 ;;
+  auto)
+    if git cat-file -e "$COMMIT^{commit}" 2>/dev/null && [ -z "$(git branch -r --contains "$COMMIT" 2>/dev/null)" ]; then USE_BUNDLE=1; fi ;;
+esac
 
 RUN="run-${COMMIT:0:12}"
 DIR="bah-verify/$RUN" # relative to the remote $HOME
@@ -61,7 +76,19 @@ unreachable() {
   return 1
 }
 
-ERR="$(mktemp)"; trap 'rm -f "$ERR"' EXIT
+ERR="$(mktemp)"; BUNDLE_FILE=""; BUNDLE_REF="refs/bah-verify/tmp"
+cleanup() { rm -f "$ERR" "$BUNDLE_FILE"; git update-ref -d "$BUNDLE_REF" 2>/dev/null; }
+trap cleanup EXIT
+
+if [ "$USE_BUNDLE" = 1 ]; then
+  BUNDLE_FILE="$(mktemp)"
+  git cat-file -e "$COMMIT^{commit}" 2>/dev/null || { echo "mac-verify: --bundle needs the commit to exist locally" >&2; exit 2; }
+  git update-ref "$BUNDLE_REF" "$COMMIT" || { echo "mac-verify: could not create the bundle ref" >&2; exit 1; }
+  # Exclude what the Mac's clone already has: the fork point from origin/main when known.
+  BASE="$(git merge-base "$COMMIT" origin/main 2>/dev/null || true)"
+  if [ -n "$BASE" ]; then BUNDLE_ARGS=("$BUNDLE_REF" "^$BASE"); else BUNDLE_ARGS=("$BUNDLE_REF"); fi
+  git bundle create "$BUNDLE_FILE" "${BUNDLE_ARGS[@]}" >/dev/null 2>"$ERR" || { cat "$ERR" >&2; echo "mac-verify: could not create the bundle" >&2; exit 1; }
+fi
 
 # Remote build script, uploaded as a file inside the run directory.
 REMOTE_SCRIPT=$(cat <<'REMOTE'
@@ -76,6 +103,9 @@ step() { # name, dir, command...
 }
 rm -rf repo
 git clone --quiet __REPO__ repo || { echo "== clone FAILED"; echo 1 > status; exit 1; }
+if [ "__BUNDLE__" = 1 ]; then
+  ( cd repo && git fetch --quiet ../repo.bundle "__BUNDLE_REF__:__BUNDLE_REF__" ) || { echo "== bundle fetch FAILED"; echo 1 > status; exit 1; }
+fi
 ( cd repo && git checkout --quiet __COMMIT__ ) || { echo "== checkout FAILED (is the commit pushed?)"; echo 1 > status; exit 1; }
 export CARGO_TARGET_DIR="$HOME/Documents/Projects/buildaharness/packages/desktop/src-tauri/target"
 [ -d "$CARGO_TARGET_DIR" ] || export CARGO_TARGET_DIR="$HOME/bah-verify/target"
@@ -94,11 +124,22 @@ REMOTE_SCRIPT="${REMOTE_SCRIPT//__DIR__/$DIR}"
 REMOTE_SCRIPT="${REMOTE_SCRIPT//__STEPS__/$STEPS}"
 REMOTE_SCRIPT="${REMOTE_SCRIPT//__REPO__/$REPO}"
 REMOTE_SCRIPT="${REMOTE_SCRIPT//__COMMIT__/$COMMIT}"
+REMOTE_SCRIPT="${REMOTE_SCRIPT//__BUNDLE_REF__/$BUNDLE_REF}"
+REMOTE_SCRIPT="${REMOTE_SCRIPT//__BUNDLE__/$USE_BUNDLE}"
 
 # Step 1: create the run directory and upload the script (only under ~/bah-verify/).
 if ! printf '%s\n' "$REMOTE_SCRIPT" | rssh "mkdir -p \"\$HOME/$DIR\" && rm -f \"\$HOME/$DIR/status\" && cat > \"\$HOME/$DIR/run.sh\"" 2>"$ERR"; then
   if unreachable "$(cat "$ERR")"; then echo "mac-verify: Mac unreachable (asleep or off the LAN): deferring" >&2; exit "$DEFER"; fi
   cat "$ERR" >&2; echo "mac-verify: could not prepare the run directory" >&2; exit 1
+fi
+
+# Step 1b: upload the bundle when the commit is not on any remote.
+if [ "$USE_BUNDLE" = 1 ]; then
+  echo "mac-verify: sending $COMMIT as a git bundle ($(wc -c < "$BUNDLE_FILE") bytes); nothing is pushed"
+  if ! rssh "cat > \"\$HOME/$DIR/repo.bundle\"" < "$BUNDLE_FILE" 2>"$ERR"; then
+    if unreachable "$(cat "$ERR")"; then exit "$DEFER"; fi
+    cat "$ERR" >&2; echo "mac-verify: could not upload the bundle" >&2; exit 1
+  fi
 fi
 
 # Step 2: start it in the background with a login shell (needed for PATH).
