@@ -8,6 +8,7 @@ use tauri::Emitter;
 use tauri_plugin_dialog::DialogExt;
 
 mod mail_cache;
+mod mail_imap;
 mod mail_keychain;
 mod mail_net;
 
@@ -1213,6 +1214,10 @@ pub fn run() {
       mail_net::mail_sign_out,
       mail_net::mail_list_folders,
       mail_net::mail_list_messages,
+      mail_imap::mail_imap_set_password,
+      mail_imap::mail_imap_clear_password,
+      mail_imap::mail_imap_run,
+      mail_imap::mail_smtp_send,
       mail_cache::mail_cache_upsert_folders,
       mail_cache::mail_cache_upsert_threads,
       mail_cache::mail_cache_upsert_messages,

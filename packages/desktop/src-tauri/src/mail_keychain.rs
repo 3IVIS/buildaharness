@@ -58,7 +58,7 @@ pub fn secret_delete_impl(account_id: &str) -> Result<(), String> {
 
 /// The page-facing commands refuse the entries Rust owns (OAuth tokens, phase R4), so a token never reaches the page.
 fn page_guard(account_id: &str) -> Result<(), String> {
-  if account_id.starts_with(crate::mail_net::RESERVED_PREFIX) {
+  if account_id.starts_with(crate::mail_net::RESERVED_PREFIX) || account_id.starts_with(crate::mail_imap::PASSWORD_PREFIX) {
     return Err("keychain error: reserved account id".to_string());
   }
   Ok(())

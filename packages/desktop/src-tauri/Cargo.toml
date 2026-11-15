@@ -37,6 +37,14 @@ base64 = "0.22"
 url = "2"
 getrandom = "0.2"
 
+# Mail over IMAP and SMTP (phase H6a). rustls 0.23 (Apache-2.0 OR ISC OR MIT, the rustls project) and webpki-roots 0.26
+# (MPL-2.0 data, the rustls project) are already in the tree through reqwest's rustls-tls; here they give implicit TLS
+# on the mail ports with no plaintext fallback. The IMAP and SMTP wire layer is written in-repo (src/mail_imap.rs) because
+# the maintained IMAP crates either pull in OpenSSL (imap 2.x, native-tls) or are alpha (imap 3.0); the protocol subset
+# used here is small and fully covered by the fake server tests.
+rustls = { version = "0.23", default-features = false, features = ["ring", "std", "tls12"] }
+webpki-roots = "0.26"
+
 # Account-keyed mail credentials (phase R2). MIT OR Apache-2.0, maintained by the open-source keyring-rs project.
 # One API over Keychain Services, Credential Manager and the Secret Service; no plain-file fallback.
 [target.'cfg(target_os = "macos")'.dependencies]

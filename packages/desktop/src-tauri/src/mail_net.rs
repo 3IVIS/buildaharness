@@ -320,7 +320,7 @@ pub fn exchange_code(policy: &HostPolicy, vault: &dyn TokenVault, account_id: &s
 
 /// A valid access token for an account, refreshing through the token endpoint when it is about to expire.
 /// Internal only: nothing here is returned to the page.
-fn access_token(policy: &HostPolicy, vault: &dyn TokenVault, account_id: &str, ep: &Endpoints, client_id: &str) -> Result<String, String> {
+pub(crate) fn access_token(policy: &HostPolicy, vault: &dyn TokenVault, account_id: &str, ep: &Endpoints, client_id: &str) -> Result<String, String> {
   let raw = vault.load(account_id)?.ok_or("sign_in_needed: no sign-in stored for this account")?;
   let t: StoredTokens = serde_json::from_str(&raw).map_err(|_| "sign_in_needed: the stored sign-in is unreadable".to_string())?;
   if now_ms() + TOKEN_SKEW_MS < t.expires_at {
@@ -417,7 +417,7 @@ pub fn sign_in(policy: &HostPolicy, vault: &dyn TokenVault, account_id: &str, ep
 /// Mail servers the user configured, per account. Held in memory; the page re-registers them on start.
 static USER_HOSTS: Mutex<Option<HashMap<String, Vec<String>>>> = Mutex::new(None);
 
-fn policy_for(account_id: &str) -> HostPolicy {
+pub(crate) fn policy_for(account_id: &str) -> HostPolicy {
   let mut p = HostPolicy::known();
   if let Some(map) = USER_HOSTS.lock().unwrap().as_ref() {
     for h in map.get(account_id).into_iter().flatten() {
@@ -425,6 +425,13 @@ fn policy_for(account_id: &str) -> HostPolicy {
     }
   }
   p
+}
+
+/// True when the user registered exactly this mail server host for the account (IMAP and SMTP use this, never the
+/// provider API hosts that `HostPolicy::known` also lists).
+pub(crate) fn user_host_registered(account_id: &str, host: &str) -> bool {
+  let h = host.trim().to_ascii_lowercase();
+  USER_HOSTS.lock().unwrap().as_ref().and_then(|m| m.get(account_id)).is_some_and(|l| l.contains(&h))
 }
 
 #[derive(Serialize)]
