@@ -36,3 +36,9 @@ keyring = { version = "3", features = ["apple-native"] }
 keyring = { version = "3", features = ["windows-native"] }
 [target.'cfg(target_os = "linux")'.dependencies]
 keyring = { version = "3", features = ["sync-secret-service", "crypto-rust"] }
+
+# Local mailbox cache (phase R3). rusqlite 0.32: MIT, maintained by the rusqlite project; the "bundled" feature compiles
+# SQLite itself (public domain) so the app does not depend on a system library. One file in the app's local data dir.
+[dependencies.rusqlite]
+version = "0.32"
+features = ["bundled"]

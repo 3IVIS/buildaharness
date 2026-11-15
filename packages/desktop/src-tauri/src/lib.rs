@@ -7,6 +7,7 @@ use std::time::SystemTime;
 use tauri::Emitter;
 use tauri_plugin_dialog::DialogExt;
 
+mod mail_cache;
 mod mail_keychain;
 
 /// The monorepo root, computed from this crate's compile-time location
@@ -1205,8 +1206,22 @@ pub fn run() {
       keychain_delete_api_key,
       mail_keychain::mail_secret_set,
       mail_keychain::mail_secret_get,
-      mail_keychain::mail_secret_delete
+      mail_keychain::mail_secret_delete,
+      mail_cache::mail_cache_upsert_folders,
+      mail_cache::mail_cache_upsert_threads,
+      mail_cache::mail_cache_upsert_messages,
+      mail_cache::mail_cache_delete_messages,
+      mail_cache::mail_cache_delete_threads,
+      mail_cache::mail_cache_get_folders,
+      mail_cache::mail_cache_get_message,
+      mail_cache::mail_cache_get_thread,
+      mail_cache::mail_cache_query_messages,
+      mail_cache::mail_cache_list_threads,
+      mail_cache::mail_cache_get_sync_token,
+      mail_cache::mail_cache_set_sync_token,
+      mail_cache::mail_cache_clear_account
     ])
+    .manage(mail_cache::MailCacheState::default())
     .setup(|app| {
       if cfg!(debug_assertions) {
         app.handle().plugin(
