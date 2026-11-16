@@ -1,5 +1,6 @@
 import { describe, it, expect } from 'vitest'
 import { readdirSync, readFileSync } from 'node:fs'
+import { join } from 'node:path'
 import { DEFAULT_MAIL_PRIVACY, applyMailPrivacy, loadMailPrivacy, saveMailPrivacy, mayReadText, mayReadMessage } from './privacy.js'
 import { buildMailModelInput } from './model-input.js'
 import type { Account, Message } from './model.js'
@@ -84,11 +85,11 @@ export function modulesImportingLlm(files: Record<string, string>): string[] {
 }
 
 describe('no LLM client import in email/', () => {
-  const dir = new URL('.', import.meta.url)
+  const dir = __dirname
   const files = Object.fromEntries(
     readdirSync(dir)
       .filter((f) => f.endsWith('.ts') && !f.endsWith('.test.ts'))
-      .map((f) => [f, readFileSync(new URL(f, dir), 'utf8')]),
+      .map((f) => [f, readFileSync(join(dir, f), 'utf8')]),
   )
   it('no module imports one', () => {
     expect(modulesImportingLlm(files)).toEqual([])

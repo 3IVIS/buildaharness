@@ -13,7 +13,7 @@ afterEach(() => { cleanup(); platform.mockReset() })
 
 describe('Email opened from the desktop app', () => {
   it('is a lazy module in App.tsx, loaded only when the screen opens', async () => {
-    const src = (await import('node:fs')).readFileSync('src/App.tsx', 'utf8')
+    const src = (await import('node:fs')).readFileSync(((await import('node:path')).resolve)(__dirname, '../App.tsx'), 'utf8')
     expect(src).toMatch(/const EmailHost = lazy\(\(\) => import\('\.\/email\/EmailHost'\)\)/)
     expect(src).not.toMatch(/^import .*EmailHost/m)
   })

@@ -254,10 +254,11 @@ describe('networkFromFetch', () => {
 describe('no direct fetch in mail code', () => {
   it('only network.ts mentions fetch( as a call', async () => {
     const { readdirSync, readFileSync } = await import('node:fs')
-    const dir = new URL('.', import.meta.url)
+    const { join } = await import('node:path')
+    const dir = __dirname
     for (const f of readdirSync(dir)) {
       if (!f.endsWith('.ts') || f.endsWith('.test.ts') || f === 'network.ts') continue
-      const src = readFileSync(new URL(f, dir), 'utf8').replace(/\/\*[\s\S]*?\*\/|\/\/.*$/gm, '')
+      const src = readFileSync(join(dir, f), 'utf8').replace(/\/\*[\s\S]*?\*\/|\/\/.*$/gm, '')
       expect(src, f).not.toMatch(/\bfetch\s*\(/)
     }
   })

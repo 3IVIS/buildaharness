@@ -22,7 +22,7 @@ function loadWorker(origin = 'https://app.example') {
   const fetched: string[] = []
   const fetchFn = async (r: { url: string }) => { fetched.push(r.url); return { ok: true, clone() { return this }, url: r.url } }
   const self = { location: { origin }, addEventListener: (t: string, h: (e: any) => void) => { handlers[t] = h } }
-  vm.runInNewContext(readFileSync(resolve(process.cwd(), 'public/email-sw.js'), 'utf8'), { self, caches, fetch: fetchFn, URL, Promise })
+  vm.runInNewContext(readFileSync(resolve(__dirname, '../../public/email-sw.js'), 'utf8'), { self, caches, fetch: fetchFn, URL, Promise })
   async function request(url: string, method = 'GET') {
     let responded: Promise<unknown> | undefined
     handlers.fetch({ request: { url, method }, respondWith: (p: Promise<unknown>) => { responded = p } })
@@ -73,7 +73,7 @@ describe('service worker', () => {
   })
 
   it('the manifest is installable', () => {
-    const m = JSON.parse(readFileSync(resolve(process.cwd(), 'public/email.webmanifest'), 'utf8'))
+    const m = JSON.parse(readFileSync(resolve(__dirname, '../../public/email.webmanifest'), 'utf8'))
     expect(m.display).toBe('standalone'); expect(m.start_url).toBe('/email'); expect(m.icons.length).toBeGreaterThan(0)
   })
 })
