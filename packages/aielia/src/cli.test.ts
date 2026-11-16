@@ -1802,3 +1802,22 @@ describe('audit fixes: command lookup, picked next steps, closed input, reset sa
     }
   })
 })
+
+describe('/email over the sample mailbox', () => {
+  it('drives review, to-do and a staged reply that is not sent, and refuses an unknown subcommand', async () => {
+    const { cli } = await setupCli()
+    const lines = captureOutput()
+
+    await cli.dispatchLine('/email review')
+    await cli.dispatchLine('/email todo')
+    await cli.dispatchLine('/email reply')
+    await cli.dispatchLine('/email bogus')
+    const out = lines.join('\n')
+
+    expect(out).toContain('(sample mailbox)')
+    expect(out).toMatch(/Reviewed \d+ thread\(s\)/)
+    expect(out).toMatch(/Do now|Schedule|Quick answers|Can wait/i)
+    expect(out).toContain('Draft staged. Nothing is sent until you approve')
+    expect(out).toContain('Unknown /email subcommand')
+  })
+})

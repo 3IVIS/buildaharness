@@ -27,3 +27,35 @@ tauri-plugin-fs = "2.5.1"
 tauri-plugin-dialog = "2"
 tauri-plugin-http = "2"
 tauri-plugin-window-state = "2"
+
+# Mail sign-in and reads (phase R4). All MIT or Apache-2.0. reqwest 0.12 is already in the tree through
+# tauri-plugin-http (blocking client, rustls, no system OpenSSL); sha2 and base64 for the PKCE challenge; url to parse
+# and check every address against the host allow-list; getrandom for the state and verifier.
+reqwest = { version = "0.12", default-features = false, features = ["blocking", "json", "rustls-tls"] }
+sha2 = "0.10"
+base64 = "0.22"
+url = "2"
+getrandom = "0.2"
+
+# Mail over IMAP and SMTP (phase H6a). rustls 0.23 (Apache-2.0 OR ISC OR MIT, the rustls project) and webpki-roots 0.26
+# (MPL-2.0 data, the rustls project) are already in the tree through reqwest's rustls-tls; here they give implicit TLS
+# on the mail ports with no plaintext fallback. The IMAP and SMTP wire layer is written in-repo (src/mail_imap.rs) because
+# the maintained IMAP crates either pull in OpenSSL (imap 2.x, native-tls) or are alpha (imap 3.0); the protocol subset
+# used here is small and fully covered by the fake server tests.
+rustls = { version = "0.23", default-features = false, features = ["ring", "std", "tls12"] }
+webpki-roots = "0.26"
+
+# Account-keyed mail credentials (phase R2). MIT OR Apache-2.0, maintained by the open-source keyring-rs project.
+# One API over Keychain Services, Credential Manager and the Secret Service; no plain-file fallback.
+[target.'cfg(target_os = "macos")'.dependencies]
+keyring = { version = "3", features = ["apple-native"] }
+[target.'cfg(target_os = "windows")'.dependencies]
+keyring = { version = "3", features = ["windows-native"] }
+[target.'cfg(target_os = "linux")'.dependencies]
+keyring = { version = "3", features = ["sync-secret-service", "crypto-rust"] }
+
+# Local mailbox cache (phase R3). rusqlite 0.32: MIT, maintained by the rusqlite project; the "bundled" feature compiles
+# SQLite itself (public domain) so the app does not depend on a system library. One file in the app's local data dir.
+[dependencies.rusqlite]
+version = "0.32"
+features = ["bundled"]

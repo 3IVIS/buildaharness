@@ -7,6 +7,11 @@ use std::time::SystemTime;
 use tauri::Emitter;
 use tauri_plugin_dialog::DialogExt;
 
+mod mail_cache;
+mod mail_imap;
+mod mail_keychain;
+mod mail_net;
+
 /// The monorepo root, computed from this crate's compile-time location
 /// (`packages/desktop/src-tauri`) rather than the process's runtime cwd — dev-mode-only
 /// wiring so "what is this repo about"-style questions have something real to read via
@@ -1200,8 +1205,34 @@ pub fn run() {
       dns_lookup,
       keychain_set_api_key,
       keychain_get_api_key,
-      keychain_delete_api_key
+      keychain_delete_api_key,
+      mail_keychain::mail_secret_set,
+      mail_keychain::mail_secret_get,
+      mail_keychain::mail_secret_delete,
+      mail_net::mail_register_host,
+      mail_net::mail_oauth_sign_in,
+      mail_net::mail_sign_out,
+      mail_net::mail_list_folders,
+      mail_net::mail_list_messages,
+      mail_imap::mail_imap_set_password,
+      mail_imap::mail_imap_clear_password,
+      mail_imap::mail_imap_run,
+      mail_imap::mail_smtp_send,
+      mail_cache::mail_cache_upsert_folders,
+      mail_cache::mail_cache_upsert_threads,
+      mail_cache::mail_cache_upsert_messages,
+      mail_cache::mail_cache_delete_messages,
+      mail_cache::mail_cache_delete_threads,
+      mail_cache::mail_cache_get_folders,
+      mail_cache::mail_cache_get_message,
+      mail_cache::mail_cache_get_thread,
+      mail_cache::mail_cache_query_messages,
+      mail_cache::mail_cache_list_threads,
+      mail_cache::mail_cache_get_sync_token,
+      mail_cache::mail_cache_set_sync_token,
+      mail_cache::mail_cache_clear_account
     ])
+    .manage(mail_cache::MailCacheState::default())
     .setup(|app| {
       if cfg!(debug_assertions) {
         app.handle().plugin(

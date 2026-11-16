@@ -21,12 +21,13 @@ describe('COMMAND_REGISTRY', () => {
     expect(CLI_COMMANDS_HELP.map((c) => c.command)).toEqual(COMMAND_REGISTRY.filter((c) => c.surfaces !== 'gui-only').map((c) => c.usage))
   })
 
-  it('lists the explain commands, /project and /undo-action as the commands the apps handle', () => {
-    expect(dispatchKeysFor('gui').sort()).toEqual([...EXPLAIN_COMMANDS, '/project', '/undo-action'].sort())
+  it('lists the explain commands, /email, /project and /undo-action as the commands the apps handle', () => {
+    expect(dispatchKeysFor('gui').sort()).toEqual([...EXPLAIN_COMMANDS, '/email', '/project', '/undo-action'].sort())
   })
 
-  it('records email as a deliberate CLI-only feature, with its reason (D5)', () => {
-    expect(CLI_ONLY_FEATURES).toEqual([{ name: 'email', reason: 'sending needs credentials a browser or webview cannot hold safely' }])
+  it('has no CLI-only feature left: /email is on both surfaces under the same name (decision 3)', () => {
+    expect(CLI_ONLY_FEATURES).toEqual([])
+    expect(COMMAND_REGISTRY.find((c) => c.name === '/email')).toMatchObject({ surfaces: 'both' })
   })
 
   it('keeps the apps-export reason for /memory export', () => {

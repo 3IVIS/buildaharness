@@ -17,6 +17,8 @@ import {
   presentTurnResult,
   DEFAULT_ESCALATION_REASON,
   parseProjectCommand,
+  parseEmailCommand,
+  formatEmailCommand,
   parseUndoActionCommand,
   formatUndoLogListing,
   formatMemoryExport,
@@ -74,6 +76,8 @@ import { SetupWizard } from './components/SetupWizard'
 import { KeyNotice } from './components/KeyNotice'
 // Loaded when Write is opened, so the chat does not carry it.
 const WriteHost = lazy(() => import('./write/WriteHost'))
+// Email is a third lazy screen, loaded the same way.
+const EmailHost = lazy(() => import('./email/EmailHost'))
 import { isKeyMissing, requiresOwnKey } from './key-gate'
 import { SearchPanel } from './components/SearchPanel'
 import { GoalsPanel } from './components/GoalsPanel'
@@ -82,7 +86,7 @@ import { NextStepChips } from './components/NextStepChips'
 import { BrowserConfigStore } from './browser-config-store'
 import { seedChatFromWrite } from './shared-settings'
 import { AppSwitcher } from './components/AppSwitcher'
-import { appSwitchHandler } from './app-switch'
+import { appSwitchHandler, availableApps } from './app-switch'
 import { TauriConfigStore } from './tauri-config-store'
 import { envOverridesFromImportMetaEnv, llmBackendFromEnvValue, splitBuildDefaults } from './browser-config'
 import { applyBrowserLayerSettings } from './layer-env'
@@ -317,7 +321,7 @@ export function App(): React.JSX.Element {
   const [progress, setProgress] = useState<AssistantProgress | null>(null)
   const [streamingText, setStreamingText] = useState<string | null>(null)
   const [liveToolSteps, setLiveToolSteps] = useState<AssistantToolStep[]>([])
-  const [view, setView] = useState<'chat' | 'settings' | 'search' | 'goals' | 'memory' | 'write'>('chat')
+  const [view, setView] = useState<'chat' | 'settings' | 'search' | 'goals' | 'memory' | 'write' | 'email'>('chat')
   // First-launch setup wizard: true once the config load finds nothing configured (no persisted
   // backend/key and nothing pinned by a build-time var, so hosted/self-hosted builds skip it).
   const [needsSetup, setNeedsSetup] = useState(false)
@@ -950,6 +954,17 @@ export function App(): React.JSX.Element {
     return true
   }
 
+  /** /email <subcommand>: parsing and wording are shared with the CLI (email-command.ts). Returns whether `message` was one. */
+  function handleEmailCommand(message: string): boolean {
+    const [command, ...args] = message.trim().split(/\s+/)
+    if (command !== '/email') return false
+    setShowDemo(false)
+    setInput('')
+    if (composerRef.current) composerRef.current.style.height = 'auto'
+    setEntries((prev) => [...prev, { id: newId(), kind: 'explain', command: message.trim(), lines: formatEmailCommand(parseEmailCommand(args), false) }])
+    return true
+  }
+
   /** /undo-action [id]: lists revertible edits, or stages a revert that goes through the ordinary approval card (and resumes like any staged action). Parsing and listing text are the CLI's. Returns whether `message` was one. */
   function handleUndoActionCommand(message: string): boolean {
     const [command, ...args] = message.trim().split(/\s+/)
@@ -981,6 +996,7 @@ export function App(): React.JSX.Element {
     const message = input.trim()
     if (showExplanation(message)) return
     if (handleProjectCommand(message)) return
+    if (handleEmailCommand(message)) return
     if (handleUndoActionCommand(message)) return
     if (keyMissing) {
       setNeedsSetup(true)
@@ -1101,7 +1117,11 @@ export function App(): React.JSX.Element {
   }
 
   if (view === 'write') {
-    return <Suspense fallback={<p>Opening Write…</p>}><WriteHost config={config} onClose={() => setView('chat')} /></Suspense>
+    return <Suspense fallback={<p>Opening Write…</p>}><WriteHost config={config} onClose={() => setView('chat')} onSwitch={() => setView('email')} /></Suspense>
+  }
+
+  if (view === 'email') {
+    return <Suspense fallback={<p>Opening Email…</p>}><EmailHost config={config} onClose={() => setView('chat')} onSwitch={(t) => setView(t)} /></Suspense>
   }
 
   if (view === 'memory') {
@@ -1136,14 +1156,14 @@ export function App(): React.JSX.Element {
     )
   }
 
-  // The drop-down after "Aielia": on the desktop it opens Write inside the app, on the hosted pages it goes to /write/.
-  const appSwitch = appSwitchHandler('chat', { desktop: () => setView('write') })
+  // The drop-down after "Aielia": on the desktop it opens Write or Email inside the app, on the hosted pages it goes to /write/ or /email/.
+  const appSwitch = appSwitchHandler('chat', { desktop: (target) => setView(target === 'email' ? 'email' : 'write') })
 
   return (
     <div className="app">
       <header className="app__header">
         <span className="app__header-brand">
-          <span className="app__header-title"><a className="brand-link" href="https://myaielia.com" target="_blank" rel="noopener noreferrer" title="Go to myaielia.com">Aielia</a> {appSwitch ? <AppSwitcher current="chat" onSelect={appSwitch} disabled={busy} /> : 'Chat'}</span>
+          <span className="app__header-title"><a className="brand-link" href="https://myaielia.com" target="_blank" rel="noopener noreferrer" title="Go to myaielia.com">Aielia</a> {appSwitch ? <AppSwitcher current="chat" onSelect={appSwitch} disabled={busy} apps={availableApps('chat')} /> : 'Chat'}</span>
           <span className="app__header-badge" title="Early-stage alpha software — expect rough edges and breaking changes.">Alpha</span>
           {config.dangerouslySkipPermissions && (
             <button

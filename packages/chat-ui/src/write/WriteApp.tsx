@@ -5,6 +5,7 @@ import type { ChatAction } from './AdjustBar'
 import { ArticleSwitcher, type ArticleItem } from './ArticleSwitcher'
 import { readFileText } from './file-text'
 import { StoppedError, isStopped, type Step } from './work-step'
+import { RailNav } from '../shared-ui/RailNav'
 import { ChatPane, type ChatLine, type ChatMode, type WorkProgress } from './ChatPane'
 import { HistoryPanel, type VersionRow } from './HistoryPanel'
 import { VersionOutline, VersionView, type Viewing } from './VersionView'
@@ -20,7 +21,6 @@ import { SettingsPane } from './SettingsPane'
 import { Splitter } from './Splitter'
 import type { WriteConnection } from './write-config'
 import { TextNotes, looksLikeLink, type NoteKind } from './TextNotes'
-import { Icon } from './icons'
 import { DialogProvider, useDialogs } from './dialogs'
 import type { WriteServices } from './write-services'
 import { SiteNav } from '../components/SiteNav'
@@ -1271,15 +1271,7 @@ function WriteAppBody({ services, connection, onDeleted, appSwitch, showPublish 
       </div>
 
       <main ref={mainRef} className="write__main" data-open={railOpen ? 'true' : 'false'} data-tab={tab} style={{ ...(layout.panel ? { '--panel-size': `${layout.panel}px` } : {}), ...(layout.chat ? { '--chat-size': `${layout.chat}px` } : {}) } as React.CSSProperties}>
-        <nav className="write__rail" aria-label="Panels">
-          {TABS.map((t) => (
-            <button key={t.id} type="button" data-tab={t.id} className={isOn(t.id) ? 'is-on' : ''} aria-pressed={isOn(t.id)} aria-label={t.label} onClick={() => pickTab(t.id)}>
-              <Icon d={RAIL_ICONS[t.id]} size={22} />
-              <span>{t.label}</span>
-              {t.id === 'issues' && issues > 0 && <span className="write__railbadge" aria-label={`${issues} issues`}>{issues}</span>}
-            </button>
-          ))}
-        </nav>
+        <RailNav tabs={TABS.map((t) => ({ ...t, icon: RAIL_ICONS[t.id], badge: t.id === 'issues' ? issues : undefined, badgeLabel: `${issues} issues` }))} isOn={(id) => isOn(id as Tab)} onPick={(id) => pickTab(id as Tab)} />
         {railOpen && <Splitter label="Side panel width" axis="x" grow={1} className="write__split--panel" measure={() => widthOf('.write__panel', 340)} limits={() => ({ min: 260, max: isDesktop() ? Math.min(640, roomFor(widthOf('.write__pane--chat', 320))) : Math.min(640, Math.round(window.innerWidth * 0.6)) })} onSize={(px) => resize('panel', px)} onReset={() => resize('panel', undefined)} />}
         <Splitter label="Chat width" axis="x" grow={-1} className="write__split--chat" measure={() => widthOf('.write__pane--chat', 320)} limits={() => ({ min: 260, max: Math.min(720, roomFor(panelTakesRoom() ? widthOf('.write__panel', 340) : 0)) })} onSize={(px) => resize('chat', px)} onReset={() => resize('chat', undefined)} />
         <aside className="write__panel" aria-label="Side panel">

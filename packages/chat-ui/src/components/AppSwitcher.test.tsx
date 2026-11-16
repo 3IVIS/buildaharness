@@ -6,6 +6,14 @@ import { AppSwitcher } from './AppSwitcher'
 afterEach(cleanup)
 
 describe('AppSwitcher', () => {
+  it('lists Email as the third screen, or leaves it out when the build has no such page', async () => {
+    const { rerender } = render(<AppSwitcher current="chat" onSelect={() => undefined} />)
+    await userEvent.click(screen.getByRole('button', { name: /^Chat/ }))
+    expect(screen.getByRole('menuitemradio', { name: /Aielia Email/ })).toBeInTheDocument()
+    rerender(<AppSwitcher current="chat" apps={['chat', 'write']} onSelect={() => undefined} />)
+    expect(screen.queryByRole('menuitemradio', { name: /Aielia Email/ })).toBeNull()
+  })
+
   it('shows the open screen and keeps the list closed', () => {
     render(<AppSwitcher current="chat" onSelect={() => undefined} />)
     const button = screen.getByRole('button', { name: /^Chat/ })
@@ -41,7 +49,7 @@ describe('AppSwitcher', () => {
   })
 
   it('opens on the current item, moves with the arrow keys, and closes on Escape with focus back on the button', async () => {
-    render(<AppSwitcher current="chat" onSelect={() => undefined} />)
+    render(<AppSwitcher current="chat" apps={['chat', 'write']} onSelect={() => undefined} />)
     const button = screen.getByRole('button', { name: /^Chat/ })
     await userEvent.click(button)
     expect(screen.getByRole('menuitemradio', { name: /Aielia Chat/ })).toHaveFocus()

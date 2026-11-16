@@ -636,6 +636,76 @@
       "batch": null,
       "rationale": "Markup syntax of a tool call, not natural language; nothing about the meaning of the text is decided",
       "class": "A"
+    },
+    {
+      "id": "mail-link-scheme-strip",
+      "file": "packages/aielia/src/email/untrusted.ts",
+      "line": 54,
+      "decides": "strips the http(s):// scheme from a link's visible text before comparing hosts in the mail link-mismatch check",
+      "inputs": null,
+      "batch": null,
+      "rationale": "URL scheme syntax, not natural language; nothing about the meaning of the text is decided",
+      "class": "A"
+    },
+    {
+      "id": "mail-gmail-fixture-routing",
+      "file": "packages/aielia/src/email/providers/gmail-fixture-server.ts",
+      "line": 113,
+      "decides": "routes fixture-server requests by REST path shape and checks the Bearer header format",
+      "inputs": null,
+      "batch": null,
+      "rationale": "URL path and HTTP header syntax in a test fixture server, not natural language",
+      "class": "A"
+    },
+    {
+      "id": "mail-gmail-query-and-errors",
+      "file": "packages/aielia/src/email/providers/gmail.ts",
+      "line": 96,
+      "decides": "escapes search-query operator characters, checks a numeric timestamp, and maps Gmail API error reason codes",
+      "inputs": null,
+      "batch": null,
+      "rationale": "query-syntax escaping, digit check and API error-code names; nothing about message meaning is decided",
+      "class": "A"
+    },
+    {
+      "id": "mail-imap-fixture",
+      "file": "packages/aielia/src/email/providers/imap-fixture-server.ts",
+      "line": 71,
+      "decides": "parses IMAP fixture-server request headers and refuses client-side auth commands",
+      "inputs": null,
+      "batch": null,
+      "rationale": "IMAP/HTTP protocol syntax in a test fixture server, not natural language",
+      "class": "A"
+    },
+    {
+      "id": "mail-imap-mime",
+      "file": "packages/aielia/src/email/providers/imap-mime.ts",
+      "line": 40,
+      "decides": "parses MIME header parameters, boundaries and strips script/style/br markup when converting HTML bodies",
+      "inputs": null,
+      "batch": null,
+      "rationale": "MIME and HTML markup syntax; nothing about the meaning of the text is decided",
+      "class": "A"
+    },
+    {
+      "id": "mail-imap-wire",
+      "file": "packages/aielia/src/email/providers/imap-wire.ts",
+      "line": 181,
+      "decides": "extracts bracketed IMAP response codes from a server line",
+      "inputs": null,
+      "batch": null,
+      "rationale": "IMAP wire-protocol response-code syntax, not natural language",
+      "class": "A"
+    },
+    {
+      "id": "mail-imap-transport-errors",
+      "file": "packages/aielia/src/email/providers/tauri-imap-transport.ts",
+      "line": 22,
+      "decides": "maps IMAP server error keywords (NONEXISTENT, TRYCREATE, THROTTLE) to provider error kinds",
+      "inputs": null,
+      "batch": null,
+      "rationale": "protocol error-code names from the server, not user text",
+      "class": "A"
     }
   ],
   "scanBaseline": {
@@ -656,6 +726,13 @@
     "packages/runtime/src/openai-compatible-client.ts": 3,
     "packages/aielia/src/html-to-markdown.ts": 11,
     "packages/aielia/src/writer/repo-search.ts": 3,
-    "packages/aielia/src/writer/text-tool-calls.ts": 2
+    "packages/aielia/src/email/untrusted.ts": 1,
+    "packages/aielia/src/writer/text-tool-calls.ts": 2,
+    "packages/aielia/src/email/providers/gmail-fixture-server.ts": 5,
+    "packages/aielia/src/email/providers/gmail.ts": 1,
+    "packages/aielia/src/email/providers/imap-fixture-server.ts": 3,
+    "packages/aielia/src/email/providers/imap-mime.ts": 3,
+    "packages/aielia/src/email/providers/imap-wire.ts": 1,
+    "packages/aielia/src/email/providers/tauri-imap-transport.ts": 2
   }
 }

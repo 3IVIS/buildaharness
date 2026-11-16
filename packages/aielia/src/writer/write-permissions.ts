@@ -1,7 +1,7 @@
 import { z } from 'zod'
 import type { ChatMessage, ChatOptions, ILLMClient, TokenUsage, ToolDefinition } from '@buildaharness/runtime'
 import { withCostEstimate } from '../turn-cost.js'
-import { classifyCall } from './write-spend.js'
+import { classifyCall, type CallType } from './write-spend.js'
 
 /**
  * The permission list (T11): what the assistant may do on its own in Aielia Write, with defaults the writer can change, and
@@ -146,11 +146,19 @@ export async function createSpendMeter(store: SettingsStore, pricing: { backend?
  * Wraps a client so every call is counted, and no call starts once the cap is reached. Every model step in the article
  * service fails closed on an error (nothing is marked checked), so hitting the cap degrades to "not checked", never to a wrong result.
  */
-export function withSpendCap(inner: ILLMClient, meter: SpendMeter, getCap: () => number | undefined): ILLMClient {
+export function withSpendCap(
+  inner: ILLMClient,
+  meter: SpendMeter,
+  getCap: () => number | undefined,
+  /** Recognises the call type; Email passes its own (a mail step falls back to the writer's types, then to chat). */
+  classify: (messages: readonly ChatMessage[]) => CallType = classifyCall,
+  /** Call types whose conversation is sent again at each step, so the provider is asked to cache it. */
+  cachedTypes: readonly string[] = ['chat'],
+): ILLMClient {
   const counted = (messages: ChatMessage[], o?: ChatOptions): ChatOptions => {
-    const type = classifyCall(messages).id
+    const type = classify(messages).id
     // The chat is a loop that sends the same conversation again at each step, so the provider is asked to cache it (a client that cannot, ignores this).
-    return { ...(type === 'chat' ? { cachePrompt: true } : {}), ...o, onUsage: (u) => { void meter.record(withEstimatedInput(u, messages), type, o?.model); o?.onUsage?.(u) } }
+    return { ...(cachedTypes.includes(type) ? { cachePrompt: true } : {}), ...o, onUsage: (u) => { void meter.record(withEstimatedInput(u, messages), type, o?.model); o?.onUsage?.(u) } }
   }
   return {
     // A client that cannot take tool definitions (the claude CLI) must still say so through the cap, or the repository search would call it with tools.

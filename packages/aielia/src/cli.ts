@@ -20,6 +20,8 @@ import {
 import type { AskAnswer, AskQuestion, AskResponse } from '@buildaharness/harness'
 import { orderedOptions, draftToAnswer, emptyDraft, type QuestionDraft } from './ask-draft.js'
 import { parseProjectCommand } from './project-command.js'
+import { parseEmailCommand, formatEmailCommand } from './email/email-command.js'
+import { OfflineEmailSession } from './email/offline-session.js'
 import { parseUndoActionCommand } from './undo-action-command.js'
 import { createLlmClient } from './llm-client-factory.js'
 import type { GoalGraphState } from './goal-graph-service.js'
@@ -1775,6 +1777,16 @@ export async function runCli(options: RunCliOptions = {}): Promise<CliInstance> 
     else await handleConfigCommand(['set', 'activeProject', command.project])
   }
 
+  /** /email <subcommand>: parsing and wording are shared (email/email-command.ts); the CLI only prints. */
+  let offlineEmail: OfflineEmailSession | undefined
+  async function handleEmail(args: string[]): Promise<void> {
+    // No mail account can be connected from the CLI yet, so every run uses the sample mailbox over the fake provider (nothing leaves the machine).
+    const command = parseEmailCommand(args)
+    if (command.kind !== 'run') return printSafe(`\n${formatEmailCommand(command, true).join('\n')}\n`)
+    offlineEmail ??= new OfflineEmailSession()
+    printSafe(`\n(sample mailbox)\n${(await offlineEmail.run(args)).join('\n')}\n`)
+  }
+
   // Phase 3 of plans/hierarchical_goal_tree_and_steering_plan.html (R1, mid-task steering).
   // `turnInProgress` is true only while dispatchOne is awaiting an actual conversational
   // handleTurn() call, never while a command handler (e.g. /config) is running — so a /config
@@ -1811,6 +1823,7 @@ export async function runCli(options: RunCliOptions = {}): Promise<CliInstance> 
     '/goals': () => handleGoals(),
     '/model': (args) => handleModel(args),
     '/project': (args) => handleProject(args),
+    '/email': (args) => handleEmail(args),
     '/cost': () => printCost(),
     '/doctor': () => handleDoctor(),
     '/config': (args) => handleConfigCommand(args),
