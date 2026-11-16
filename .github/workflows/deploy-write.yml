@@ -46,6 +46,7 @@ jobs:
           VITE_ASSISTANT_WEB_BACKEND: proxy
           # The Chat/Write drop-down in the page title goes to the chat page on the same site.
           VITE_APP_URL_CHAT: /chat/
+          VITE_APP_URL_EMAIL: /email/
         run: npm run build:write --workspace=packages/chat-ui
 
       - name: Check deploy key is present
