@@ -4,6 +4,10 @@ import { mkdtempSync, writeFileSync, chmodSync, readFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join, resolve } from 'node:path'
 
+// Git hooks (pre-push runs the test suite) export GIT_DIR, GIT_INDEX_FILE and friends; a throwaway repo
+// must never inherit them or its commits and ref deletes land in the real repository.
+const cleanEnv = Object.fromEntries(Object.entries(process.env).filter(([k]) => !k.startsWith('GIT_')))
+
 const SCRIPT = resolve(__dirname, 'mac-verify.sh')
 const SHA = 'a'.repeat(40)
 let dir
@@ -65,7 +69,7 @@ describe('mac-verify.sh', () => {
 
   describe('bundle mode', () => {
     let repo, sha
-    const git = (...a) => execFileSync('git', a, { cwd: repo, encoding: 'utf8' }).trim()
+    const git = (...a) => execFileSync('git', a, { cwd: repo, encoding: 'utf8', env: cleanEnv }).trim()
     // The fake ssh saves whatever is piped to the bundle upload and answers the poll with PASS.
     const bundleSsh = () => fakeSsh(`case "$*" in *repo.bundle*) cat > "${dir}/uploaded.bundle";; *"tail -n"*) echo "@@STATUS:0";; *) cat > /dev/null;; esac; exit 0`)
     const runIn = (args, ssh) => spawnSync('bash', [SCRIPT, ...args], {
@@ -85,7 +89,7 @@ describe('mac-verify.sh', () => {
       const r = runIn(['--commit', sha, '--poll', '0'], bundleSsh())
       expect(r.status).toBe(0)
       expect(r.stdout).toContain('git bundle')
-      expect(execFileSync('git', ['bundle', 'verify', join(dir, 'uploaded.bundle')], { cwd: repo, encoding: 'utf8' })).toBeDefined()
+      expect(execFileSync('git', ['bundle', 'verify', join(dir, 'uploaded.bundle')], { cwd: repo, encoding: 'utf8', env: cleanEnv })).toBeDefined()
       expect(git('for-each-ref', 'refs/bah-verify')).toBe('')
     })
 
