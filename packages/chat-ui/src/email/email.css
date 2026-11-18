@@ -332,3 +332,4 @@
 .probably-spam li { display: grid; grid-template-columns: 1fr auto; gap: 2px 8px; }
 .probably-spam__from, .probably-spam__why { color: var(--muted); grid-column: 1; }
 .probably-spam li button { grid-column: 2; grid-row: 1 / span 3; align-self: center; }
+.mailpane__server { margin: 0 12px 8px; padding: 6px 10px; border: 1px dashed var(--border); border-radius: 8px; background: none; color: inherit; font: inherit; font-size: 0.86rem; cursor: pointer; text-align: left; }

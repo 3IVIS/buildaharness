@@ -4,6 +4,8 @@ import { buildMailModelInput } from './model-input.js'
 import { folderExcluded } from './privacy.js'
 import { MAIL_UNTRUSTED_PROMPT } from './untrusted.js'
 import { resolveContext, type MailContext } from './mail-context.js'
+import { SEARCH_SCOPES, searchMail, type SearchScope } from './mail-search.js'
+import type { EmailProvider } from './provider.js'
 import { evaluateToolPolicy, mailToolClass, type ToolPolicyControlState, type ToolPolicyResult } from '../tool-policy.js'
 
 /**
@@ -37,6 +39,7 @@ export const MAIL_READ_TOOLS: MailToolDefinition[] = [
         text: { type: 'string' }, from: { type: 'string' }, folder: { type: 'string', description: 'Folder name or id.' },
         unreadOnly: { type: 'boolean' }, after: { type: 'string', description: 'ISO date, inclusive.' }, before: { type: 'string', description: 'ISO date, exclusive.' },
         limit: { type: 'number' },
+        scope: { type: 'string', enum: ['local', 'server', 'both', 'auto'], description: 'local = what is synced (fast); server = the mail provider\'s own search, which also reaches mail older than the review window; both; auto (default) = local, and the server too when the local answer is thin or the dates reach back past the window.' },
       },
     },
   },
@@ -81,6 +84,10 @@ export interface MailToolDeps {
   maxBodyChars?: number
   /** Results per search (default 20, at most 50). */
   searchLimit?: number
+  /** The provider, so `mail_search` can ask the server. Absent: local search only. */
+  provider?: Pick<EmailProvider, 'search'>
+  /** Start of the review window (ISO); results older than it are marked as outside the reviewed window. */
+  windowSince?: string
 }
 
 export interface MailToolCitation { messageId: string; threadId: string; subject: string }
@@ -136,31 +143,34 @@ async function search(args: Record<string, unknown>, folders: Folder[], deps: Ma
   const folder = folderArg ? folders.find((f) => f.id === folderArg || f.name.toLowerCase() === folderArg.toLowerCase()) : undefined
   if (folderArg && !folder) return fail(gate, `No folder named "${folderArg}".`)
   const limit = Math.min(50, Math.max(1, Math.floor(Number(args.limit) || deps.searchLimit || 20)))
-  const needle = str('text')?.toLowerCase()
+  const scopeArg = str('scope')
+  if (scopeArg && !(SEARCH_SCOPES as readonly string[]).includes(scopeArg)) return fail(gate, `Unknown scope "${scopeArg}". Use local, server, both or auto.`)
+  const scope = (scopeArg ?? 'auto') as SearchScope
+  const res = await searchMail(
+    { text: str('text'), from: str('from'), folderId: folder?.id, unreadOnly: args.unreadOnly === true ? true : undefined, after: str('after'), before: str('before') },
+    scope,
+    {
+      account: deps.account, cache: deps.cache, provider: deps.provider, windowSince: deps.windowSince, limit,
+      // Judge readability BEFORE matching text: an excluded message contributes nothing but a count.
+      accept: (m) => buildMailModelInput(deps.account, m, folders, ['headers']).ok,
+    },
+  )
   const out: string[] = []
   const citations: MailToolCitation[] = []
-  let withheld = 0
-  const PAGE = 100
-  for (let offset = 0; out.length < limit; offset += PAGE) {
-    const page = await deps.cache.queryMessages(
-      { folderId: folder?.id, sender: str('from'), read: args.unreadOnly === true ? false : undefined, since: str('after'), before: str('before') },
-      { offset, limit: PAGE },
-    )
-    for (const m of page.items) {
-      if (out.length >= limit) break
-      if (m.accountId !== deps.account.id) continue
-      // Judge readability BEFORE matching text, so an excluded message's body can never decide what is shown.
-      const shown = renderMessage(m, folders, deps, ['headers'], 0)
-      if (!shown) { withheld++; continue }
-      if (needle && !`${m.subject}\n${m.from.address}\n${m.textBody}`.toLowerCase().includes(needle)) continue
-      const snippet = truncate(m.textBody.replace(/\s+/g, ' ').trim(), 160)
-      out.push(`${shown.text}\nSnippet (untrusted): ${snippet}`)
-      citations.push({ messageId: m.id, threadId: m.threadId, subject: m.subject })
-    }
-    if (offset + PAGE >= page.total) break
+  for (const h of res.hits) {
+    const shown = renderMessage(h.message, folders, deps, ['headers'], 0)
+    if (!shown) continue
+    const snippet = truncate(h.message.textBody.replace(/\s+/g, ' ').trim(), 160)
+    out.push(`${shown.text}${h.outsideWindow ? '\n(older than your review window)' : ''}\nSnippet (untrusted): ${snippet}`)
+    citations.push({ messageId: h.message.id, threadId: h.message.threadId, subject: h.message.subject })
   }
-  const text = (out.join('\n\n') || 'No matching messages.') + (withheld ? `\n(${withheld} message${withheld === 1 ? '' : 's'} not shown: excluded from Aielia or account read is off.)` : '')
-  return { ok: true, text, citations, readMail: out.length > 0, withheld, gate }
+  const notes: string[] = []
+  if (res.withheld) notes.push(`${res.withheld} message${res.withheld === 1 ? '' : 's'} not shown: excluded from Aielia or account read is off.`)
+  if (res.scopeUsed !== 'local') notes.push('The mail server was searched too.')
+  if (res.serverError) notes.push(`The mail server could not be searched (${res.serverError.code}); these are the results already on this device, so older mail may be missing.`)
+  if (res.serverUnavailable) notes.push('The mail server is not reachable from here, so only mail on this device was searched.')
+  const text = (out.join('\n\n') || 'No matching messages.') + (notes.length ? `\n(${notes.join(' ')})` : '')
+  return { ok: true, text, citations, readMail: out.length > 0, withheld: res.withheld, gate }
 }
 
 /** Thread id from the args, else from the "this one" chip. */

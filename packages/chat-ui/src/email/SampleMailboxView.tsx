@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
-import type { Message } from '@buildaharness/aielia'
+import { InMemoryEmailCache, searchMail, type Message } from '@buildaharness/aielia'
 import type { SampleMailbox } from './sample-mode'
 import { EmailLayout } from './EmailLayout'
 import { MessageList } from './MessageList'
@@ -45,6 +45,8 @@ export function SampleMailboxView({ sample, onConnect, appSwitch }: { sample: Sa
   const [openId, setOpenId] = useState<string | undefined>()
   const [query, setQuery] = useState('')
   const [threaded, setThreaded] = useState(true)
+  const [serverHits, setServerHits] = useState<{ query: string; messages: Message[]; error?: string } | undefined>()
+  const [serverBusy, setServerBusy] = useState(false)
   const [spamHidden, setSpamHidden] = useState<ReadonlySet<string>>(new Set()) // sample only: nothing is stored
   const [spamKept, setSpamKept] = useState<ReadonlySet<string>>(new Set())
   const spamItems = sample.spam.filter((s) => !spamHidden.has(s.threadId) && !spamKept.has(s.threadId))
@@ -52,7 +54,19 @@ export function SampleMailboxView({ sample, onConnect, appSwitch }: { sample: Sa
   const [folderId, setFolderId] = useState<string | undefined>(inbox?.id)
   const folder = sample.folders.find((f) => f.id === folderId) ?? inbox
   const inFolder = useMemo(() => (folder?.kind === 'inbox' ? sample.inbox.filter((m) => !spamHidden.has(m.threadId)) : []), [folder?.kind, sample.inbox, spamHidden])
-  const shown = useMemo(() => inFolder.filter((m) => matches(m, query)), [inFolder, query])
+  const local = useMemo(() => inFolder.filter((m) => matches(m, query)), [inFolder, query])
+  // Hits from the mail server for this very query, added after the local ones (nothing already shown is repeated).
+  const extra = useMemo(() => (serverHits && serverHits.query === query.trim() ? serverHits.messages.filter((m) => !local.some((l) => l.id === m.id)) : []), [serverHits, query, local])
+  const shown = useMemo(() => [...local, ...extra], [local, extra])
+  const searchServer = async (): Promise<void> => {
+    const q = query.trim()
+    if (!q || serverBusy) return
+    setServerBusy(true)
+    try {
+      const r = await searchMail({ text: q }, 'server', { account: sample.provider.account, cache: new InMemoryEmailCache(), provider: sample.provider, limit: 30 })
+      setServerHits({ query: q, messages: r.hits.map((h) => h.message), ...(r.serverError ? { error: r.serverError.message } : {}) })
+    } finally { setServerBusy(false) }
+  }
   const open = sample.inbox.find((m) => m.id === openId)
   const unread = inFolder.filter((m) => !m.flags.read).length
   const [listBox, listHeight] = useHeight(480)
@@ -102,11 +116,13 @@ export function SampleMailboxView({ sample, onConnect, appSwitch }: { sample: Sa
           <div className="mailpane">
             <div className="mailpane__head">
               <h2>{folderTitle}</h2>
-              <span className="mailpane__meta">{query.trim() ? `${shown.length} found` : unread > 0 ? `${unread} unread` : `${inFolder.length} messages`}</span>
+              <span className="mailpane__meta">{query.trim() ? `${shown.length} found${extra.length ? ` (${extra.length} from the server)` : ''}` : unread > 0 ? `${unread} unread` : `${inFolder.length} messages`}</span>
               <button type="button" className="email__iconbtn mailpane__threads" aria-pressed={threaded} aria-label="Group into conversations" title={threaded ? 'Showing conversations: click for single messages' : 'Showing single messages: click to group into conversations'} onClick={() => setThreaded((v) => !v)}>
                 <MailIcon name="chat" size={16} />
               </button>
             </div>
+            {query.trim() && serverHits?.query !== query.trim() && <button type="button" className="mailpane__server" disabled={serverBusy} onClick={() => void searchServer()}>{serverBusy ? 'Searching the server…' : 'Search the whole mailbox on the server too'}</button>}
+            {serverHits?.error && serverHits.query === query.trim() && <p role="status" className="mailpane__none">The server could not be searched: {serverHits.error}</p>}
             {folder?.kind === 'inbox' && <ProbablySpam items={spamItems} onMoveAll={() => setSpamHidden(new Set([...spamHidden, ...spamItems.map((s) => s.threadId)]))} onNotSpam={(id) => setSpamKept(new Set([...spamKept, id]))} />}
             <div className="mailpane__body" ref={listBox}>
               {shown.length > 0
