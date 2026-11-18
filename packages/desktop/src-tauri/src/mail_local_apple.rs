@@ -579,7 +579,7 @@ mod tests {
     let root = lib.join("V10");
     fs::create_dir_all(root.join("MailData")).unwrap();
     let conn = Connection::open(root.join("MailData").join("Envelope Index")).unwrap();
-    conn.execute_batch("PRAGMA journal_mode=WAL;").unwrap();
+    let _mode: String = conn.query_row("PRAGMA journal_mode=WAL", [], |r| r.get(0)).unwrap();
     conn.execute_batch(
       "CREATE TABLE messages (ROWID INTEGER PRIMARY KEY AUTOINCREMENT, message_id INTEGER NOT NULL DEFAULT 0, global_message_id INTEGER NOT NULL, remote_id INTEGER, sender INTEGER, subject_prefix TEXT, subject INTEGER NOT NULL, summary INTEGER, date_sent INTEGER, date_received INTEGER, mailbox INTEGER NOT NULL, flags INTEGER NOT NULL DEFAULT 0, read INTEGER NOT NULL DEFAULT 0, flagged INTEGER NOT NULL DEFAULT 0, deleted INTEGER NOT NULL DEFAULT 0, size INTEGER NOT NULL DEFAULT 0, conversation_id INTEGER NOT NULL DEFAULT 0);
        CREATE TABLE subjects (ROWID INTEGER PRIMARY KEY, subject TEXT);
