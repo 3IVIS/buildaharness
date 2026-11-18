@@ -1,4 +1,4 @@
-import type { BulkPreview, EmailChange, Message, Triage } from '@buildaharness/aielia'
+import { groupConversations, type BulkPreview, type EmailChange, type Message, type Triage } from '@buildaharness/aielia'
 
 /** One line of the message list: a message, or the thread it stands for when the list is threaded. */
 export interface ListItem {
@@ -21,11 +21,14 @@ const byNewest = (a: Message, b: Message): number => (a.date < b.date ? 1 : a.da
 export function buildItems(messages: readonly Message[], threaded: boolean): ListItem[] {
   const sorted = [...messages].sort(byNewest)
   if (!threaded) return sorted.map((m) => ({ id: m.id, threadId: m.threadId, latest: m, count: 1, unread: !m.flags.read, messageIds: [m.id] }))
+  // One row per conversation: the provider's thread ids, reconciled structurally (a Sent copy joins its conversation).
+  const conv = groupConversations(sorted)
   const byThread = new Map<string, Message[]>()
   for (const m of sorted) {
-    const g = byThread.get(m.threadId)
+    const key = conv.get(m.id) ?? m.threadId
+    const g = byThread.get(key)
     if (g) g.push(m)
-    else byThread.set(m.threadId, [m])
+    else byThread.set(key, [m])
   }
   return [...byThread.values()].map((g) => ({
     id: g[0].id, threadId: g[0].threadId, latest: g[0], count: g.length, unread: g.some((m) => !m.flags.read), messageIds: g.map((m) => m.id),

@@ -278,6 +278,7 @@ export { BULK_CEILING_PER_TURN, EmailActionError, EmailActionLog, TurnCeiling, a
 export type { EmailChange, MessageState, ActionEntry, PreviewRow, BulkPreview, UndoConflict, UndoResult, ActionContext, EmailAction as MailActionRecord } from './email/action-log.js'
 export * from './email/organise-tools.js'
 export * from './email/rules.js'
+export * from './email/conversation.js'
 export * from './email/mail-spend.js'
 export * from './email/mail-data.js'
 export { withMailSpendCap, createCappedMailModel } from './mail-spend-bridge.js'

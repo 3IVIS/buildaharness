@@ -26,6 +26,14 @@ describe('message list model', () => {
     expect(t.unread).toBe(true)
     expect(t.messageIds.sort()).toEqual(['m1', 'm2'])
   })
+  it('threads: a Sent copy under another thread id joins its conversation through in-reply-to', () => {
+    const a = msg(1, { threadId: 'T1', headers: { 'message-id': '<one@x.test>' } })
+    const b = msg(2, { threadId: 'T2', headers: { 'message-id': '<two@x.test>', 'in-reply-to': '<one@x.test>' }, subject: 'A different subject' })
+    const items = buildItems([a, b], true)
+    expect(items).toHaveLength(1)
+    expect(items[0]!.count).toBe(2)
+    expect(buildItems([a, b], false)).toHaveLength(2)
+  })
   it('windowRange is bounded by the viewport', () => {
     const r = windowRange(0, 480, ROW_HEIGHT, 50_000)
     expect(r.end - r.start).toBeLessThan(30)

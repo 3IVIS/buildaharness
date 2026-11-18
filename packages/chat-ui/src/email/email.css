@@ -62,7 +62,9 @@
 .mailpane { display: flex; flex-direction: column; flex: 1; min-height: 0; }
 .mailpane__head { display: flex; align-items: baseline; justify-content: space-between; gap: 8px; padding: 14px 16px 8px; }
 .mailpane__head h2 { margin: 0; font-size: 1.15rem; font-weight: 650; letter-spacing: -0.005em; }
-.mailpane__meta { color: var(--muted); font-size: 0.82rem; }
+.mailpane__meta { color: var(--muted); font-size: 0.82rem; margin-left: auto; }
+.mailpane__threads { align-self: center; opacity: 0.6; }
+.mailpane__threads[aria-pressed='true'] { opacity: 1; color: var(--accent, currentColor); }
 .mailpane__body { flex: 1; min-height: 0; }
 .mailpane__none { margin: 0; padding: 32px 20px; text-align: center; color: var(--muted); }
 .mlist__bar { display: flex; gap: 8px; align-items: center; padding: 8px 14px; background: var(--amber-a18); border-bottom: 1px solid var(--amber); }

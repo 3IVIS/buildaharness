@@ -42,6 +42,7 @@ export function SampleMailboxView({ sample, onConnect, appSwitch }: { sample: Sa
   const [lines, setLines] = useState<AielaChatLine[]>([])
   const [openId, setOpenId] = useState<string | undefined>()
   const [query, setQuery] = useState('')
+  const [threaded, setThreaded] = useState(true)
   const inbox = sample.folders.find((f) => f.kind === 'inbox')
   const [folderId, setFolderId] = useState<string | undefined>(inbox?.id)
   const folder = sample.folders.find((f) => f.id === folderId) ?? inbox
@@ -95,10 +96,13 @@ export function SampleMailboxView({ sample, onConnect, appSwitch }: { sample: Sa
             <div className="mailpane__head">
               <h2>{folderTitle}</h2>
               <span className="mailpane__meta">{query.trim() ? `${shown.length} found` : unread > 0 ? `${unread} unread` : `${inFolder.length} messages`}</span>
+              <button type="button" className="email__iconbtn mailpane__threads" aria-pressed={threaded} aria-label="Group into conversations" title={threaded ? 'Showing conversations: click for single messages' : 'Showing single messages: click to group into conversations'} onClick={() => setThreaded((v) => !v)}>
+                <MailIcon name="chat" size={16} />
+              </button>
             </div>
             <div className="mailpane__body" ref={listBox}>
               {shown.length > 0
-                ? <MessageList messages={shown} height={listHeight} activeId={openId} onOpen={setOpenId} />
+                ? <MessageList messages={shown} threaded={threaded} height={listHeight} activeId={openId} onOpen={setOpenId} />
                 : <p className="mailpane__none">{query.trim() ? 'No message matches your search.' : `Nothing in ${folderTitle} in this sample.`}</p>}
             </div>
           </div>
