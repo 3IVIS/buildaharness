@@ -13,7 +13,10 @@
 .email__mail[hidden], .email__aielia[hidden], .email__list[hidden], .email__reader[hidden], .email__tree[hidden], .email__drawer[hidden] { display: none; }
 .email[data-reader='beside'] .email__mail { flex-direction: row; }
 .email[data-reader='beside'] .email__list { width: 360px; flex: none; border-right: 1px solid var(--border); }
-.email[data-reader='below'] .email__list { height: 40%; border-bottom: 1px solid var(--border); }
+.email[data-reader='below'] .email__list { height: 40%; min-height: 250px; border-bottom: 1px solid var(--border); }
+/* Reader below the list: with no message open there is nothing to show, so the list takes the whole height. */
+.email[data-reader='below']:not([data-open='true']) .email__reader { display: none; }
+.email[data-reader='below']:not([data-open='true']) .email__list { height: auto; flex: 1; border-bottom: 0; }
 .email__list { display: flex; flex-direction: column; min-width: 0; min-height: 0; background: var(--surface); overflow: hidden; }
 .email__reader { flex: 1; min-width: 0; min-height: 0; overflow-y: auto; }
 .email--phone .email__list { flex: 1; width: auto; border: 0; }

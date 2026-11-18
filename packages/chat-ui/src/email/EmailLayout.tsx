@@ -71,7 +71,7 @@ export function EmailLayout({ folders, list, reader, aielia, todo, banner, mode:
   ]
 
   return (
-    <div className={`email email--${mode}`} data-layout={mode} data-reader={placement}>
+    <div className={`email email--${mode}`} data-layout={mode} data-reader={placement} data-open={readerOpen}>
       {banner}
       {tablet && (
         <div className="email__bar">
