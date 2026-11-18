@@ -8,6 +8,8 @@ import { draftReply, saveReplyDraft, type DraftModel } from './draft.js'
 import { SendCoordinator, type StagedSend } from './send.js'
 import { parseEmailCommand, formatEmailCommand, type EmailCommand } from './email-command.js'
 import type { Message, Thread, Triage } from './model.js'
+import { catchUpSummary, estimateCatchUp, runCatchUp } from './catch-up.js'
+import { REVIEW_WINDOWS, reviewWindowLabel, windowSince, type ReviewWindow } from './review-window.js'
 
 /**
  * `/email` over the fake provider and the invented sample mailbox, with no network and no model: the whole read, triage, to-do and draft
@@ -103,6 +105,18 @@ export class OfflineEmailSession {
     return { written: res.written.length, lines }
   }
 
+  /** Review the mail of a window (default 30 days) and say what needs a response. Reads and records; changes no mail. */
+  async catchUp(arg?: string): Promise<{ lines: string[]; needsResponse: number }> {
+    const window = (arg === undefined ? 30 : REVIEW_WINDOWS.find((w) => String(w) === arg.toLowerCase())) as ReviewWindow | undefined
+    if (window === undefined) return { lines: [`Unknown window "${arg}". Use one of: ${REVIEW_WINDOWS.join(', ')}.`], needsResponse: 0 }
+    await this.threads()
+    const since = windowSince(window, new Date(this.now()))
+    const deps = { account: this.provider.account, cache: this.cache, store: this.store, model: this.triageModel, ...(since ? { since } : {}), now: this.now }
+    const est = await estimateCatchUp(deps)
+    const r = await runCatchUp(deps)
+    return { lines: [`${reviewWindowLabel(window)}: ${est.inWindow} thread(s), ${est.toReview} to review in ${est.calls} model call(s).`, ...catchUpSummary(r, reviewWindowLabel(window))], needsResponse: r.needsResponse.length }
+  }
+
   async todo(): Promise<{ items: ScoredTodo[]; lines: string[] }> {
     const items = await this.threads()
     const triage: Triage[] = []
@@ -150,6 +164,7 @@ export class OfflineEmailSession {
     const head = formatEmailCommand(cmd, true)
     switch (cmd.sub) {
       case 'review': return [...head, ...(await this.review()).lines]
+      case 'catchup': return [...head, ...(await this.catchUp(cmd.args[0])).lines]
       case 'todo': return [...head, ...(await this.todo()).lines]
       case 'reply': return [...head, ...(await this.reply(cmd.args[0])).lines]
       default: return [...head, 'This part is not available in the sample mailbox.']

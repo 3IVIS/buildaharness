@@ -1,13 +1,14 @@
 /**
- * `/email <review|todo|reply|file|rules|undo> [args]` for every surface. Pure: parses the line and words the result; the surface
+ * `/email <review|catchup|todo|reply|file|rules|undo> [args]` for every surface. Pure: parses the line and words the result; the surface
  * prints or renders it and, when an account is connected, runs the action through the shared mail code. Slash text is the user's
  * own typing: it is matched against the fixed subcommand list only, never against mail text. No `node:*` and no DOM imports.
  */
-export const EMAIL_SUBCOMMANDS = ['review', 'todo', 'reply', 'file', 'rules', 'undo'] as const
+export const EMAIL_SUBCOMMANDS = ['review', 'catchup', 'todo', 'reply', 'file', 'rules', 'undo'] as const
 export type EmailSubcommand = (typeof EMAIL_SUBCOMMANDS)[number]
 
 const SUMMARY: Record<EmailSubcommand, string> = {
   review: 'go through new mail with you, one thread at a time',
+  catchup: 'review the mail of a time window (7, 30, 90, 365 days or all) and say what needs a response',
   todo: 'show your to-do list: do now, schedule, quick answers, can wait',
   reply: 'draft a reply to a thread (it is staged; sending needs your approval)',
   file: 'propose folders or labels for mail (nothing moves until you accept)',
@@ -21,7 +22,7 @@ export type EmailCommand =
   | { kind: 'run'; sub: EmailSubcommand; args: string[]; message: string }
 
 export function emailUsageLines(): string[] {
-  return ['/email <subcommand>:', ...EMAIL_SUBCOMMANDS.map((s) => `  /email ${s}${s === 'reply' || s === 'file' ? ' [thread]' : ''} — ${SUMMARY[s]}`)]
+  return ['/email <subcommand>:', ...EMAIL_SUBCOMMANDS.map((s) => `  /email ${s}${s === 'reply' || s === 'file' ? ' [thread]' : s === 'catchup' ? ' [7|30|90|365|all]' : ''} — ${SUMMARY[s]}`)]
 }
 
 export function parseEmailCommand(args: readonly string[]): EmailCommand {

@@ -39,3 +39,15 @@ describe('OfflineEmailSession', () => {
     expect((await s.run(['bogus'])).join('\n')).toContain('Unknown')
   })
 })
+
+describe('/email catchup', () => {
+  it('reviews a window, says what needs a response, and rejects an unknown window', async () => {
+    const s = new OfflineEmailSession({ now: () => '2026-11-02T00:00:00.000Z' })
+    const out = (await s.run(['catchup', '90'])).join('\n')
+    expect(out).toMatch(/Last 90 days: \d+ thread\(s\)/)
+    expect(out).toMatch(/need a response/)
+    expect((await s.run(['catchup', '14'])).join('\n')).toMatch(/Unknown window "14"/)
+    // The to-do list is fed by the same records.
+    expect((await s.run(['todo'])).join('\n')).not.toMatch(/run \/email review first/)
+  })
+})
