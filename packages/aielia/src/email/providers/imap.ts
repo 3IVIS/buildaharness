@@ -56,12 +56,13 @@ function bitsOf(flags: ImapToken | undefined): number {
   return (f.includes('\\seen') ? FLAG_BITS.seen : 0) | (f.includes('\\flagged') ? FLAG_BITS.flagged : 0) | (f.includes('\\draft') ? FLAG_BITS.draft : 0)
 }
 
-const SPECIAL_USE: Record<string, FolderKind> = { '\\sent': 'sent', '\\drafts': 'drafts', '\\trash': 'trash', '\\archive': 'archive', '\\all': 'archive' }
+const SPECIAL_USE: Record<string, FolderKind> = { '\\sent': 'sent', '\\drafts': 'drafts', '\\trash': 'trash', '\\junk': 'junk', '\\archive': 'archive', '\\all': 'archive' }
 const NAME_FALLBACK: Record<string, FolderKind> = {
   sent: 'sent', 'sent items': 'sent', 'sent mail': 'sent', 'sent messages': 'sent',
   drafts: 'drafts', draft: 'drafts',
   trash: 'trash', 'deleted items': 'trash', 'deleted messages': 'trash', bin: 'trash',
   archive: 'archive', archives: 'archive',
+  junk: 'junk', spam: 'junk', 'junk e-mail': 'junk', 'junk email': 'junk', 'bulk mail': 'junk',
 }
 
 /** Folder roles: SPECIAL-USE first, then names for the roles no folder claimed. Exported for tests. */

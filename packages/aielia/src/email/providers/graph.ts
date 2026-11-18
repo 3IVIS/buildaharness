@@ -34,7 +34,7 @@ const MESSAGE_SELECT = [
 ].join(',')
 const WELL_KNOWN: Array<{ name: string; kind: FolderKind }> = [
   { name: 'inbox', kind: 'inbox' }, { name: 'sentitems', kind: 'sent' }, { name: 'drafts', kind: 'drafts' },
-  { name: 'deleteditems', kind: 'trash' }, { name: 'archive', kind: 'archive' },
+  { name: 'deleteditems', kind: 'trash' }, { name: 'archive', kind: 'archive' }, { name: 'junkemail', kind: 'junk' },
 ]
 
 export interface GraphProviderOptions {
@@ -327,8 +327,8 @@ export class GraphEmailProvider implements EmailProvider {
         const f = await this.call<GraphFolder>('GET', `/me/mailFolders/${w.name}`, { $select: 'id' })
         return [f.id, w.kind] as const
       } catch (e) {
-        // A mailbox may have no archive folder yet; any other failure (sign-in, rate limit, outage) is real.
-        if (w.kind === 'archive' && e instanceof EmailProviderError && (e.code === 'not_found' || e.code === 'invalid_argument')) return undefined
+        // A mailbox may have no archive or junk folder yet; any other failure (sign-in, rate limit, outage) is real.
+        if ((w.kind === 'archive' || w.kind === 'junk') && e instanceof EmailProviderError && (e.code === 'not_found' || e.code === 'invalid_argument')) return undefined
         throw e
       }
     })).then((pairs) => new Map(pairs.filter((p): p is readonly [string, FolderKind] => p !== undefined)))

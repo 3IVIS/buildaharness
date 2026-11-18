@@ -21,7 +21,7 @@ const BATCH_LIMIT = 1000
 const KEPT_HEADERS = ['message-id', 'in-reply-to', 'references', 'list-unsubscribe', 'list-id', 'authentication-results', 'reply-to']
 /** Labels that describe message state, not a place. */
 const STATE_LABELS = new Set(['UNREAD', 'STARRED', 'IMPORTANT', 'CHAT'])
-const SYSTEM_KINDS: Record<string, FolderKind> = { INBOX: 'inbox', SENT: 'sent', DRAFT: 'drafts', TRASH: 'trash' }
+const SYSTEM_KINDS: Record<string, FolderKind> = { INBOX: 'inbox', SENT: 'sent', DRAFT: 'drafts', TRASH: 'trash', SPAM: 'junk' }
 
 export interface GmailProviderOptions {
   account: Account

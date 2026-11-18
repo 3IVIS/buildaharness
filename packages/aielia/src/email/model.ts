@@ -28,7 +28,7 @@ export const AccountSchema = z.object({
 })
 export type Account = z.infer<typeof AccountSchema>
 
-export const FolderKindSchema = z.enum(['inbox', 'sent', 'drafts', 'archive', 'trash', 'custom'])
+export const FolderKindSchema = z.enum(['inbox', 'sent', 'drafts', 'archive', 'trash', 'junk', 'custom'])
 export type FolderKind = z.infer<typeof FolderKindSchema>
 
 export const FolderSchema = z.object({

@@ -7,6 +7,7 @@ export const MAIL_ICONS = {
   sent: 'M21 4L3 11l7 3 3 7zM10 14l11-10',
   drafts: 'M5 3h10l4 4v14H5zM14 3v5h5M8 13h8M8 17h5',
   archive: 'M3 5h18v4H3zM5 9v10h14V9M10 13h4',
+  junk: 'M12 3l9 16H3zM12 10v4M12 17v.5',
   trash: 'M4 7h16M9 7V4h6v3M6 7l1 13h10l1-13M10 11v6M14 11v6',
   custom: 'M3 6h6l2 2h10v11H3z',
   todo: 'M5 12l4 4 10-10',
@@ -53,7 +54,7 @@ export function mailSnippet(m: Pick<Message, 'textBody'>, max = 110): string {
 
 /** The folders as a list: an icon, the name and the unread count. */
 export function FolderList({ folders, activeId, onSelect, compact }: { folders: readonly Folder[]; activeId?: string; onSelect?: (id: string) => void; /** Icons only (the collapsed rail). */ compact?: boolean }): React.JSX.Element {
-  const order = ['inbox', 'drafts', 'sent', 'archive', 'trash', 'custom']
+  const order = ['inbox', 'drafts', 'sent', 'archive', 'junk', 'trash', 'custom']
   const sorted = [...folders].sort((a, b) => order.indexOf(a.kind) - order.indexOf(b.kind))
   return (
     <nav aria-label={compact ? 'Folder icons' : 'Folder list'} className={`folders${compact ? ' folders--compact' : ''}`}>
