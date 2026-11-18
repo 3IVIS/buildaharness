@@ -187,7 +187,7 @@ async function search(args: Record<string, unknown>, folders: Folder[], deps: Ma
     const shown = renderMessage(h.message, folders, deps, ['headers'], 0)
     if (!shown) continue
     const snippet = truncate(h.message.textBody.replace(/\s+/g, ' ').trim(), 160)
-    out.push(`${shown.text}${h.outsideWindow ? '\n(older than your review window)' : ''}\nSnippet (untrusted): ${snippet}`)
+    out.push(`${shown.text}${h.outsideWindow ? '\n(older than your review window)' : ''}\nSnippet:\n${wrapUntrusted(snippet)}`)
     citations.push({ messageId: h.message.id, threadId: h.message.threadId, subject: h.message.subject })
   }
   const notes: string[] = []

@@ -15,6 +15,8 @@ import type { Message } from './model.js'
 
 export interface ConversationOptions { maxGapDays?: number }
 
+/** How many earlier same-subject messages are looked at for a join. */
+const MAX_CANDIDATES = 50
 const PREFIX = /^\s*((re|fw|fwd|aw|wg|sv|vs|antw)\s*(\[\d+\])?\s*:\s*)+/i
 
 /** A subject with reply and forward prefixes and surrounding space removed, lower-cased. */
@@ -67,11 +69,20 @@ export function groupConversations(messages: readonly Message[], opts: Conversat
     const headerless = ids(m.headers['in-reply-to']).length === 0 && ids(m.headers['references']).length === 0
     if (headerless && PREFIX.test(m.subject) && joinable(norm)) {
       const mine = new Set(people(m))
-      const hit = [...(seen.get(`${m.accountId}|${norm}`) ?? [])].reverse().find((o) => Date.parse(m.date) - Date.parse(o.date) <= maxGap && people(o).some((p) => mine.has(p)))
+      // Newest candidates first, and only a bounded number: a thousand identical subjects must not make this quadratic.
+      const cands = seen.get(`${m.accountId}|${norm}`) ?? []
+      let hit: Message | undefined
+      for (let i = cands.length - 1, looked = 0; i >= 0 && looked < MAX_CANDIDATES; i--, looked++) {
+        const o = cands[i]!
+        if (Date.parse(m.date) - Date.parse(o.date) > maxGap) break
+        if (people(o).some((p) => mine.has(p))) { hit = o; break }
+      }
       if (hit) sets.union(`t:${m.threadId}`, `t:${hit.threadId}`)
     }
     const key = `${m.accountId}|${norm}`
-    seen.set(key, [...(seen.get(key) ?? []), m])
+    const list = seen.get(key)
+    if (list) list.push(m)
+    else seen.set(key, [m])
   }
 
   const out = new Map<string, string>()
