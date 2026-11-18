@@ -1,53 +1,110 @@
-import { useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
+import type { Message } from '@buildaharness/aielia'
 import type { SampleMailbox } from './sample-mode'
 import { EmailLayout } from './EmailLayout'
 import { MessageList } from './MessageList'
 import { MailReader } from './MailReader'
+import { ReaderEmpty } from './ReaderEmpty'
+import { AielaChat, type AielaChatLine } from './AielaChat'
+import { FolderList, MailIcon } from './mail-ui'
 import { AppSwitcher } from '../components/AppSwitcher'
 import type { AppId } from '../app-switch'
 
+const SUGGESTIONS = ['Summarise my unread mail', 'What needs a reply this week?', 'Find the receipts']
+
+/** The height of an element, kept up to date, so the windowed message list fills the pane it is in. */
+function useHeight(fallback: number): [React.RefObject<HTMLDivElement>, number] {
+  const ref = useRef<HTMLDivElement>(null)
+  const [h, setH] = useState(fallback)
+  useEffect(() => {
+    const el = ref.current
+    if (!el || typeof ResizeObserver === 'undefined') return undefined
+    const ro = new ResizeObserver(() => setH(Math.max(120, Math.floor(el.clientHeight))))
+    ro.observe(el)
+    setH(Math.max(120, Math.floor(el.clientHeight)))
+    return () => ro.disconnect()
+  }, [])
+  return [ref, h]
+}
+
+const matches = (m: Message, q: string): boolean => {
+  const t = q.trim().toLowerCase()
+  return !t || `${m.from.name ?? ''} ${m.from.address} ${m.subject} ${m.textBody}`.toLowerCase().includes(t)
+}
+
 /**
- * The sample mailbox: the Inbox of the invented mailbox, and a chat box whose every answer says this is a sample. The full layout (U3 onward) replaces
- * the plain lists here; what stays is the notice and that no model is ever called.
+ * The sample mailbox: the Inbox of the invented mailbox, and a chat box whose every answer says this is a sample. It uses the same page shell as Write
+ * (a title bar with the app switcher, the sample notice) around the three-column mail layout. No model is ever called.
  */
-export function SampleMailboxView({ sample, onConnect, appSwitch }: { sample: SampleMailbox; onConnect: () => void; /** Inside the desktop app: the way to the other screens. */ appSwitch?: (target: AppId) => void }): React.JSX.Element {
+export function SampleMailboxView({ sample, onConnect, appSwitch }: { sample: SampleMailbox; onConnect: () => void; /** The way to the other screens (the desktop app, or the hosted pages that name them). */ appSwitch?: (target: AppId) => void }): React.JSX.Element {
   const [text, setText] = useState('')
-  const [lines, setLines] = useState<Array<{ from: 'you' | 'aielia'; text: string }>>([])
+  const [busy, setBusy] = useState(false)
+  const [lines, setLines] = useState<AielaChatLine[]>([])
   const [openId, setOpenId] = useState<string | undefined>()
+  const [query, setQuery] = useState('')
+  const inbox = sample.folders.find((f) => f.kind === 'inbox')
+  const [folderId, setFolderId] = useState<string | undefined>(inbox?.id)
+  const folder = sample.folders.find((f) => f.id === folderId) ?? inbox
+  const inFolder = folder?.kind === 'inbox' ? sample.inbox : []
+  const shown = useMemo(() => inFolder.filter((m) => matches(m, query)), [inFolder, query])
   const open = sample.inbox.find((m) => m.id === openId)
-  const send = async (): Promise<void> => {
-    const t = text.trim()
-    if (!t) return
+  const unread = inFolder.filter((m) => !m.flags.read).length
+  const [listBox, listHeight] = useHeight(480)
+  const next = useRef(1)
+
+  const send = async (override?: string): Promise<void> => {
+    const t = (override ?? text).trim()
+    if (!t || busy) return
     setText('')
-    const r = await sample.ask(t)
-    setLines((l) => [...l, { from: 'you', text: t }, { from: 'aielia', text: r.reply }])
+    setBusy(true)
+    const mine: AielaChatLine = { id: next.current++, from: 'you', text: t }
+    setLines((l) => [...l, mine])
+    try {
+      const r = await sample.ask(t)
+      setLines((l) => [...l, { id: next.current++, from: 'aielia', text: r.reply }])
+    } finally { setBusy(false) }
   }
+
+  const folderTitle = folder?.name ?? 'Inbox'
   return (
     <div className="write email-sample">
-      {appSwitch && <h1 className="write__title">Aielia <AppSwitcher current="email" onSelect={appSwitch} /></h1>}
+      <header className="write__bar email-top">
+        <h1 className="write__title">
+          <a className="brand-link" href="https://myaielia.com" target="_blank" rel="noopener noreferrer" title="Go to myaielia.com">Aielia</a>{' '}
+          {appSwitch ? <AppSwitcher current="email" onSelect={appSwitch} /> : 'Email'}
+        </h1>
+        <label className="email-search">
+          <MailIcon name="search" size={16} />
+          <input type="search" aria-label="Search mail" placeholder="Search mail" value={query} onChange={(e) => setQuery(e.target.value)} />
+        </label>
+      </header>
       <EmailLayout
         readerOpen={!!open}
+        title={folderTitle}
+        onBack={() => setOpenId(undefined)}
         banner={
           <div className="write__sample" role="note">
             <span className="write__sample-text"><strong>Sample.</strong> These messages are invented. Connect your mail and your AI to use Aielia on your own.</span>
             <button type="button" className="write__sample-add" onClick={onConnect}>Connect</button>
           </div>
         }
-        folders={<nav aria-label="Folder list"><ul>{sample.folders.map((f) => <li key={f.id}>{f.name}{f.unreadCount ? ` (${f.unreadCount})` : ''}</li>)}</ul></nav>}
+        railIcons={<FolderList folders={sample.folders} activeId={folder?.id} onSelect={setFolderId} compact />}
+        folders={<FolderList folders={sample.folders} activeId={folder?.id} onSelect={setFolderId} />}
         list={
-          <>
-            <h2>Inbox</h2>
-            <MessageList messages={sample.inbox} onOpen={setOpenId} />
-          </>
+          <div className="mailpane">
+            <div className="mailpane__head">
+              <h2>{folderTitle}</h2>
+              <span className="mailpane__meta">{query.trim() ? `${shown.length} found` : unread > 0 ? `${unread} unread` : `${inFolder.length} messages`}</span>
+            </div>
+            <div className="mailpane__body" ref={listBox}>
+              {shown.length > 0
+                ? <MessageList messages={shown} height={listHeight} activeId={openId} onOpen={setOpenId} />
+                : <p className="mailpane__none">{query.trim() ? 'No message matches your search.' : `Nothing in ${folderTitle} in this sample.`}</p>}
+            </div>
+          </div>
         }
-        reader={open ? <MailReader message={open} /> : <p>Select a message to read it.</p>}
-        aielia={
-          <>
-            <ul>{lines.map((l, i) => <li key={i} data-from={l.from}>{l.text}</li>)}</ul>
-            <input aria-label="Ask Aielia" value={text} onChange={(e) => setText(e.target.value)} onKeyDown={(e) => { if (e.key === 'Enter') void send() }} />
-            <button type="button" onClick={() => void send()}>Send</button>
-          </>
-        }
+        reader={open ? <MailReader message={open} /> : <ReaderEmpty unread={unread} />}
+        aielia={<AielaChat lines={lines} input={text} onInput={setText} onSend={(t) => void send(t)} busy={busy} suggestions={SUGGESTIONS} subtitle="Sample mailbox" />}
       />
     </div>
   )

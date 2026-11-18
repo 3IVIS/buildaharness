@@ -84,7 +84,7 @@ describe('the sample mailbox', () => {
     fireEvent.click(screen.getByText(new RegExp(first.subject.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'))))
     expect(screen.getByLabelText('Message').textContent).toContain(first.subject)
     fireEvent.change(screen.getByLabelText('Ask Aielia'), { target: { value: 'hello' } })
-    fireEvent.click(screen.getByText('Send'))
+    fireEvent.click(screen.getByRole('button', { name: 'Send', hidden: true }))
     await waitFor(() => expect(screen.getByText(`${SAMPLE_MESSAGE}.`)).toBeTruthy())
     fireEvent.click(screen.getByText('Connect'))
     expect(onConnect).toHaveBeenCalled()
