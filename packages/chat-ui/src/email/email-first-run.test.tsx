@@ -71,8 +71,8 @@ describe('the sample mailbox', () => {
   it('answers every chat message with the sample message, and every model call refuses with it', async () => {
     const s = await createSampleMailbox()
     expect(await s.ask('Summarise my inbox')).toEqual({ reply: `${SAMPLE_MESSAGE}.`, model: SAMPLE_BACKEND })
-    await expect(s.llm.callChatSync([], {} as never)).rejects.toThrow(SAMPLE_MESSAGE)
-    await expect(s.llm.callChatStructured([], {} as never)).rejects.toThrow(SAMPLE_MESSAGE)
+    await expect(s.llm!.callChatSync([], {} as never)).rejects.toThrow(SAMPLE_MESSAGE)
+    await expect(s.llm!.callChatStructured([], {} as never)).rejects.toThrow(SAMPLE_MESSAGE)
   })
 
   it('renders the Inbox, opens a message, shows the sample notice, and chat says it is a sample', async () => {

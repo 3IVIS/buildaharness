@@ -1,5 +1,5 @@
 import type { ILLMClient } from '@buildaharness/runtime'
-import { FakeEmailProvider, OfflineEmailSession, generateSyntheticMailbox, type Folder, type Message, type ScoredTodo } from '@buildaharness/aielia'
+import { FakeEmailProvider, OfflineEmailSession, type EmailProvider, generateSyntheticMailbox, type Folder, type Message, type ScoredTodo } from '@buildaharness/aielia'
 
 /** The backend name of the sample: what a failed step reads to say "this is a sample" rather than "check your key". */
 export const SAMPLE_BACKEND = 'sample'
@@ -18,11 +18,15 @@ export function sampleLlm(): ILLMClient {
 }
 
 export interface SampleMailbox {
-  provider: FakeEmailProvider
-  llm: ILLMClient
+  provider: EmailProvider
+  llm?: ILLMClient
   folders: Folder[]
   /** The Inbox, newest first. */
   inbox: Message[]
+  /** Set when this is a real mailbox read from the mail already on this computer, not the invented sample. */
+  live?: { label: string; /** False for mail read from a local program: there is no server to ask. */ serverSearch: boolean }
+  /** Live mailboxes only: the messages of one folder, newest first. */
+  loadFolder?: (folderId: string) => Promise<Message[]>
   /** The to-do list of the sample, from the generator's own labels (no model is called). */
   todo: ScoredTodo[]
   /** Mail the sample judges probably spam, with the reason (from the generator's labels; no model is called). */
