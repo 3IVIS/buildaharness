@@ -12,6 +12,7 @@ mod mail_imap;
 mod mail_keychain;
 mod mail_local_apple;
 mod mail_local_script;
+mod mail_sso;
 mod mail_net;
 
 /// The monorepo root, computed from this crate's compile-time location
@@ -1242,7 +1243,9 @@ pub fn run() {
       mail_local_apple::mail_local_states,
       mail_local_apple::mail_local_body,
       mail_local_script::mail_local_script,
-      mail_local_script::mail_local_open_privacy_settings
+      mail_local_script::mail_local_open_privacy_settings,
+      mail_sso::mail_sso_availability,
+      mail_sso::mail_sso_acquire
     ])
     .manage(mail_cache::MailCacheState::default())
     .manage(mail_local_apple::LocalMailState::default())
