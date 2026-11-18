@@ -51,3 +51,18 @@ describe('/email catchup', () => {
     expect((await s.run(['todo'])).join('\n')).not.toMatch(/run \/email review first/)
   })
 })
+
+describe('/email spam', () => {
+  it('lists likely spam only after a review, previews first, and moves only on `move`', async () => {
+    const s = new OfflineEmailSession({ now: () => '2026-11-02T00:00:00.000Z' })
+    // Before any review no thread has a triage record, so the guard keeps every spam call at "unsure".
+    expect((await s.run(['spam'])).join('\n')).toMatch(/No mail looks like spam/)
+    await s.run(['review'])
+    const preview = (await s.run(['spam'])).join('\n')
+    expect(preview).toMatch(/look like spam\. Moving them to Junk would change \d+ message\(s\); nothing has moved/)
+    expect(preview).toMatch(/spoofed sender/)
+    const done = (await s.run(['spam', 'move'])).join('\n')
+    expect(done).toMatch(/changed \d+ message\(s\)/)
+    expect((await s.run(['spam'])).join('\n')).toMatch(/No mail looks like spam/)
+  })
+})

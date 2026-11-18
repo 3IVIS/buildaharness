@@ -25,6 +25,8 @@ export interface SampleMailbox {
   inbox: Message[]
   /** The to-do list of the sample, from the generator's own labels (no model is called). */
   todo: ScoredTodo[]
+  /** Mail the sample judges probably spam, with the reason (from the generator's labels; no model is called). */
+  spam: Array<{ threadId: string; subject: string; sender: string; reason: string }>
   /** A chat message is answered at once with the sample message; nothing is recorded. */
   ask: (text: string) => Promise<{ reply: string; model: string }>
 }
@@ -39,9 +41,15 @@ export async function createSampleMailbox(): Promise<SampleMailbox> {
   const session = new OfflineEmailSession({ mailbox, now: () => '2026-11-02T00:00:00.000Z' })
   await session.catchUp('all')
   const todo = (await session.todo()).items
+  const likely = (await session.spam()).likely
+  const spam = likely.map((v) => {
+    const t = mailbox.threads.find((x) => x.id === v.threadId)
+    const m = mailbox.messages.find((x) => x.threadId === v.threadId)
+    return { threadId: v.threadId, subject: t?.subject ?? v.threadId, sender: m?.from.address ?? '', reason: v.reason }
+  })
   const folders = await provider.listFolders()
   const inboxFolder = folders.find((f) => f.kind === 'inbox')
   const page = inboxFolder ? await provider.listMessages(inboxFolder.id, { limit: 200 }) : { items: [] as Message[] }
   const inbox = [...page.items].sort((a, b) => b.date.localeCompare(a.date))
-  return { provider, llm: sampleLlm(), folders, inbox, todo, ask: async () => ({ reply: `${SAMPLE_MESSAGE}.`, model: SAMPLE_BACKEND }) }
+  return { provider, llm: sampleLlm(), folders, inbox, todo, spam, ask: async () => ({ reply: `${SAMPLE_MESSAGE}.`, model: SAMPLE_BACKEND }) }
 }

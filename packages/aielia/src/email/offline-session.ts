@@ -9,6 +9,9 @@ import { SendCoordinator, type StagedSend } from './send.js'
 import { parseEmailCommand, formatEmailCommand, type EmailCommand } from './email-command.js'
 import type { Message, Thread, Triage } from './model.js'
 import { catchUpSummary, estimateCatchUp, runCatchUp } from './catch-up.js'
+import { InMemoryJunkStore, classifyJunk, learnJunkSignals, proposeJunkMoves, type JunkModel, type JunkVerdict } from './junk.js'
+import { EmailActionLog, TurnCeiling } from './action-log.js'
+import { OrganiseSession, SnoozeStore, confirmPending } from './organise-tools.js'
 import { REVIEW_WINDOWS, reviewWindowLabel, windowSince, type ReviewWindow } from './review-window.js'
 
 /**
@@ -51,10 +54,25 @@ export function sampleTriageModel(labels: Record<string, SyntheticCategory>): Tr
 export const sampleDraftModel: DraftModel = async () =>
   JSON.stringify({ body: 'Thanks for your message. I will get back to you on the details by [[GAP:the date you can commit to]].', statesDatePriceOrCommitment: false })
 
+/** The sample junk stand-in: calls a thread spam only when the generator labelled it a spoofed sender, otherwise unsure. It reads no mail text. */
+export function sampleJunkModel(labels: Record<string, SyntheticCategory>): JunkModel {
+  return async (_system, user) => {
+    const ids: string[] = []
+    for (const line of user.split('\n')) {
+      if (!line.startsWith('Thread "')) continue
+      let end = 8
+      while (end < line.length && line[end] !== '"') end += line[end] === '\\' ? 2 : 1
+      ids.push(JSON.parse(line.slice(7, end + 1)) as string)
+    }
+    return JSON.stringify({ junk: ids.map((threadId) => ({ threadId, verdict: labels[threadId] === 'spoofed_sender' ? 'likely_spam' : 'unsure', reason: labels[threadId] === 'spoofed_sender' ? 'Sample mailbox: a spoofed sender.' : 'Sample mailbox: not clearly junk.' })) })
+  }
+}
+
 export interface OfflineEmailSessionOptions {
   mailbox?: SyntheticMailbox
   triageModel?: TriageModel
   draftModel?: DraftModel
+  junkModel?: JunkModel
   now?: () => string
 }
 
@@ -65,6 +83,10 @@ export class OfflineEmailSession {
   private readonly store = new InMemoryTriageStore()
   private readonly triageModel: TriageModel
   private readonly draftModel: DraftModel
+  private readonly junkModel: JunkModel
+  private readonly junk = new InMemoryJunkStore()
+  private readonly session = new OrganiseSession()
+  private readonly actionLog = new EmailActionLog()
   private readonly now: () => string
   private readonly staged = new Map<string, StagedSend>()
   private synced = false
@@ -75,6 +97,7 @@ export class OfflineEmailSession {
     this.sender = new SendCoordinator(this.provider)
     this.triageModel = opts.triageModel ?? sampleTriageModel(mailbox.categoryByThread)
     this.draftModel = opts.draftModel ?? sampleDraftModel
+    this.junkModel = opts.junkModel ?? sampleJunkModel(mailbox.categoryByThread)
     this.now = opts.now ?? (() => new Date().toISOString())
   }
 
@@ -115,6 +138,32 @@ export class OfflineEmailSession {
     const est = await estimateCatchUp(deps)
     const r = await runCatchUp(deps)
     return { lines: [`${reviewWindowLabel(window)}: ${est.inWindow} thread(s), ${est.toReview} to review in ${est.calls} model call(s).`, ...catchUpSummary(r, reviewWindowLabel(window))], needsResponse: r.needsResponse.length }
+  }
+
+  /** Judge the mail for spam (learned signals, then the model, then the guards) and propose ONE move to Junk. Nothing moves until `move` is true. */
+  async spam(move = false): Promise<{ likely: JunkVerdict[]; lines: string[] }> {
+    const items = await this.threads()
+    const folders = await this.provider.listFolders()
+    const all = (await this.cache.queryMessages({}, { offset: 0, limit: 100_000 })).items
+    const account = this.provider.account
+    const signals = learnJunkSignals(all, folders, [account.address])
+    const kinds = new Map(folders.map((f) => [f.id, f.kind]))
+    // By the messages (a local move updates them at once; the thread record's folder list follows on the next sync).
+    const inbox = items.filter((i) => i.messages.some((m) => m.folderIds.some((f) => kinds.get(f) === 'inbox')))
+    await classifyJunk(inbox, {
+      account, folders, signals, model: this.junkModel, store: this.junk, triage: this.store, now: this.now,
+      junkExamples: all.filter((m) => m.folderIds.some((f) => kinds.get(f) === 'junk')), hamExamples: all.filter((m) => signals.correspondents.includes(m.from.address.toLowerCase())),
+    })
+    const likely = (await Promise.all(inbox.map((i) => this.junk.get(i.thread.id)))).filter((v): v is JunkVerdict => v?.verdict === 'likely_spam')
+    const lines: string[] = []
+    if (likely.length === 0) return { likely, lines: ['No mail looks like spam. (Review first with /email review so nothing real is mistaken for it.)'] }
+    for (const v of likely) lines.push(`  - ${items.find((i) => i.thread.id === v.threadId)?.thread.subject ?? v.threadId}: ${v.reason}`)
+    const ctx = { account, action: { cache: this.cache, provider: this.provider, log: this.actionLog, now: this.now, turn: new TurnCeiling() }, session: this.session }
+    const prop = await proposeJunkMoves(likely, ctx)
+    if (!prop.pending) return { likely, lines: [`${likely.length} thread(s) look like spam, but there is nothing to move (${prop.reason ?? 'no change'}).`, ...lines] }
+    if (!move) return { likely, lines: [`${likely.length} thread(s) look like spam. Moving them to Junk would change ${prop.pending.messageIds.length} message(s); nothing has moved. Run /email spam move to do it (it can be undone).`, ...lines] }
+    const done = await confirmPending({ account, action: ctx.action, session: this.session, snoozes: new SnoozeStore() }, prop.pending.id)
+    return { likely, lines: [done.text, ...lines] }
   }
 
   async todo(): Promise<{ items: ScoredTodo[]; lines: string[] }> {
@@ -165,6 +214,7 @@ export class OfflineEmailSession {
     switch (cmd.sub) {
       case 'review': return [...head, ...(await this.review()).lines]
       case 'catchup': return [...head, ...(await this.catchUp(cmd.args[0])).lines]
+      case 'spam': return [...head, ...(await this.spam(cmd.args[0] === 'move')).lines]
       case 'todo': return [...head, ...(await this.todo()).lines]
       case 'reply': return [...head, ...(await this.reply(cmd.args[0])).lines]
       default: return [...head, 'This part is not available in the sample mailbox.']

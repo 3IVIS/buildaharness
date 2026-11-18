@@ -51,7 +51,7 @@ export function generateSyntheticMailbox(opts: SyntheticOptions = {}): Synthetic
   const nowMs = Date.parse(opts.now ?? DEFAULT_NOW)
   const perCategory = opts.perCategory ?? 2
 
-  const folders: Folder[] = (['inbox', 'sent', 'drafts', 'archive', 'trash'] as const).map((kind) => ({
+  const folders: Folder[] = (['inbox', 'sent', 'drafts', 'archive', 'trash', 'junk'] as const).map((kind) => ({
     id: `fld-${kind}`, accountId: ACCOUNT_ID, providerId: kind.toUpperCase(), name: kind[0].toUpperCase() + kind.slice(1), kind, unreadCount: 0,
   }))
   folders.push({ id: 'fld-projects', accountId: ACCOUNT_ID, providerId: 'Projects', name: 'Projects', kind: 'custom', unreadCount: 0 })

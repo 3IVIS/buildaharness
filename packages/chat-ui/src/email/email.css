@@ -324,3 +324,11 @@
 .phone-todo h3 { margin: 0; font-size: 1.25rem; line-height: 1.3; }
 .write .phone-todo__actions button:first-child { background: var(--accent-solid); border-color: var(--accent-solid); color: var(--on-accent); font-weight: 600; }
 .phone-todo__empty { text-align: center; color: var(--muted); padding: 40px 0; }
+
+/* Probably spam group above the list. */
+.probably-spam { margin: 0 12px 8px; padding: 6px 10px; border: 1px solid var(--amber, #c98a1b); border-radius: 8px; font-size: 0.86rem; }
+.probably-spam > summary { display: flex; align-items: center; justify-content: space-between; gap: 8px; cursor: pointer; }
+.probably-spam ul { margin: 8px 0 2px; padding: 0; list-style: none; display: grid; gap: 6px; }
+.probably-spam li { display: grid; grid-template-columns: 1fr auto; gap: 2px 8px; }
+.probably-spam__from, .probably-spam__why { color: var(--muted); grid-column: 1; }
+.probably-spam li button { grid-column: 2; grid-row: 1 / span 3; align-self: center; }

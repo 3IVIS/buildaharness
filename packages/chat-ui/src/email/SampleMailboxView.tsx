@@ -7,6 +7,7 @@ import { MailReader } from './MailReader'
 import { ReaderEmpty } from './ReaderEmpty'
 import { AielaChat, type AielaChatLine } from './AielaChat'
 import { TodoView } from './TodoView'
+import { ProbablySpam } from './ProbablySpam'
 import { FolderList, MailIcon } from './mail-ui'
 import { AppSwitcher } from '../components/AppSwitcher'
 import type { AppId } from '../app-switch'
@@ -44,10 +45,13 @@ export function SampleMailboxView({ sample, onConnect, appSwitch }: { sample: Sa
   const [openId, setOpenId] = useState<string | undefined>()
   const [query, setQuery] = useState('')
   const [threaded, setThreaded] = useState(true)
+  const [spamHidden, setSpamHidden] = useState<ReadonlySet<string>>(new Set()) // sample only: nothing is stored
+  const [spamKept, setSpamKept] = useState<ReadonlySet<string>>(new Set())
+  const spamItems = sample.spam.filter((s) => !spamHidden.has(s.threadId) && !spamKept.has(s.threadId))
   const inbox = sample.folders.find((f) => f.kind === 'inbox')
   const [folderId, setFolderId] = useState<string | undefined>(inbox?.id)
   const folder = sample.folders.find((f) => f.id === folderId) ?? inbox
-  const inFolder = useMemo(() => (folder?.kind === 'inbox' ? sample.inbox : []), [folder?.kind, sample.inbox])
+  const inFolder = useMemo(() => (folder?.kind === 'inbox' ? sample.inbox.filter((m) => !spamHidden.has(m.threadId)) : []), [folder?.kind, sample.inbox, spamHidden])
   const shown = useMemo(() => inFolder.filter((m) => matches(m, query)), [inFolder, query])
   const open = sample.inbox.find((m) => m.id === openId)
   const unread = inFolder.filter((m) => !m.flags.read).length
@@ -103,6 +107,7 @@ export function SampleMailboxView({ sample, onConnect, appSwitch }: { sample: Sa
                 <MailIcon name="chat" size={16} />
               </button>
             </div>
+            {folder?.kind === 'inbox' && <ProbablySpam items={spamItems} onMoveAll={() => setSpamHidden(new Set([...spamHidden, ...spamItems.map((s) => s.threadId)]))} onNotSpam={(id) => setSpamKept(new Set([...spamKept, id]))} />}
             <div className="mailpane__body" ref={listBox}>
               {shown.length > 0
                 ? <MessageList messages={shown} threaded={threaded} height={listHeight} activeId={openId} onOpen={setOpenId} />
