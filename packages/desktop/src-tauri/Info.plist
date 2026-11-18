@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+  <!-- Shown by macOS the first time Aielia asks Apple Mail to move, flag or save a draft for you. Nothing is sent. -->
+  <key>NSAppleEventsUsageDescription</key>
+  <string>Aielia asks Mail to file, flag or save a draft of a message when you ask it to. It never sends mail.</string>
+</dict>
+</plist>

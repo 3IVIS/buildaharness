@@ -10,6 +10,8 @@ use tauri_plugin_dialog::DialogExt;
 mod mail_cache;
 mod mail_imap;
 mod mail_keychain;
+mod mail_local_apple;
+mod mail_local_script;
 mod mail_net;
 
 /// The monorepo root, computed from this crate's compile-time location
@@ -1230,9 +1232,20 @@ pub fn run() {
       mail_cache::mail_cache_list_threads,
       mail_cache::mail_cache_get_sync_token,
       mail_cache::mail_cache_set_sync_token,
-      mail_cache::mail_cache_clear_account
+      mail_cache::mail_cache_clear_account,
+      mail_local_apple::mail_local_discover,
+      mail_local_apple::mail_local_mailboxes,
+      mail_local_apple::mail_local_messages,
+      mail_local_apple::mail_local_message,
+      mail_local_apple::mail_local_recipients,
+      mail_local_apple::mail_local_state,
+      mail_local_apple::mail_local_states,
+      mail_local_apple::mail_local_body,
+      mail_local_script::mail_local_script,
+      mail_local_script::mail_local_open_privacy_settings
     ])
     .manage(mail_cache::MailCacheState::default())
+    .manage(mail_local_apple::LocalMailState::default())
     .setup(|app| {
       if cfg!(debug_assertions) {
         app.handle().plugin(
