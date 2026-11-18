@@ -121,3 +121,30 @@ describe('phone', () => {
     } finally { window.matchMedia = original }
   })
 })
+
+describe('To do entry in the rail', () => {
+  it('desktop: the rail has a To do entry with the open count; it swaps the middle for the list and a folder brings the mail back', () => {
+    render(<EmailLayout mode="desktop" {...parts} todo={<p>TODO LIST</p>} todoCount={3} />)
+    const entry = screen.getByRole('button', { name: 'To do, 3 open' })
+    expect(screen.queryByText('TODO LIST')).toBeNull()
+    fireEvent.click(entry)
+    expect(screen.getByText('TODO LIST')).toBeTruthy()
+    expect(hiddenOf(screen.getByText('LIST'))).toBe(true)
+    fireEvent.click(entry)
+    expect(screen.queryByText('TODO LIST')).toBeNull()
+  })
+  it('desktop: no count shown when nothing is open, and the label stays plain', () => {
+    render(<EmailLayout mode="desktop" {...parts} todo={<p>TODO LIST</p>} />)
+    expect(screen.getByRole('button', { name: 'To do' })).toBeTruthy()
+  })
+  it('tablet: the entry is in the folder drawer', () => {
+    render(<EmailLayout mode="tablet" {...parts} todo={<p>TODO LIST</p>} todoCount={2} />)
+    fireEvent.click(screen.getByRole('button', { name: 'Folders' }))
+    fireEvent.click(screen.getByRole('button', { name: 'To do, 2 open' }))
+    expect(screen.getByText('TODO LIST')).toBeTruthy()
+  })
+  it('phone: the bottom tab carries the count', () => {
+    render(<EmailLayout mode="phone" {...parts} todo={<p>TODO LIST</p>} todoCount={4} />)
+    expect(screen.getByRole('button', { name: /To do \(4\)/ })).toBeTruthy()
+  })
+})

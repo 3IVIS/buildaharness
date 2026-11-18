@@ -148,8 +148,10 @@ export function scoreVerdicts(predicted: Record<string, Verdict | undefined>, tr
   let tp = 0, fp = 0, fn = 0, spamFp = 0, spamCaught = 0, spamTotal = 0
   for (const [tid, t] of Object.entries(truth)) {
     const p = predicted[tid] ?? 'no_action'
-    if (t === 'needs_response') (p === 'needs_response' ? tp++ : fn++)
-    else if (p === 'needs_response') fp++
+    if (t === 'needs_response') {
+      if (p === 'needs_response') tp++
+      else fn++
+    } else if (p === 'needs_response') fp++
     if (t === 'spam') { spamTotal++; if (p === 'spam') spamCaught++ }
     else if (p === 'spam') spamFp++
   }

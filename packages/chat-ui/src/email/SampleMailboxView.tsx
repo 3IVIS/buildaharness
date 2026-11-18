@@ -6,6 +6,7 @@ import { MessageList } from './MessageList'
 import { MailReader } from './MailReader'
 import { ReaderEmpty } from './ReaderEmpty'
 import { AielaChat, type AielaChatLine } from './AielaChat'
+import { TodoView } from './TodoView'
 import { FolderList, MailIcon } from './mail-ui'
 import { AppSwitcher } from '../components/AppSwitcher'
 import type { AppId } from '../app-switch'
@@ -81,6 +82,8 @@ export function SampleMailboxView({ sample, onConnect, appSwitch }: { sample: Sa
       </header>
       <EmailLayout
         readerOpen={!!open}
+        todoCount={sample.todo.filter((t) => t.status === 'open').length}
+        todo={<TodoView items={sample.todo.filter((t) => t.status === 'open')} onOpenThread={(tid) => setOpenId(sample.inbox.find((m) => m.threadId === tid)?.id)} />}
         title={folderTitle}
         onBack={() => setOpenId(undefined)}
         banner={

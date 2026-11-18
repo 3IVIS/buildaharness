@@ -18,6 +18,8 @@ interface Props {
   /** The Aielia column: chat and the sample or error notices. */
   aielia: React.ReactNode
   todo?: React.ReactNode
+  /** How many to-do items are open; shown as a count on the To do entry. */
+  todoCount?: number
   /** Shown above everything (the sample notice). */
   banner?: React.ReactNode
   /** Overrides the mode read from matchMedia (tests, previews). */
@@ -32,13 +34,24 @@ interface Props {
   onBack?: () => void
 }
 
+/** The To do entry of the rail and the tablet drawer: one line with a check icon and the open count. */
+function TodoEntry({ on, count, compact, onPick }: { on: boolean; count: number; compact?: boolean; onPick: () => void }): React.JSX.Element {
+  return (
+    <button type="button" className={`email__todoentry${on ? ' is-on' : ''}`} aria-label={count > 0 ? `To do, ${count} open` : 'To do'} aria-pressed={on} title="To do" onClick={onPick}>
+      <MailIcon name="todo" />
+      {!compact && <span className="email__todolabel">To do</span>}
+      {count > 0 && <span className="email__todocount" aria-hidden="true">{count}</span>}
+    </button>
+  )
+}
+
 /**
  * The Email page shell. Desktop: a folder rail (collapsed, opens on hover or click, can be pinned), the message list, the reader (beside or below the
  * list by room) and an always-on Aielia column on the right. Tablet: the same without the column, which is a slide-over, and folders as a slide-over.
  * Phone: one panel at a time (Email, To do, Aielia) with a bottom bar and a drawer for folders. Every panel stays mounted and is only hidden, so
  * the chat keeps its text when the user switches panels.
  */
-export function EmailLayout({ folders, list, reader, aielia, todo, banner, mode: forced, readerOpen = false, railIcons, title, onBack }: Props): React.JSX.Element {
+export function EmailLayout({ folders, list, reader, aielia, todo, todoCount = 0, banner, mode: forced, readerOpen = false, railIcons, title, onBack }: Props): React.JSX.Element {
   const [detected, setDetected] = useState<LayoutMode>(() => layoutNow())
   const mode = forced ?? detected
   const [width, setWidth] = useState(() => (typeof window === 'undefined' ? 1024 : window.innerWidth))
@@ -54,20 +67,24 @@ export function EmailLayout({ folders, list, reader, aielia, todo, banner, mode:
   const [drawer, setDrawer] = useState(false) // folders drawer (phone) / slide-over (tablet)
   const [chatOpen, setChatOpen] = useState(false) // Aielia slide-over (tablet)
   const [panel, setPanel] = useState<PhonePanel>('email')
+  const [view, setView] = useState<'mail' | 'todo'>('mail') // desktop and tablet: the middle shows mail or the To do list
   const [chatWidth, setChatWidth] = useState(CHAT_DEFAULT)
+
+  // Opening a message (from the To do list, say) brings the mail view back.
+  useEffect(() => { if (readerOpen) setView('mail') }, [readerOpen])
 
   const railOpen = mode === 'desktop' && (pinned || railHover || railClicked)
   const placement = readerPlacement(mode, width, chatWidth, pinned)
   const phone = mode === 'phone'
   const tablet = mode === 'tablet'
-  const showEmail = !phone || panel === 'email'
-  const showTodo = phone && panel === 'todo'
+  const showEmail = phone ? panel === 'email' : view === 'mail'
+  const showTodo = phone ? panel === 'todo' : view === 'todo'
   const chatShown = mode === 'desktop' || (tablet && chatOpen) || (phone && panel === 'aielia')
   const foldersShown = mode === 'desktop' || drawer
 
   const tabs: RailTab[] = [
     { id: 'email', label: 'Email', icon: MAIL_ICONS.mail },
-    { id: 'todo', label: 'To do', icon: MAIL_ICONS.todo },
+    { id: 'todo', label: todoCount > 0 ? `To do (${todoCount})` : 'To do', icon: MAIL_ICONS.todo },
     { id: 'aielia', label: 'Aielia', icon: MAIL_ICONS.chat },
   ]
 
@@ -96,8 +113,9 @@ export function EmailLayout({ folders, list, reader, aielia, todo, banner, mode:
               <button type="button" className="email__iconbtn" aria-label={railOpen ? 'Collapse folders' : 'Open folders'} title="Folders" aria-expanded={railOpen} onClick={() => setRailClicked((v) => !v)}><MailIcon name="menu" /></button>
               {railOpen && <button type="button" className="email__iconbtn" aria-label={pinned ? 'Unpin folders' : 'Pin folders open'} title={pinned ? 'Unpin folders' : 'Pin folders open'} aria-pressed={pinned} onClick={() => setPinned((v) => !v)}><MailIcon name="pin" /></button>}
             </div>
-            {!railOpen && railIcons && <div className="email__railicons">{railIcons}</div>}
-            <div className="email__tree" hidden={!railOpen}>{folders}</div>
+            <div className="email__railtodo"><TodoEntry on={view === 'todo'} count={todoCount} compact={!railOpen} onPick={() => setView((v) => (v === 'todo' ? 'mail' : 'todo'))} /></div>
+            {!railOpen && railIcons && <div className="email__railicons" onClick={() => setView('mail')}>{railIcons}</div>}
+            <div className="email__tree" hidden={!railOpen} onClick={() => setView('mail')}>{folders}</div>
           </aside>
         )}
 
@@ -105,7 +123,8 @@ export function EmailLayout({ folders, list, reader, aielia, todo, banner, mode:
         {mode !== 'desktop' && (
           <aside className="email__drawer" aria-label="Folders" data-open={drawer} hidden={!foldersShown}>
             <button type="button" className="email__iconbtn" aria-label="Close folders" onClick={() => setDrawer(false)}><MailIcon name="back" /></button>
-            <div onClick={() => setDrawer(false)}>{folders}</div>
+            {!phone && <TodoEntry on={view === 'todo'} count={todoCount} onPick={() => { setView((v) => (v === 'todo' ? 'mail' : 'todo')); setDrawer(false) }} />}
+            <div onClick={() => { setDrawer(false); setView('mail') }}>{folders}</div>
           </aside>
         )}
 

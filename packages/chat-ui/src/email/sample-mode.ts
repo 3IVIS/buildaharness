@@ -1,5 +1,5 @@
 import type { ILLMClient } from '@buildaharness/runtime'
-import { FakeEmailProvider, generateSyntheticMailbox, type Folder, type Message } from '@buildaharness/aielia'
+import { FakeEmailProvider, OfflineEmailSession, generateSyntheticMailbox, type Folder, type Message, type ScoredTodo } from '@buildaharness/aielia'
 
 /** The backend name of the sample: what a failed step reads to say "this is a sample" rather than "check your key". */
 export const SAMPLE_BACKEND = 'sample'
@@ -23,6 +23,8 @@ export interface SampleMailbox {
   folders: Folder[]
   /** The Inbox, newest first. */
   inbox: Message[]
+  /** The to-do list of the sample, from the generator's own labels (no model is called). */
+  todo: ScoredTodo[]
   /** A chat message is answered at once with the sample message; nothing is recorded. */
   ask: (text: string) => Promise<{ reply: string; model: string }>
 }
@@ -32,10 +34,14 @@ export interface SampleMailbox {
  * works and everything that would call a model says it is a sample.
  */
 export async function createSampleMailbox(): Promise<SampleMailbox> {
-  const provider = new FakeEmailProvider(generateSyntheticMailbox())
+  const mailbox = generateSyntheticMailbox()
+  const provider = new FakeEmailProvider(mailbox)
+  const session = new OfflineEmailSession({ mailbox, now: () => '2026-11-02T00:00:00.000Z' })
+  await session.catchUp('all')
+  const todo = (await session.todo()).items
   const folders = await provider.listFolders()
   const inboxFolder = folders.find((f) => f.kind === 'inbox')
   const page = inboxFolder ? await provider.listMessages(inboxFolder.id, { limit: 200 }) : { items: [] as Message[] }
   const inbox = [...page.items].sort((a, b) => b.date.localeCompare(a.date))
-  return { provider, llm: sampleLlm(), folders, inbox, ask: async () => ({ reply: `${SAMPLE_MESSAGE}.`, model: SAMPLE_BACKEND }) }
+  return { provider, llm: sampleLlm(), folders, inbox, todo, ask: async () => ({ reply: `${SAMPLE_MESSAGE}.`, model: SAMPLE_BACKEND }) }
 }
