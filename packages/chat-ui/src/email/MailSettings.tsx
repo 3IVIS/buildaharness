@@ -36,10 +36,10 @@ export function MailSettings(p: Props): React.JSX.Element {
           {confirm === a.id ? (
             <span role="alertdialog" aria-label="Confirm disconnect">
               Remove the sign-in and every stored message of {a.address} from this device?
-              <button type="button" onClick={async () => { setRevoke(await p.onDisconnect(a.id)); setConfirm(null) }}>Disconnect</button>
+              <button type="button" className="email-settings__danger" onClick={async () => { setRevoke(await p.onDisconnect(a.id)); setConfirm(null) }}>Disconnect</button>
               <button type="button" onClick={() => setConfirm(null)}>Keep</button>
             </span>
-          ) : <button type="button" onClick={() => setConfirm(a.id)}>Disconnect {a.address}</button>}
+          ) : <button type="button" className="email-settings__danger" onClick={() => setConfirm(a.id)}>Disconnect {a.address}</button>}
         </fieldset>
       ))}
       {revoke && (
@@ -61,14 +61,14 @@ export function MailSettings(p: Props): React.JSX.Element {
           }} />
         </label>
       </fieldset>
-      <div>
+      <div className="email-settings__foot">
         {confirm === 'all' ? (
           <span role="alertdialog" aria-label="Confirm delete all data">
             Delete every account&apos;s sign-in, stored mail, settings and spend totals from this device?
-            <button type="button" onClick={async () => { await p.onDeleteAll(); setConfirm(null); setDeleted(true) }}>Delete everything</button>
+            <button type="button" className="email-settings__danger" onClick={async () => { await p.onDeleteAll(); setConfirm(null); setDeleted(true) }}>Delete everything</button>
             <button type="button" onClick={() => setConfirm(null)}>Keep</button>
           </span>
-        ) : <button type="button" onClick={() => setConfirm('all')}>Delete all data</button>}
+        ) : <button type="button" className="email-settings__danger" onClick={() => setConfirm('all')}>Delete all data</button>}
         {deleted && <p role="status">All Email data on this device was deleted.</p>}
       </div>
     </div>
