@@ -45,7 +45,7 @@ export function SampleMailboxView({ sample, onConnect, appSwitch }: { sample: Sa
   const inbox = sample.folders.find((f) => f.kind === 'inbox')
   const [folderId, setFolderId] = useState<string | undefined>(inbox?.id)
   const folder = sample.folders.find((f) => f.id === folderId) ?? inbox
-  const inFolder = folder?.kind === 'inbox' ? sample.inbox : []
+  const inFolder = useMemo(() => (folder?.kind === 'inbox' ? sample.inbox : []), [folder?.kind, sample.inbox])
   const shown = useMemo(() => inFolder.filter((m) => matches(m, query)), [inFolder, query])
   const open = sample.inbox.find((m) => m.id === openId)
   const unread = inFolder.filter((m) => !m.flags.read).length
