@@ -7,6 +7,7 @@ import { resolveContext, type MailContext } from './mail-context.js'
 import { wrapUntrusted } from '../trust-tagging.js'
 import { SEARCH_SCOPES, searchMail, type SearchScope } from './mail-search.js'
 import type { EmailProvider } from './provider.js'
+import { isLocalOnlyAccount } from './providers/local-mail.js'
 import { evaluateToolPolicy, mailToolClass, type ToolPolicyControlState, type ToolPolicyResult } from '../tool-policy.js'
 
 /**
@@ -176,7 +177,7 @@ async function search(args: Record<string, unknown>, folders: Folder[], deps: Ma
     { text: str('text'), from: str('from'), folderId: folder?.id, unreadOnly: args.unreadOnly === true ? true : undefined, after: str('after'), before: str('before') },
     scope,
     {
-      account: deps.account, cache: deps.cache, provider: deps.provider, windowSince: deps.windowSince, limit,
+      account: deps.account, cache: deps.cache, provider: deps.provider, windowSince: deps.windowSince, limit, localOnly: isLocalOnlyAccount(deps.account),
       // Judge readability BEFORE matching text: an excluded message contributes nothing but a count.
       accept: (m) => buildMailModelInput(deps.account, m, folders, ['headers']).ok,
     },
@@ -194,7 +195,7 @@ async function search(args: Record<string, unknown>, folders: Folder[], deps: Ma
   if (res.withheld) notes.push(`${res.withheld} message${res.withheld === 1 ? '' : 's'} not shown: excluded from Aielia or account read is off.`)
   if (res.scopeUsed !== 'local') notes.push('The mail server was searched too.')
   if (res.serverError) notes.push(`The mail server could not be searched (${res.serverError.code}); these are the results already on this device, so older mail may be missing.`)
-  if (res.serverUnavailable) notes.push('The mail server is not reachable from here, so only mail on this device was searched.')
+  if (res.serverUnavailable) notes.push(res.localOnly ? 'This account is read from your mail program, which holds only the mail it downloaded, so older mail on the server was not searched.' : 'The mail server is not reachable from here, so only mail on this device was searched.')
   const text = (out.join('\n\n') || 'No matching messages.') + (notes.length ? `\n(${notes.join(' ')})` : '')
   return { ok: true, text, citations, readMail: out.length > 0, withheld: res.withheld, gate }
 }
@@ -241,7 +242,7 @@ async function summarise(args: Record<string, unknown>, folders: Folder[], deps:
   if (typeof args.threadId === 'string' && args.threadId) msgs = await threadMessages(args.threadId, deps)
   else if (typeof args.topic === 'string' && args.topic.trim()) {
     // Find the threads about the topic (local, and the server when the local answer is thin), then summarise up to three.
-    const found = await searchMail({ text: args.topic.trim() }, 'auto', { account: deps.account, cache: deps.cache, provider: deps.provider, windowSince: deps.windowSince, limit: 12, accept: (m) => buildMailModelInput(deps.account, m, folders, ['headers']).ok })
+    const found = await searchMail({ text: args.topic.trim() }, 'auto', { account: deps.account, cache: deps.cache, provider: deps.provider, windowSince: deps.windowSince, localOnly: isLocalOnlyAccount(deps.account), limit: 12, accept: (m) => buildMailModelInput(deps.account, m, folders, ['headers']).ok })
     const threadIds = [...new Set(found.hits.map((h) => h.message.threadId))].slice(0, 3)
     msgs = []
     for (const t of threadIds) msgs.push(...(await threadMessages(t, deps)))
@@ -329,7 +330,7 @@ async function count(args: Record<string, unknown>, folders: Folder[], deps: Mai
   const ranked = [...groups].sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0]))
   for (const [k, n] of ranked.slice(0, top)) lines.push(`  ${k}: ${n}`)
   if (ranked.length > top) lines.push(`  …and ${ranked.length - top} more.`)
-  lines.push(deps.windowSince ? `(Counted over mail synced to this device, from ${deps.windowSince.slice(0, 10)} on; older mail on the server is not counted. Use mail_search with scope server to look further back.)` : '(Counted over mail synced to this device.)')
+  lines.push(isLocalOnlyAccount(deps.account) ? '(Counted over the mail your mail program has downloaded; older mail that was never downloaded is not counted, and there is no server to search for it.)' : deps.windowSince ? `(Counted over mail synced to this device, from ${deps.windowSince.slice(0, 10)} on; older mail on the server is not counted. Use mail_search with scope server to look further back.)` : '(Counted over mail synced to this device.)')
   if (withheld) lines.push(`(${withheld} message${withheld === 1 ? '' : 's'} not counted: excluded from Aielia or account read is off.)`)
   return { ok: true, text: lines.join('\n'), citations: [], readMail: false, withheld, gate }
 }

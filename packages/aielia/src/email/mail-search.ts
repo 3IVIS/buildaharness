@@ -36,6 +36,8 @@ export interface MailSearchDeps {
   windowSince?: string
   /** Decides whether the message may be shown to the model; a refused one is counted, never returned. */
   accept?: (m: Message) => boolean
+  /** The account is read from a local mail program: there is no server to ask, however a provider is wired. */
+  localOnly?: boolean
   /** Hits wanted (default 20). */
   limit?: number
   /** Local hits below this many make `auto` ask the server too (default 3). */
@@ -54,6 +56,8 @@ export interface MailSearchResult {
   serverError?: { code: EmailProviderError['code'] | 'offline'; message: string }
   /** Set when the server was never consulted for lack of a provider. */
   serverUnavailable?: boolean
+  /** With `serverUnavailable`: the account is read from a local mail program, which holds only what it downloaded. */
+  localOnly?: boolean
 }
 
 const PAGE = 100
@@ -94,6 +98,7 @@ export async function searchMail(q: MailSearchQuery, scope: SearchScope, d: Mail
   const hits: SearchHit[] = local.hits.map((message) => ({ message, source: 'local', outsideWindow: outside(message) }))
   const result: MailSearchResult = { hits, scopeUsed: 'local', withheld: local.withheld }
   if (!askServer) return result
+  if (d.localOnly) return { ...result, serverUnavailable: true, localOnly: true }
   if (!d.provider) return { ...result, serverUnavailable: true }
 
   const seen = new Set(hits.map((h) => h.message.id))
