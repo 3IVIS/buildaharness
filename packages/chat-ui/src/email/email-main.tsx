@@ -5,6 +5,7 @@ import { SampleMailboxView } from './SampleMailboxView'
 import { createSampleMailbox, type SampleMailbox } from './sample-mode'
 import { loadEmailConnection, saveEmailConnection, type EmailConnection } from './email-config'
 import { registerEmailServiceWorker } from './register-sw'
+import { appSwitchHandler } from '../app-switch'
 import '../write/write.css'
 
 /**
@@ -35,7 +36,7 @@ function Root(): React.JSX.Element {
     )
   }
   if (!sample) return <p>Opening the sample mailbox…</p>
-  return <SampleMailboxView sample={sample} onConnect={() => setSettingUp(true)} />
+  return <SampleMailboxView sample={sample} onConnect={() => setSettingUp(true)} appSwitch={appSwitchHandler('email')} />
 }
 
 if (import.meta.env?.PROD) void registerEmailServiceWorker()

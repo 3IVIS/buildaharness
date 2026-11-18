@@ -9,14 +9,26 @@ const ENV_KEY: Record<AppId, string> = { chat: 'VITE_APP_URL_CHAT', write: 'VITE
 
 type Env = Record<string, unknown>
 
+/** The only other origins a build setting may name, written out in full so no pattern can match a look-alike host. */
+export const SITE_ORIGINS: readonly string[] = ['https://myaielia.com', 'https://email.myaielia.com']
+
+const PATH = /^\/(?!\/)[\w\-./]*$/
+const isSwitchUrl = (raw: string): boolean => {
+  if (PATH.test(raw)) return true
+  const origin = SITE_ORIGINS.find((o) => raw.startsWith(`${o}/`))
+  return origin !== undefined && PATH.test(raw.slice(origin.length))
+}
+
 /**
  * Where the other page lives when the app runs as hosted web pages (myaielia.com/chat and /write). The deploy workflows set
  * VITE_APP_URL_CHAT on the Write build and VITE_APP_URL_WRITE on the chat build. Only a path on the same site is accepted
- * ("/write/" or "/email/", not "//host" or a full URL), so a build setting cannot send people elsewhere. Unset for every other build.
+ * ("/write/" or "/email/", not "//host" or a full URL), so a build setting cannot send people elsewhere. The one other form is a full https URL on
+ * the Aielia sites themselves (SITE_ORIGINS): the Email page lives on its own subdomain, so it reaches Chat and Write on the main site that way.
+ * Unset for every other build.
  */
 export function webSwitchUrl(target: AppId, env: Env = import.meta.env as Env): string | undefined {
   const raw = env[ENV_KEY[target]]
-  return typeof raw === 'string' && /^\/(?!\/)[\w\-./]*$/.test(raw) ? raw : undefined
+  return typeof raw === 'string' && isSwitchUrl(raw) ? raw : undefined
 }
 
 export interface AppSwitchOptions {

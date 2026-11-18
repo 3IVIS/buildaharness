@@ -2,11 +2,13 @@ import { useEffect, useState } from 'react'
 import { RailNav, type RailTab } from '../shared-ui/RailNav'
 import { Splitter } from '../shared-ui/Splitter'
 import { CHAT_DEFAULT, clampChat, layoutNow, readerPlacement, type LayoutMode, type PhonePanel } from './email-layout'
+import { MailIcon, MAIL_ICONS } from './mail-ui'
+import { EmptyState } from './ReaderEmpty'
 import './email.css'
 
-const MAIL = 'M3 6h18v12H3zM3 7l9 7 9-7'
-const TODO = 'M5 12l4 4 10-10M5 5h4'
-const CHAT = 'M4 5h16v11H9l-5 4z'
+
+
+
 
 interface Props {
   /** The folder tree. It is the same node in the rail, the tablet slide-over and the phone drawer. */
@@ -22,6 +24,12 @@ interface Props {
   mode?: LayoutMode
   /** Whether a message is open: on a phone the reader replaces the list. */
   readerOpen?: boolean
+  /** The folder icons shown in the collapsed rail. */
+  railIcons?: React.ReactNode
+  /** The open folder's name, shown in the phone's header row. */
+  title?: string
+  /** Closes the open message (the phone's back arrow). */
+  onBack?: () => void
 }
 
 /**
@@ -30,7 +38,7 @@ interface Props {
  * Phone: one panel at a time (Email, To do, Aielia) with a bottom bar and a drawer for folders. Every panel stays mounted and is only hidden, so
  * the chat keeps its text when the user switches panels.
  */
-export function EmailLayout({ folders, list, reader, aielia, todo, banner, mode: forced, readerOpen = false }: Props): React.JSX.Element {
+export function EmailLayout({ folders, list, reader, aielia, todo, banner, mode: forced, readerOpen = false, railIcons, title, onBack }: Props): React.JSX.Element {
   const [detected, setDetected] = useState<LayoutMode>(() => layoutNow())
   const mode = forced ?? detected
   const [width, setWidth] = useState(() => (typeof window === 'undefined' ? 1024 : window.innerWidth))
@@ -58,14 +66,22 @@ export function EmailLayout({ folders, list, reader, aielia, todo, banner, mode:
   const foldersShown = mode === 'desktop' || drawer
 
   const tabs: RailTab[] = [
-    { id: 'email', label: 'Email', icon: MAIL },
-    { id: 'todo', label: 'To do', icon: TODO },
-    { id: 'aielia', label: 'Aielia', icon: CHAT },
+    { id: 'email', label: 'Email', icon: MAIL_ICONS.mail },
+    { id: 'todo', label: 'To do', icon: MAIL_ICONS.todo },
+    { id: 'aielia', label: 'Aielia', icon: MAIL_ICONS.chat },
   ]
 
   return (
-    <div className={`email email--${mode}`} data-layout={mode} data-reader={placement}>
+    <div className={`email email--${mode}`} data-layout={mode} data-reader={placement} data-open={readerOpen}>
       {banner}
+      {tablet && (
+        <div className="email__bar">
+          {readerOpen && placement === 'below' && <button type="button" className="email__iconbtn email__backbtn" aria-label="Back to the list" title="Back" onClick={onBack}><MailIcon name="back" /></button>}
+          <button type="button" className="email__iconbtn" aria-label="Folders" title="Folders" aria-expanded={drawer} onClick={() => setDrawer((v) => !v)}><MailIcon name="menu" /></button>
+          <span className="email__bartitle">{title}</span>
+          <button type="button" className="email__iconbtn" aria-label="Aielia" title="Aielia" aria-expanded={chatOpen} onClick={() => setChatOpen((v) => !v)}><MailIcon name="chat" /></button>
+        </div>
+      )}
       <div className="email__body">
         {mode === 'desktop' && (
           <aside
@@ -77,34 +93,36 @@ export function EmailLayout({ folders, list, reader, aielia, todo, banner, mode:
             onMouseLeave={() => { setRailHover(false); setRailClicked(false) }}
           >
             <div className="email__railbar">
-              <button type="button" aria-label={railOpen ? 'Collapse folders' : 'Open folders'} aria-expanded={railOpen} onClick={() => setRailClicked((v) => !v)}>Folders</button>
-              {railOpen && <button type="button" aria-label={pinned ? 'Unpin folders' : 'Pin folders open'} aria-pressed={pinned} onClick={() => setPinned((v) => !v)}>{pinned ? 'Unpin' : 'Pin'}</button>}
+              <button type="button" className="email__iconbtn" aria-label={railOpen ? 'Collapse folders' : 'Open folders'} title="Folders" aria-expanded={railOpen} onClick={() => setRailClicked((v) => !v)}><MailIcon name="menu" /></button>
+              {railOpen && <button type="button" className="email__iconbtn" aria-label={pinned ? 'Unpin folders' : 'Pin folders open'} title={pinned ? 'Unpin folders' : 'Pin folders open'} aria-pressed={pinned} onClick={() => setPinned((v) => !v)}><MailIcon name="pin" /></button>}
             </div>
+            {!railOpen && railIcons && <div className="email__railicons">{railIcons}</div>}
             <div className="email__tree" hidden={!railOpen}>{folders}</div>
           </aside>
         )}
 
-        {!phone && !(mode === 'desktop') && (
-          <div className="email__bar">
-            <button type="button" aria-label="Folders" aria-expanded={drawer} onClick={() => setDrawer((v) => !v)}>Folders</button>
-            <button type="button" aria-label="Aielia" aria-expanded={chatOpen} onClick={() => setChatOpen((v) => !v)}>Aielia</button>
-          </div>
-        )}
         {phone && drawer && <div className="email__scrim" data-testid="scrim" onClick={() => setDrawer(false)} />}
         {mode !== 'desktop' && (
           <aside className="email__drawer" aria-label="Folders" data-open={drawer} hidden={!foldersShown}>
-            <button type="button" aria-label="Close folders" onClick={() => setDrawer(false)}>Close</button>
+            <button type="button" className="email__iconbtn" aria-label="Close folders" onClick={() => setDrawer(false)}><MailIcon name="back" /></button>
             <div onClick={() => setDrawer(false)}>{folders}</div>
           </aside>
         )}
 
         <main className="email__mail" hidden={!showEmail} aria-label="Mail">
-          {phone && <button type="button" className="email__foldersbtn" aria-label="Open folders" onClick={() => setDrawer(true)}>Folders</button>}
+          {phone && (
+            <div className="email__phonebar">
+              {readerOpen
+                ? <button type="button" className="email__iconbtn" aria-label="Back to the list" title="Back" onClick={onBack}><MailIcon name="back" /></button>
+                : <button type="button" className="email__iconbtn email__foldersbtn" aria-label="Open folders" title="Folders" onClick={() => setDrawer(true)}><MailIcon name="menu" /></button>}
+              <span className="email__bartitle" />
+            </div>
+          )}
           <div className="email__list" hidden={phone && readerOpen}>{list}</div>
           <div className="email__reader" hidden={phone && !readerOpen}>{reader}</div>
         </main>
 
-        {showTodo && <section className="email__todo" aria-label="To do">{todo ?? <p>Nothing to do yet.</p>}</section>}
+        {showTodo && <section className="email__todo" aria-label="To do">{todo ?? <EmptyState icon="todo" title="Nothing to do yet" text="Once Aielia has sorted your mail, the messages that need you show up here, with the reason for each." />}</section>}
 
         {mode === 'desktop' && (
           <Splitter

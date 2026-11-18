@@ -147,7 +147,7 @@ export function sanitizeMailHtml(html: string, opts: SanitizeOptions = {}): Sani
   const body = walk(doc.documentElement, false)
   const srcdoc =
     `<!doctype html><html><head><meta charset="utf-8"><meta http-equiv="Content-Security-Policy" content="default-src 'none'; img-src data:${opts.allowRemoteImages ? ' https:' : ''}; style-src 'unsafe-inline'">` +
-    `<style>body{font:14px system-ui,sans-serif;margin:8px;word-wrap:break-word}.img-blocked{color:#666;border:1px dashed #999;padding:0 4px}` +
+    `<style>body{font:15px/1.55 system-ui,sans-serif;margin:16px;color:#1b1f2e;word-wrap:break-word;overflow-wrap:anywhere}pre{white-space:pre-wrap;font:inherit;margin:0}img{max-width:100%;height:auto}.img-blocked{color:#666;border:1px dashed #999;padding:0 4px}` +
     `.mail-link{text-decoration:underline;color:#06c}.mail-link--mismatch{color:#b00;background:#fee}.mail-link__dest{color:#555}</style></head><body>${body}</body></html>`
   return { srcdoc, visibleText: visible.join('').replace(/\s+/g, ' ').trim(), hiddenText, links, blockedImages }
 }

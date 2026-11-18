@@ -40,6 +40,9 @@ jobs:
       - name: Build the Email page
         env:
           CHAT_UI_BASE: /
+          # The app switcher: Chat and Write live on the main site, so they are full URLs (app-switch.ts accepts these origins only).
+          VITE_APP_URL_CHAT: https://myaielia.com/chat/
+          VITE_APP_URL_WRITE: https://myaielia.com/write/
         run: npm run build:email --workspace=packages/chat-ui
 
       - name: Check deploy key is present

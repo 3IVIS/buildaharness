@@ -1,5 +1,6 @@
 import { useMemo, useState } from 'react'
 import type { Message } from '@buildaharness/aielia'
+import { Avatar, mailTime } from './mail-ui'
 import { sanitizeMailHtml, sanitizeMailText, senderMismatch } from './reader-html'
 
 const formatSize = (n: number): string => (n < 1024 ? `${n} B` : n < 1024 * 1024 ? `${Math.round(n / 1024)} KB` : `${(n / 1024 / 1024).toFixed(1)} MB`)
@@ -20,10 +21,18 @@ export function MailReader({ message, onOpenAttachment }: { message: Message; on
   const mismatched = view.links.filter((l) => l.mismatch)
   return (
     <article aria-label="Message" className="mail-reader">
-      <h3>{message.subject}</h3>
-      <p className="mail-reader__from">
-        <span>{message.from.name ? `${message.from.name} ` : ''}&lt;{message.from.address}&gt;</span>
-      </p>
+      <h3 className="mail-reader__subject">{message.subject}</h3>
+      <header className="mail-reader__head">
+        <Avatar name={message.from.name} address={message.from.address} size={40} />
+        <div className="mail-reader__who">
+          <p className="mail-reader__from">
+            {message.from.name && <strong>{message.from.name} </strong>}
+            <span>&lt;{message.from.address}&gt;</span>
+          </p>
+          {message.to.length > 0 && <p className="mail-reader__to">To {message.to.map((a) => a.name ?? a.address).join(', ')}</p>}
+        </div>
+        <time className="mail-reader__date" dateTime={message.date}>{mailTime(message.date)}</time>
+      </header>
       {sender.mismatch && <p role="alert" className="mail-reader__warn" data-flag="sender_mismatch">Sender does not match. {sender.detail}</p>}
       {mismatched.length > 0 && (
         <p role="alert" className="mail-reader__warn" data-flag="link_mismatch">

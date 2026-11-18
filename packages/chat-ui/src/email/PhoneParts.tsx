@@ -1,5 +1,5 @@
 import { useRef, useState } from 'react'
-import { currentTodo, settleSheet, swipeOutcome, type SheetState, type SwipeAction, type TodoFlow, type TodoFlowStep } from './phone-gestures'
+import { currentTodo, settleSheet, swipeOutcome, SWIPE_THRESHOLD, type SheetState, type SwipeAction, type TodoFlow, type TodoFlowStep } from './phone-gestures'
 
 /** The chat as a draggable sheet over a message. Drag the handle; it settles closed, half or full. */
 export function PhoneSheet({ state, onState, children }: { state: SheetState; onState: (s: SheetState) => void; children: React.ReactNode }): React.JSX.Element {
@@ -31,21 +31,47 @@ export function FloatingAielia({ onOpen, hidden }: { onOpen: () => void; hidden?
 
 /** A row that can be swiped: right archives, left sets aside for later. Buttons give the same two actions without a gesture. */
 export function SwipeRow({ onAction, children }: { onAction: (a: SwipeAction) => void; children: React.ReactNode }): React.JSX.Element {
-  const x0 = useRef<number | null>(null)
+  const start = useRef<{ x: number; y: number } | null>(null)
+  const moved = useRef(false)
   const [dx, setDx] = useState(0)
+  const cancel = (): void => { start.current = null; setDx(0) }
   return (
     <div
-      className="phone-swipe" style={{ transform: dx ? `translateX(${dx}px)` : undefined }}
-      onPointerDown={(e) => { x0.current = e.clientX }}
-      onPointerMove={(e) => { if (x0.current !== null) setDx(e.clientX - x0.current) }}
-      onPointerUp={(e) => {
-        const a = x0.current === null ? null : swipeOutcome(e.clientX - x0.current)
-        x0.current = null; setDx(0)
-        if (a) onAction(a)
-      }}
-      onPointerCancel={() => { x0.current = null; setDx(0) }}
+      className="phone-swipe" data-swipe={dx > 0 ? 'archive' : dx < 0 ? 'later' : undefined}
+      style={{ ['--swipe-progress' as string]: Math.min(1, Math.abs(dx) / SWIPE_THRESHOLD) }}
+      // A drag that moved is not a tap: the click the browser sends after it must not open the row.
+      onClickCapture={(e) => { if (moved.current) { e.stopPropagation(); e.preventDefault(); moved.current = false } }}
     >
-      {children}
+      <span className="phone-swipe__hint" aria-hidden="true" data-label={dx > 0 ? 'Archive' : dx < 0 ? 'Later' : ''} />
+      <div
+        className="phone-swipe__row" style={{ transform: dx ? `translateX(${dx}px)` : undefined }}
+        onPointerDown={(e) => {
+          start.current = { x: e.clientX, y: e.clientY }; moved.current = false
+        }}
+        onPointerMove={(e) => {
+          const s = start.current
+          if (!s) return
+          const x = e.clientX - s.x
+          if (Math.abs(x) > 10 && !moved.current) {
+            moved.current = true
+            // Capture only once it is a drag: capturing on press would send a plain click to the row instead of the message inside it.
+            try { e.currentTarget.setPointerCapture(e.pointerId) } catch { /* not every environment supports capture */ }
+          }
+          setDx(x)
+        }}
+        onPointerUp={(e) => {
+          const s = start.current
+          cancel()
+          if (!s) return
+          const x = e.clientX - s.x
+          // A mostly vertical movement is a scroll, not a swipe.
+          const a = Math.abs(e.clientY - s.y) > Math.abs(x) * 0.6 ? null : swipeOutcome(x)
+          if (a) onAction(a)
+        }}
+        onPointerCancel={cancel}
+      >
+        {children}
+      </div>
       <span className="phone-swipe__buttons">
         <button type="button" aria-label="Archive" onClick={() => onAction('archive')}>Archive</button>
         <button type="button" aria-label="Later" onClick={() => onAction('later')}>Later</button>

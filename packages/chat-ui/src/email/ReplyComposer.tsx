@@ -26,8 +26,10 @@ export function SendApproval({ staged, onApprove, onCancel }: { staged: StagedSe
       </dl>
       <pre className="reply__text">{m.textBody}</pre>
       {staged.warnings.map((w) => <p key={w} role="alert" className="reply__warn">Warning: {w}</p>)}
-      <button type="button" onClick={onApprove}>Send</button>
-      <button type="button" onClick={onCancel}>Back to editing</button>
+      <div className="reply__actions">
+        <button type="button" className="reply__primary" onClick={onApprove}>Send</button>
+        <button type="button" onClick={onCancel}>Back to editing</button>
+      </div>
     </div>
   )
 }
@@ -54,10 +56,10 @@ export function ReplyComposer({ initial, coordinator, fullScreen, onSent, onClos
 
   return (
     <section aria-label="Reply" className={`reply${fullScreen ? ' reply--full' : ''}`}>
-      <header><strong>Re: {draft.subject}</strong>{onClose && <button type="button" aria-label="Close reply" onClick={onClose}>×</button>}</header>
-      <p>To: {draft.to.map((a) => a.address).join(', ')}</p>
-      <label>Cc <input value={cc} onChange={(e) => setCc(e.target.value)} /></label>
-      <label>Bcc <input value={bcc} onChange={(e) => setBcc(e.target.value)} /></label>
+      <header className="reply__head"><strong>Re: {draft.subject}</strong>{onClose && <button type="button" className="email__iconbtn" aria-label="Close reply" title="Close" onClick={onClose}>×</button>}</header>
+      <p className="reply__to"><span>To</span> {draft.to.map((a) => a.address).join(', ')}</p>
+      <label className="reply__field"><span>Cc</span> <input value={cc} onChange={(e) => setCc(e.target.value)} /></label>
+      <label className="reply__field"><span>Bcc</span> <input value={bcc} onChange={(e) => setBcc(e.target.value)} /></label>
       <textarea aria-label="Reply text" value={draft.body} onChange={(e) => setDraft({ ...draft, body: e.target.value, savedAs: undefined })} rows={fullScreen ? 16 : 8} />
       {pending.length > 0 && (
         <ul aria-label="Suggestions" className="reply__suggestions">
@@ -65,14 +67,16 @@ export function ReplyComposer({ initial, coordinator, fullScreen, onSent, onClos
             <li key={s.id} data-suggestion={s.id}>
               <del>{s.span.quote}</del> <ins>{s.replacement || '(removed)'}</ins>
               <span className="reply__reason">{s.reason}</span>
-              <button type="button" onClick={() => act(acceptDraftEdit(draft, s.id))}>Accept</button>
-              <button type="button" onClick={() => act(rejectDraftEdit(draft, s.id))}>Reject</button>
+              <span className="reply__choose">
+                <button type="button" className="reply__accept" onClick={() => act(acceptDraftEdit(draft, s.id))}>Accept</button>
+                <button type="button" onClick={() => act(rejectDraftEdit(draft, s.id))}>Reject</button>
+              </span>
             </li>
           ))}
         </ul>
       )}
       {error && <p role="alert" className="reply__error">{error}</p>}
-      <button type="button" onClick={() => void review()} disabled={staged !== null}>Review and send</button>
+      <div className="reply__actions"><button type="button" className="reply__primary" onClick={() => void review()} disabled={staged !== null}>Review and send</button></div>
       {staged && <SendApproval staged={staged} onApprove={() => void approve()} onCancel={() => setStaged(null)} />}
     </section>
   )

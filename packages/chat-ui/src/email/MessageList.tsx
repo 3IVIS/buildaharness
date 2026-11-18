@@ -4,8 +4,9 @@ import {
   buildItems, describeChange, groupRows, highlightedItemIds, nextActive, rangeIds, scrollToRow, triageLabel, windowRange, type ListRow, type NavKey,
 } from './message-list'
 import type { Message } from '@buildaharness/aielia'
+import { Avatar, mailSnippet, mailTime } from './mail-ui'
 
-export const ROW_HEIGHT = 56
+export const ROW_HEIGHT = 64
 
 /** Aielia's mark on a message (a label or a move she made), with the action that undo reverses. */
 export interface AielaMark { label: string; actionId: string }
@@ -18,6 +19,8 @@ interface Props {
   /** Aielia's marks by message id. */
   marks?: Readonly<Record<string, AielaMark>>
   onUndoMark?: (actionId: string) => void
+  /** The message open in the reader; its row is marked. */
+  activeId?: string
   /** The open message; a row opens on Enter or click. */
   onOpen?: (messageId: string) => void
   /** Pending bulk change, shown in the bar above the list with the affected rows highlighted. */
@@ -119,7 +122,7 @@ export function MessageList(p: Props): React.JSX.Element {
             const { item } = r
             const label = triageLabel(p.triage?.[item.threadId])
             const mark = p.marks?.[item.id]
-            const cls = ['mlist__row', item.unread ? 'is-unread' : '', selected.has(item.id) ? 'is-selected' : '', i === active ? 'is-active' : '', hot.has(item.id) ? 'is-affected' : ''].filter(Boolean).join(' ')
+            const cls = ['mlist__row', item.unread ? 'is-unread' : '', selected.has(item.id) ? 'is-selected' : '', i === active ? 'is-active' : '', item.id === p.activeId ? 'is-open' : '', hot.has(item.id) ? 'is-affected' : ''].filter(Boolean).join(' ')
             return (
               <div
                 key={r.key}
@@ -137,15 +140,27 @@ export function MessageList(p: Props): React.JSX.Element {
                   else { select(new Set()); p.onOpen?.(item.id) }
                 }}
               >
-                <span className="mlist__from">{item.latest.from.name ?? item.latest.from.address}{item.count > 1 ? ` (${item.count})` : ''}</span>
-                <span className="mlist__subject">{item.latest.subject}</span>
-                {label && <span className="mlist__tag">{label}</span>}
-                {mark && (
-                  <span className="mlist__mark">
-                    {mark.label}
-                    <button type="button" aria-label={`Undo: ${mark.label}`} onClick={(e) => { e.stopPropagation(); p.onUndoMark?.(mark.actionId) }}>Undo</button>
+                <Avatar name={item.latest.from.name} address={item.latest.from.address} />
+                <span className="mlist__main">
+                  <span className="mlist__top">
+                    <span className="mlist__from">{item.latest.from.name ?? item.latest.from.address}{item.count > 1 ? ` (${item.count})` : ''}</span>
+                    <time className="mlist__time" dateTime={item.latest.date}>{mailTime(item.latest.date, p.now)}</time>
                   </span>
-                )}
+                  <span className="mlist__bottom">
+                    <span className="mlist__subject">{item.latest.subject}</span>
+                    <span className="mlist__snippet">{mailSnippet(item.latest)}</span>
+                  </span>
+                </span>
+                <span className="mlist__side">
+                  {item.unread && <span className="mlist__dot" aria-label="Unread" role="img" />}
+                  {label && <span className="mlist__tag">{label}</span>}
+                  {mark && (
+                    <span className="mlist__mark">
+                      {mark.label}
+                      <button type="button" aria-label={`Undo: ${mark.label}`} onClick={(e) => { e.stopPropagation(); p.onUndoMark?.(mark.actionId) }}>Undo</button>
+                    </span>
+                  )}
+                </span>
               </div>
             )
           })}

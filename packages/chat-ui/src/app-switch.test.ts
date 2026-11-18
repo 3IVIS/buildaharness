@@ -10,6 +10,13 @@ describe('webSwitchUrl', () => {
     expect(webSwitchUrl('write', {})).toBeUndefined()
     expect(webSwitchUrl('chat', { VITE_APP_URL_WRITE: '/write/' })).toBeUndefined()
   })
+  it('accepts a full https URL on the Aielia sites only (the Email subdomain reaches Chat and Write that way)', () => {
+    expect(webSwitchUrl('chat', { VITE_APP_URL_CHAT: 'https://myaielia.com/chat/' })).toBe('https://myaielia.com/chat/')
+    expect(webSwitchUrl('write', { VITE_APP_URL_WRITE: 'https://email.myaielia.com/' })).toBe('https://email.myaielia.com/')
+    for (const bad of ['http://myaielia.com/chat/', 'https://myaielia.com.evil.example/chat/', 'https://evil.example/myaielia.com/', 'https://myaielia.com@evil.example/', 'https://myaielia.com//evil.example/', 'https://myaielia.com']) {
+      expect(webSwitchUrl('chat', { VITE_APP_URL_CHAT: bad })).toBeUndefined()
+    }
+  })
   it('only accepts a path on the same site', () => {
     for (const bad of ['https://evil.example/', '//evil.example/', 'write/', 'javascript:alert(1)', '/a b', '']) {
       expect(webSwitchUrl('write', { VITE_APP_URL_WRITE: bad })).toBeUndefined()
