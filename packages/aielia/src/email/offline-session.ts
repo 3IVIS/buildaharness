@@ -8,7 +8,8 @@ import { draftReply, saveReplyDraft, type DraftModel } from './draft.js'
 import { SendCoordinator, type StagedSend } from './send.js'
 import { parseEmailCommand, formatEmailCommand, type EmailCommand } from './email-command.js'
 import type { Message, Thread, Triage } from './model.js'
-import { catchUpSummary, estimateCatchUp, runCatchUp } from './catch-up.js'
+import { catchUpParts, catchUpSummary, estimateCatchUp, runCatchUp } from './catch-up.js'
+import { runMailReadTool, type MailToolResult } from './mail-tools.js'
 import { InMemoryJunkStore, classifyJunk, learnJunkSignals, proposeJunkMoves, type JunkModel, type JunkVerdict } from './junk.js'
 import { EmailActionLog, TurnCeiling } from './action-log.js'
 import { OrganiseSession, SnoozeStore, confirmPending } from './organise-tools.js'
@@ -73,6 +74,8 @@ export interface OfflineEmailSessionOptions {
   triageModel?: TriageModel
   draftModel?: DraftModel
   junkModel?: JunkModel
+  /** Text in, text out, for `mail_summarise`. The default is a fixed sample answer that reads no mail. */
+  summariser?: (system: string, user: string) => Promise<string>
   now?: () => string
 }
 
@@ -84,6 +87,7 @@ export class OfflineEmailSession {
   private readonly triageModel: TriageModel
   private readonly draftModel: DraftModel
   private readonly junkModel: JunkModel
+  private readonly summariser: (system: string, user: string) => Promise<string>
   private readonly junk = new InMemoryJunkStore()
   private readonly session = new OrganiseSession()
   private readonly actionLog = new EmailActionLog()
@@ -98,6 +102,7 @@ export class OfflineEmailSession {
     this.triageModel = opts.triageModel ?? sampleTriageModel(mailbox.categoryByThread)
     this.draftModel = opts.draftModel ?? sampleDraftModel
     this.junkModel = opts.junkModel ?? sampleJunkModel(mailbox.categoryByThread)
+    this.summariser = opts.summariser ?? (async () => 'Sample mailbox: no model is called, so this is a fixed summary.')
     this.now = opts.now ?? (() => new Date().toISOString())
   }
 
@@ -164,6 +169,23 @@ export class OfflineEmailSession {
     if (!move) return { likely, lines: [`${likely.length} thread(s) look like spam. Moving them to Junk would change ${prop.pending.messageIds.length} message(s); nothing has moved. Run /email spam move to do it (it can be undone).`, ...lines] }
     const done = await confirmPending({ account, action: ctx.action, session: this.session, snoozes: new SnoozeStore() }, prop.pending.id)
     return { likely, lines: [done.text, ...lines] }
+  }
+
+  /** Run one read-only mail tool as the chat would: through the gate, the privacy choke point and the shared tool code. */
+  async runTool(name: string, args: Record<string, unknown> = {}): Promise<MailToolResult> {
+    await this.threads()
+    const account = this.provider.account
+    return runMailReadTool(name, args, {
+      account, cache: this.cache, context: { chips: [] }, provider: this.provider, summarise: this.summariser,
+      listTodo: async () => (await this.todo()).items,
+      catchUp: async (w) => {
+        const window = (w === undefined ? 30 : REVIEW_WINDOWS.find((x) => String(x) === w)) as ReviewWindow
+        const since = windowSince(window, new Date(this.now()))
+        const r = await runCatchUp({ account, cache: this.cache, store: this.store, model: this.triageModel, ...(since ? { since } : {}), now: this.now })
+        const p = catchUpParts(r, reviewWindowLabel(window))
+        return { summary: [...p.summary, ...p.closing], details: p.details, needsResponse: r.needsResponse.map((n) => ({ threadId: n.threadId, subject: n.subject })) }
+      },
+    })
   }
 
   async todo(): Promise<{ items: ScoredTodo[]; lines: string[] }> {

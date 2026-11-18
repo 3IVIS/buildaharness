@@ -63,6 +63,8 @@ export const MAIL_TOOL_CLASSES: Readonly<Record<string, MailToolClass>> = {
   mail_list_folders: 'read_only',
   mail_summarise: 'read_only',
   mail_list_todo: 'read_only',
+  mail_count: 'read_only',
+  mail_catch_up: 'read_only',
   mail_move: 'reversible',
   mail_label: 'reversible',
   mail_archive: 'reversible',

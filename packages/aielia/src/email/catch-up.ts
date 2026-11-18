@@ -132,16 +132,25 @@ export async function runCatchUp(deps: CatchUpDeps): Promise<CatchUpResult> {
   return { status, inWindow: threads.length, reviewed, needsResponse: needs, urgent, withheld, failedCalls }
 }
 
-/** Plain words for the chat column and the CLI. */
-export function catchUpSummary(r: CatchUpResult, windowLabel?: string): string[] {
+/**
+ * The summary split by trust: `summary` is counts and fixed wording (plain text), `details` carries thread subjects and the one-sentence
+ * reasons a model wrote from mail (data, to be wrapped as untrusted wherever a model reads it).
+ */
+export function catchUpParts(r: CatchUpResult, windowLabel?: string): { summary: string[]; details: string[]; closing: string[] } {
   const where = windowLabel ? ` (${windowLabel.toLowerCase()})` : ''
   const head = r.inWindow === 0 ? `No mail to review${where}.`
     : `${r.needsResponse.length} of ${r.inWindow} thread${r.inWindow === 1 ? '' : 's'}${where} need a response${r.urgent > 0 ? `, ${r.urgent} urgent` : ''}.`
-  const lines = [head]
-  for (const n of r.needsResponse.slice(0, 10)) lines.push(`  - ${n.subject}: ${n.triage.reason}`)
-  if (r.needsResponse.length > 10) lines.push(`  …and ${r.needsResponse.length - 10} more, all on your To do list.`)
-  if (r.status === 'interrupted') lines.push('The review was stopped before it finished; run it again to continue.')
-  if (r.failedCalls > 0) lines.push(`${r.failedCalls} model call${r.failedCalls === 1 ? '' : 's'} failed; those threads were left unreviewed.`)
-  if (r.withheld > 0) lines.push(`${r.withheld} thread${r.withheld === 1 ? ' was' : 's were'} not reviewed (excluded from Aielia, or not answered).`)
-  return lines
+  const details = r.needsResponse.slice(0, 10).map((n) => `  - ${n.subject}: ${n.triage.reason}`)
+  if (r.needsResponse.length > 10) details.push(`  …and ${r.needsResponse.length - 10} more, all on your To do list.`)
+  const closing: string[] = []
+  if (r.status === 'interrupted') closing.push('The review was stopped before it finished; run it again to continue.')
+  if (r.failedCalls > 0) closing.push(`${r.failedCalls} model call${r.failedCalls === 1 ? '' : 's'} failed; those threads were left unreviewed.`)
+  if (r.withheld > 0) closing.push(`${r.withheld} thread${r.withheld === 1 ? ' was' : 's were'} not reviewed (excluded from Aielia, or not answered).`)
+  return { summary: [head], details, closing }
+}
+
+/** Plain words for the chat column and the CLI. */
+export function catchUpSummary(r: CatchUpResult, windowLabel?: string): string[] {
+  const p = catchUpParts(r, windowLabel)
+  return [...p.summary, ...p.details, ...p.closing]
 }

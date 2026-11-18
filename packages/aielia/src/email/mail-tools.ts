@@ -4,6 +4,7 @@ import { buildMailModelInput } from './model-input.js'
 import { folderExcluded } from './privacy.js'
 import { MAIL_UNTRUSTED_PROMPT } from './untrusted.js'
 import { resolveContext, type MailContext } from './mail-context.js'
+import { wrapUntrusted } from '../trust-tagging.js'
 import { SEARCH_SCOPES, searchMail, type SearchScope } from './mail-search.js'
 import type { EmailProvider } from './provider.js'
 import { evaluateToolPolicy, mailToolClass, type ToolPolicyControlState, type ToolPolicyResult } from '../tool-policy.js'
@@ -24,7 +25,7 @@ export interface MailToolDefinition {
   input_schema: { type: 'object'; properties: Record<string, unknown>; required?: string[] }
 }
 
-export const MAIL_READ_TOOL_NAMES = ['mail_search', 'mail_read_thread', 'mail_list_folders', 'mail_summarise', 'mail_list_todo'] as const
+export const MAIL_READ_TOOL_NAMES = ['mail_search', 'mail_read_thread', 'mail_list_folders', 'mail_summarise', 'mail_list_todo', 'mail_count', 'mail_catch_up'] as const
 export type MailReadToolName = (typeof MAIL_READ_TOOL_NAMES)[number]
 
 export const MAIL_READ_TOOLS: MailToolDefinition[] = [
@@ -53,13 +54,34 @@ export const MAIL_READ_TOOLS: MailToolDefinition[] = [
     name: 'mail_summarise',
     description:
       'Summarise mail in one short paragraph. With no arguments it summarises what the context chips point at (the open message, the selection, ' +
-      'the current view, or the account). Pass threadId to summarise one thread.',
-    input_schema: { type: 'object', properties: { threadId: { type: 'string' } } },
+      'the current view, or the account). Pass threadId to summarise one thread, or topic (a few words) to find the threads about it and summarise up to three: use that for "what is the status of the lease thread".',
+    input_schema: { type: 'object', properties: { threadId: { type: 'string' }, topic: { type: 'string' } } },
   },
   {
     name: 'mail_list_todo',
     description: 'List the user\'s mail to-do items (open by default), each with its reason.',
     input_schema: { type: 'object', properties: { status: { type: 'string', enum: ['open', 'snoozed', 'done', 'dismissed'] } } },
+  },
+  {
+    name: 'mail_count',
+    description:
+      'Count messages and optionally group the counts: "how many from X this quarter", "who emails me most", "how much mail per month". Filters are optional and combine ' +
+      '(text, from, folder, unreadOnly, after, before). groupBy is none (a single count), sender, domain, folder or month. Counts cover mail synced to this device (the review window); the result says so. Excluded mail is not counted, only reported.',
+    input_schema: {
+      type: 'object',
+      properties: {
+        text: { type: 'string' }, from: { type: 'string' }, folder: { type: 'string' }, unreadOnly: { type: 'boolean' },
+        after: { type: 'string', description: 'ISO date, inclusive.' }, before: { type: 'string', description: 'ISO date, exclusive.' },
+        groupBy: { type: 'string', enum: ['none', 'sender', 'domain', 'folder', 'month'] }, top: { type: 'number', description: 'Groups to list (default 10).' },
+      },
+    },
+  },
+  {
+    name: 'mail_catch_up',
+    description:
+      'Review the mail of a time window and say which threads need a response. window is 7, 30, 90, 365 or all (default: the account\'s review window). It reads and records, and changes no mail. ' +
+      'It can take a while and costs model calls, so use it when the user asks to be caught up.',
+    input_schema: { type: 'object', properties: { window: { type: 'string', enum: ['7', '30', '90', '365', 'all'] } } },
   },
 ]
 
@@ -76,6 +98,8 @@ export interface MailToolDeps {
   summarise?: MailSummariser
   /** Needed only by `mail_list_todo`. */
   listTodo?: () => Promise<TodoItem[]>
+  /** Needed only by `mail_catch_up`: runs the review for a window (`undefined` = the account's own) and returns plain lines plus the threads that need a response. */
+  catchUp?: (window: string | undefined) => Promise<{ /** Computed counts, safe as plain text. */ summary: string[]; /** Thread subjects and reasons, written from mail: shown wrapped as data. */ details: string[]; needsResponse: Array<{ threadId: string; subject: string }> }>
   /** The turn's live control state, as for every other tool. */
   controlState?: ToolPolicyControlState
   /** Set by the caller once the turn has shown mail text to the model; echoed into the gate. */
@@ -123,6 +147,8 @@ export async function runMailReadTool(name: string, args: Record<string, unknown
     case 'mail_read_thread': return readThread(args, folders, deps, gate)
     case 'mail_summarise': return summarise(args, folders, deps, gate)
     case 'mail_list_todo': return listTodo(args, deps, gate)
+    case 'mail_count': return count(args, folders, deps, gate)
+    case 'mail_catch_up': return catchUpTool(args, deps, gate)
   }
 }
 
@@ -213,7 +239,14 @@ async function summarise(args: Record<string, unknown>, folders: Folder[], deps:
   if (!deps.summarise) return fail(gate, 'Summarising is not available (no model wired).')
   let msgs: Message[]
   if (typeof args.threadId === 'string' && args.threadId) msgs = await threadMessages(args.threadId, deps)
-  else msgs = (await resolveContext(deps.context, deps.cache, deps.account.id, 30)).messages.filter((m) => m.accountId === deps.account.id)
+  else if (typeof args.topic === 'string' && args.topic.trim()) {
+    // Find the threads about the topic (local, and the server when the local answer is thin), then summarise up to three.
+    const found = await searchMail({ text: args.topic.trim() }, 'auto', { account: deps.account, cache: deps.cache, provider: deps.provider, windowSince: deps.windowSince, limit: 12, accept: (m) => buildMailModelInput(deps.account, m, folders, ['headers']).ok })
+    const threadIds = [...new Set(found.hits.map((h) => h.message.threadId))].slice(0, 3)
+    msgs = []
+    for (const t of threadIds) msgs.push(...(await threadMessages(t, deps)))
+    if (msgs.length === 0) return fail(gate, `No mail found about "${args.topic.trim()}".`)
+  } else msgs = (await resolveContext(deps.context, deps.cache, deps.account.id, 30)).messages.filter((m) => m.accountId === deps.account.id)
   if (msgs.length === 0) return fail(gate, 'Nothing to summarise: no thread given and the context chips point at no messages.')
   const parts: string[] = []
   const citations: MailToolCitation[] = []
@@ -255,4 +288,64 @@ async function listTodo(args: Record<string, unknown>, deps: MailToolDeps, gate:
   }
   const text = (lines.join('\n') || `No ${status} to-do items.`) + (withheld ? `\n(${withheld} item${withheld === 1 ? '' : 's'} not shown: excluded.)` : '')
   return { ok: true, text, citations, readMail: false, withheld, gate }
+}
+
+type GroupBy = 'none' | 'sender' | 'domain' | 'folder' | 'month'
+const GROUPS: readonly GroupBy[] = ['none', 'sender', 'domain', 'folder', 'month']
+
+async function count(args: Record<string, unknown>, folders: Folder[], deps: MailToolDeps, gate: ToolPolicyResult): Promise<MailToolResult> {
+  const str = (k: string): string | undefined => (typeof args[k] === 'string' && (args[k] as string).trim() ? (args[k] as string).trim() : undefined)
+  const groupBy = (str('groupBy') ?? 'none') as GroupBy
+  if (!GROUPS.includes(groupBy)) return fail(gate, `Unknown groupBy "${groupBy}". Use none, sender, domain, folder or month.`)
+  const folderArg = str('folder')
+  const folder = folderArg ? folders.find((f) => f.id === folderArg || f.name.toLowerCase() === folderArg.toLowerCase()) : undefined
+  if (folderArg && !folder) return fail(gate, `No folder named "${folderArg}".`)
+  const needle = str('text')?.toLowerCase()
+  const from = str('from')?.toLowerCase()
+  const top = Math.min(50, Math.max(1, Math.floor(Number(args.top) || 10)))
+  const groups = new Map<string, number>()
+  let total = 0, withheld = 0
+  const nameOf = new Map(folders.map((f) => [f.id, f.name]))
+  for (let offset = 0; ; offset += 200) {
+    const page = await deps.cache.queryMessages(
+      { ...(folder ? { folderId: folder.id } : {}), ...(args.unreadOnly === true ? { read: false } : {}), ...(str('after') ? { since: str('after') } : {}), ...(str('before') ? { before: str('before') } : {}) },
+      { offset, limit: 200 },
+    )
+    for (const m of page.items) {
+      if (m.accountId !== deps.account.id) continue
+      // Readability first, so an excluded message's text can never decide a count; it is only reported.
+      if (!buildMailModelInput(deps.account, m, folders, ['headers']).ok) { withheld++; continue }
+      if (from && !`${m.from.address} ${m.from.name ?? ''}`.toLowerCase().includes(from)) continue
+      if (needle && !`${m.subject}\n${m.from.address}\n${m.textBody}`.toLowerCase().includes(needle)) continue
+      total++
+      if (groupBy === 'none') continue
+      const key = groupBy === 'sender' ? m.from.address.toLowerCase() : groupBy === 'domain' ? (m.from.address.split('@')[1] ?? '').toLowerCase()
+        : groupBy === 'month' ? m.date.slice(0, 7) : (m.folderIds.map((f) => nameOf.get(f) ?? f).join(', ') || '(no folder)')
+      groups.set(key, (groups.get(key) ?? 0) + 1)
+    }
+    if (offset + 200 >= page.total) break
+  }
+  const lines = [`${total} message${total === 1 ? '' : 's'}${groupBy === 'none' ? '' : `, by ${groupBy}`}.`]
+  const ranked = [...groups].sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0]))
+  for (const [k, n] of ranked.slice(0, top)) lines.push(`  ${k}: ${n}`)
+  if (ranked.length > top) lines.push(`  …and ${ranked.length - top} more.`)
+  lines.push(deps.windowSince ? `(Counted over mail synced to this device, from ${deps.windowSince.slice(0, 10)} on; older mail on the server is not counted. Use mail_search with scope server to look further back.)` : '(Counted over mail synced to this device.)')
+  if (withheld) lines.push(`(${withheld} message${withheld === 1 ? '' : 's'} not counted: excluded from Aielia or account read is off.)`)
+  return { ok: true, text: lines.join('\n'), citations: [], readMail: false, withheld, gate }
+}
+
+async function catchUpTool(args: Record<string, unknown>, deps: MailToolDeps, gate: ToolPolicyResult): Promise<MailToolResult> {
+  if (!deps.catchUp) return fail(gate, 'The catch-up review is not available here.')
+  const w = typeof args.window === 'string' && args.window.trim() ? args.window.trim().toLowerCase() : undefined
+  if (w !== undefined && !['7', '30', '90', '365', 'all'].includes(w)) return fail(gate, `Unknown window "${w}". Use 7, 30, 90, 365 or all.`)
+  let r: Awaited<ReturnType<NonNullable<MailToolDeps['catchUp']>>>
+  try { r = await deps.catchUp(w) } catch (e) { return fail(gate, `The review failed: ${e instanceof Error ? e.message : String(e)}`) }
+  const citations: MailToolCitation[] = []
+  for (const n of r.needsResponse.slice(0, 20)) {
+    const msgs = await threadMessages(n.threadId, deps)
+    if (msgs.length > 0) citations.push({ messageId: msgs[msgs.length - 1]!.id, threadId: n.threadId, subject: msgs[0]!.subject })
+  }
+  // The lines carry thread subjects and one-sentence reasons that a model wrote from mail: they are data, and the turn is now an untrusted-mail turn.
+  const text = [...r.summary, ...(r.details.length ? [wrapUntrusted(r.details.join('\n'))] : [])].join('\n')
+  return { ok: true, text, citations, readMail: r.details.length > 0, withheld: 0, gate }
 }
