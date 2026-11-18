@@ -91,4 +91,17 @@ describe('MailChatColumn', () => {
     expect(container.querySelector('input[type=file]')).toBeNull()
     expect(container.textContent).not.toMatch(/shell|terminal/i)
   })
+
+  it('offers the review window and reports a change, with a cost note for the long windows', () => {
+    const onWin = vi.fn()
+    const acc = [{ ...accounts[0]!, reviewWindow: 30 as const }]
+    const { rerender } = render(<MailSettings accounts={acc} permissions={perms} onPrivacy={vi.fn()} onPermissions={vi.fn()} onReviewWindow={onWin} onDisconnect={vi.fn()} onDeleteAll={vi.fn()} />)
+    const sel = screen.getByLabelText(/Review window for/)
+    expect(Array.from((sel as HTMLSelectElement).options).map((o) => o.text)).toEqual(['Last 7 days', 'Last 30 days', 'Last 90 days', 'Last 365 days', 'All messages'])
+    fireEvent.change(sel, { target: { value: 'all' } })
+    expect(onWin).toHaveBeenCalledWith(acc[0]!.id, 'all')
+    expect(screen.queryByText(/more mail to download/)).toBeNull()
+    rerender(<MailSettings accounts={[{ ...acc[0]!, reviewWindow: 'all' }]} permissions={perms} onPrivacy={vi.fn()} onPermissions={vi.fn()} onReviewWindow={onWin} onDisconnect={vi.fn()} onDeleteAll={vi.fn()} />)
+    expect(screen.getByText(/more mail to download/)).toBeTruthy()
+  })
 })

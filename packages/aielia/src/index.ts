@@ -279,6 +279,7 @@ export type { EmailChange, MessageState, ActionEntry, PreviewRow, BulkPreview, U
 export * from './email/organise-tools.js'
 export * from './email/rules.js'
 export * from './email/conversation.js'
+export * from './email/review-window.js'
 export * from './email/mail-spend.js'
 export * from './email/mail-data.js'
 export { withMailSpendCap, createCappedMailModel } from './mail-spend-bridge.js'

@@ -1,13 +1,14 @@
 import { useState } from 'react'
-import { type DisconnectResult, type MailPermissions, type MailPrivacy } from '@buildaharness/aielia'
+import { REVIEW_WINDOWS, reviewWindowLabel, type DisconnectResult, type MailPermissions, type MailPrivacy, type ReviewWindow } from '@buildaharness/aielia'
 
-export interface SettingsAccount { id: string; address: string; provider: string; privacy: MailPrivacy }
+export interface SettingsAccount { id: string; address: string; provider: string; privacy: MailPrivacy; /** How far back Aielia syncs and reviews; absent when the host does not offer the choice. */ reviewWindow?: ReviewWindow }
 
 interface Props {
   accounts: SettingsAccount[]
   permissions: MailPermissions
   onPrivacy: (accountId: string, next: MailPrivacy) => void
   onPermissions: (next: MailPermissions) => void
+  onReviewWindow?: (accountId: string, next: ReviewWindow) => void
   onDisconnect: (accountId: string) => Promise<DisconnectResult>
   onDeleteAll: () => Promise<void>
 }
@@ -27,6 +28,14 @@ export function MailSettings(p: Props): React.JSX.Element {
           <legend>{a.address}</legend>
           <label><input type="checkbox" checked={a.privacy.aieliaMayRead} onChange={(e) => p.onPrivacy(a.id, { ...a.privacy, aieliaMayRead: e.target.checked })} /> Aielia may read this account&apos;s mail</label>
           {!a.privacy.aieliaMayRead && <p className="email-settings__note">Switched off: no text of this account is sent to the AI.</p>}
+          {a.reviewWindow !== undefined && p.onReviewWindow && (
+            <label>Mail to keep in step and review
+              <select aria-label={`Review window for ${a.address}`} value={String(a.reviewWindow)} onChange={(e) => p.onReviewWindow?.(a.id, e.target.value === 'all' ? 'all' : (Number(e.target.value) as ReviewWindow))}>
+                {REVIEW_WINDOWS.map((w) => <option key={String(w)} value={String(w)}>{reviewWindowLabel(w)}</option>)}
+              </select>
+            </label>
+          )}
+          {(a.reviewWindow === 365 || a.reviewWindow === 'all') && <p className="email-settings__note">A long window means more mail to download and review. Aielia shows an estimate before each catch-up.</p>}
           <label>Never read these folders (comma separated)
             <input aria-label={`Excluded folders for ${a.address}`} defaultValue={a.privacy.excludedFolders.join(', ')} onBlur={(e) => p.onPrivacy(a.id, { ...a.privacy, excludedFolders: list(e.target.value) })} />
           </label>

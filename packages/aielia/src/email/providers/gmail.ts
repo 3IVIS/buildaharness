@@ -66,13 +66,13 @@ export class GmailEmailProvider implements EmailProvider {
 
   async listMessages(folderId: string, opts: PageOptions = {}): Promise<Page<Message>> {
     await this.requireFolder(folderId)
-    return this.messagePage({ labelIds: folderId }, opts)
+    return this.messagePage({ labelIds: folderId, ...(opts.since ? { q: `after:${epochSeconds(opts.since)}` } : {}) }, opts)
   }
 
   async listThreads(folderId: string, opts: PageOptions = {}): Promise<Page<Thread>> {
     await this.requireFolder(folderId)
     const res = await this.call<{ threads?: Array<{ id: string }>; nextPageToken?: string }>('GET', '/threads', {
-      labelIds: folderId, maxResults: String(limitOf(opts)), pageToken: opts.pageToken,
+      labelIds: folderId, maxResults: String(limitOf(opts)), pageToken: opts.pageToken, q: opts.since ? `after:${epochSeconds(opts.since)}` : undefined,
     })
     const threads = await Promise.all((res.threads ?? []).map(async (t) => {
       const g = await this.call<{ id: string; messages?: GmailMessage[] }>('GET', `/threads/${encodeURIComponent(t.id)}`, { format: 'metadata' })

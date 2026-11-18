@@ -19,6 +19,11 @@ export interface PageOptions {
   /** Opaque cursor from a previous page's `nextPageToken`. */
   pageToken?: string
   limit?: number
+  /**
+   * ISO instant. A hint to list only mail received at or after it (review window, plan C2). A provider may honour it natively or ignore it;
+   * the sync engine filters again, so a provider that ignores it is still correct, only slower.
+   */
+  since?: string
 }
 
 export interface Page<T> {

@@ -53,13 +53,13 @@ export class FakeEmailProvider implements EmailProvider {
 
   async listMessages(folderId: string, opts: PageOptions = {}): Promise<Page<Message>> {
     this.requireFolder(folderId)
-    const all = [...this.messages.values()].filter((m) => m.folderIds.includes(folderId)).sort(byDateDesc)
+    const all = [...this.messages.values()].filter((m) => m.folderIds.includes(folderId) && (!opts.since || m.date >= opts.since)).sort(byDateDesc)
     return page(all, opts)
   }
 
   async listThreads(folderId: string, opts: PageOptions = {}): Promise<Page<Thread>> {
     this.requireFolder(folderId)
-    const all = [...this.threads.values()].filter((t) => t.folderIds.includes(folderId)).sort((a, b) => b.lastMessageAt.localeCompare(a.lastMessageAt) || a.id.localeCompare(b.id))
+    const all = [...this.threads.values()].filter((t) => t.folderIds.includes(folderId) && (!opts.since || t.lastMessageAt >= opts.since)).sort((a, b) => b.lastMessageAt.localeCompare(a.lastMessageAt) || a.id.localeCompare(b.id))
     return page(all, opts)
   }
 

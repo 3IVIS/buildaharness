@@ -111,3 +111,18 @@ describe('mime helpers', () => {
     expect(parseRawMessage(raw2).headers['bcc']).toBeUndefined()
   })
 })
+
+describe('GmailEmailProvider review window hint', () => {
+  it('lists only mail received at or after `since`', async () => {
+    const { provider } = gmail()
+    const inbox = (await provider.listFolders()).find((f) => f.kind === 'inbox')!
+    const all = (await provider.listMessages(inbox.id, { limit: 200 })).items
+    const sorted = all.map((m) => m.date).sort()
+    const since = sorted[Math.floor(sorted.length / 2)]!
+    const cut = (await provider.listMessages(inbox.id, { limit: 200, since })).items
+    expect(cut.length).toBeGreaterThan(0)
+    expect(cut.length).toBeLessThan(all.length)
+    // Gmail's after: operator works in whole seconds, so allow the boundary second.
+    for (const m of cut) expect(Date.parse(m.date)).toBeGreaterThanOrEqual(Date.parse(since) - 1000)
+  })
+})

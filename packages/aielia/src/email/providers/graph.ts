@@ -104,6 +104,7 @@ export class GraphEmailProvider implements EmailProvider {
     await this.requireFolder(folderId)
     const res = await this.callPage<GraphCollection<GraphMessage>>(opts.pageToken, `/me/mailFolders/${enc(folderId)}/messages`, {
       $select: MESSAGE_SELECT, $top: String(limitOf(opts)), $orderby: 'receivedDateTime desc',
+      ...(opts.since ? { $filter: `receivedDateTime ge ${new Date(opts.since).toISOString()}` } : {}),
     })
     return pageOf(await this.toMessages(res.value ?? []), res['@odata.nextLink'])
   }
