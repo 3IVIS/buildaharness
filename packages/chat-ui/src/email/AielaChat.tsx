@@ -30,7 +30,8 @@ export function AielaChat(p: Props): React.JSX.Element {
     const el = box.current
     if (!el) return
     el.style.height = 'auto'
-    el.style.height = `${Math.min(el.scrollHeight, 160)}px`
+    // A hidden panel (the phone's other tabs) measures 0, so the box never goes below one line.
+    el.style.height = `${Math.min(Math.max(el.scrollHeight, 36), 160)}px`
   }, [p.input])
   return (
     <section className="achat" aria-label="Aielia">

@@ -3,6 +3,7 @@ import { RailNav, type RailTab } from '../shared-ui/RailNav'
 import { Splitter } from '../shared-ui/Splitter'
 import { CHAT_DEFAULT, clampChat, layoutNow, readerPlacement, type LayoutMode, type PhonePanel } from './email-layout'
 import { MailIcon, MAIL_ICONS } from './mail-ui'
+import { EmptyState } from './ReaderEmpty'
 import './email.css'
 
 
@@ -120,7 +121,7 @@ export function EmailLayout({ folders, list, reader, aielia, todo, banner, mode:
           <div className="email__reader" hidden={phone && !readerOpen}>{reader}</div>
         </main>
 
-        {showTodo && <section className="email__todo" aria-label="To do">{todo ?? <p>Nothing to do yet.</p>}</section>}
+        {showTodo && <section className="email__todo" aria-label="To do">{todo ?? <EmptyState icon="todo" title="Nothing to do yet" text="Once Aielia has sorted your mail, the messages that need you show up here, with the reason for each." />}</section>}
 
         {mode === 'desktop' && (
           <Splitter

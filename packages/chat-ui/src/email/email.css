@@ -135,7 +135,7 @@
 .write .achat__chips button:hover:not(:disabled) { border-color: var(--accent); }
 .achat__compose { flex: none; display: flex; align-items: flex-end; gap: 8px; margin: 0 12px 12px; padding: 6px 6px 6px 12px; border: 1px solid var(--border); border-radius: 16px; background: var(--bg); }
 .achat__compose:focus-within { border-color: var(--accent); }
-.write .achat__compose textarea { flex: 1; min-width: 0; resize: none; border: 0; background: transparent; padding: 6px 0; max-height: 160px; line-height: 1.45; }
+.write .achat__compose textarea { min-height: 36px; flex: 1; min-width: 0; resize: none; border: 0; background: transparent; padding: 6px 0; max-height: 160px; line-height: 1.45; }
 .write .achat__compose textarea:focus { outline: none; }
 .write .achat__send { flex: none; display: inline-flex; align-items: center; justify-content: center; min-width: 36px; min-height: 36px; padding: 0; border-radius: 12px; background: var(--accent-solid); border-color: var(--accent-solid); color: var(--on-accent); }
 .write .achat__send:disabled { opacity: 0.4; }
@@ -188,6 +188,10 @@
 @media (max-width: 639px) {
   .email-top { padding: 8px 12px; }
   .email-top .write__title { order: 0; flex: none; }
+  .email-top .write__title .brand-link { display: inline-flex; align-items: center; min-height: 44px; }
+  .email-top .app-switcher .app-switcher__button { min-height: 44px; padding: 2px 8px; }
+  .write.email-sample .write__sample-add { min-height: 36px; padding: 4px 14px; }
+  .email__todo { display: flex; flex-direction: column; justify-content: center; }
   .email-top .email-search { order: 1; }
   .email-search { max-width: none; }
   .mail-reader { padding: 14px 14px 20px; }
