@@ -178,7 +178,13 @@
 .phone-sheet__handle { height: 20px; touch-action: none; cursor: grab; }
 .phone-sheet__handle::after { content: ''; display: block; width: 40px; height: 4px; margin: 8px auto; border-radius: 2px; background: var(--border); }
 .phone-fab { position: fixed; right: 16px; bottom: calc(72px + env(safe-area-inset-bottom)); z-index: 14; border-radius: 28px; padding: 12px 18px; }
-.phone-swipe { position: relative; touch-action: pan-y; }
+.phone-swipe { position: relative; overflow: hidden; }
+.phone-swipe__row { position: relative; touch-action: pan-y; background: var(--surface); }
+/* What the swipe will do, shown under the row as it slides: green to archive (from the left), amber for later (from the right). */
+.phone-swipe__hint { position: absolute; inset: 0; display: flex; align-items: center; padding: 0 20px; font-weight: 650; opacity: calc(0.25 + var(--swipe-progress, 0) * 0.75); }
+.phone-swipe__hint::before { content: attr(data-label); }
+.phone-swipe[data-swipe='archive'] .phone-swipe__hint { justify-content: flex-start; background: rgba(46, 158, 91, 0.35); color: var(--green); }
+.phone-swipe[data-swipe='later'] .phone-swipe__hint { justify-content: flex-end; background: var(--amber-a18); color: var(--amber); }
 .phone-swipe__buttons { display: none; }
 @media (hover: hover) { .phone-swipe:hover .phone-swipe__buttons { display: inline-flex; gap: 4px; } }
 .phone-confirm { position: fixed; left: 8px; right: 8px; bottom: calc(60px + env(safe-area-inset-bottom)); z-index: 16; display: flex; justify-content: space-between; align-items: center; padding: 8px 12px; border-radius: 10px; background: var(--text); color: var(--bg); }
@@ -276,3 +282,37 @@
 .write .email-firstrun__providers { display: grid; gap: 10px; margin: 14px 0; }
 .write .email-firstrun__providers button { min-height: 46px; justify-content: center; font-weight: 600; }
 .write .write__link { background: none; border: 0; color: var(--accent); text-decoration: underline; padding: 4px 0; }
+
+/* The tablet bar's back arrow only matters where the open message replaces the list (short screens, below). */
+.write .email__backbtn { display: none; }
+
+/* Short screens (a phone on its side): the page chrome shrinks so the mail keeps the room. */
+@media (max-height: 520px) {
+  .email[data-reader='below'][data-open='true'] .email__list { display: none; }
+  .write .email[data-reader='below'][data-open='true'] .email__backbtn { display: inline-flex; }
+  .write.email-sample .email-top { padding: 4px 12px; }
+  .write.email-sample .email-top .write__title { font-size: 0.95rem; }
+  .write.email-sample .email-search input { padding-top: 4px; padding-bottom: 4px; }
+  .write.email-sample .write__sample { padding: 2px 12px; font-size: 0.78rem; }
+  .write.email-sample .write__sample-text { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .write.email-sample .write__sample-add { min-height: 28px; padding: 2px 12px; }
+  .email-top .write__title .brand-link, .email-top .app-switcher .app-switcher__button { min-height: 36px; }
+  .email__bar, .email__phonebar { padding-top: 2px; padding-bottom: 2px; }
+  .write .email__iconbtn { min-height: 34px; }
+  .mailpane__head { padding: 6px 16px 2px; }
+  .email__bar .email__bartitle { font-size: 0.9rem; }
+  .email--phone .email__tabs { padding-top: 2px; padding-bottom: calc(2px + env(safe-area-inset-bottom)); }
+  .write .email__tabs button { flex-direction: row; justify-content: center; gap: 8px; min-height: 40px; font-size: 0.8rem; }
+  .mail-reader { padding-top: 8px; gap: 6px; }
+  .mail-reader__subject { font-size: 1.05rem; }
+  .mail-reader__head { padding: 4px 0 8px; }
+  .achat__head { padding: 6px 14px; }
+  .achat__lines { padding: 8px 14px; }
+}
+
+/* To do flow on a phone. */
+.phone-todo { display: grid; gap: 10px; padding: 8px 4px; }
+.phone-todo__count { margin: 0; color: var(--muted); font-size: 0.8rem; letter-spacing: 0.04em; text-transform: uppercase; }
+.phone-todo h3 { margin: 0; font-size: 1.25rem; line-height: 1.3; }
+.write .phone-todo__actions button:first-child { background: var(--accent-solid); border-color: var(--accent-solid); color: var(--on-accent); font-weight: 600; }
+.phone-todo__empty { text-align: center; color: var(--muted); padding: 40px 0; }

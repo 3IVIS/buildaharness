@@ -110,6 +110,26 @@ describe('swipe', () => {
     expect(r.undone?.messageId).toBe('m1'); expect(log.done).toHaveLength(0)
     expect(undoSwipe(log).undone).toBeUndefined()
   })
+  it('a mostly vertical or diagonal drag is a scroll, not a swipe', () => {
+    const onAction = vi.fn()
+    render(<SwipeRow onAction={onAction}><span>row</span></SwipeRow>)
+    const row = screen.getByText('row').parentElement!
+    fireEvent.pointerDown(row, { clientX: 200, clientY: 100 }); fireEvent.pointerUp(row, { clientX: 300, clientY: 190 })
+    expect(onAction).not.toHaveBeenCalled()
+    fireEvent.pointerDown(row, { clientX: 200, clientY: 100 }); fireEvent.pointerUp(row, { clientX: 320, clientY: 130 })
+    expect(onAction).toHaveBeenCalledWith('archive')
+  })
+  it('the click that follows a drag does not open the row; a plain click does', () => {
+    const onOpen = vi.fn()
+    render(<SwipeRow onAction={vi.fn()}><button type="button" onClick={onOpen}>open</button></SwipeRow>)
+    const btn = screen.getByText('open'); const row = btn.parentElement!
+    fireEvent.pointerDown(row, { clientX: 200, clientY: 100 }); fireEvent.pointerMove(row, { clientX: 260, clientY: 100 }); fireEvent.pointerUp(row, { clientX: 260, clientY: 100 })
+    fireEvent.click(btn)
+    expect(onOpen).not.toHaveBeenCalled()
+    fireEvent.pointerDown(row, { clientX: 200, clientY: 100 }); fireEvent.pointerUp(row, { clientX: 201, clientY: 100 })
+    fireEvent.click(btn)
+    expect(onOpen).toHaveBeenCalledTimes(1)
+  })
   it('the confirm bar offers undo', () => {
     const onUndo = vi.fn(); render(<ConfirmBar text="Archived" onUndo={onUndo} />)
     fireEvent.click(screen.getByText('Undo')); expect(onUndo).toHaveBeenCalled()

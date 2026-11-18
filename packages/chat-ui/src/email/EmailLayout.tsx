@@ -76,6 +76,7 @@ export function EmailLayout({ folders, list, reader, aielia, todo, banner, mode:
       {banner}
       {tablet && (
         <div className="email__bar">
+          {readerOpen && placement === 'below' && <button type="button" className="email__iconbtn email__backbtn" aria-label="Back to the list" title="Back" onClick={onBack}><MailIcon name="back" /></button>}
           <button type="button" className="email__iconbtn" aria-label="Folders" title="Folders" aria-expanded={drawer} onClick={() => setDrawer((v) => !v)}><MailIcon name="menu" /></button>
           <span className="email__bartitle">{title}</span>
           <button type="button" className="email__iconbtn" aria-label="Aielia" title="Aielia" aria-expanded={chatOpen} onClick={() => setChatOpen((v) => !v)}><MailIcon name="chat" /></button>
