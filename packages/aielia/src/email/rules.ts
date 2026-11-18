@@ -2,8 +2,9 @@ import { z } from 'zod'
 import { parseModelJson } from '../model-json.js'
 import { buildMailModelInput } from './model-input.js'
 import { MAIL_UNTRUSTED_PROMPT } from './untrusted.js'
-import { previewChange, type ActionContext, type EmailChange } from './action-log.js'
+import { previewChange, undoAction, type ActionContext, type EmailChange } from './action-log.js'
 import type { Account, FilingAction, FilingMatch, FilingRule, Folder, Message } from './model.js'
+import type { GateReason, RuleGate } from './rule-gate.js'
 import { runMailOrganiseTool, type MailOrganiseToolName, type OrganiseDeps, type PendingChange } from './organise-tools.js'
 
 /**
@@ -33,11 +34,14 @@ export const RULE_PAUSE_AFTER_CORRECTIONS = 2
 
 export interface FilingRecord { messageId: string; ruleId: string; actionId: string; folderIds: string[] }
 export interface RuleCorrection { ruleId: string; messageId: string; at: string }
+/** A message a rule filed that turned out to need action (the user said so, or a later check found it). One pauses the rule. */
+export interface RuleLeak { ruleId: string; messageId: string; reason: GateReason | 'user_marked'; at: string }
 
 export class RuleStore {
   private rules = new Map<string, FilingRule>()
   private filings = new Map<string, FilingRecord>()
   private corrections: RuleCorrection[] = []
+  private leaks: RuleLeak[] = []
   private rejected = new Set<string>()
   private seq = 0
   nextId(): string { return `rule-${++this.seq}` }
@@ -51,7 +55,10 @@ export class RuleStore {
   recordFiling(f: FilingRecord): void { this.filings.set(f.messageId, structuredClone(f)) }
   filingFor(messageId: string): FilingRecord | undefined { const f = this.filings.get(messageId); return f ? structuredClone(f) : undefined }
   clearFiling(messageId: string): void { this.filings.delete(messageId) }
+  filingsOf(ruleId: string): FilingRecord[] { return structuredClone([...this.filings.values()].filter((f) => f.ruleId === ruleId)) }
   addCorrection(c: RuleCorrection): void { this.corrections.push(structuredClone(c)) }
+  addLeak(l: RuleLeak): void { this.leaks.push(structuredClone(l)) }
+  leaksFor(ruleId: string): RuleLeak[] { return structuredClone(this.leaks.filter((l) => l.ruleId === ruleId)) }
   correctionsFor(ruleId: string): RuleCorrection[] { return structuredClone(this.corrections.filter((c) => c.ruleId === ruleId)) }
 }
 
@@ -82,6 +89,11 @@ export interface LearnOptions {
   minPurity?: number
   /** Evidence ids kept per rule (default 5). */
   maxEvidence?: number
+  /**
+   * Eligibility of an example message (see `rule-gate.ts`). A rule is proposed only when EVERY message that shares its pattern in the folder is
+   * eligible: a sender that sometimes sends mail needing action gets no rule. Absent means no example is checked (callers should pass it).
+   */
+  eligible?: (m: Message) => boolean
 }
 
 /**
@@ -111,6 +123,7 @@ export function learnExactRules(account: Pick<Account, 'id'>, folders: readonly 
       }
       for (const [v, msgs] of [...groups].sort((a, b) => b[1].length - a[1].length || a[0].localeCompare(b[0]))) {
         if (msgs.length < minExamples) continue
+        if (opts.eligible && (all0(filed, k.key, v)).some((m) => !opts.eligible!(m))) continue
         if (msgs.every((m) => covered.has(m.id))) continue
         const all = filed.filter((m) => k.key(m) === v)
         if (msgs.length / all.length < minPurity) continue
@@ -128,6 +141,9 @@ export function learnExactRules(account: Pick<Account, 'id'>, folders: readonly 
   }
   return out
 }
+
+/** Every filed message that shares one pattern value, in any folder. */
+const all0 = (filed: readonly Message[], key: (m: Message) => string | undefined, v: string): Message[] => filed.filter((m) => key(m) === v)
 
 const ProposedSchema = z.object({ folderId: z.string().min(1), description: z.string().min(1) })
 
@@ -258,6 +274,8 @@ async function changeFor(ctx: ActionContext, account: Pick<Account, 'id'>, a: Fi
 
 export interface RuleMatchDeps {
   account: Pick<Account, 'id' | 'aieliaMayRead' | 'excludedFolders' | 'excludedSenders'>
+  /** Required: a rule only ever touches mail that passes it (see `rule-gate.ts`). A message it refuses is left where it is. */
+  gate: RuleGate
   folders: readonly Folder[]
   store: RuleStore
   model?: RuleModel
@@ -265,6 +283,8 @@ export interface RuleMatchDeps {
 }
 
 export interface RuleMatches {
+  /** Matches the gate refused: the rule matched, but the mail may need action, so it was left alone. */
+  blocked: Array<{ ruleId: string; messageId: string; reason: GateReason }>
   /** Rule id to the messages it matches. A message is matched by at most one rule (the oldest active one). */
   byRule: Map<string, Message[]>
   modelCalls: number
@@ -314,11 +334,25 @@ export async function matchActiveRules(messages: readonly Message[], d: RuleMatc
       } catch { /* a failed judgement files nothing */ }
     }
   }
-  return { byRule, modelCalls }
+  // The gate has the last word, after the match: whatever matched, mail that may need action stays where it is.
+  const blocked: RuleMatches['blocked'] = []
+  for (const [rid, msgs] of [...byRule]) {
+    const kept: Message[] = []
+    for (const m of msgs) {
+      const v = await d.gate.check(m)
+      if (v.eligible) kept.push(m)
+      else blocked.push({ ruleId: rid, messageId: m.id, reason: v.reason })
+    }
+    if (kept.length > 0) byRule.set(rid, kept)
+    else byRule.delete(rid)
+  }
+  return { byRule, modelCalls, blocked }
 }
 
 export interface ApplyNewMailResult {
   applied: Array<{ ruleId: string; actionId: string; messageIds: string[] }>
+  /** Matched but refused by the gate, so left in place. */
+  blocked: RuleMatches['blocked']
   /** Matches that need the user (the rule's batch was bigger than one message), as previews. */
   pending: PendingChange[]
   modelCalls: number
@@ -330,8 +364,8 @@ export interface ApplyNewMailResult {
  * filed by the rule, for the correction path); several become a preview. Nothing for a proposed or paused rule.
  */
 export async function applyRulesToNewMail(messages: readonly Message[], d: RuleMatchDeps & { organise: OrganiseDeps }): Promise<ApplyNewMailResult> {
-  const { byRule, modelCalls } = await matchActiveRules(messages, d)
-  const result: ApplyNewMailResult = { applied: [], pending: [], modelCalls }
+  const { byRule, modelCalls, blocked } = await matchActiveRules(messages, d)
+  const result: ApplyNewMailResult = { applied: [], pending: [], blocked, modelCalls }
   for (const [ruleId, msgs] of byRule) {
     const rule = d.store.get(ruleId)!
     const ids = msgs.map((m) => m.id)
@@ -387,4 +421,43 @@ export async function recordUserMove(store: RuleStore, ctx: Pick<ActionContext, 
   let paused = false
   if (rule && rule.state === 'active' && corrections >= RULE_PAUSE_AFTER_CORRECTIONS) { pauseRule(store, rule.id); paused = true }
   return { ruleId: filing.ruleId, corrections, paused }
+}
+
+export interface RescanFinding { ruleId: string; messageId: string; reason: GateReason; undone: boolean; paused: boolean }
+
+/**
+ * After filing: check every message a rule filed against the gate again. Mail that no longer passes (a reply arrived, the user wrote back,
+ * the review changed its mind) is a leak: the filing is undone when it still can be (the message goes back where it was), the leak is
+ * recorded, and the rule is paused at the first one. Returns what it found so the surface can tell the user in the inbox.
+ */
+export async function rescanFiled(store: RuleStore, gate: RuleGate, ctx: ActionContext, now: () => string = () => new Date().toISOString()): Promise<RescanFinding[]> {
+  const out: RescanFinding[] = []
+  for (const rule of store.list()) {
+    for (const filing of store.filingsOf(rule.id)) {
+      const m = await ctx.cache.getMessage(filing.messageId)
+      if (!m) continue
+      const v = await gate.check(m)
+      if (v.eligible) continue
+      let undone = false
+      try { const r = await undoAction(ctx, filing.actionId); undone = r.conflicts.length === 0 } catch { undone = false }
+      store.clearFiling(filing.messageId)
+      store.addLeak({ ruleId: rule.id, messageId: filing.messageId, reason: v.reason, at: now() })
+      let paused = false
+      if (rule.state === 'active') { pauseRule(store, rule.id); paused = true }
+      out.push({ ruleId: rule.id, messageId: filing.messageId, reason: v.reason, undone, paused })
+    }
+  }
+  return out
+}
+
+/** The user says a message a rule filed needs action: that is a leak, and one is enough to pause the rule. */
+export function markFiledNeedsAction(store: RuleStore, messageId: string, now: () => string = () => new Date().toISOString()): RescanFinding | undefined {
+  const filing = store.filingFor(messageId)
+  if (!filing) return undefined
+  store.clearFiling(messageId)
+  store.addLeak({ ruleId: filing.ruleId, messageId, reason: 'user_marked', at: now() })
+  const rule = store.get(filing.ruleId)
+  let paused = false
+  if (rule && rule.state === 'active') { pauseRule(store, rule.id); paused = true }
+  return { ruleId: filing.ruleId, messageId, reason: 'needs_reply', undone: false, paused }
 }

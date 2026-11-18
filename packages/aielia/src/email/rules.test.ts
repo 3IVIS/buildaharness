@@ -10,6 +10,10 @@ import {
   type RuleModel,
 } from './rules.js'
 import type { Folder, Message } from './model.js'
+import type { RuleGate } from './rule-gate.js'
+
+/** These tests are about matching and filing, not eligibility (see rule-gate.test.ts), so the gate lets everything through. */
+const gate: RuleGate = { check: async () => ({ eligible: true }) }
 
 const NOW = '2026-11-13T00:00:00.000Z'
 async function setup(): Promise<{ d: OrganiseDeps; p: FakeEmailProvider; c: InMemoryEmailCache; folders: Folder[]; inbox: Message[]; projects: Folder }> {
@@ -114,7 +118,7 @@ describe('no rule acts before approval', () => {
     const store = new RuleStore()
     const from = inbox[0]!.from.address
     const rule = proposeUserStatedRule(store, p.account.id, { kind: 'sender', address: from }, { type: 'move', target: projects.id })!
-    const deps = { account: p.account, folders, store, organise: d }
+    const deps = { account: p.account, gate, folders, store, organise: d }
     const before = (await c.getMessage(inbox[0]!.id))!.folderIds
     const r1 = await applyRulesToNewMail(inbox, deps)
     expect(r1.applied).toEqual([])
@@ -144,7 +148,7 @@ describe('exact rules make no model call', () => {
     const rule = proposeUserStatedRule(store, p.account.id, { kind: 'sender', address: target.from.address.toUpperCase() }, { type: 'move', target: projects.id })!
     approveRule(store, rule.id)
     expect(exactMatch(rule.match, target)).toBe(true)
-    const res = await applyRulesToNewMail(only.slice(0, 1), { account: p.account, folders, store, model, organise: d })
+    const res = await applyRulesToNewMail(only.slice(0, 1), { account: p.account, gate, folders, store, model, organise: d })
     expect(calls).toHaveLength(0)
     expect(res.modelCalls).toBe(0)
     expect(res.applied).toHaveLength(1)
@@ -171,7 +175,7 @@ describe('described matches use the model', () => {
     const { model, calls } = countingModel(() => JSON.stringify({ matches: [
       { messageId: a!.id, ruleId: rule.id }, { messageId: 'invented', ruleId: rule.id }, { messageId: b!.id, ruleId: 'invented' },
     ] }))
-    const res = await applyRulesToNewMail([a!, b!], { account: p.account, folders, store, model, organise: d })
+    const res = await applyRulesToNewMail([a!, b!], { account: p.account, gate, folders, store, model, organise: d })
     expect(calls).toHaveLength(1)
     expect(calls[0]!.system).toBe(RULE_JUDGE_SYSTEM_PROMPT)
     expect(res.applied.flatMap((x) => x.messageIds)).toEqual([a!.id])
@@ -181,8 +185,8 @@ describe('described matches use the model', () => {
     const { d, p, folders, inbox, projects } = await setup()
     const store = new RuleStore()
     approveRule(store, proposeUserStatedRule(store, p.account.id, { kind: 'description', text: 'anything' }, { type: 'move', target: projects.id })!.id)
-    const none = await applyRulesToNewMail(inbox.slice(0, 2), { account: p.account, folders, store, organise: d })
-    const boom = await applyRulesToNewMail(inbox.slice(0, 2), { account: p.account, folders, store, model: async () => { throw new Error('x') }, organise: d })
+    const none = await applyRulesToNewMail(inbox.slice(0, 2), { account: p.account, gate, folders, store, organise: d })
+    const boom = await applyRulesToNewMail(inbox.slice(0, 2), { account: p.account, gate, folders, store, model: async () => { throw new Error('x') }, organise: d })
     expect(none.applied).toEqual([])
     expect(boom.applied).toEqual([])
     expect(d.action.log.list()).toHaveLength(0)
@@ -195,9 +199,9 @@ describe('a rule on existing mail goes through the preview', () => {
     const store = new RuleStore()
     const domain = inbox[0]!.from.address.split('@')[1]!
     const rule = proposeUserStatedRule(store, p.account.id, { kind: 'domain', domain }, { type: 'move', target: projects.id })!
-    expect(await previewRuleOnExisting(rule.id, inbox, { account: p.account, folders, store, organise: d })).toBeUndefined() // not approved
+    expect(await previewRuleOnExisting(rule.id, inbox, { account: p.account, gate, folders, store, organise: d })).toBeUndefined() // not approved
     approveRule(store, rule.id)
-    const pending = await previewRuleOnExisting(rule.id, inbox, { account: p.account, folders, store, organise: d })
+    const pending = await previewRuleOnExisting(rule.id, inbox, { account: p.account, gate, folders, store, organise: d })
     expect(pending?.reason).toBe('bulk')
     expect(pending!.messageIds.length).toBeGreaterThan(0)
     expect(d.action.log.list()).toHaveLength(0)
@@ -235,7 +239,7 @@ describe('the correction path', () => {
     const two = await recordUserMove(store, { cache: c }, b!.id, () => NOW)
     expect(two).toEqual({ ruleId: rule.id, corrections: 2, paused: true })
     expect(store.get(rule.id)!.state).toBe('paused')
-    expect((await matchActiveRules(inbox, { account: p.account, folders, store })).byRule.size).toBe(0)
+    expect((await matchActiveRules(inbox, { account: p.account, gate, folders, store })).byRule.size).toBe(0)
     void d
   })
 })
