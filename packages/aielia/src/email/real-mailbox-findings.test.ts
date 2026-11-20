@@ -85,3 +85,16 @@ describe('folder kinds in another language', () => {
     void FIXTURE_LOCAL_ACCOUNT
   })
 })
+
+describe('the owner address is inferred, not assumed', () => {
+  it('uses the Sent folder when a kind says which it is, else the inbox recipients', async () => {
+    const { inferOwnAddress } = await import('./local-source.js')
+    const src = new FixtureLocalSource(generateSyntheticMailbox({ seed: 1 }))
+    const boxes = await src.mailboxes()
+    const kindOf = (p: readonly string[]) => classifyLocalFolder(p)
+    const a = await inferOwnAddress(src, boxes[0]!.accountId, kindOf)
+    expect(a).toMatch(/@/)
+    // With no sent or inbox folder recognised, nothing is guessed.
+    expect(await inferOwnAddress(src, boxes[0]!.accountId, () => 'custom')).toBeUndefined()
+  })
+})

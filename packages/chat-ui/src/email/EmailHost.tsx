@@ -2,6 +2,8 @@ import { useCallback, useEffect, useState } from 'react'
 import { AppleMailActions, tauriLocalMailSource, tauriScriptRunner, type AssistantConfig, type LocalMailActions, type LocalMailSource } from '@buildaharness/aielia'
 import { appSwitchHandler, type AppId } from '../app-switch'
 import { desktopEmailPlatform, type Invoke } from './desktop-platform'
+import type { ILLMClient } from '@buildaharness/runtime'
+import type { WorkbenchEvent } from '@buildaharness/aielia'
 import { createSampleMailbox, type SampleMailbox } from './sample-mode'
 import { createLocalMailbox } from './local-mode'
 import { LocalMailSetup } from './LocalMailSetup'
@@ -38,12 +40,14 @@ export default function EmailHost({ config, onClose, onSwitch, localKit }: { con
   const [setup, setSetup] = useState(false)
   const [notice, setNotice] = useState<string | undefined>()
   const [busy, setBusy] = useState(false)
+  const [llm, setLlm] = useState<ILLMClient | undefined>()
+  const [activity, setActivity] = useState<WorkbenchEvent[]>([])
 
   useEffect(() => {
     let live = true
     // The platform is built first so a missing Tauri plugin is reported here, not later in the middle of mail work.
     desktopEmailPlatform(config)
-      .then(() => createSampleMailbox())
+      .then((p) => { if (live) setLlm(p.llm); return createSampleMailbox() })
       .then((s) => { if (live) setMailbox(s) }, (e) => { if (live) setError(e instanceof Error ? e.message : String(e)) })
     return () => { live = false }
   }, [config])
@@ -57,7 +61,8 @@ export default function EmailHost({ config, onClose, onSwitch, localKit }: { con
     if (!kit) return
     setBusy(true)
     try {
-      setMailbox(await createLocalMailbox({ source: kit.source, accountIds: ids, ...(kit.actions ? { actions: kit.actions } : {}) }))
+      setActivity([])
+      setMailbox(await createLocalMailbox({ source: kit.source, accountIds: ids, ...(kit.actions ? { actions: kit.actions } : {}), ...(llm ? { llm } : {}), onEvent: (e) => setActivity((a) => [...a.slice(-300), e]) }))
       setSetup(false)
     } catch (e) {
       setNotice(`Aielia could not read that mail: ${e instanceof Error ? e.message : String(e)}`)
@@ -85,7 +90,7 @@ export default function EmailHost({ config, onClose, onSwitch, localKit }: { con
   return (
     <div className="write-host">
       {notice && <p role="status" className="write-host__notice">{notice}</p>}
-      <SampleMailboxView sample={mailbox} onConnect={() => void openSetup()} appSwitch={appSwitch} />
+      <SampleMailboxView sample={mailbox} onConnect={() => void openSetup()} appSwitch={appSwitch} activity={activity} />
     </div>
   )
 }

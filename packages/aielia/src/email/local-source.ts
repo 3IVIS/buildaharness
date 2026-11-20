@@ -136,3 +136,29 @@ function parseJsonLoose(text: string): unknown {
   const start = text.indexOf('{'), end = text.lastIndexOf('}')
   return JSON.parse(start >= 0 && end > start ? text.slice(start, end + 1) : text)
 }
+
+/**
+ * The owner's own address, which the mail program's index does not state. The commonest sender in the Sent folder; failing that, the commonest
+ * recipient across recent inbox mail (mail is mostly addressed to its owner). Undefined when neither says anything. Reads headers only.
+ */
+export async function inferOwnAddress(
+  source: Pick<LocalMailSource, 'mailboxes' | 'messages' | 'recipients'>, localAccountId: string, kindOf: (path: readonly string[]) => ReturnType<typeof classifyLocalFolder>,
+): Promise<string | undefined> {
+  const boxes = (await source.mailboxes()).filter((b) => b.accountId === localAccountId)
+  const idsOf = (k: ReturnType<typeof classifyLocalFolder>): number[] => boxes.filter((b) => kindOf(b.path) === k).map((b) => b.rowid)
+  const top = (counts: Map<string, number>): string | undefined => [...counts].sort((a, b) => b[1] - a[1])[0]?.[0]
+  const sentIds = idsOf('sent')
+  if (sentIds.length) {
+    const counts = new Map<string, number>()
+    for (const m of (await source.messages({ mailboxIds: sentIds, limit: 300 })).items) if (m.sender) counts.set(m.sender.toLowerCase(), (counts.get(m.sender.toLowerCase()) ?? 0) + 1)
+    const a = top(counts); if (a) return a
+  }
+  const inboxIds = idsOf('inbox')
+  if (inboxIds.length) {
+    const msgs = (await source.messages({ mailboxIds: inboxIds, limit: 150 })).items
+    const counts = new Map<string, number>()
+    for (const r of await source.recipients(msgs.map((m) => m.rowid))) counts.set(r.address.toLowerCase(), (counts.get(r.address.toLowerCase()) ?? 0) + 1)
+    return top(counts)
+  }
+  return undefined
+}

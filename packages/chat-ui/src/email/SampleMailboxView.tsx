@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
-import { InMemoryEmailCache, searchMail, type Message } from '@buildaharness/aielia'
+import { InMemoryEmailCache, searchMail, type CatchUpView, type Message, type ScoredTodo, type SpamView, type WorkbenchEvent } from '@buildaharness/aielia'
 import type { SampleMailbox } from './sample-mode'
 import { EmailLayout } from './EmailLayout'
 import { MessageList } from './MessageList'
@@ -8,6 +8,7 @@ import { ReaderEmpty } from './ReaderEmpty'
 import { AielaChat, type AielaChatLine } from './AielaChat'
 import { TodoView } from './TodoView'
 import { ProbablySpam } from './ProbablySpam'
+import { WorkbenchPanel, type RulesView } from './WorkbenchPanel'
 import { FolderList, MailIcon } from './mail-ui'
 import { AppSwitcher } from '../components/AppSwitcher'
 import type { AppId } from '../app-switch'
@@ -38,7 +39,7 @@ const matches = (m: Message, q: string): boolean => {
  * The sample mailbox: the Inbox of the invented mailbox, and a chat box whose every answer says this is a sample. It uses the same page shell as Write
  * (a title bar with the app switcher, the sample notice) around the three-column mail layout. No model is ever called.
  */
-export function SampleMailboxView({ sample, onConnect, appSwitch }: { sample: SampleMailbox; onConnect: () => void; /** The way to the other screens (the desktop app, or the hosted pages that name them). */ appSwitch?: (target: AppId) => void }): React.JSX.Element {
+export function SampleMailboxView({ sample, onConnect, appSwitch, activity = [] }: { sample: SampleMailbox; onConnect: () => void; /** The way to the other screens (the desktop app, or the hosted pages that name them). */ appSwitch?: (target: AppId) => void; /** What the capabilities are doing, newest last (live mailboxes with a model). */ activity?: readonly WorkbenchEvent[] }): React.JSX.Element {
   const [text, setText] = useState('')
   const [busy, setBusy] = useState(false)
   const [lines, setLines] = useState<AielaChatLine[]>([])
@@ -49,7 +50,22 @@ export function SampleMailboxView({ sample, onConnect, appSwitch }: { sample: Sa
   const [serverBusy, setServerBusy] = useState(false)
   const [spamHidden, setSpamHidden] = useState<ReadonlySet<string>>(new Set()) // sample only: nothing is stored
   const [spamKept, setSpamKept] = useState<ReadonlySet<string>>(new Set())
-  const spamItems = sample.spam.filter((s) => !spamHidden.has(s.threadId) && !spamKept.has(s.threadId))
+  // Live mailbox with a model: the capabilities, run on request, read-only.
+  const wb = sample.workbench
+  const [running, setRunning] = useState<string | undefined>()
+  const [wbError, setWbError] = useState<string | undefined>()
+  const [catchUp, setCatchUp] = useState<CatchUpView | undefined>()
+  const [rules, setRules] = useState<RulesView | undefined>()
+  const [liveTodo, setLiveTodo] = useState<ScoredTodo[] | undefined>()
+  const [liveSpam, setLiveSpam] = useState<SpamView | undefined>()
+  const runWb = async (what: string, fn: () => Promise<void>): Promise<void> => {
+    if (running) return
+    setRunning(what); setWbError(undefined)
+    try { await fn() } catch (e) { setWbError(`${what} failed: ${e instanceof Error ? e.message : String(e)}`) } finally { setRunning(undefined) }
+  }
+  const refreshTodo = async (): Promise<void> => { if (wb) setLiveTodo(await wb.todo()) }
+  const todoItems = liveTodo ?? sample.todo
+  const spamItems = liveSpam ? liveSpam.rows.map((r) => ({ threadId: r.threadId, subject: r.subject, sender: r.sender, reason: r.reason })) : sample.spam.filter((s) => !spamHidden.has(s.threadId) && !spamKept.has(s.threadId))
   const inbox = sample.folders.find((f) => f.kind === 'inbox')
   const [folderId, setFolderId] = useState<string | undefined>(inbox?.id)
   const folder = sample.folders.find((f) => f.id === folderId) ?? inbox
@@ -109,8 +125,8 @@ export function SampleMailboxView({ sample, onConnect, appSwitch }: { sample: Sa
       </header>
       <EmailLayout
         readerOpen={!!open}
-        todoCount={sample.todo.filter((t) => t.status === 'open').length}
-        todo={<TodoView items={sample.todo.filter((t) => t.status === 'open')} onOpenThread={(tid) => setOpenId(sample.inbox.find((m) => m.threadId === tid)?.id)} />}
+        todoCount={todoItems.filter((t) => t.status === 'open').length}
+        todo={<TodoView items={todoItems.filter((t) => t.status === 'open')} onOpenThread={(tid) => setOpenId(sample.inbox.find((m) => m.threadId === tid)?.id)} />}
         title={folderTitle}
         onBack={() => setOpenId(undefined)}
         banner={
@@ -137,9 +153,19 @@ export function SampleMailboxView({ sample, onConnect, appSwitch }: { sample: Sa
                 <MailIcon name="chat" size={16} />
               </button>
             </div>
+            {wb && (
+              <WorkbenchPanel
+                running={running} events={activity} {...(catchUp ? { catchUp } : {})} {...(rules ? { rules } : {})} {...(wbError ? { error: wbError } : {})}
+                onCatchUp={(days) => void runWb('catch-up', async () => { setCatchUp(await wb.catchUp(days)); await refreshTodo() })}
+                onSpam={() => void runWb('spam check', async () => { setLiveSpam(await wb.spam()); await refreshTodo() })}
+                onRules={() => void runWb('rule proposals', async () => { setRules(await wb.ruleProposals()); await refreshTodo() })}
+                onTodo={() => void runWb('to do', refreshTodo)}
+                onOpenThread={(tid) => { setOpenId(inFolder.find((m) => m.threadId === tid)?.id); setFolderId(inbox?.id) }}
+              />
+            )}
             {query.trim() && (sample.live?.serverSearch ?? true) && serverHits?.query !== query.trim() && <button type="button" className="mailpane__server" disabled={serverBusy} onClick={() => void searchServer()}>{serverBusy ? 'Searching the server…' : 'Search the whole mailbox on the server too'}</button>}
             {serverHits?.error && serverHits.query === query.trim() && <p role="status" className="mailpane__none">The server could not be searched: {serverHits.error}</p>}
-            {folder?.kind === 'inbox' && <ProbablySpam items={spamItems} onMoveAll={() => setSpamHidden(new Set([...spamHidden, ...spamItems.map((s) => s.threadId)]))} onNotSpam={(id) => setSpamKept(new Set([...spamKept, id]))} />}
+            {folder?.kind === 'inbox' && <ProbablySpam items={spamItems} {...(wb ? { readOnlyNote: 'Read-only: nothing is moved' } : {})} onMoveAll={() => setSpamHidden(new Set([...spamHidden, ...spamItems.map((s) => s.threadId)]))} onNotSpam={(id) => setSpamKept(new Set([...spamKept, id]))} />}
             <div className="mailpane__body" ref={listBox}>
               {shown.length > 0
                 ? <MessageList messages={shown} threaded={threaded} height={listHeight} activeId={openId} onOpen={setOpenId} />

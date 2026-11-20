@@ -1,0 +1,11 @@
+.wb { border: 1px solid var(--line, #ddd); border-radius: 8px; padding: 6px 10px; margin: 6px 8px; font-size: 13px; max-height: 45vh; overflow: auto; }
+.wb > summary { cursor: pointer; font-weight: 600; }
+.wb__bar { display: flex; flex-wrap: wrap; gap: 6px; margin: 8px 0; }
+.wb__card { border: 1px solid var(--line, #ddd); border-radius: 6px; padding: 6px 8px; margin: 6px 0; }
+.wb__card ul { margin: 4px 0 0; padding-left: 18px; }
+.wb__muted { opacity: 0.65; }
+.wb__bad { color: #c62828; }
+.wb__link { background: none; border: 0; padding: 0; color: inherit; text-decoration: underline; cursor: pointer; font: inherit; }
+.wb__log { font: 12px/1.35 ui-monospace, monospace; max-height: 240px; overflow: auto; }
+.wb__event { padding: 2px 0; border-bottom: 1px dotted var(--line, #ddd); }
+.wb__event pre { white-space: pre-wrap; word-break: break-word; max-height: 200px; overflow: auto; margin: 2px 0; }

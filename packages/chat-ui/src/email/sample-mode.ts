@@ -1,5 +1,5 @@
 import type { ILLMClient } from '@buildaharness/runtime'
-import { FakeEmailProvider, OfflineEmailSession, type EmailProvider, generateSyntheticMailbox, type Folder, type Message, type ScoredTodo } from '@buildaharness/aielia'
+import { EmailWorkbench, FakeEmailProvider, OfflineEmailSession, type EmailProvider, generateSyntheticMailbox, type Folder, type Message, type ScoredTodo } from '@buildaharness/aielia'
 
 /** The backend name of the sample: what a failed step reads to say "this is a sample" rather than "check your key". */
 export const SAMPLE_BACKEND = 'sample'
@@ -31,6 +31,8 @@ export interface SampleMailbox {
   todo: ScoredTodo[]
   /** Mail the sample judges probably spam, with the reason (from the generator's labels; no model is called). */
   spam: Array<{ threadId: string; subject: string; sender: string; reason: string }>
+  /** Live mailboxes with a model: the capabilities (catch-up, spam, rules, to-do, ask) over this mailbox, read-only. */
+  workbench?: EmailWorkbench
   /** A chat message is answered at once with the sample message; nothing is recorded. */
   ask: (text: string) => Promise<{ reply: string; model: string }>
 }
