@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useState } from 'react'
 import type { LocalDiscovery, LocalMailSource } from '@buildaharness/aielia'
 import { monitorLog } from './monitor'
+import './local-setup.css'
 
 interface Props {
   source: LocalMailSource
@@ -8,6 +9,12 @@ interface Props {
   listAccountNames?: () => Promise<Array<{ id: string; name: string }>>
   /** Opens the right pane of System Settings (the desktop app does this; a test passes a spy). */
   openFullDiskAccessSettings?: () => void
+  /** The app's name as macOS lists it in System Settings (default "Aielia"). */
+  appName?: string
+  /** Shows this app in Finder, to drag into the Full Disk Access list. */
+  revealApp?: () => void
+  /** Quits and starts the app again: macOS applies the permission only to a process that starts after it is granted. */
+  restartApp?: () => void
   onUse: (accountIds: string[]) => void
   /** The sign-in route that always exists. */
   onSignIn: () => void
@@ -17,7 +24,7 @@ interface Props {
 type Phase = { kind: 'checking' } | { kind: 'ready'; d: LocalDiscovery } | { kind: 'blocked'; reason: string; d?: LocalDiscovery }
 
 const SENTENCE: Record<string, { title: string; body: string }> = {
-  permission_denied: { title: 'Aielia needs permission to read Apple Mail\'s folder', body: 'macOS keeps Mail\'s files private. To let Aielia read them, switch on Full Disk Access for Aielia in System Settings, then come back here and check again. This permission is broad, so it is optional: you can sign in to an account instead.' },
+  permission_denied: { title: 'Aielia needs permission to read Apple Mail\'s folder', body: 'macOS keeps Mail\'s files private. To let this app read them, switch on Full Disk Access for it. This permission is broad, so it is optional: you can sign in to an account instead.' },
   not_found: { title: 'No Apple Mail mail was found on this computer', body: 'Either Mail has not been set up here yet, or it keeps its mail somewhere Aielia does not look. You can sign in to an account instead.' },
   unsupported_layout: { title: 'This version of Apple Mail stores mail in a way Aielia does not know yet', body: 'Aielia checked and stopped rather than guess, so nothing was read. You can sign in to an account instead.' },
   unsupported_platform: { title: 'Reading Apple Mail works on a Mac', body: 'On this computer you can sign in to an account instead.' },
@@ -29,7 +36,7 @@ const FALLBACK = { title: 'Aielia could not read Apple Mail', body: 'Nothing was
  * text), what it will and will not do (read only, nothing leaves this computer to read it), and why a permission is needed when it is. A refused
  * permission, a missing store or an unknown layout each end at the sign-in route, so the screen is never a dead end.
  */
-export function LocalMailSetup({ source, listAccountNames, openFullDiskAccessSettings, onUse, onSignIn, onCancel }: Props): React.JSX.Element {
+export function LocalMailSetup({ source, listAccountNames, openFullDiskAccessSettings, appName = 'Aielia', revealApp, restartApp, onUse, onSignIn, onCancel }: Props): React.JSX.Element {
   const [phase, setPhase] = useState<Phase>({ kind: 'checking' })
   const [picked, setPicked] = useState<Set<string>>(new Set())
   const [names, setNames] = useState<Map<string, string>>(new Map())
@@ -90,18 +97,22 @@ export function LocalMailSetup({ source, listAccountNames, openFullDiskAccessSet
             <h3>{s.title}</h3>
             <p>{s.body}</p>
             {phase.reason === 'permission_denied' && (
-              <ol>
+              <ol className="local-setup__steps">
                 <li>Open System Settings, Privacy &amp; Security, Full Disk Access.</li>
-                <li>Switch on Aielia (add it with the + button if it is not listed).</li>
-                <li>Come back here and press Check again.</li>
+                <li>Switch on <strong>{appName}</strong>. If it is not in the list, press the + button, or use Show in Finder and drag it into the list.</li>
+                <li>macOS applies the permission only when an app starts, so restart {appName}, open Email and press Connect again.</li>
               </ol>
             )}
-            <p>
-              {phase.reason === 'permission_denied' && openFullDiskAccessSettings && <><button type="button" onClick={openFullDiskAccessSettings}>Open System Settings</button>{' '}</>}
-              {(phase.reason === 'permission_denied' || phase.reason === 'not_found') && <><button type="button" onClick={() => void check()}>Check again</button>{' '}</>}
-              <button type="button" className="reply__primary" onClick={onSignIn}>Sign in to an account instead</button>
-              {' '}<button type="button" onClick={onCancel}>Back</button>
-            </p>
+            <div className="local-setup__actions">
+              {phase.reason === 'permission_denied' && openFullDiskAccessSettings && <button type="button" className="reply__primary" onClick={openFullDiskAccessSettings}>Open System Settings</button>}
+              {phase.reason === 'permission_denied' && revealApp && <button type="button" onClick={revealApp}>Show {appName} in Finder</button>}
+              {phase.reason === 'permission_denied' && restartApp && <button type="button" onClick={restartApp}>Restart {appName}</button>}
+              {(phase.reason === 'permission_denied' || phase.reason === 'not_found') && <button type="button" onClick={() => void check()}>Check again</button>}
+            </div>
+            <div className="local-setup__actions local-setup__actions--quiet">
+              <button type="button" onClick={onSignIn}>Sign in to an account instead</button>
+              <button type="button" onClick={onCancel}>Back</button>
+            </div>
           </div>
         )
       })()}

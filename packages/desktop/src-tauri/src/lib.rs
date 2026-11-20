@@ -1245,6 +1245,8 @@ pub fn run() {
       mail_local_apple::mail_local_body,
       mail_local_script::mail_local_script,
       mail_local_script::mail_local_open_privacy_settings,
+      mail_local_script::mail_local_reveal_app,
+      mail_local_script::mail_local_restart_app,
       mail_monitor::email_monitor_enabled,
       mail_monitor::email_monitor_log,
       mail_sso::mail_sso_availability,

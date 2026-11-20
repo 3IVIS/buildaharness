@@ -1,0 +1,16 @@
+/* The first-run screen for reading the mail already on this computer. It lives inside `.write` (which supplies the colours and button looks). */
+.local-setup-page { align-items: center; justify-content: flex-start; padding: 56px 20px 40px; overflow: auto; }
+.local-setup-page .local-setup { width: 100%; max-width: 640px; background: var(--surface); border: 1px solid var(--border); border-radius: 16px; padding: 28px 32px 24px; box-shadow: 0 1px 2px rgba(0, 0, 0, 0.12); }
+.local-setup h2 { margin: 0 0 6px; font-size: 1.35rem; font-weight: 650; letter-spacing: -0.01em; }
+.local-setup h3 { margin: 18px 0 6px; font-size: 1.05rem; font-weight: 600; }
+.local-setup p { margin: 8px 0; color: var(--muted); line-height: 1.55; }
+.local-setup__steps { margin: 14px 0 6px; padding-left: 0; list-style: none; counter-reset: step; display: grid; gap: 10px; }
+.local-setup__steps li { counter-increment: step; position: relative; padding: 10px 12px 10px 46px; border: 1px solid var(--border); border-radius: 10px; background: var(--bg); color: var(--text); line-height: 1.45; }
+.local-setup__steps li::before { content: counter(step); position: absolute; left: 12px; top: 10px; width: 24px; height: 24px; border-radius: 50%; background: var(--accent-solid); color: var(--on-accent, #fff); font-size: 0.8rem; font-weight: 650; display: grid; place-items: center; }
+.local-setup__actions { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 16px; }
+.local-setup__actions--quiet { margin-top: 10px; padding-top: 14px; border-top: 1px solid var(--border); }
+.local-setup__accounts { list-style: none; padding: 0; margin: 14px 0; display: grid; gap: 8px; }
+.local-setup__accounts li { border: 1px solid var(--border); border-radius: 10px; background: var(--bg); }
+.local-setup__accounts label { display: flex; align-items: center; gap: 10px; padding: 10px 12px; cursor: pointer; color: var(--text); }
+.local-setup__count { margin-left: auto; color: var(--muted); font-size: 0.85rem; }
+.local-setup__note { font-size: 0.85rem; }

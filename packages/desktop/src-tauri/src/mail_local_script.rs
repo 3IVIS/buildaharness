@@ -257,6 +257,34 @@ pub fn privacy_url(pane: &str) -> Option<&'static str> {
   }
 }
 
+/// The `.app` that holds this executable (`.../X.app/Contents/MacOS/bin` gives `.../X.app`). None when it is not run from a bundle.
+pub fn bundle_of(exe: &std::path::Path) -> Option<std::path::PathBuf> {
+  exe.ancestors().find(|p| p.extension().and_then(|e| e.to_str()) == Some("app")).map(|p| p.to_path_buf())
+}
+
+/// Show this app in Finder, so the person can drag it into System Settings > Privacy & Security > Full Disk Access. Takes no argument: the path
+/// is this app's own.
+#[tauri::command]
+pub fn mail_local_reveal_app() -> Result<(), String> {
+  #[cfg(target_os = "macos")]
+  {
+    let exe = std::env::current_exe().map_err(|e| format!("script_failed: {e}"))?;
+    let bundle = bundle_of(&exe).ok_or_else(|| "not_found: this is not running from an app bundle".to_string())?;
+    Command::new("open").arg("-R").arg(bundle).status().map_err(|e| format!("script_failed: {e}"))?;
+    Ok(())
+  }
+  #[cfg(not(target_os = "macos"))]
+  {
+    Err("unsupported_platform".into())
+  }
+}
+
+/// Quit and start this app again (macOS applies a Full Disk Access grant only to a process that starts after it). The environment and arguments are kept.
+#[tauri::command]
+pub fn mail_local_restart_app(app: tauri::AppHandle) -> Result<(), String> {
+  app.restart()
+}
+
 #[tauri::command]
 pub fn mail_local_open_privacy_settings(pane: String) -> Result<(), String> {
   let url = privacy_url(&pane).ok_or_else(|| "bad_request: unknown settings pane".to_string())?;
@@ -280,6 +308,13 @@ pub async fn mail_local_script(kind: String, args: Vec<String>) -> Result<String
 
 #[cfg(test)]
 mod tests {
+  #[test]
+  fn finds_the_bundle_that_holds_an_executable() {
+    let exe = std::path::Path::new("/Users/x/Applications/AieliaEmail.app/Contents/MacOS/aielia-desktop");
+    assert_eq!(bundle_of(exe), Some(std::path::PathBuf::from("/Users/x/Applications/AieliaEmail.app")));
+    assert_eq!(bundle_of(std::path::Path::new("/usr/local/bin/aielia-desktop")), None);
+  }
+
   use super::*;
 
   fn s(v: &[&str]) -> Vec<String> { v.iter().map(|x| x.to_string()).collect() }

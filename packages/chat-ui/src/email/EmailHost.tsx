@@ -17,6 +17,9 @@ export interface LocalMailKit {
   actions?: LocalMailActions
   listAccountNames?: () => Promise<Array<{ id: string; name: string }>>
   openFullDiskAccessSettings?: () => void
+  appName?: string
+  revealApp?: () => void
+  restartApp?: () => void
 }
 
 /** A workbench event for the record: the long fields (what was sent to the model and what came back) are cut short. */
@@ -26,9 +29,13 @@ async function tauriLocalKit(): Promise<LocalMailKit> {
   const core = await import('@tauri-apps/api/core')
   const invoke = core.invoke as Invoke
   const actions = new AppleMailActions(tauriScriptRunner(invoke))
+  const appName = await import('@tauri-apps/api/app').then((m) => m.getName(), () => undefined)
   return {
     source: tauriLocalMailSource(invoke), actions, listAccountNames: () => actions.listAccounts(),
     openFullDiskAccessSettings: () => { void invoke('mail_local_open_privacy_settings', { pane: 'full_disk_access' }) },
+    ...(appName ? { appName } : {}),
+    revealApp: () => { void invoke('mail_local_reveal_app') },
+    restartApp: () => { void invoke('mail_local_restart_app') },
   }
 }
 
@@ -90,9 +97,9 @@ export default function EmailHost({ config, onClose, onSwitch, localKit }: { con
   if (!mailbox) return <div className="write-host"><div className="write-host__bar"><button type="button" onClick={onClose}>← Back to chat</button></div><p>Opening Email…</p></div>
   if (setup && kit) {
     return (
-      <div className="write-host">
+      <div className="write-host write local-setup-page">
         <LocalMailSetup
-          source={kit.source} {...(kit.listAccountNames ? { listAccountNames: kit.listAccountNames } : {})} {...(kit.openFullDiskAccessSettings ? { openFullDiskAccessSettings: kit.openFullDiskAccessSettings } : {})}
+          source={kit.source} {...(kit.listAccountNames ? { listAccountNames: kit.listAccountNames } : {})} {...(kit.openFullDiskAccessSettings ? { openFullDiskAccessSettings: kit.openFullDiskAccessSettings } : {})} {...(kit.appName ? { appName: kit.appName } : {})} {...(kit.revealApp ? { revealApp: kit.revealApp } : {})} {...(kit.restartApp ? { restartApp: kit.restartApp } : {})}
           onUse={(ids) => void chooseAccounts(ids)}
           onSignIn={() => { setSetup(false); setNotice('Signing in to an account is not available in the desktop app yet. Reading the mail Apple Mail already has works without it.') }}
           onCancel={() => setSetup(false)}
