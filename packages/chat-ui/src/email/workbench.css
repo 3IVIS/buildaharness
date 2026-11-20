@@ -19,3 +19,9 @@
 .write-host__accounts select { min-height: 30px; }
 .wb__group > summary { cursor: pointer; font-weight: 600; margin-top: 6px; }
 .wb__group ul { margin: 4px 0 0; padding-left: 18px; max-height: 220px; overflow: auto; }
+
+.wb__lead { margin: 0 0 6px; }
+.wb__list { margin: 4px 0 0; padding-left: 18px; }
+.wb__draft { white-space: pre-wrap; background: var(--surface); border: 1px solid var(--border); border-radius: 8px; padding: 8px; margin: 4px 0; font: inherit; }
+.achat .wb__activity { margin: 0 12px 6px; font-size: 0.8rem; max-height: 40vh; overflow: auto; }
+.achat .wb__activity > summary { cursor: pointer; color: var(--muted); }

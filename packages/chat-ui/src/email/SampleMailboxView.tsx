@@ -1,14 +1,14 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
-import { InMemoryEmailCache, searchMail, type CatchUpView, type Message, type ScoredTodo, type SendersView, type SpamView, type WorkbenchEvent } from '@buildaharness/aielia'
+import { InMemoryEmailCache, searchMail, type Message, type ScoredTodo, type SpamView, type WorkbenchEvent } from '@buildaharness/aielia'
 import type { SampleMailbox } from './sample-mode'
 import { EmailLayout } from './EmailLayout'
 import { MessageList } from './MessageList'
 import { MailReader } from './MailReader'
 import { ReaderEmpty } from './ReaderEmpty'
-import { AielaChat, type AielaChatLine } from './AielaChat'
+import { AielaChat, type AielaChatLine, type TaskMenu } from './AielaChat'
 import { TodoView } from './TodoView'
 import { ProbablySpam } from './ProbablySpam'
-import { WorkbenchPanel, type RulesView } from './WorkbenchPanel'
+import { CatchUpResult, DraftResult, RulesResult, SendersResult, SpamResult } from './WorkbenchResults'
 import { FolderList, MailIcon } from './mail-ui'
 import { AppSwitcher } from '../components/AppSwitcher'
 import type { AppId } from '../app-switch'
@@ -53,18 +53,16 @@ export function SampleMailboxView({ sample, onConnect, appSwitch, activity = [] 
   // Live mailbox with a model: the capabilities, run on request, read-only.
   const wb = sample.workbench
   const [running, setRunning] = useState<string | undefined>()
-  const [wbError, setWbError] = useState<string | undefined>()
-  const [catchUp, setCatchUp] = useState<CatchUpView | undefined>()
-  const [rules, setRules] = useState<RulesView | undefined>()
   const [liveTodo, setLiveTodo] = useState<ScoredTodo[] | undefined>()
   const [liveSpam, setLiveSpam] = useState<SpamView | undefined>()
-  const [liveSenders, setLiveSenders] = useState<SendersView | undefined>()
+  const say = (text: string, node?: React.ReactNode): void => setLines((l) => [...l, { id: next.current++, from: 'aielia', text, ...(node ? { node } : {}) }])
+  const youSay = (text: string): void => setLines((l) => [...l, { id: next.current++, from: 'you', text }])
   const runWb = async (what: string, fn: () => Promise<void>): Promise<void> => {
     if (running) return
-    setRunning(what); setWbError(undefined)
-    try { await fn() } catch (e) { setWbError(`${what} failed: ${e instanceof Error ? e.message : String(e)}`) } finally { setRunning(undefined) }
+    setRunning(what)
+    try { await fn() } catch (e) { say(`${what} failed: ${e instanceof Error ? e.message : String(e)}`) } finally { setRunning(undefined) }
   }
-  const refreshTodo = async (): Promise<void> => { if (wb) setLiveTodo(await wb.todo()) }
+  const refreshTodo = async (): Promise<ScoredTodo[] | undefined> => { if (!wb) return undefined; const t = await wb.todo(); setLiveTodo(t); return t }
   const todoItems = liveTodo ?? sample.todo
   const spamItems = liveSpam ? liveSpam.rows.map((r) => ({ threadId: r.threadId, subject: r.subject, sender: r.sender, reason: r.reason })) : sample.spam.filter((s) => !spamHidden.has(s.threadId) && !spamKept.has(s.threadId))
   const inbox = sample.folders.find((f) => f.kind === 'inbox')
@@ -111,6 +109,37 @@ export function SampleMailboxView({ sample, onConnect, appSwitch, activity = [] 
     } finally { setBusy(false) }
   }
 
+  const openThread = (tid: string): void => { const at = wb?.locate(tid); if (at) { setFolderId(at.folderId); setOpenId(at.messageId) } }
+  const runTask = (value: string): void => {
+    if (!wb || running) return
+    const [kind, arg] = value.split(':')
+    const days = Number(arg) as 7 | 30 | 90
+    const run = (what: string, ask: string, fn: () => Promise<void>): void => { youSay(ask); void runWb(what, fn) }
+    if (kind === 'catchup') run('catch-up', `What needs a response? (last ${days} days)`, async () => { const v = await wb.catchUp(days); say(v.note ?? v.summary.join(' '), <CatchUpResult view={v} onOpen={openThread} />); await refreshTodo() })
+    else if (kind === 'senders') run('sorting senders', `Sort my senders by kind (last ${days} days)`, async () => { const v = await wb.senders(days); say(v.note ?? `${v.total} senders sorted.`, <SendersResult view={v} />) })
+    else if (kind === 'spam') run('spam check', `Spam check (last ${days} days)`, async () => { const v = await wb.spam(days); setLiveSpam(v); say(v.note ?? `${v.rows.length} probably spam of ${v.threads} threads.`, <SpamResult view={v} />); await refreshTodo() })
+    else if (kind === 'rules') run('rule proposals', 'Propose rules from how my mail is filed', async () => { const v = await wb.ruleProposals(); say(`${v.proposals.length} rule proposals, none applied.`, <RulesResult view={v} />); await refreshTodo() })
+    else if (kind === 'todo') run('to do', 'Update my To do list', async () => { const t = await refreshTodo(); say(`To do updated: ${(t ?? []).filter((x) => x.status === 'open').length} open.`) })
+    else if (kind === 'draft' && open) {
+      const target = open
+      run('drafting a reply', `Draft a reply to “${target.subject}”`, async () => {
+        const r = await wb.draft(target.threadId)
+        say(r.ok ? r.draft.body : `No draft: ${r.reason}`, <DraftResult subject={target.subject} {...(r.ok ? { draft: r.draft } : { refused: r.reason })} />)
+      })
+    }
+  }
+  const tasks: TaskMenu | undefined = wb
+    ? {
+        onPick: runTask,
+        groups: [
+          { label: 'What needs a response?', options: [7, 30, 90].map((d) => ({ value: `catchup:${d}`, label: `Catch up: last ${d} days` })) },
+          { label: 'Sort senders by kind', options: [30, 90].map((d) => ({ value: `senders:${d}`, label: `Sort senders: last ${d} days` })) },
+          { label: 'Spam check', options: [7, 30].map((d) => ({ value: `spam:${d}`, label: `Spam check: last ${d} days` })) },
+          { label: 'More', options: [{ value: 'rules:0', label: 'Propose rules from my folders' }, { value: 'todo:0', label: 'Update my To do list' }, ...(open ? [{ value: 'draft:0', label: 'Draft a reply to the open message' }] : [])] },
+        ],
+      }
+    : undefined
+
   const folderTitle = folder?.name ?? 'Inbox'
   return (
     <div className="write email-sample">
@@ -154,17 +183,6 @@ export function SampleMailboxView({ sample, onConnect, appSwitch, activity = [] 
                 <MailIcon name="chat" size={16} />
               </button>
             </div>
-            {wb && (
-              <WorkbenchPanel
-                running={running} events={activity} {...(catchUp ? { catchUp } : {})} {...(liveSpam ? { spam: liveSpam } : {})} {...(liveSenders ? { senders: liveSenders } : {})} {...(rules ? { rules } : {})} {...(wbError ? { error: wbError } : {})}
-                onCatchUp={(days) => void runWb('catch-up', async () => { setCatchUp(await wb.catchUp(days)); await refreshTodo() })}
-                onSpam={(days) => void runWb('spam check', async () => { setLiveSpam(await wb.spam(days)); await refreshTodo() })}
-                onSenders={(days) => void runWb('sorting senders', async () => { setLiveSenders(await wb.senders(days)) })}
-                onRules={() => void runWb('rule proposals', async () => { setRules(await wb.ruleProposals()); await refreshTodo() })}
-                onTodo={() => void runWb('to do', refreshTodo)}
-                onOpenThread={(tid) => { const at = wb.locate(tid); if (at) { setFolderId(at.folderId); setOpenId(at.messageId) } }}
-              />
-            )}
             {query.trim() && (sample.live?.serverSearch ?? true) && serverHits?.query !== query.trim() && <button type="button" className="mailpane__server" disabled={serverBusy} onClick={() => void searchServer()}>{serverBusy ? 'Searching the server…' : 'Search the whole mailbox on the server too'}</button>}
             {serverHits?.error && serverHits.query === query.trim() && <p role="status" className="mailpane__none">The server could not be searched: {serverHits.error}</p>}
             {folder?.kind === 'inbox' && <ProbablySpam items={spamItems} {...(wb ? { readOnlyNote: 'Read-only: nothing is moved' } : {})} onMoveAll={() => setSpamHidden(new Set([...spamHidden, ...spamItems.map((s) => s.threadId)]))} onNotSpam={(id) => setSpamKept(new Set([...spamKept, id]))} />}
@@ -176,7 +194,7 @@ export function SampleMailboxView({ sample, onConnect, appSwitch, activity = [] 
           </div>
         }
         reader={open ? <MailReader message={open} /> : <ReaderEmpty unread={unread} />}
-        aielia={<AielaChat lines={lines} input={text} onInput={setText} onSend={(t) => void send(t)} busy={busy} suggestions={SUGGESTIONS} subtitle={sample.live ? sample.live.label.replace(/\.$/, '') : 'Sample mailbox'} />}
+        aielia={<AielaChat lines={lines} input={text} onInput={setText} onSend={(t) => void send(t)} busy={busy || !!running} suggestions={SUGGESTIONS} {...(tasks ? { tasks } : {})} {...(running ? { working: running } : {})} {...(wb ? { activity } : {})} subtitle={sample.live ? sample.live.label.replace(/\.$/, '') : 'Sample mailbox'} />}
       />
     </div>
   )

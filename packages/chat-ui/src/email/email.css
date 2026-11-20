@@ -141,7 +141,7 @@
 .achat__chips { list-style: none; margin: 4px 0 0; padding: 0; display: grid; gap: 6px; width: 100%; }
 .write .achat__chips button { width: 100%; text-align: left; padding: 8px 12px; border-radius: 10px; background: var(--bg); color: var(--text); }
 .write .achat__chips button:hover:not(:disabled) { border-color: var(--accent); }
-.achat__compose { flex: none; display: flex; align-items: flex-end; gap: 8px; margin: 0 12px 12px; padding: 6px 6px 6px 12px; border: 1px solid var(--border); border-radius: 16px; background: var(--bg); }
+.achat__compose { flex: none; display: flex; flex-direction: column; align-items: stretch; gap: 4px; margin: 0 12px 12px; padding: 6px 6px 6px 12px; border: 1px solid var(--border); border-radius: 16px; background: var(--bg); }
 .achat__compose:focus-within { border-color: var(--accent); }
 .write .achat__compose textarea { min-height: 36px; flex: 1; min-width: 0; resize: none; border: 0; background: transparent; padding: 6px 0; max-height: 160px; line-height: 1.45; }
 .write .achat__compose textarea:focus { outline: none; }
@@ -339,3 +339,11 @@
 .email__split--list { width: 6px; margin: 0 -3px; cursor: col-resize; }
 .email__split--listy { height: 6px; width: auto; margin: -3px 0; cursor: row-resize; }
 .email__split--list:hover, .email__split--listy:hover, .email__split--list:focus-visible, .email__split--listy:focus-visible { background: var(--accent-a18); }
+
+/* The compose bar under the text box: the task dropdown on the left (as in Write), Send on the right. */
+.achat__bar { display: flex; align-items: center; gap: 8px; }
+.achat__task { flex: 1; min-width: 0; }
+.write .achat__task select { width: 100%; min-height: 32px; font-size: 0.85rem; padding: 4px 8px; background: var(--surface); }
+.achat__bar .achat__send { margin-left: auto; }
+.achat__line--rich { max-width: 100%; white-space: normal; }
+.achat__line--working { color: var(--muted); font-style: italic; }
