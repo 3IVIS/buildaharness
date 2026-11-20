@@ -5,7 +5,7 @@ import type { SurfaceSpec } from './harness-surfaces.js'
 
 function good(over: Record<string, unknown> = {}): HarnessSuggestion {
   return suggestionFromJSON({
-    id: 's1', tier: 2, surfaceId: 'layer:semantic_compaction', class: 'I', clusterSignature: 'c1',
+    id: 's1', tier: 2, surfaceId: 'layer:code_plan_templates', class: 'I', clusterSignature: 'c1',
     change: { kind: 'set', value: true }, whyNotNoop: 'long sessions overflow', regressionGuard: 'short sessions unchanged', expectedEffect: 'fewer overflows',
     expectedAffectedCases: ['a'], protectedCases: ['b'], expectedBeacon: 'layer_fired', evidenceRefs: ['run1'], status: 'proposed', ...over,
   })
@@ -60,11 +60,11 @@ describe('validateSuggestion', () => {
     expect(reasons(good({ change: { kind: 'noop' } }))).toContain('noop')
   })
   it('already in force', () => {
-    expect(reasons(good(), ctx({ choices: { semantic_compaction: true } }))).toContain('already_in_force')
-    expect(reasons(good(), ctx({ choices: { semantic_compaction: false } }))).not.toContain('already_in_force')
+    expect(reasons(good(), ctx({ choices: { code_plan_templates: true } }))).toContain('already_in_force')
+    expect(reasons(good(), ctx({ choices: { code_plan_templates: false } }))).not.toContain('already_in_force')
   })
   it('operator-pinned flag', () => {
-    expect(reasons(good(), ctx({ pinned: new Set(['semantic_compaction']), env: { AUDIT_SEMANTIC_COMPACTION: '0' } }))).toContain('operator_pinned')
+    expect(reasons(good(), ctx({ pinned: new Set(['code_plan_templates']), env: { AUDIT_SEMANTIC_COMPACTION: '0' } }))).toContain('operator_pinned')
     expect(reasons(good(), ctx({ pinned: new Set(['other']) }))).not.toContain('operator_pinned')
   })
   it('unmet requires', () => {

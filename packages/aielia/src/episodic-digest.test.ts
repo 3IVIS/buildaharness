@@ -86,7 +86,7 @@ describe('M3 session digest', () => {
   })
 
   it('negative control: flag off makes no digest call and stores nothing', async () => {
-    delete process.env.AUDIT_EPISODIC_DIGEST
+    process.env.AUDIT_EPISODIC_DIGEST = '0' // explicit off: the default is ON since H1
     const memory = new InMemoryAdapter({ scope: 'thread', namespace: 'dg4' })
     const { llm, calls } = makeLlm(digestJson())
     const assistant = new PersonalAssistant({ llmClient: llm, memory })
@@ -238,6 +238,7 @@ describe('M3 pre-compaction flush', () => {
   })
 
   it('negative control: flag off, no flush call and the fact is lost with the dropped message (existing behaviour)', async () => {
+    process.env.AUDIT_EPISODIC_DIGEST = '0' // explicit off: the default is ON since H1
     const { llm, calls } = makeLlm(flushAnswer([FACT]))
     const { memory, assistant } = await runCompaction(llm)
     expect(calls).toHaveLength(0)

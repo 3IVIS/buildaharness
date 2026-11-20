@@ -40,10 +40,12 @@ const MAX_INPUT_CHARS = 60_000
 const MAX_ITEMS = 12
 const MAX_FIELD_CHARS = 600
 
-/** `AUDIT_EPISODIC_DIGEST`: the digest writer and the pre-compaction flush. Default OFF; `1/true/on/yes/enabled` enables. Read where the writer is invoked (assistant.ts). */
+/** `AUDIT_EPISODIC_DIGEST`: the digest writer and the pre-compaction flush. Default ON since H1 (2026-11-20); `0/false/off/no/disabled` disables. Read where the writer is invoked (assistant.ts). */
 export function episodicDigestEnabled(env?: Record<string, string | undefined>): boolean {
   const source = env ?? (typeof process !== 'undefined' ? process.env : {})
-  return ['1', 'true', 'on', 'yes', 'enabled'].includes(String(source.AUDIT_EPISODIC_DIGEST ?? '').trim().toLowerCase())
+  const raw = String(source.AUDIT_EPISODIC_DIGEST ?? '').trim().toLowerCase()
+  if (raw === '') return true
+  return !['0', 'false', 'off', 'no', 'disabled'].includes(raw)
 }
 
 export function episodicRetentionDays(env?: Record<string, string | undefined>): number {

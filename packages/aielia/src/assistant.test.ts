@@ -3286,6 +3286,9 @@ describe('PersonalAssistant shell tools', () => {
 })
 
 describe('PersonalAssistant dynamic decomposition', () => {
+  beforeEach(() => { vi.stubEnv('AUDIT_DECOMPOSITION', '1') }) // H1: decomposition is off by default now; these tests exercise it
+  afterEach(() => { vi.unstubAllEnvs() })
+
   // Decomposition is no longer a separate, conditionally-spent LLM call (see
   // turn-intent-classifier.ts) — the mandatory classifyTurnIntent call every turn already makes
   // produces decomposedTasks directly, so these tests assert on the resulting task-graph shape
@@ -3318,6 +3321,9 @@ describe('PersonalAssistant dynamic decomposition', () => {
 })
 
 describe('PersonalAssistant single-task description reframing', () => {
+  beforeEach(() => { vi.stubEnv('AUDIT_DECOMPOSITION', '1') }) // H1: decomposition is off by default now; these tests exercise it
+  afterEach(() => { vi.unstubAllEnvs() })
+
   it('spends one extra LLM call reframing a coding-fact-shaped, non-LOW-risk single task, and still completes the turn', async () => {
     const reframeJson = JSON.stringify({ description: 'the deploy tests: schedule a rerun tonight' })
     const llm = new ReframeAwareLLMClient('Scheduled.', reframeJson)
@@ -3368,13 +3374,16 @@ describe('PersonalAssistant single-task description reframing', () => {
 })
 
 describe('decompositionEnabled (AUDIT_DECOMPOSITION gate — Phase C4)', () => {
-  it('defaults ON when unset, empty or truthy', () => {
-    expect(decompositionEnabled({})).toBe(true)
-    expect(decompositionEnabled({ AUDIT_DECOMPOSITION: '' })).toBe(true)
-    for (const v of ['1', 'true', 'on', 'yes', 'enabled']) expect(decompositionEnabled({ AUDIT_DECOMPOSITION: v }), v).toBe(true)
+  it('defaults OFF when unset or empty (H1, 2026-11-20)', () => {
+    expect(decompositionEnabled({})).toBe(false)
+    expect(decompositionEnabled({ AUDIT_DECOMPOSITION: '' })).toBe(false)
   })
 
-  it('is OFF only for an explicit falsy value', () => {
+  it('is ON for an explicit truthy value', () => {
+    for (const v of ['1', 'true', 'on', 'yes', 'enabled', ' ON ']) expect(decompositionEnabled({ AUDIT_DECOMPOSITION: v }), v).toBe(true)
+  })
+
+  it('stays OFF for an explicit falsy value', () => {
     for (const v of ['0', 'false', 'off', 'no', 'disabled', ' OFF ']) expect(decompositionEnabled({ AUDIT_DECOMPOSITION: v }), v).toBe(false)
   })
 })
@@ -4803,6 +4812,9 @@ describe('PersonalAssistant flat tool loop — harness-driven (flag ON)', () => 
   const ROOT = '/workspace'
 
   describe('a request split into subtasks (no plan) is still one answer', () => {
+  beforeEach(() => { vi.stubEnv('AUDIT_DECOMPOSITION', '1') }) // H1: decomposition is off by default now; these tests exercise it
+  afterEach(() => { vi.unstubAllEnvs() })
+
     const message = 'Read notes.txt and give me a summary, an outline and a title for it.'
     const three = [
       { id: 'a', description: 'the summary of notes.txt', depends_on: [] as string[], riskLevel: 'LOW' },

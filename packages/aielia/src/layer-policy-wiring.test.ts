@@ -166,8 +166,9 @@ describe('AL9a: per-turn call budget through resolveEscalationPlan', () => {
 
 describe('enabledOptInLayers / the opt-in category in the recorded plan', () => {
   const FLAGS = ['AUDIT_SEMANTIC_SOURCE_RELIABILITY', 'AUDIT_SEMANTIC_HYPOTHESES', 'AUDIT_REVIEWER_REVISION', 'AUDIT_EXPERIENCE_LEARNING', 'AUDIT_SEMANTIC_COMPACTION', 'AUDIT_MEMORY_REVIEWER']
-  it('nothing is enabled by default, and each flag enables exactly its own layer', () => {
-    expect(enabledOptInLayers({})).toEqual([])
+  it('only semantic_compaction is enabled by default (H1), and each flag enables exactly its own layer', () => {
+    expect(enabledOptInLayers({})).toEqual(['semantic_compaction'])
+    expect(enabledOptInLayers({ AUDIT_SEMANTIC_COMPACTION: '0' })).toEqual([])
     const byFlag: Record<string, string> = {
       AUDIT_SEMANTIC_SOURCE_RELIABILITY: 'source_reliability',
       AUDIT_SEMANTIC_HYPOTHESES: 'semantic_hypotheses',
@@ -176,7 +177,7 @@ describe('enabledOptInLayers / the opt-in category in the recorded plan', () => 
       AUDIT_SEMANTIC_COMPACTION: 'semantic_compaction',
       AUDIT_MEMORY_REVIEWER: 'memory_reviewer',
     }
-    for (const f of FLAGS) expect(enabledOptInLayers({ [f]: '1' })).toEqual([byFlag[f]])
+    for (const f of FLAGS) expect(enabledOptInLayers({ AUDIT_SEMANTIC_COMPACTION: '0', [f]: '1' })).toEqual([byFlag[f]])
   })
 
   it('the plan the assistant records shows an enabled opt-in layer as full and the rest as off', () => {

@@ -20,17 +20,19 @@ const SYSTEM_PROMPT =
   '"[... omitted ...]"): say only what you can see.'
 
 /**
- * `AUDIT_SEMANTIC_COMPACTION` gate. Default **OFF**: once a transcript is long, transcript-compaction.ts keeps the
+ * `AUDIT_SEMANTIC_COMPACTION` gate. Default **ON** (H1, 2026-11-20; matched pairs 0/3→3/3 and 0/4→4/4): once a transcript is long, transcript-compaction.ts keeps the
  * first 200 characters of each older message and nothing else, so a detail deep in an earlier message (a pasted
  * document, a long answer) is gone from what the model sees — and the model has no tool to search the message index.
  * On, ONE bounded call writes the summary instead (see summarizeOlderMessages); any failure falls back to the
- * truncated form. Costs one call each time the thresholds trip. A truthy value (`1` / `true` / `on` / `yes` /
- * `enabled`) enables it. Read at exactly one site: assistant.ts.
+ * truncated form. Costs one call each time the thresholds trip. A falsy value (`0` / `false` / `off` / `no` /
+ * `disabled`) disables it. Read at exactly one site: assistant.ts.
  */
 export function semanticCompactionEnabled(env?: Record<string, string | undefined>): boolean {
   const source = env ?? (typeof process !== 'undefined' ? process.env : {})
   const raw = String(source.AUDIT_SEMANTIC_COMPACTION ?? '').trim().toLowerCase()
-  return ['1', 'true', 'on', 'yes', 'enabled'].includes(raw)
+  // Default ON since H1 (2026-11-20); `0` / `false` / `off` / `no` / `disabled` turn it off.
+  if (raw === '') return true
+  return !['0', 'false', 'off', 'no', 'disabled'].includes(raw)
 }
 
 /** More than this after shortening each message means the input is not one this call can take; use the free form. */
