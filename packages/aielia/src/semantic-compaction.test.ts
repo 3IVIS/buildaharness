@@ -45,9 +45,10 @@ describe('summarizeOlderMessages', () => {
 })
 
 describe('AUDIT_SEMANTIC_COMPACTION', () => {
-  it('is off unless explicitly turned on', () => {
-    expect(semanticCompactionEnabled({})).toBe(false)
-    expect(semanticCompactionEnabled({ AUDIT_SEMANTIC_COMPACTION: '0' })).toBe(false)
+  it('is on unless explicitly turned off (default ON since H1, 2026-11-20)', () => {
+    expect(semanticCompactionEnabled({})).toBe(true)
+    expect(semanticCompactionEnabled({ AUDIT_SEMANTIC_COMPACTION: '' })).toBe(true)
+    for (const v of ['0', 'false', 'off', 'no', 'disabled', ' OFF ']) expect(semanticCompactionEnabled({ AUDIT_SEMANTIC_COMPACTION: v })).toBe(false)
     for (const v of ['1', 'true', 'on', 'yes', 'enabled']) expect(semanticCompactionEnabled({ AUDIT_SEMANTIC_COMPACTION: v })).toBe(true)
   })
 })

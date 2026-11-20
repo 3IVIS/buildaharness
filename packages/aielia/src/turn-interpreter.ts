@@ -17,10 +17,9 @@ import type { AssistantTrace, AssistantTurnResult } from './assistant-types.js'
 
 /**
  * `AUDIT_DECOMPOSITION` gate — feature-value audit (Phase C4 of the internal plan). Default
- * **ON**: the classifier's `decomposedTasks` graph and the single-task
- * `reframeTaskDescriptionWithLLM` call both shape the turn today, so an unset / empty / truthy
- * value keeps that behaviour. Set to a falsy value (`0` / `false` / `off` / `no` / `disabled`) to
- * take the single-task path: the raw user message as one `respond` task, no decomposition, no
+ * **OFF** since H1 (2026-11-20; no positive regime found, hook never fired in the cost slice): unset / empty / falsy
+ * takes the single-task path. A truthy value (`1` / `true` / `on` / `yes` / `enabled`) restores the classifier's
+ * `decomposedTasks` graph and the single-task `reframeTaskDescriptionWithLLM` call. The single-task path is: the raw user message as one `respond` task, no decomposition, no
  * reframe call. The classifier call itself is untouched (it also produces the intent/risk fields
  * every arm needs). Read at exactly one call site — the top of `resolveTasks()` below. An active
  * plan's own tasks are not decomposition and are unaffected. Same shape as
@@ -29,8 +28,8 @@ import type { AssistantTrace, AssistantTurnResult } from './assistant-types.js'
 export function decompositionEnabled(env?: Record<string, string | undefined>): boolean {
   const source = env ?? (typeof process !== 'undefined' ? process.env : {})
   const raw = String(source.AUDIT_DECOMPOSITION ?? '').trim().toLowerCase()
-  if (raw === '') return true
-  return !['0', 'false', 'off', 'no', 'disabled'].includes(raw)
+  // Default OFF since H1 (2026-11-20): no positive regime was found; unset or empty means the single-task path.
+  return ['1', 'true', 'on', 'yes', 'enabled'].includes(raw)
 }
 
 /**

@@ -381,7 +381,10 @@ describe('SettingsScreen', () => {
   describe('Reasoning layers', () => {
     it('lists the switchable layers at their defaults and leaves the locked floor out', () => {
       renderSettings()
-      expect(screen.getByRole('checkbox', { name: 'decomposition_reframe' })).toBeChecked()
+      expect(screen.getByRole('checkbox', { name: 'semantic_contradiction' })).toBeChecked()
+      expect(screen.getByRole('checkbox', { name: 'decomposition_reframe' })).not.toBeChecked() // off by default since H1
+      expect(screen.getByRole('checkbox', { name: 'semantic_compaction' })).toBeChecked() // on by default since H1
+      expect(screen.getByRole('checkbox', { name: 'episodic_digest' })).toBeChecked() // on by default since H1
       expect(screen.getByRole('checkbox', { name: 'semantic_hypotheses' })).not.toBeChecked()
       expect(screen.queryByRole('checkbox', { name: 'approval_staging' })).not.toBeInTheDocument()
     })
@@ -406,7 +409,7 @@ describe('SettingsScreen', () => {
     })
 
     it('says when a switched-on layer needs one that is off', () => {
-      renderSettings({ config: { ...DEFAULT_CONFIG, layers: { recall_tool: true } } })
+      renderSettings({ config: { ...DEFAULT_CONFIG, layers: { recall_tool: true, episodic_digest: false } } })
       expect(screen.getByText(/Needs episodic_digest, which is off/)).toBeInTheDocument()
     })
 
@@ -424,15 +427,15 @@ describe('SettingsScreen', () => {
       const user = userEvent.setup()
       const { onSave } = renderSettings()
       await user.click(screen.getByRole('checkbox', { name: 'semantic_hypotheses' }))
-      await user.click(screen.getByRole('checkbox', { name: 'decomposition_reframe' }))
+      await user.click(screen.getByRole('checkbox', { name: 'semantic_contradiction' }))
       await user.click(screen.getByRole('button', { name: 'Save' }))
-      expect(onSave).toHaveBeenCalledWith({ layers: { semantic_hypotheses: true, decomposition_reframe: false } })
+      expect(onSave).toHaveBeenCalledWith({ layers: { semantic_hypotheses: true, semantic_contradiction: false } })
     })
 
     it('toggling back to the default removes the saved choice', async () => {
       const user = userEvent.setup()
-      const { onSave } = renderSettings({ config: { ...DEFAULT_CONFIG, layers: { decomposition_reframe: false } } })
-      await user.click(screen.getByRole('checkbox', { name: 'decomposition_reframe' }))
+      const { onSave } = renderSettings({ config: { ...DEFAULT_CONFIG, layers: { semantic_contradiction: false } } })
+      await user.click(screen.getByRole('checkbox', { name: 'semantic_contradiction' }))
       await user.click(screen.getByRole('button', { name: 'Save' }))
       expect(onSave).toHaveBeenCalledWith({ layers: {} })
     })

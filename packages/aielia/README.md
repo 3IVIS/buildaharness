@@ -166,7 +166,7 @@ contradiction detection considers it:
 
 | Tier | Answers | Allowed `FactSource` | Retention | Contradiction-checked | Where it lives |
 |---|---|---|---|---|---|
-| **Episodic** | "What was said or mused, unconfirmed?" | any | session | no | `facts:<sessionId>`, plus `episodic:<sessionId>` session digests when `AUDIT_EPISODIC_DIGEST` is on (see below) — also every `model_inferred`/`observed` `UserFact` lands here regardless of its `durable` bit; an unconfirmed model guess is never Knowledge |
+| **Episodic** | "What was said or mused, unconfirmed?" | any | session | no | `facts:<sessionId>`, plus `episodic:<sessionId>` session digests unless `AUDIT_EPISODIC_DIGEST=0` (see below) — also every `model_inferred`/`observed` `UserFact` lands here regardless of its `durable` bit; an unconfirmed model guess is never Knowledge |
 | **Semantic** | "What's currently stated as true?" | `user_asserted`, `externally_verified` | durable (by tier policy) | yes | `facts:<sessionId>` or `facts:durable`, depending on the existing promotion policy (`durable` bit) — the tier a fact belongs to and whether it's actually promoted are tracked separately today |
 | **Identity** | "Who is this?" (name, "call me X") | `user_asserted` | durable | yes | `facts:durable` |
 | **Preference** | "What does the user want?" (stated preference) | `user_asserted` | durable | yes | `facts:durable`; a *configured* preference (backend, model, `enableShell`) is separately `AssistantConfig` (`config.ts`), not a `UserFact` at all |
@@ -183,7 +183,7 @@ the other half is that `isKnowledgeTier()` only returns true for `semantic`,
 commitments never enter contradiction detection as if they were beliefs.
 
 **Episodic memory now has a store and a writer, behind a flag.** With
-`AUDIT_EPISODIC_DIGEST` on (off by default; the cross-session scenario improved on 2 of 2 seeds, one scenario only), the assistant
+`AUDIT_EPISODIC_DIGEST` on (on by default since the H1 decision, 2026-11-20, after the hard-set runs improved on 2 of 2 seeds; `AUDIT_EPISODIC_DIGEST=0` turns it off), the assistant
 writes one short handoff digest per session (objective, what was done,
 decisions, open items, next step) at the session edge (`/new`, exit), never
 inside a turn, to `episodic:<sessionId>`. A second use of the same writer runs

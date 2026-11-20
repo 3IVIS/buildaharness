@@ -196,9 +196,10 @@ describe('M6 hooks: consolidation registration and the writer-flag guard', () =>
     expect(calls.consolidate).toBe(1)
   })
 
-  it('with the writer flags off (the default, and always in a browser tab) turns, /new and the memory panel hooks make no reviewer, digest or consolidation call', async () => {
+  it('with the writer flags off (explicit; the default for the reviewer and consolidation, digest turned on by H1) turns, /new and the memory panel hooks make no reviewer, digest or consolidation call', async () => {
     const memory = new InMemoryAdapter()
     const { llm, calls } = makeLlm()
+    process.env.AUDIT_EPISODIC_DIGEST = '0'
     const assistant = new PersonalAssistant({ llmClient: llm, memory, consolidateOnNewSession: true })
     expect(assistant.memoryWriterFlags()).toEqual({ reviewer: false, consolidation: false, digest: false })
     for (let i = 0; i < 6; i++) await assistant.turn(`message number ${i}`, { sessionId: 'cli' })

@@ -56,7 +56,7 @@ describe('requirements', () => {
     expect(layerWarnings({ reviewer_revision: true }, new Set(['reviewer_adversarial']), { AUDIT_REVIEWER_PASS: '0' })).toHaveLength(1)
   })
   it('shows the need in the listing', () => {
-    expect(formatLayerListing({ recall_tool: true }, new Set(), {})).toMatch(/needs: episodic_digest \(off\)/)
+    expect(formatLayerListing({ recall_tool: true, episodic_digest: false }, new Set(), {})).toMatch(/needs: episodic_digest \(off\)/)
   })
 })
 
@@ -64,10 +64,10 @@ describe('applyLayerSettings', () => {
   it('writes choices to the flags the layers read, so the real gates follow', () => {
     const env: Record<string, string | undefined> = {}
     expect(semanticHypothesesEnabled(env)).toBe(false)
-    expect(decompositionEnabled(env)).toBe(true)
-    applyLayerSettings({ semantic_hypotheses: true, decomposition_reframe: false }, env)
+    expect(decompositionEnabled(env)).toBe(false) // off by default since H1
+    applyLayerSettings({ semantic_hypotheses: true, decomposition_reframe: true }, env)
     expect(semanticHypothesesEnabled(env)).toBe(true)
-    expect(decompositionEnabled(env)).toBe(false)
+    expect(decompositionEnabled(env)).toBe(true)
   })
   it('restores a flag it wrote when the choice is removed', () => {
     const env: Record<string, string | undefined> = {}
