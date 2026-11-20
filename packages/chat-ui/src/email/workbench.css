@@ -17,3 +17,5 @@
 .write-host__accounts { font-size: 0.85rem; padding: 6px 16px; }
 .write-host__accounts label { display: inline-flex; align-items: center; gap: 8px; color: var(--muted); }
 .write-host__accounts select { min-height: 30px; }
+.wb__group > summary { cursor: pointer; font-weight: 600; margin-top: 6px; }
+.wb__group ul { margin: 4px 0 0; padding-left: 18px; max-height: 220px; overflow: auto; }

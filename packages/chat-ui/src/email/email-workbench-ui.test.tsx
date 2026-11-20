@@ -16,6 +16,7 @@ const llm: ILLMClient = {
     seen.push({ system, user })
     const ids = [...user.matchAll(/^Thread ("(?:[^"\\]|\\.)*")/gm)].map((m) => JSON.parse(m[1]!) as string)
     if (system.includes('label mail folders')) return '{"folders":[]}'
+    if (system.includes('profile the senders')) return JSON.stringify({ senders: [...user.matchAll(/^Sender ("(?:[^"\\]|\\.)*")/gm)].map((m) => ({ sender: JSON.parse(m[1]!), kind: 'business_newsletter', reason: 'a company newsletter' })) })
     if (system.includes('answer questions about the user')) return ++chatCalls === 1 ? '{"tool":"mail_count","args":{}}' : '{"answer":"Scripted answer about your mail."}'
     if (ids.length > 0 && /spam/i.test(system) && /junk/i.test(system)) return JSON.stringify({ junk: ids.map((threadId) => ({ threadId, verdict: 'not_spam', reason: 'ordinary mail' })) })
     return JSON.stringify({ triage: ids.map((threadId) => ({ threadId, category: 'person', needsReply: true, priority: 'high', urgency: 'soon', reason: 'asks you something' })) })
@@ -76,5 +77,27 @@ describe('a live mailbox is labelled as live', () => {
     await openLive()
     expect(screen.queryByText('Sample mailbox')).toBeNull()
     expect(screen.getAllByText(/Apple Mail on this computer/).length).toBeGreaterThan(0)
+  })
+})
+
+describe('sender profiles and opening a result', () => {
+  it('Sort senders groups the senders by kind and says newsletters are not spam', async () => {
+    await openLive()
+    fireEvent.change(screen.getByLabelText('Window'), { target: { value: '90' } })
+    fireEvent.click(screen.getByRole('button', { name: 'Sort senders' }))
+    expect(await screen.findByText(/Senders, last 90 days/)).toBeTruthy()
+    expect(screen.getByText(/a company's newsletter is a newsletter/)).toBeTruthy()
+    expect(await screen.findByText(/Business newsletters and promotions \(\d+\)/)).toBeTruthy()
+  })
+  it('a "needs a response" item opens that thread in the reader', async () => {
+    await openLive()
+    fireEvent.change(screen.getByLabelText('Window'), { target: { value: '90' } })
+    fireEvent.click(screen.getByRole('button', { name: 'What needs a response?' }))
+    await screen.findByText('Last 90 days')
+    const card = screen.getByText('Last 90 days').closest('.wb__card')!
+    const link = card.querySelector('button.wb__link') as HTMLButtonElement
+    const subject = link.textContent!
+    fireEvent.click(link)
+    await vi.waitFor(() => expect(document.querySelector('.email__reader')?.textContent ?? '').toContain(subject.slice(0, 20)))
   })
 })

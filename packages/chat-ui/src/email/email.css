@@ -333,3 +333,9 @@
 .probably-spam__from, .probably-spam__why { color: var(--muted); grid-column: 1; }
 .probably-spam li button { grid-column: 2; grid-row: 1 / span 3; align-self: center; }
 .mailpane__server { margin: 0 12px 8px; padding: 6px 10px; border: 1px dashed var(--border); border-radius: 8px; background: none; color: inherit; font: inherit; font-size: 0.86rem; cursor: pointer; text-align: left; }
+
+/* Resizable panes: the handles are thin lines between the panes; the hit area is wider than the line. */
+.email__split--list, .email__split--listy { flex: none; z-index: 2; background: transparent; }
+.email__split--list { width: 6px; margin: 0 -3px; cursor: col-resize; }
+.email__split--listy { height: 6px; width: auto; margin: -3px 0; cursor: row-resize; }
+.email__split--list:hover, .email__split--listy:hover, .email__split--list:focus-visible, .email__split--listy:focus-visible { background: var(--accent-a18); }

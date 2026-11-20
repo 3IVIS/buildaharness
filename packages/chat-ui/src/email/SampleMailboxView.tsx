@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
-import { InMemoryEmailCache, searchMail, type CatchUpView, type Message, type ScoredTodo, type SpamView, type WorkbenchEvent } from '@buildaharness/aielia'
+import { InMemoryEmailCache, searchMail, type CatchUpView, type Message, type ScoredTodo, type SendersView, type SpamView, type WorkbenchEvent } from '@buildaharness/aielia'
 import type { SampleMailbox } from './sample-mode'
 import { EmailLayout } from './EmailLayout'
 import { MessageList } from './MessageList'
@@ -58,6 +58,7 @@ export function SampleMailboxView({ sample, onConnect, appSwitch, activity = [] 
   const [rules, setRules] = useState<RulesView | undefined>()
   const [liveTodo, setLiveTodo] = useState<ScoredTodo[] | undefined>()
   const [liveSpam, setLiveSpam] = useState<SpamView | undefined>()
+  const [liveSenders, setLiveSenders] = useState<SendersView | undefined>()
   const runWb = async (what: string, fn: () => Promise<void>): Promise<void> => {
     if (running) return
     setRunning(what); setWbError(undefined)
@@ -155,12 +156,13 @@ export function SampleMailboxView({ sample, onConnect, appSwitch, activity = [] 
             </div>
             {wb && (
               <WorkbenchPanel
-                running={running} events={activity} {...(catchUp ? { catchUp } : {})} {...(liveSpam ? { spam: liveSpam } : {})} {...(rules ? { rules } : {})} {...(wbError ? { error: wbError } : {})}
+                running={running} events={activity} {...(catchUp ? { catchUp } : {})} {...(liveSpam ? { spam: liveSpam } : {})} {...(liveSenders ? { senders: liveSenders } : {})} {...(rules ? { rules } : {})} {...(wbError ? { error: wbError } : {})}
                 onCatchUp={(days) => void runWb('catch-up', async () => { setCatchUp(await wb.catchUp(days)); await refreshTodo() })}
                 onSpam={(days) => void runWb('spam check', async () => { setLiveSpam(await wb.spam(days)); await refreshTodo() })}
+                onSenders={(days) => void runWb('sorting senders', async () => { setLiveSenders(await wb.senders(days)) })}
                 onRules={() => void runWb('rule proposals', async () => { setRules(await wb.ruleProposals()); await refreshTodo() })}
                 onTodo={() => void runWb('to do', refreshTodo)}
-                onOpenThread={(tid) => { setOpenId(inFolder.find((m) => m.threadId === tid)?.id); setFolderId(inbox?.id) }}
+                onOpenThread={(tid) => { const at = wb.locate(tid); if (at) { setFolderId(at.folderId); setOpenId(at.messageId) } }}
               />
             )}
             {query.trim() && (sample.live?.serverSearch ?? true) && serverHits?.query !== query.trim() && <button type="button" className="mailpane__server" disabled={serverBusy} onClick={() => void searchServer()}>{serverBusy ? 'Searching the server…' : 'Search the whole mailbox on the server too'}</button>}

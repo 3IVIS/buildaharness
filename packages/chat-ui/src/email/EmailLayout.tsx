@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { RailNav, type RailTab } from '../shared-ui/RailNav'
 import { Splitter } from '../shared-ui/Splitter'
 import { CHAT_DEFAULT, clampChat, layoutNow, readerPlacement, type LayoutMode, type PhonePanel } from './email-layout'
@@ -34,6 +34,21 @@ interface Props {
   onBack?: () => void
 }
 
+const SIZES_KEY = 'aielia-email-layout'
+interface Sizes { chat?: number; list?: number; rail?: number }
+/** The sizes the person dragged panes to, kept between sessions (nothing here is private). A browser without storage just starts from the defaults. */
+function loadSizes(): Sizes {
+  try {
+    const raw = typeof localStorage === 'undefined' ? null : localStorage.getItem(SIZES_KEY)
+    const p = raw ? (JSON.parse(raw) as Record<string, unknown>) : {}
+    const n = (v: unknown): number | undefined => (typeof v === 'number' && Number.isFinite(v) && v > 0 && v < 4000 ? v : undefined)
+    return { ...(n(p.chat) ? { chat: n(p.chat)! } : {}), ...(n(p.list) ? { list: n(p.list)! } : {}), ...(n(p.rail) ? { rail: n(p.rail)! } : {}) }
+  } catch { return {} }
+}
+function saveSizes(s: Sizes): void { try { localStorage.setItem(SIZES_KEY, JSON.stringify(s)) } catch { /* no storage: sizes last for this session */ } }
+
+const RAIL_WIDTH_DEFAULT = 232
+
 /** The To do entry of the rail and the tablet drawer: one line with a check icon and the open count. */
 function TodoEntry({ on, count, compact, onPick }: { on: boolean; count: number; compact?: boolean; onPick: () => void }): React.JSX.Element {
   return (
@@ -68,7 +83,13 @@ export function EmailLayout({ folders, list, reader, aielia, todo, todoCount = 0
   const [chatOpen, setChatOpen] = useState(false) // Aielia slide-over (tablet)
   const [panel, setPanel] = useState<PhonePanel>('email')
   const [view, setView] = useState<'mail' | 'todo'>('mail') // desktop and tablet: the middle shows mail or the To do list
-  const [chatWidth, setChatWidth] = useState(CHAT_DEFAULT)
+  const [sizes, setSizes] = useState<Sizes>(loadSizes)
+  const setSize = (k: keyof Sizes, v: number | undefined): void => setSizes((cur) => { const next = { ...cur }; if (v === undefined) delete next[k]; else next[k] = Math.round(v); saveSizes(next); return next })
+  const chatWidth = sizes.chat ?? CHAT_DEFAULT
+  const setChatWidth = (v: number): void => setSize('chat', v)
+  const mailRef = useRef<HTMLElement>(null)
+  const listRef = useRef<HTMLDivElement>(null)
+  const railRef = useRef<HTMLElement>(null)
 
   // Opening a message (from the To do list, say) brings the mail view back.
   useEffect(() => { if (readerOpen) setView('mail') }, [readerOpen])
@@ -106,6 +127,8 @@ export function EmailLayout({ folders, list, reader, aielia, todo, todoCount = 0
             aria-label="Folders"
             data-open={railOpen}
             data-pinned={pinned}
+            ref={railRef}
+            style={railOpen ? { width: sizes.rail ?? RAIL_WIDTH_DEFAULT } : undefined}
             onMouseEnter={() => setRailHover(true)}
             onMouseLeave={() => { setRailHover(false); setRailClicked(false) }}
           >
@@ -118,6 +141,18 @@ export function EmailLayout({ folders, list, reader, aielia, todo, todoCount = 0
             <div className="email__tree" hidden={!railOpen} onClick={() => setView('mail')}>{folders}</div>
           </aside>
         )}
+        {mode === 'desktop' && pinned && (
+          <Splitter
+            label="Folder list width"
+            axis="x"
+            grow={1}
+            className="email__split"
+            measure={() => railRef.current?.getBoundingClientRect().width ?? sizes.rail ?? RAIL_WIDTH_DEFAULT}
+            limits={() => ({ min: 170, max: Math.min(420, Math.max(170, width - chatWidth - 420)) })}
+            onSize={(px) => setSize('rail', px)}
+            onReset={() => setSize('rail', undefined)}
+          />
+        )}
 
         {phone && drawer && <div className="email__scrim" data-testid="scrim" onClick={() => setDrawer(false)} />}
         {mode !== 'desktop' && (
@@ -128,7 +163,7 @@ export function EmailLayout({ folders, list, reader, aielia, todo, todoCount = 0
           </aside>
         )}
 
-        <main className="email__mail" hidden={!showEmail} aria-label="Mail">
+        <main className="email__mail" hidden={!showEmail} aria-label="Mail" ref={mailRef}>
           {phone && (
             <div className="email__phonebar">
               {readerOpen
@@ -137,7 +172,27 @@ export function EmailLayout({ folders, list, reader, aielia, todo, todoCount = 0
               <span className="email__bartitle" />
             </div>
           )}
-          <div className="email__list" hidden={phone && readerOpen}>{list}</div>
+          <div
+            className="email__list"
+            hidden={phone && readerOpen}
+            ref={listRef}
+            style={placement === 'beside' && sizes.list ? { width: sizes.list } : placement === 'below' && readerOpen && sizes.list ? { height: sizes.list, minHeight: 0 } : undefined}
+          >{list}</div>
+          {!phone && (placement === 'beside' || (placement === 'below' && readerOpen)) && (
+            <Splitter
+              label={placement === 'beside' ? 'Message list width' : 'Message list height'}
+              axis={placement === 'beside' ? 'x' : 'y'}
+              grow={1}
+              className={placement === 'beside' ? 'email__split email__split--list' : 'email__split email__split--listy'}
+              measure={() => (placement === 'beside' ? listRef.current?.getBoundingClientRect().width : listRef.current?.getBoundingClientRect().height) ?? sizes.list ?? 360}
+              limits={() => {
+                const box = mailRef.current?.getBoundingClientRect()
+                return placement === 'beside' ? { min: 240, max: Math.max(240, (box?.width ?? 900) - 320) } : { min: 120, max: Math.max(120, (box?.height ?? 700) - 180) }
+              }}
+              onSize={(px) => setSize('list', px)}
+              onReset={() => setSize('list', undefined)}
+            />
+          )}
           <div className="email__reader" hidden={phone && !readerOpen}>{reader}</div>
         </main>
 

@@ -1,5 +1,6 @@
 import { z } from 'zod'
 import { mapLimit } from './concurrency.js'
+import { SENDER_KIND_LABEL, SPAM_KINDS, type SenderKind } from './sender-profile.js'
 import { parseModelJson } from '../model-json.js'
 import { buildMailModelInput } from './model-input.js'
 import { MAIL_UNTRUSTED_PROMPT } from './untrusted.js'
@@ -24,8 +25,8 @@ import type { TriageStore, TriageThread } from './triage.js'
 export const JunkVerdictSchema = z.object({
   threadId: z.string().min(1),
   verdict: z.enum(['likely_spam', 'not_spam', 'unsure']),
-  /** Which layer decided: learned exact signals, the model, a correspondent rule, or a guard that lowered a spam call. */
-  basis: z.enum(['exact', 'model', 'correspondent', 'guard']),
+  /** Which layer decided: learned exact signals, the model, a correspondent rule, mail the owner has engaged with from this sender, the kind of sender (its profile), or a guard that lowered a spam call. */
+  basis: z.enum(['exact', 'model', 'correspondent', 'engaged', 'profile', 'guard']),
   reason: z.string().min(1),
   userOverridden: z.boolean(),
   judgedAt: z.string().min(1),
@@ -57,6 +58,8 @@ export interface JunkSignals {
   junkDomains: string[]
   /** Addresses the user has written to, and senders of mail the user starred: mail from these is never spam. */
   correspondents: string[]
+  /** Sender address to the ids of the threads in which the owner KEPT mail from it (read, starred, or filed outside the inbox). Optional: absent means unknown. */
+  keptBySender?: Record<string, string[]>
 }
 
 const addr = (a: string): string => a.trim().toLowerCase()
@@ -84,6 +87,7 @@ export function learnJunkSignals(messages: readonly Message[], folders: readonly
   const byDomain = new Map<string, { n: number; senders: Set<string> }>()
   // Inbound mail that is NOT in Junk, per sender and domain: a signal must be (nearly) pure, so a domain that also sends real mail (a free-mail provider, a company) is never learned.
   const goodBySender = new Map<string, number>()
+  const keptThreads = new Map<string, Set<string>>()
   const goodByDomain = new Map<string, number>()
   for (const m of messages) {
     const from = addr(m.from.address)
@@ -92,6 +96,7 @@ export function learnJunkSignals(messages: readonly Message[], folders: readonly
     // Kept mail: read, starred or filed outside the inbox. Unread inbox mail is unjudged, so it counts for neither side.
     const kept = !m.folderIds.some((f) => junkIds.has(f) || trashIds.has(f)) && (m.flags.read || m.flags.starred || !m.folderIds.some((f) => inboxIds.has(f)))
     if (kept) {
+      const ts = keptThreads.get(from) ?? new Set<string>(); ts.add(m.threadId); keptThreads.set(from, ts)
       goodBySender.set(from, (goodBySender.get(from) ?? 0) + 1)
       goodByDomain.set(domainOf(from), (goodByDomain.get(domainOf(from)) ?? 0) + 1)
     }
@@ -107,6 +112,7 @@ export function learnJunkSignals(messages: readonly Message[], folders: readonly
     junkSenders: [...bySender].filter(([a, n]) => n >= minSender && !correspondents.has(a) && n / (n + (goodBySender.get(a) ?? 0)) >= minPurity).map(([a]) => a).sort(),
     junkDomains: [...byDomain].filter(([d, v]) => d && v.n >= minDomain && v.senders.size >= 2 && !corrDomains.has(d) && v.n / (v.n + (goodByDomain.get(d) ?? 0)) >= minPurity).map(([d]) => d).sort(),
     correspondents: [...correspondents].sort(),
+    keptBySender: Object.fromEntries([...keptThreads].map(([a, ts]) => [a, [...ts]])),
   }
 }
 
@@ -123,13 +129,22 @@ export function exactJunkVerdict(messages: readonly Message[], signals: JunkSign
   if (inbound.every((m) => senders.has(addr(m.from.address)) || domains.has(domainOf(m.from.address)))) {
     return { verdict: 'likely_spam', basis: 'exact', reason: 'The sender (or its domain) fills your Junk folder and you have never written to it.' }
   }
+  // A sender whose mail the owner has kept (read, starred, filed) in some OTHER thread is an ordinary sender, not spam: no model is needed.
+  const kept = signals.keptBySender
+  if (kept) {
+    const here = new Set(messages.map((m) => m.threadId))
+    if (inbound.every((m) => (kept[addr(m.from.address)] ?? []).some((t) => !here.has(t)))) {
+      return { verdict: 'not_spam', basis: 'engaged', reason: 'You have read or filed mail from this sender before.' }
+    }
+  }
   return undefined
 }
 
 // ---------- layer 2: the model ----------
 
 export const JUNK_SYSTEM_PROMPT =
-  'You decide whether email threads are junk for their owner. Junk means unsolicited or deceptive mail: scams, phishing, fake prizes, bulk advertising the owner never asked for. ' +
+  'You decide whether email threads are junk for their owner. Junk means deceptive or unwanted-by-nature mail: scams, phishing, fake prizes, impersonation of another organisation, and unsolicited cold sales from someone with no relationship to the owner. ' +
+  'Marketing and newsletters from a genuine business or organisation are NOT junk, even when they are bulk, promotional or unwanted: they are ordinary bulk mail. ' +
   'Mail the owner subscribed to (newsletters, receipts, notifications), mail from a real person, and anything that asks the owner something real is NOT junk, even if it is bulk or boring. ' +
   'You are shown a few examples of what the owner treats as junk and as not junk, then the threads. ' +
   'Answer with JSON only: {"junk":[{"threadId":string,"verdict":"likely_spam|not_spam|unsure","reason":one sentence}]}. One entry per thread, using the threadId given. ' +
@@ -167,6 +182,20 @@ export interface ClassifyJunkOptions {
   maxBodyChars?: number
   /** Model calls in flight at once (default 1). */
   concurrency?: number
+  /**
+   * What kind of sender each address is (see `sender-profile.ts`), by lower-case address. A thread whose newest sender has a profile is decided from it with
+   * no model call: the deceptive kinds are spam candidates (still behind the reply guard), every other kind is not spam. Senders without a profile go to the model.
+   */
+  profiles?: ReadonlyMap<string, { kind: SenderKind; reason: string }>
+  /** Newest messages of a thread shown to the model (default 3). One is enough to judge spam. */
+  messagesPerThread?: number
+  /** Keep an earlier verdict for a thread with nothing new since it was judged. */
+  skipJudged?: boolean
+  /**
+   * Reviews threads for replies (fills `triage`). Called once, with only the threads the model called spam, so the reply guard does not need every
+   * thread reviewed first. Without it, a spam call on an unreviewed thread is only `unsure`.
+   */
+  review?: (items: TriageThread[]) => Promise<void>
 }
 
 export interface ClassifyJunkResult {
@@ -186,13 +215,20 @@ function renderExamples(label: string, ms: readonly Message[] | undefined, o: Cl
 }
 
 /** Classify threads. Never throws for a model failure; a thread with no usable answer keeps no verdict, which leaves it in the inbox. */
+/** The address of the newest message not written by the owner (lower-case), or '' when every message is the owner's. */
+export function newestInboundSender(item: Pick<TriageThread, 'messages'>, own: readonly string[]): string {
+  const mine = new Set(own.map(addr))
+  return addr([...item.messages].sort((a, b) => (a.date < b.date ? -1 : 1)).reverse().find((m) => !mine.has(addr(m.from.address)))?.from.address ?? '')
+}
+
 export async function classifyJunk(items: readonly TriageThread[], o: ClassifyJunkOptions): Promise<ClassifyJunkResult> {
   const now = o.now ?? (() => new Date().toISOString())
   const own = [o.account.address]
   const result: ClassifyJunkResult = { written: [], skipped: [], unanswered: [], failedCalls: 0 }
-  const forModel: Array<{ id: string; text: string; messages: readonly Message[] }> = []
+  type Verdict = Pick<JunkVerdict, 'verdict' | 'basis' | 'reason'>
+  const corr = new Set(o.signals.correspondents)
 
-  const put = async (threadId: string, v: Pick<JunkVerdict, 'verdict' | 'basis' | 'reason'>): Promise<void> => {
+  const put = async (threadId: string, v: Verdict): Promise<void> => {
     const current = await o.store.get(threadId)
     if (current?.userOverridden) { result.skipped.push({ threadId, reason: 'user_overridden' }); return }
     const rec = JunkVerdictSchema.parse({ threadId, ...v, userOverridden: false, judgedAt: now() })
@@ -200,34 +236,61 @@ export async function classifyJunk(items: readonly TriageThread[], o: ClassifyJu
     result.written.push(rec)
   }
 
+  // Spam is only ever called on a thread that has been reviewed and does not need a reply. A spam call on a thread with no review yet waits in
+  // `pending`: with a `review` hook the flagged threads (a handful, not every thread) are reviewed in one go afterwards; without one it is only `unsure`.
+  const pending: Array<{ item: TriageThread; v: Verdict; because: string }> = []
+  const settle = async (item: TriageThread, v: Verdict, because: string): Promise<void> => {
+    if (v.verdict !== 'likely_spam' || !o.triage) { await put(item.thread.id, v); return }
+    const t = await o.triage.get(item.thread.id)
+    if (!t) {
+      if (o.review) pending.push({ item, v, because })
+      else await put(item.thread.id, { verdict: 'unsure', basis: 'guard', reason: `${because}, but this thread has not been reviewed for replies yet.` })
+    } else if (t.needsReply) await put(item.thread.id, { verdict: 'unsure', basis: 'guard', reason: `${because}, but this thread needs a reply from you.` })
+    else await put(item.thread.id, v)
+  }
+
+  // Layer 1 (no model): learned signals, correspondents, senders the owner has engaged with. Then the candidates for the model.
+  type Candidate = { item: TriageThread; parts: string[]; blocked?: 'excluded' | 'account_off' }
+  const candidates: Candidate[] = []
   for (const item of items) {
     const existing = await o.store.get(item.thread.id)
     if (existing?.userOverridden) { result.skipped.push({ threadId: item.thread.id, reason: 'user_overridden' }); continue }
+    // Already judged and nothing new has arrived since: keep that verdict.
+    if (o.skipJudged && existing && existing.judgedAt >= item.thread.lastMessageAt) continue
     const exact = exactJunkVerdict(item.messages, o.signals, own)
-    if (exact) {
-      let v = exact
-      // The learned layer is held to the same guard as the model: spam needs a review that says no reply is needed.
-      if (v.verdict === 'likely_spam' && o.triage) {
-        const t = await o.triage.get(item.thread.id)
-        if (!t) v = { verdict: 'unsure', basis: 'guard', reason: 'Matches mail you put in Junk, but this thread has not been reviewed for replies yet.' }
-        else if (t.needsReply) v = { verdict: 'unsure', basis: 'guard', reason: 'Matches mail you put in Junk, but this thread needs a reply from you.' }
-      }
-      await put(item.thread.id, v); continue
+    if (exact) { await settle(item, exact, 'Matches mail you put in Junk'); continue }
+    const prof = o.profiles?.get(newestInboundSender(item, own))
+    if (prof && prof.kind !== 'unknown') {
+      const reason = `${SENDER_KIND_LABEL[prof.kind]}: ${prof.reason}`
+      if (SPAM_KINDS.has(prof.kind)) await settle(item, { verdict: 'likely_spam', basis: 'profile', reason }, 'Its sender profile says so')
+      else await put(item.thread.id, { verdict: 'not_spam', basis: 'profile', reason })
+      continue
     }
     const parts: string[] = []
     let blocked: 'excluded' | 'account_off' | undefined
-    for (const m of [...item.messages].sort((a, b) => (a.date < b.date ? -1 : 1)).slice(-3)) {
+    for (const m of [...item.messages].sort((a, b) => (a.date < b.date ? -1 : 1)).slice(-(o.messagesPerThread ?? 3))) {
       const r = buildMailModelInput(o.account as Account, { ...m, textBody: m.textBody.slice(0, o.maxBodyChars ?? 1200) }, o.folders)
       if (r.ok) parts.push(r.text)
       else blocked = r.reason
     }
     if (parts.length === 0) { result.skipped.push({ threadId: item.thread.id, reason: blocked ?? 'excluded' }); continue }
-    forModel.push({ id: item.thread.id, text: `Thread ${JSON.stringify(item.thread.id)}:\n${parts.join('\n---\n')}`, messages: item.messages })
+    candidates.push({ item, parts })
   }
 
+  // One judgement per sender: the newest thread of each sender goes to the model and the answer applies to that sender's other threads here
+  // (each still goes through the reply guard on its own). A newsletter that arrives ten times is one question.
+  const senderOf = (c: Candidate): string => addr([...c.item.messages].reverse().find((m) => !own.map(addr).includes(addr(m.from.address)))?.from.address ?? '')
+  const groups = new Map<string, Candidate[]>()
+  for (const c of candidates) { const k = senderOf(c) || c.item.thread.id; groups.set(k, [...(groups.get(k) ?? []), c]) }
+  const forModel = [...groups.values()].map((members) => {
+    const rep = [...members].sort((a, b) => (a.item.thread.lastMessageAt < b.item.thread.lastMessageAt ? 1 : -1))[0]!
+    const more = members.length > 1 ? `\n(${members.length} threads from this sender; judge the sender.)` : ''
+    return { id: rep.item.thread.id, text: `Thread ${JSON.stringify(rep.item.thread.id)}:\n${rep.parts.join('\n---\n')}${more}`, members }
+  })
+
+  // Layer 2: the model.
   const examples = [renderExamples('junk', o.junkExamples, o), renderExamples('not junk', o.hamExamples, o)].filter(Boolean).join('\n\n')
   const size = Math.max(1, o.batchSize ?? 20)
-  const corr = new Set(o.signals.correspondents)
   const batches: Array<typeof forModel> = []
   for (let i = 0; i < forModel.length; i += size) batches.push(forModel.slice(i, i + size))
   await mapLimit(batches, o.concurrency ?? 1, async (batch) => {
@@ -241,21 +304,27 @@ export async function classifyJunk(items: readonly TriageThread[], o: ClassifyJu
       const b = byId.get(e.threadId)
       if (!b || done.has(e.threadId)) continue
       done.add(e.threadId)
-      let v: Pick<JunkVerdict, 'verdict' | 'basis' | 'reason'> = { verdict: e.verdict, basis: 'model', reason: e.reason }
-      if (e.verdict === 'likely_spam') {
-        // Guards that only ever lower a spam call.
-        if (b.messages.some((m) => corr.has(addr(m.from.address)))) v = { verdict: 'unsure', basis: 'guard', reason: 'Called spam by the model, but it is from someone you have written to.' }
-        else if (o.triage) {
-          // With triage in play, spam needs the thread to have been reviewed, and reviewed as not needing a reply.
-          const t = await o.triage.get(e.threadId)
-          if (!t) v = { verdict: 'unsure', basis: 'guard', reason: 'Called spam by the model, but this thread has not been reviewed for replies yet.' }
-          else if (t.needsReply) v = { verdict: 'unsure', basis: 'guard', reason: 'Called spam by the model, but this thread needs a reply from you.' }
-        }
+      for (const m of b.members) {
+        const v: Verdict = { verdict: e.verdict, basis: 'model', reason: e.reason }
+        // Guard that only ever lowers a spam call: the owner has written to someone in it.
+        if (v.verdict === 'likely_spam' && m.item.messages.some((x) => corr.has(addr(x.from.address)))) {
+          await put(m.item.thread.id, { verdict: 'unsure', basis: 'guard', reason: 'Called spam by the model, but it is from someone you have written to.' })
+        } else await settle(m.item, v, 'Called spam by the model')
       }
-      await put(e.threadId, v)
     }
-    for (const id of byId.keys()) if (!done.has(id)) result.unanswered.push(id)
+    for (const [id, b] of byId) if (!done.has(id)) for (const m of b.members) result.unanswered.push(m.item.thread.id)
   })
+
+  // The reply guard for what was called spam: review just those threads, then keep the call only where no reply is needed.
+  if (pending.length > 0 && o.review) {
+    try { await o.review(pending.map((p) => p.item)) } catch { result.failedCalls++ }
+    for (const p of pending) {
+      const t = await o.triage?.get(p.item.thread.id)
+      if (!t) await put(p.item.thread.id, { verdict: 'unsure', basis: 'guard', reason: `${p.because}, but this thread has not been reviewed for replies yet.` })
+      else if (t.needsReply) await put(p.item.thread.id, { verdict: 'unsure', basis: 'guard', reason: `${p.because}, but this thread needs a reply from you.` })
+      else await put(p.item.thread.id, p.v)
+    }
+  }
   return result
 }
 

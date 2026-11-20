@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import type { CatchUpView, RuleProposal, SpamView, WorkbenchEvent } from '@buildaharness/aielia'
+import type { CatchUpView, RuleProposal, SendersView, SpamView, WorkbenchEvent } from '@buildaharness/aielia'
 import './workbench.css'
 
 export interface RulesView { proposals: RuleProposal[]; filed: number; sampled: number; eligible: number }
@@ -9,10 +9,12 @@ interface Props {
   events: readonly WorkbenchEvent[]
   catchUp?: CatchUpView
   spam?: SpamView
+  senders?: SendersView
   rules?: RulesView
   error?: string
   onCatchUp: (days: 7 | 30 | 90) => void
   onSpam: (days: 7 | 30 | 90) => void
+  onSenders: (days: 7 | 30 | 90) => void
   onRules: () => void
   onTodo: () => void
   onOpenThread?: (threadId: string) => void
@@ -45,7 +47,7 @@ function EventLine({ e }: { e: WorkbenchEvent }): React.JSX.Element {
  * The review controls of a live mailbox and what they are doing. Everything here reads: nothing is moved, drafted or sent, and spam and rules are
  * proposals. The activity list shows each model call with what was sent and what came back, so the person can see exactly what Aielia is doing.
  */
-export function WorkbenchPanel({ running, events, catchUp, spam, rules, error, onCatchUp, onSpam, onRules, onTodo, onOpenThread }: Props): React.JSX.Element {
+export function WorkbenchPanel({ running, events, catchUp, spam, senders, rules, error, onCatchUp, onSpam, onSenders, onRules, onTodo, onOpenThread }: Props): React.JSX.Element {
   const [days, setDays] = useState<7 | 30 | 90>(7)
   const busy = running !== undefined
   return (
@@ -56,6 +58,7 @@ export function WorkbenchPanel({ running, events, catchUp, spam, rules, error, o
           <option value={7}>7 days</option><option value={30}>30 days</option><option value={90}>90 days</option>
         </select>
         <button type="button" disabled={busy} onClick={() => onCatchUp(days)}>What needs a response?</button>
+        <button type="button" disabled={busy} onClick={() => onSenders(days)}>Sort senders</button>
         <button type="button" disabled={busy} onClick={() => onSpam(days)}>Spam check</button>
         <button type="button" disabled={busy} onClick={onRules}>Rule proposals</button>
         <button type="button" disabled={busy} onClick={onTodo}>Update To do</button>
@@ -68,9 +71,27 @@ export function WorkbenchPanel({ running, events, catchUp, spam, rules, error, o
           <ul>{catchUp.needsResponse.map((n) => (
             <li key={n.threadId}>
               {onOpenThread ? <button type="button" className="wb__link" onClick={() => onOpenThread(n.threadId)}>{n.subject}</button> : n.subject}
-              <span className="wb__muted"> {n.reason}</span>
+              <span className="wb__muted">{n.folder ? ` (in ${n.folder})` : ''} {n.reason}</span>
             </li>
           ))}</ul>
+        </div>
+      )}
+      {senders && (
+        <div className="wb__card">
+          <strong>Senders, last {senders.windowDays} days</strong>
+          {senders.note
+            ? <p role="status" className="wb__note">{senders.note}</p>
+            : (
+              <>
+                <p className="wb__muted">{senders.total} senders sorted by what kind of sender they are. Only suspicious senders and unsolicited sales can ever be called spam; a company&apos;s newsletter is a newsletter.{senders.unsorted > 0 ? ` ${senders.unsorted} could not be placed yet.` : ''}</p>
+                {senders.groups.map((g) => (
+                  <details key={g.kind} className="wb__group" open={g.kind === 'suspicious' || g.kind === 'cold_outreach'}>
+                    <summary>{g.label} ({g.senders.length})</summary>
+                    <ul>{g.senders.map((r) => <li key={r.sender} title={r.reason}>{r.name ? `${r.name} ` : ''}<span className="wb__muted">{r.sender} · {r.threads} {r.threads === 1 ? 'thread' : 'threads'} · {r.reason}</span></li>)}</ul>
+                  </details>
+                ))}
+              </>
+            )}
         </div>
       )}
       {spam && (

@@ -11,6 +11,7 @@ import { correspondentsOf, createRuleGate, eligibleMessageIds } from './rule-gat
 import { MAIL_READ_TOOLS, isMailReadTool, runMailReadTool, type MailToolDeps } from './mail-tools.js'
 import { draftReply, type EmailReplyDraft } from './draft.js'
 import { groupConversations } from './conversation.js'
+import { InMemorySenderStore, SENDER_KINDS, SENDER_KIND_LABEL, buildSenderProfiles, classifySenders, type SenderKind } from './sender-profile.js'
 import { MAIL_UNTRUSTED_PROMPT } from './untrusted.js'
 import { parseModelJson } from '../model-json.js'
 
@@ -46,7 +47,10 @@ export interface WorkbenchOptions {
 
 export interface SpamRow { threadId: string; subject: string; sender: string; reason: string; basis: JunkVerdict['basis'] }
 export interface RuleProposal { rule: FilingRule; folder: string; examples: number; inboxHits: number; heldByGate: number }
-export interface CatchUpView { windowLabel: string; /** Set when the window held no mail. */ note?: string; summary: string[]; needsResponse: Array<{ threadId: string; subject: string; reason: string }> }
+export interface CatchUpView { windowLabel: string; /** Set when the window held no mail. */ note?: string; summary: string[]; needsResponse: Array<{ threadId: string; subject: string; reason: string; /** The folder it sits in, when that is not the inbox. */ folder?: string }> }
+export interface SenderRow { sender: string; name?: string; threads: number; reason: string; basis: 'structure' | 'model' | 'user' }
+export interface SenderGroup { kind: SenderKind; label: string; senders: SenderRow[] }
+export interface SendersView { windowDays: number; total: number; groups: SenderGroup[]; /** Senders the model did not place; asked about again next time. */ unsorted: number; note?: string }
 export interface SpamView { rows: SpamRow[]; windowDays: number; /** Set when there was nothing to judge, so a screen can say so instead of showing an empty result. */ note?: string; threads: number; unsure: number; notSpam: number; failedCalls: number; learned: { senders: number; domains: number; correspondents: number } }
 export interface AskResult { reply: string; steps: number; cited: Array<{ threadId: string; subject: string }> }
 
@@ -58,6 +62,7 @@ const PARALLEL_CALLS = 3
 export class EmailWorkbench {
   readonly triage = new InMemoryTriageStore()
   readonly junk = new InMemoryJunkStore()
+  readonly senderStore = new InMemorySenderStore()
   private rules = new RuleStore()
   private label = 'idle'
   private calls = 0
@@ -127,8 +132,59 @@ export class EmailWorkbench {
     }
     const r: CatchUpResult = await runCatchUp(deps)
     const p = catchUpParts(r, reviewWindowLabel(days))
-    const view: CatchUpView = { windowLabel: reviewWindowLabel(days), summary: [...p.summary, ...p.closing], needsResponse: r.needsResponse.map((n) => ({ threadId: n.threadId, subject: clip(n.subject, 90), reason: n.triage.reason })) }
+    const view: CatchUpView = { windowLabel: reviewWindowLabel(days), summary: [...p.summary, ...p.closing], needsResponse: r.needsResponse.map((n) => { const folder = this.folderOf(n.threadId); return { threadId: n.threadId, subject: clip(n.subject, 90), reason: n.triage.reason, ...(folder ? { folder } : {}) } }) }
     this.emit({ kind: 'result', text: view.summary.join(' ') })
+    return view
+  }
+
+  /** The folder a thread sits in when it is NOT in the inbox (its newest message's folder), for showing where a result lives. */
+  private folderOf(threadId: string): string | undefined {
+    const item = this.items.find((i) => i.thread.id === threadId)
+    if (!item || item.messages.some(this.inInbox)) return undefined
+    const f = this.folders.find((x) => item.messages[item.messages.length - 1]?.folderIds.includes(x.id))
+    return f?.name
+  }
+
+  /** Where to open a thread: its newest message and that message's folder (so a thread filed outside the inbox can be opened too). */
+  locate(threadId: string): { messageId: string; folderId: string } | undefined {
+    const item = this.items.find((i) => i.thread.id === threadId)
+    const m = item?.messages[item.messages.length - 1]
+    const folderId = m?.folderIds[0]
+    return m && folderId ? { messageId: m.id, folderId } : undefined
+  }
+
+  /** Settle what kind of sender each recent inbox sender is (structure first, then one model call per batch of senders that structure cannot place). */
+  private async profileSenders(items: readonly TriageThread[]): Promise<{ records: Map<string, { kind: SenderKind; reason: string }>; unsorted: number; profiles: ReturnType<typeof buildSenderProfiles> }> {
+    const own = new Set([this.account.address.toLowerCase()])
+    const wanted = new Set<string>()
+    for (const i of items) for (const m of i.messages) if (!own.has(m.from.address.toLowerCase())) wanted.add(m.from.address.toLowerCase())
+    const profiles = buildSenderProfiles(this.all, this.folders, [this.account.address], this.signals.correspondents).filter((p) => wanted.has(p.sender))
+    this.label = 'sender profiles'
+    const r = await classifySenders(profiles, { account: this.account, folders: this.folders, model: this.model, store: this.senderStore, now: this.now, batchSize: 30, concurrency: PARALLEL_CALLS })
+    this.emit({ kind: 'step', text: `Sender profiles: ${profiles.length} sender(s): ${r.remembered} already known, ${r.fromStructure} placed by structure, ${r.written.length - r.fromStructure} placed by the model in ${Math.ceil(r.asked / 30)} call(s)${r.unanswered.length ? `, ${r.unanswered.length} left unsorted` : ''}` })
+    const records = new Map<string, { kind: SenderKind; reason: string }>()
+    for (const p of profiles) { const rec = await this.senderStore.get(p.sender); if (rec) records.set(p.sender, { kind: rec.kind, reason: rec.reason }) }
+    return { records, unsorted: profiles.length - records.size, profiles }
+  }
+
+  /** The senders of the last `days` days of inbox mail, grouped by what kind of sender they are. */
+  async senders(days: 7 | 30 | 90 = 30): Promise<SendersView> {
+    const since = Date.parse(this.now()) - days * 86_400_000
+    const recent = this.inboxThreads().filter((i) => Date.parse(i.thread.lastMessageAt) >= since)
+    if (recent.length === 0) return { windowDays: days, total: 0, groups: [], unsorted: 0, note: `There is no inbox mail in the last ${days} days in this account, so there are no senders to sort. Try a wider window, or another account.` }
+    const { profiles, unsorted } = await this.profileSenders(recent)
+    const threadsIn = new Map<string, number>()
+    for (const i of recent) { const s = i.messages.filter((m) => m.from.address.toLowerCase() !== this.account.address.toLowerCase()).pop()?.from.address.toLowerCase(); if (s) threadsIn.set(s, (threadsIn.get(s) ?? 0) + 1) }
+    const groups = new Map<SenderKind, SenderRow[]>()
+    for (const p of profiles) {
+      const n = threadsIn.get(p.sender); if (!n) continue
+      const rec = await this.senderStore.get(p.sender)
+      const kind: SenderKind = rec?.kind ?? 'unknown'
+      groups.set(kind, [...(groups.get(kind) ?? []), { sender: p.sender, ...(p.name ? { name: p.name } : {}), threads: n, reason: rec?.reason ?? 'Not sorted yet.', basis: rec?.basis ?? 'model' }])
+    }
+    const out: SenderGroup[] = SENDER_KINDS.filter((k) => groups.has(k)).map((kind) => ({ kind, label: SENDER_KIND_LABEL[kind], senders: groups.get(kind)!.sort((a, b) => b.threads - a.threads) }))
+    const view: SendersView = { windowDays: days, total: [...groups.values()].reduce((n, g) => n + g.length, 0), groups: out, unsorted }
+    this.emit({ kind: 'result', text: `Senders (last ${days} days): ${view.total} sender(s): ${out.map((g) => `${g.senders.length} ${g.label.toLowerCase()}`).join(', ')}` })
     return view
   }
 
@@ -146,21 +202,21 @@ export class EmailWorkbench {
   async spam(days: 7 | 30 | 90 = 30): Promise<SpamView> {
     const since = Date.parse(this.now()) - days * 86_400_000
     const recent = this.inboxThreads().filter((i) => Date.parse(i.thread.lastMessageAt) >= since)
-    const unreviewed: TriageThread[] = []
-    for (const i of recent) if (!(await this.triage.get(i.thread.id))) unreviewed.push(i)
     if (recent.length === 0) {
       const note = `There is no inbox mail in the last ${days} days in this account, so there is nothing to check. Try a wider window, or another account.`
       this.emit({ kind: 'result', text: note })
       return { rows: [], windowDays: days, note, threads: 0, unsure: 0, notSpam: 0, failedCalls: 0, learned: { senders: this.signals.junkSenders.length, domains: this.signals.junkDomains.length, correspondents: this.signals.correspondents.length } }
     }
-    this.emit({ kind: 'step', text: `Spam: ${recent.length} inbox thread(s) in ${days} days; ${unreviewed.length} not yet reviewed for replies are reviewed first` })
-    this.label = 'review before spam'
-    if (unreviewed.length) await triageThreads(unreviewed.slice(0, 150), { account: this.account, model: this.model, store: this.triage, concurrency: PARALLEL_CALLS, now: this.now })
+    this.emit({ kind: 'step', text: `Spam: ${recent.length} inbox thread(s) in ${days} days. Senders are profiled first (a genuine business's newsletter is not spam), then only the senders that stay unclear are judged` })
+    const { records } = await this.profileSenders(recent)
     this.label = 'spam judgement'
     const res = await classifyJunk(recent, {
-      account: this.account, folders: this.folders, signals: this.signals, model: this.model, store: this.junk, concurrency: PARALLEL_CALLS, triage: this.triage, now: this.now,
-      junkExamples: this.all.filter((m) => this.kindOf.get(m.folderIds[0] ?? '') === 'junk').slice(0, 20),
+      account: this.account, folders: this.folders, signals: this.signals, model: this.model, store: this.junk, triage: this.triage, now: this.now,
+      profiles: records, skipJudged: true, concurrency: PARALLEL_CALLS, messagesPerThread: 1, maxBodyChars: 600, batchSize: 30,
+      // The owner's Junk folder is NOT shown as examples: it holds ordinary newsletters too, and the model copied that. Only not-junk examples are given.
       hamExamples: this.all.filter((m) => this.signals.correspondents.includes(m.from.address.toLowerCase())).slice(0, 20),
+      // The reply guard: only the threads called spam are reviewed for replies, in one go.
+      review: async (flagged) => { this.label = 'review of flagged mail'; await triageThreads(flagged, { account: this.account, model: this.model, store: this.triage, concurrency: PARALLEL_CALLS, now: this.now }) },
     })
     const vs = (await Promise.all(recent.map((i) => this.junk.get(i.thread.id)))).filter((v): v is JunkVerdict => !!v)
     const rows: SpamRow[] = vs.filter((v) => v.verdict === 'likely_spam').map((v) => {
