@@ -1,4 +1,5 @@
 import type { Account, Folder, Message, Thread } from '../model.js'
+type FolderKind = Folder['kind']
 import { EmailProviderError, type ChangeSet, type DraftInput, type EmailProvider, type MessageChange, type Page, type PageOptions, type SearchQuery } from '../provider.js'
 import {
   LocalSourceError, classifyLocalFolder, type LocalMailboxRow, type LocalMailSource, type LocalMessageFilter, type LocalMessageRow, type LocalRecipientRow, type LocalRowState,
@@ -39,6 +40,8 @@ export interface LocalMailProviderOptions {
   actions?: LocalMailActions
   /** Messages whose bodies are read at once (default 8). */
   concurrency?: number
+  /** Folder kinds the name table did not know, decided once per account (`resolveFolderKinds`). Keyed by `path.join('/')`. */
+  folderKinds?: ReadonlyMap<string, FolderKind>
 }
 
 const DEFAULT_LIMIT = 50
@@ -67,6 +70,7 @@ export class LocalMailProvider implements EmailProvider {
   private readonly acct: string
   private readonly actions?: LocalMailActions
   private readonly conc: number
+  private readonly folderKinds: ReadonlyMap<string, FolderKind>
   private boxes: Promise<LocalMailboxRow[]> | undefined
   /** Per-message state at recent change tokens, so a later call can say what changed. Lost on restart, which asks for a resync (cheap, local). */
   private baselines = new Map<string, Map<number, string>>()
@@ -77,6 +81,7 @@ export class LocalMailProvider implements EmailProvider {
     this.acct = o.localAccountId
     this.actions = o.actions
     this.conc = Math.max(1, o.concurrency ?? 8)
+    this.folderKinds = o.folderKinds ?? new Map()
   }
 
   private async myBoxes(): Promise<LocalMailboxRow[]> {
@@ -97,8 +102,13 @@ export class LocalMailProvider implements EmailProvider {
     return box
   }
 
+  private kindOf(path: readonly string[]): FolderKind {
+    const k = classifyLocalFolder(path)
+    return k === 'custom' ? (this.folderKinds.get(path.join('/')) ?? 'custom') : k
+  }
+
   private toFolder(b: LocalMailboxRow): Folder {
-    return { id: folderId(b.rowid), accountId: this.account.id, providerId: b.path.join('/'), name: b.path[b.path.length - 1] ?? '', kind: classifyLocalFolder(b.path), unreadCount: Math.max(0, b.unread) }
+    return { id: folderId(b.rowid), accountId: this.account.id, providerId: b.path.join('/'), name: b.path[b.path.length - 1] ?? '', kind: this.kindOf(b.path), unreadCount: Math.max(0, b.unread) }
   }
 
   async listFolders(): Promise<Folder[]> {
@@ -128,7 +138,7 @@ export class LocalMailProvider implements EmailProvider {
         for (const h of KEPT_HEADERS) if (parsed?.headers[h]) headers[h] = parsed.headers[h]!
         if (!headers['message-id'] && r.messageIdHeader) headers['message-id'] = r.messageIdHeader
         if (missing) headers['x-aielia-body'] = 'not-downloaded'
-        const kind = box ? classifyLocalFolder(box.path) : 'custom'
+        const kind = box ? this.kindOf(box.path) : 'custom'
         out[i + k] = {
           id: idOf(r.rowid), accountId: this.account.id, threadId: threadIdOf(r), providerId: String(r.rowid), folderIds: [folderId(r.mailbox)],
           from: parsed && parsed.from.address !== 'unknown@invalid' ? parsed.from : { address: r.sender ?? 'unknown@invalid', ...(r.senderName ? { name: r.senderName } : {}) },

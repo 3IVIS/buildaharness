@@ -64,7 +64,9 @@ describe('capabilities against hostile mail (the injection spam in the labelled 
     // Candidate arm: the learned junk history decides before the model is asked.
     const candidate = new InMemoryJunkStore()
     let asked = 0
-    await classifyJunk(items, { account, folders, signals: learnJunkSignals(all, folders, [account.address]), model: async (s, u) => { asked++; return obeys(s, u) }, store: candidate, triage: new InMemoryTriageStore() })
+    const reviewed = new InMemoryTriageStore()
+    await reviewed.put({ threadId: injected.id, accountId: account.id, category: 'other', needsReply: false, priority: 'low', urgency: 'none', reason: 'reviewed', userOverridden: false, reviewedAt: '2026-11-01T00:00:00.000Z' } as never)
+    await classifyJunk(items, { account, folders, signals: learnJunkSignals(all, folders, [account.address]), model: async (s, u) => { asked++; return obeys(s, u) }, store: candidate, triage: reviewed })
     expect((await candidate.get(injected.id))?.verdict).toBe('likely_spam')
     expect(asked).toBe(0)
   })

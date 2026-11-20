@@ -65,6 +65,8 @@ export interface LearnJunkOptions {
   /** A sender needs at least this many junk messages (default 2); a domain needs `minDomain` messages from at least two addresses (default 3). */
   minSender?: number
   minDomain?: number
+  /** Share of the sender's (or domain's) inbound mail that sits in Junk for it to be learned (default 0.8). */
+  minPurity?: number
 }
 
 /**
@@ -74,13 +76,24 @@ export interface LearnJunkOptions {
 export function learnJunkSignals(messages: readonly Message[], folders: readonly Pick<Folder, 'id' | 'kind'>[], ownAddresses: readonly string[], opts: LearnJunkOptions = {}): JunkSignals {
   const own = new Set(ownAddresses.map(addr))
   const junkIds = new Set(folders.filter((f) => f.kind === 'junk').map((f) => f.id))
+  const trashIds = new Set(folders.filter((f) => f.kind === 'trash').map((f) => f.id))
+  const inboxIds = new Set(folders.filter((f) => f.kind === 'inbox').map((f) => f.id))
   const correspondents = new Set<string>()
   const bySender = new Map<string, number>()
   const byDomain = new Map<string, { n: number; senders: Set<string> }>()
+  // Inbound mail that is NOT in Junk, per sender and domain: a signal must be (nearly) pure, so a domain that also sends real mail (a free-mail provider, a company) is never learned.
+  const goodBySender = new Map<string, number>()
+  const goodByDomain = new Map<string, number>()
   for (const m of messages) {
     const from = addr(m.from.address)
     if (own.has(from)) { for (const t of [...m.to, ...m.cc]) if (!own.has(addr(t.address))) correspondents.add(addr(t.address)); continue }
     if (m.flags.starred && !m.folderIds.some((f) => junkIds.has(f))) correspondents.add(from)
+    // Kept mail: read, starred or filed outside the inbox. Unread inbox mail is unjudged, so it counts for neither side.
+    const kept = !m.folderIds.some((f) => junkIds.has(f) || trashIds.has(f)) && (m.flags.read || m.flags.starred || !m.folderIds.some((f) => inboxIds.has(f)))
+    if (kept) {
+      goodBySender.set(from, (goodBySender.get(from) ?? 0) + 1)
+      goodByDomain.set(domainOf(from), (goodByDomain.get(domainOf(from)) ?? 0) + 1)
+    }
     if (m.folderIds.some((f) => junkIds.has(f))) {
       bySender.set(from, (bySender.get(from) ?? 0) + 1)
       const d = byDomain.get(domainOf(from)) ?? { n: 0, senders: new Set<string>() }
@@ -88,10 +101,10 @@ export function learnJunkSignals(messages: readonly Message[], folders: readonly
     }
   }
   const corrDomains = new Set([...correspondents].map(domainOf))
-  const minSender = opts.minSender ?? 2, minDomain = opts.minDomain ?? 3
+  const minSender = opts.minSender ?? 2, minDomain = opts.minDomain ?? 3, minPurity = opts.minPurity ?? 0.8
   return {
-    junkSenders: [...bySender].filter(([a, n]) => n >= minSender && !correspondents.has(a)).map(([a]) => a).sort(),
-    junkDomains: [...byDomain].filter(([d, v]) => d && v.n >= minDomain && v.senders.size >= 2 && !corrDomains.has(d)).map(([d]) => d).sort(),
+    junkSenders: [...bySender].filter(([a, n]) => n >= minSender && !correspondents.has(a) && n / (n + (goodBySender.get(a) ?? 0)) >= minPurity).map(([a]) => a).sort(),
+    junkDomains: [...byDomain].filter(([d, v]) => d && v.n >= minDomain && v.senders.size >= 2 && !corrDomains.has(d) && v.n / (v.n + (goodByDomain.get(d) ?? 0)) >= minPurity).map(([d]) => d).sort(),
     correspondents: [...correspondents].sort(),
   }
 }
@@ -188,7 +201,16 @@ export async function classifyJunk(items: readonly TriageThread[], o: ClassifyJu
     const existing = await o.store.get(item.thread.id)
     if (existing?.userOverridden) { result.skipped.push({ threadId: item.thread.id, reason: 'user_overridden' }); continue }
     const exact = exactJunkVerdict(item.messages, o.signals, own)
-    if (exact) { await put(item.thread.id, exact); continue }
+    if (exact) {
+      let v = exact
+      // The learned layer is held to the same guard as the model: spam needs a review that says no reply is needed.
+      if (v.verdict === 'likely_spam' && o.triage) {
+        const t = await o.triage.get(item.thread.id)
+        if (!t) v = { verdict: 'unsure', basis: 'guard', reason: 'Matches mail you put in Junk, but this thread has not been reviewed for replies yet.' }
+        else if (t.needsReply) v = { verdict: 'unsure', basis: 'guard', reason: 'Matches mail you put in Junk, but this thread needs a reply from you.' }
+      }
+      await put(item.thread.id, v); continue
+    }
     const parts: string[] = []
     let blocked: 'excluded' | 'account_off' | undefined
     for (const m of [...item.messages].sort((a, b) => (a.date < b.date ? -1 : 1)).slice(-3)) {
