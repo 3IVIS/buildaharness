@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import type { CatchUpView, RuleProposal, WorkbenchEvent } from '@buildaharness/aielia'
+import type { CatchUpView, RuleProposal, SpamView, WorkbenchEvent } from '@buildaharness/aielia'
 import './workbench.css'
 
 export interface RulesView { proposals: RuleProposal[]; filed: number; sampled: number; eligible: number }
@@ -8,10 +8,11 @@ interface Props {
   running: string | undefined
   events: readonly WorkbenchEvent[]
   catchUp?: CatchUpView
+  spam?: SpamView
   rules?: RulesView
   error?: string
   onCatchUp: (days: 7 | 30 | 90) => void
-  onSpam: () => void
+  onSpam: (days: 7 | 30 | 90) => void
   onRules: () => void
   onTodo: () => void
   onOpenThread?: (threadId: string) => void
@@ -44,18 +45,18 @@ function EventLine({ e }: { e: WorkbenchEvent }): React.JSX.Element {
  * The review controls of a live mailbox and what they are doing. Everything here reads: nothing is moved, drafted or sent, and spam and rules are
  * proposals. The activity list shows each model call with what was sent and what came back, so the person can see exactly what Aielia is doing.
  */
-export function WorkbenchPanel({ running, events, catchUp, rules, error, onCatchUp, onSpam, onRules, onTodo, onOpenThread }: Props): React.JSX.Element {
+export function WorkbenchPanel({ running, events, catchUp, spam, rules, error, onCatchUp, onSpam, onRules, onTodo, onOpenThread }: Props): React.JSX.Element {
   const [days, setDays] = useState<7 | 30 | 90>(7)
   const busy = running !== undefined
   return (
     <details className="wb" open>
       <summary>Aielia review <span className="wb__muted">{busy ? `· ${running}…` : '· read-only: nothing is changed or sent'}</span></summary>
       <div className="wb__bar">
-        <select aria-label="Catch-up window" value={days} onChange={(e) => setDays(Number(e.target.value) as 7 | 30 | 90)} disabled={busy}>
+        <select aria-label="Window" value={days} onChange={(e) => setDays(Number(e.target.value) as 7 | 30 | 90)} disabled={busy}>
           <option value={7}>7 days</option><option value={30}>30 days</option><option value={90}>90 days</option>
         </select>
         <button type="button" disabled={busy} onClick={() => onCatchUp(days)}>What needs a response?</button>
-        <button type="button" disabled={busy} onClick={onSpam}>Spam check</button>
+        <button type="button" disabled={busy} onClick={() => onSpam(days)}>Spam check</button>
         <button type="button" disabled={busy} onClick={onRules}>Rule proposals</button>
         <button type="button" disabled={busy} onClick={onTodo}>Update To do</button>
       </div>
@@ -63,13 +64,21 @@ export function WorkbenchPanel({ running, events, catchUp, rules, error, onCatch
       {catchUp && (
         <div className="wb__card">
           <strong>{catchUp.windowLabel}</strong>
-          <p>{catchUp.summary.join(' ')}</p>
+          {catchUp.note ? <p role="status" className="wb__note">{catchUp.note}</p> : <p>{catchUp.summary.join(' ')}</p>}
           <ul>{catchUp.needsResponse.map((n) => (
             <li key={n.threadId}>
               {onOpenThread ? <button type="button" className="wb__link" onClick={() => onOpenThread(n.threadId)}>{n.subject}</button> : n.subject}
               <span className="wb__muted"> {n.reason}</span>
             </li>
           ))}</ul>
+        </div>
+      )}
+      {spam && (
+        <div className="wb__card">
+          <strong>Spam check, last {spam.windowDays} days</strong>
+          {spam.note
+            ? <p role="status" className="wb__note">{spam.note}</p>
+            : <p>{spam.rows.length} probably spam, {spam.unsure} unsure, {spam.notSpam} not spam of {spam.threads} threads. Learned from your Junk folder: {spam.learned.senders} senders, {spam.learned.domains} domains. Nothing was moved.</p>}
         </div>
       )}
       {rules && (

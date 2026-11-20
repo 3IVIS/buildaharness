@@ -75,4 +75,20 @@ describe('EmailWorkbench', () => {
     await expect(wb.ask('x')).rejects.toThrow('down')
     expect(events.some((e) => e.kind === 'model_error')).toBe(true)
   })
+  it('an empty window says so instead of returning an empty result', async () => {
+    const { wb, events } = await setup()
+    // The corpus is dated 2026-11-01; ask from a "now" long after, so a 7-day window holds nothing.
+    const late = new EmailWorkbench({ provider: (wb as unknown as { o: { provider: never } }).o.provider, cache: (wb as unknown as { o: { cache: never } }).o.cache, model: async () => '{}', now: () => '2027-06-01T00:00:00.000Z', onEvent: (e) => events.push(e) })
+    await late.refresh()
+    const s = await late.spam(7)
+    expect(s.threads).toBe(0)
+    expect(s.note).toMatch(/nothing to check/)
+    const c = await late.catchUp(7)
+    expect(c.note).toMatch(/nothing to review/)
+    expect(c.needsResponse).toEqual([])
+  })
+  it('spam takes the window it is given', async () => {
+    const { wb } = await setup()
+    expect((await wb.spam(90)).windowDays).toBe(90)
+  })
 })

@@ -40,7 +40,7 @@ describe('Email host: the capabilities on a live mailbox with a model', () => {
     await openLive()
     expect(await screen.findByText(/Aielia review/)).toBeTruthy()
     expect(screen.getByText(/read-only: nothing is changed or sent/)).toBeTruthy()
-    fireEvent.change(screen.getByLabelText('Catch-up window'), { target: { value: '90' } })
+    fireEvent.change(screen.getByLabelText('Window'), { target: { value: '90' } })
     fireEvent.click(screen.getByRole('button', { name: 'What needs a response?' }))
     expect(await screen.findByText('Last 90 days')).toBeTruthy()
     expect(screen.getAllByText(/need a response/).length).toBeGreaterThan(0)
@@ -49,7 +49,7 @@ describe('Email host: the capabilities on a live mailbox with a model', () => {
   })
   it('shows every model call with what was sent and what came back', async () => {
     await openLive()
-    fireEvent.change(screen.getByLabelText('Catch-up window'), { target: { value: '90' } })
+    fireEvent.change(screen.getByLabelText('Window'), { target: { value: '90' } })
     fireEvent.click(screen.getByRole('button', { name: 'What needs a response?' }))
     await screen.findByText('Last 90 days')
     const activity = screen.getByText(/What Aielia is doing/).closest('details')!

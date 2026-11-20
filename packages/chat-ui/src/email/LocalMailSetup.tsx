@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from 'react'
-import type { LocalDiscovery, LocalMailSource } from '@buildaharness/aielia'
+import { recentInboxCounts, type LocalDiscovery, type LocalMailSource } from '@buildaharness/aielia'
 import { monitorLog } from './monitor'
 import './local-setup.css'
 
@@ -15,7 +15,8 @@ interface Props {
   revealApp?: () => void
   /** Quits and starts the app again: macOS applies the permission only to a process that starts after it is granted. */
   restartApp?: () => void
-  onUse: (accountIds: string[]) => void
+  /** The accounts chosen, and a short label for each (its name if shown, and how much recent mail it has), for switching between them. */
+  onUse: (accountIds: string[], labels: Record<string, string>) => void
   /** The sign-in route that always exists. */
   onSignIn: () => void
   onCancel: () => void
@@ -41,13 +42,22 @@ export function LocalMailSetup({ source, listAccountNames, openFullDiskAccessSet
   const [picked, setPicked] = useState<Set<string>>(new Set())
   const [names, setNames] = useState<Map<string, string>>(new Map())
   const [namesError, setNamesError] = useState<string | undefined>()
+  const [recent, setRecent] = useState<Map<string, number>>(new Map())
 
   const check = useCallback(async () => {
     setPhase({ kind: 'checking' })
     try {
       const d = await source.discover()
       monitorLog('local_discover', { available: d.available, reason: d.reason ?? null, layout: d.layout ?? null, accounts: d.accounts.length, messages: d.messageCount })
-      if (d.available && d.accounts.length > 0) { setPicked(new Set(d.accounts.map((a) => a.id))); setPhase({ kind: 'ready', d }) }
+      if (d.available && d.accounts.length > 0) {
+        // Which accounts have mail from the last 30 days: those are chosen by default, and listed first.
+        const counts = await recentInboxCounts(source, 30).catch(() => new Map<string, number>())
+        monitorLog('local_recent', { counts: [...counts.values()] })
+        setRecent(counts)
+        const active = d.accounts.filter((a) => (counts.get(a.id) ?? 0) > 0)
+        setPicked(new Set((active.length ? active : d.accounts.slice(0, 1)).map((a) => a.id)))
+        setPhase({ kind: 'ready', d })
+      }
       else setPhase({ kind: 'blocked', reason: d.available ? 'not_found' : String(d.reason ?? 'other'), d })
     } catch (e) {
       monitorLog('local_discover_error', { error: e instanceof Error ? e.message : String(e) })
@@ -70,12 +80,12 @@ export function LocalMailSetup({ source, listAccountNames, openFullDiskAccessSet
         <>
           <p>Aielia found these accounts in Apple Mail. It reads what Mail has already downloaded, so you do not sign in again. Reading is read-only and nothing is sent anywhere to do it.</p>
           <ul className="local-setup__accounts">
-            {phase.d.accounts.map((a, i) => (
+            {[...phase.d.accounts].sort((x, y) => (recent.get(y.id) ?? 0) - (recent.get(x.id) ?? 0)).map((a, i) => (
               <li key={`${a.scheme}:${a.id}`}>
                 <label>
                   <input type="checkbox" checked={picked.has(a.id)} onChange={(e) => { const n = new Set(picked); if (e.target.checked) n.add(a.id); else n.delete(a.id); setPicked(n) }} />
                   {' '}{names.get(a.id) ?? (a.scheme === 'local' ? 'On this computer' : `Account ${i + 1}`)}
-                  <span className="local-setup__count"> {a.messages.toLocaleString()} messages, {a.mailboxes} folders</span>
+                  <span className="local-setup__count"> {(recent.get(a.id) ?? 0) > 0 ? `${recent.get(a.id)} new in the last 30 days · ` : 'nothing in the last 30 days · '}{a.messages.toLocaleString()} messages in all</span>
                 </label>
               </li>
             ))}
@@ -84,7 +94,7 @@ export function LocalMailSetup({ source, listAccountNames, openFullDiskAccessSet
           {namesError && <p role="alert">Could not get the names: {namesError}</p>}
           <p className="local-setup__note">Aielia never reads an account&apos;s text with the AI until you switch that on for the account in Settings. Moving, flagging and saving drafts go through Mail itself and ask for one more permission the first time. Sending is always done by you in Mail.</p>
           <p>
-            <button type="button" className="reply__primary" disabled={picked.size === 0} onClick={() => onUse([...picked])}>Use these accounts</button>
+            <button type="button" className="reply__primary" disabled={picked.size === 0} onClick={() => onUse([...picked], Object.fromEntries(phase.d.accounts.map((a, i) => [a.id, `${names.get(a.id) ?? (a.scheme === 'local' ? 'On this computer' : `Account ${i + 1}`)} · ${recent.get(a.id) ?? 0} recent`])))}>Use these accounts</button>
             {' '}<button type="button" onClick={onSignIn}>Sign in to an account instead</button>
             {' '}<button type="button" onClick={onCancel}>Back</button>
           </p>

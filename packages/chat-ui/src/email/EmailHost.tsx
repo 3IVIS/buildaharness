@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import { AppleMailActions, tauriLocalMailSource, tauriScriptRunner, type AssistantConfig, type LocalMailActions, type LocalMailSource } from '@buildaharness/aielia'
 import { appSwitchHandler, type AppId } from '../app-switch'
 import { desktopEmailPlatform, type Invoke } from './desktop-platform'
@@ -76,19 +76,36 @@ export default function EmailHost({ config, onClose, onSwitch, localKit }: { con
     try { setKit(localKit ?? (await tauriLocalKit())); setSetup(true) } catch (e) { setNotice(`Reading the mail on this computer is not available: ${e instanceof Error ? e.message : String(e)}`) }
   }, [localKit])
 
-  const chooseAccounts = async (ids: string[]): Promise<void> => {
+  const [chosen, setChosen] = useState<{ ids: string[]; labels: Record<string, string>; active: string } | undefined>()
+  const loaded = useRef(new Map<string, SampleMailbox>())
+
+  /** One account at a time: its own folders, its own review, no ambiguity about which mail Aielia is looking at. Each is read once and kept. */
+  const openAccount = async (id: string): Promise<void> => {
     if (!kit) return
     setBusy(true)
-    monitorLog('use_accounts', { accounts: ids.length, model: llm ? 'connected' : 'none' })
+    monitorLog('open_account', { account: id.slice(0, 8), model: llm ? 'connected' : 'none' })
     try {
-      setActivity([])
-      setMailbox(await createLocalMailbox({ source: kit.source, accountIds: ids, ...(kit.actions ? { actions: kit.actions } : {}), ...(llm ? { llm } : {}), onEvent: (e) => { setActivity((a) => [...a.slice(-300), e]); monitorLog('workbench', briefly(e)) } }))
-      monitorLog('mailbox_ready', {})
+      let box = loaded.current.get(id)
+      if (!box) {
+        setActivity([])
+        box = await createLocalMailbox({ source: kit.source, accountIds: [id], ...(kit.actions ? { actions: kit.actions } : {}), ...(llm ? { llm } : {}), onEvent: (e) => { setActivity((a) => [...a.slice(-300), e]); monitorLog('workbench', briefly(e)) } })
+        loaded.current.set(id, box)
+      }
+      setMailbox(box)
+      setChosen((c) => (c ? { ...c, active: id } : c))
       setSetup(false)
+      monitorLog('mailbox_ready', { account: id.slice(0, 8) })
     } catch (e) {
       monitorLog('use_accounts_failed', { error: e instanceof Error ? e.message : String(e) })
       setNotice(`Aielia could not read that mail: ${e instanceof Error ? e.message : String(e)}`)
     } finally { setBusy(false) }
+  }
+
+  const chooseAccounts = async (ids: string[], labels: Record<string, string>): Promise<void> => {
+    monitorLog('use_accounts', { accounts: ids.length })
+    loaded.current.clear()
+    setChosen({ ids, labels, active: ids[0]! })
+    await openAccount(ids[0]!)
   }
 
   const appSwitch = appSwitchHandler('email', { desktop: (target) => (target === 'chat' ? onClose() : onSwitch?.(target)), desktopApp: true })
@@ -100,7 +117,7 @@ export default function EmailHost({ config, onClose, onSwitch, localKit }: { con
       <div className="write-host write local-setup-page">
         <LocalMailSetup
           source={kit.source} {...(kit.listAccountNames ? { listAccountNames: kit.listAccountNames } : {})} {...(kit.openFullDiskAccessSettings ? { openFullDiskAccessSettings: kit.openFullDiskAccessSettings } : {})} {...(kit.appName ? { appName: kit.appName } : {})} {...(kit.revealApp ? { revealApp: kit.revealApp } : {})} {...(kit.restartApp ? { restartApp: kit.restartApp } : {})}
-          onUse={(ids) => void chooseAccounts(ids)}
+          onUse={(ids, labels) => void chooseAccounts(ids, labels)}
           onSignIn={() => { setSetup(false); setNotice('Signing in to an account is not available in the desktop app yet. Reading the mail Apple Mail already has works without it.') }}
           onCancel={() => setSetup(false)}
         />
@@ -112,6 +129,16 @@ export default function EmailHost({ config, onClose, onSwitch, localKit }: { con
   return (
     <div className="write-host">
       {notice && <p role="status" className="write-host__notice">{notice}</p>}
+      {chosen && chosen.ids.length > 1 && (
+        <div className="write-host__bar write-host__accounts">
+          <label>Account{' '}
+            <select aria-label="Mail account" value={chosen.active} disabled={busy} onChange={(e) => void openAccount(e.target.value)}>
+              {chosen.ids.map((id) => <option key={id} value={id}>{chosen.labels[id] ?? id.slice(0, 8)}</option>)}
+            </select>
+          </label>
+          {busy && <span role="status"> Reading this account…</span>}
+        </div>
+      )}
       <SampleMailboxView sample={mailbox} onConnect={() => void openSetup()} appSwitch={appSwitch} activity={activity} />
     </div>
   )

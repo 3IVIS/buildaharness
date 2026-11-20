@@ -162,3 +162,19 @@ export async function inferOwnAddress(
   }
   return undefined
 }
+
+/**
+ * How much inbox mail each account received in the last `days` days (by the mail program's own account id), so a first-run screen can show which
+ * accounts have anything recent. One cheap count per account; headers only. INBOX is the same name in every language for IMAP, and the name table
+ * knows the others.
+ */
+export async function recentInboxCounts(source: Pick<LocalMailSource, 'mailboxes' | 'messages'>, days: number, now: Date = new Date()): Promise<Map<string, number>> {
+  const since = Math.floor(now.getTime() / 1000) - days * 86_400
+  const boxes = await source.mailboxes()
+  const out = new Map<string, number>()
+  for (const id of new Set(boxes.map((b) => b.accountId))) {
+    const ids = boxes.filter((b) => b.accountId === id && classifyLocalFolder(b.path) === 'inbox').map((b) => b.rowid)
+    out.set(id, ids.length ? (await source.messages({ mailboxIds: ids, since, limit: 1 })).total : 0)
+  }
+  return out
+}

@@ -46,8 +46,8 @@ export interface WorkbenchOptions {
 
 export interface SpamRow { threadId: string; subject: string; sender: string; reason: string; basis: JunkVerdict['basis'] }
 export interface RuleProposal { rule: FilingRule; folder: string; examples: number; inboxHits: number; heldByGate: number }
-export interface CatchUpView { windowLabel: string; summary: string[]; needsResponse: Array<{ threadId: string; subject: string; reason: string }> }
-export interface SpamView { rows: SpamRow[]; threads: number; unsure: number; notSpam: number; failedCalls: number; learned: { senders: number; domains: number; correspondents: number } }
+export interface CatchUpView { windowLabel: string; /** Set when the window held no mail. */ note?: string; summary: string[]; needsResponse: Array<{ threadId: string; subject: string; reason: string }> }
+export interface SpamView { rows: SpamRow[]; windowDays: number; /** Set when there was nothing to judge, so a screen can say so instead of showing an empty result. */ note?: string; threads: number; unsure: number; notSpam: number; failedCalls: number; learned: { senders: number; domains: number; correspondents: number } }
 export interface AskResult { reply: string; steps: number; cited: Array<{ threadId: string; subject: string }> }
 
 const clip = (s: string, n: number): string => (s.length > n ? `${s.slice(0, n - 1)}…` : s)
@@ -118,6 +118,11 @@ export class EmailWorkbench {
     const deps = { account: this.account, cache: this.o.cache, store: this.triage, model: this.model, ...(since ? { since } : {}), batchSize: 20, now: this.now, onProgress: (p: { done: number; total: number }) => this.emit({ kind: 'progress', text: `catch-up ${p.done}/${p.total}` }) }
     const est = await estimateCatchUp(deps)
     this.emit({ kind: 'step', text: `${reviewWindowLabel(days)}: ${est.inWindow} thread(s) in the window, ${est.toReview} to review in ${est.calls} model call(s)` })
+    if (est.inWindow === 0) {
+      const note = `There is no inbox mail in the ${reviewWindowLabel(days).toLowerCase()} in this account, so there is nothing to review. Try a wider window, or another account.`
+      this.emit({ kind: 'result', text: note })
+      return { windowLabel: reviewWindowLabel(days), note, summary: [], needsResponse: [] }
+    }
     const r: CatchUpResult = await runCatchUp(deps)
     const p = catchUpParts(r, reviewWindowLabel(days))
     const view: CatchUpView = { windowLabel: reviewWindowLabel(days), summary: [...p.summary, ...p.closing], needsResponse: r.needsResponse.map((n) => ({ threadId: n.threadId, subject: clip(n.subject, 90), reason: n.triage.reason })) }
@@ -136,12 +141,17 @@ export class EmailWorkbench {
    * Judge the last 30 days of the inbox for spam: learned signals, then the model, then the guards. A thread is first reviewed for replies, because
    * spam may never be called on mail that needs one. Returns proposals; nothing moves.
    */
-  async spam(): Promise<SpamView> {
-    const since = Date.parse(this.now()) - 30 * 86_400_000
+  async spam(days: 7 | 30 | 90 = 30): Promise<SpamView> {
+    const since = Date.parse(this.now()) - days * 86_400_000
     const recent = this.inboxThreads().filter((i) => Date.parse(i.thread.lastMessageAt) >= since)
     const unreviewed: TriageThread[] = []
     for (const i of recent) if (!(await this.triage.get(i.thread.id))) unreviewed.push(i)
-    this.emit({ kind: 'step', text: `Spam: ${recent.length} inbox thread(s) in 30 days; ${unreviewed.length} not yet reviewed for replies are reviewed first` })
+    if (recent.length === 0) {
+      const note = `There is no inbox mail in the last ${days} days in this account, so there is nothing to check. Try a wider window, or another account.`
+      this.emit({ kind: 'result', text: note })
+      return { rows: [], windowDays: days, note, threads: 0, unsure: 0, notSpam: 0, failedCalls: 0, learned: { senders: this.signals.junkSenders.length, domains: this.signals.junkDomains.length, correspondents: this.signals.correspondents.length } }
+    }
+    this.emit({ kind: 'step', text: `Spam: ${recent.length} inbox thread(s) in ${days} days; ${unreviewed.length} not yet reviewed for replies are reviewed first` })
     this.label = 'review before spam'
     if (unreviewed.length) await triageThreads(unreviewed.slice(0, 150), { account: this.account, model: this.model, store: this.triage, now: this.now })
     this.label = 'spam judgement'
@@ -156,10 +166,10 @@ export class EmailWorkbench {
       return { threadId: v.threadId, subject: clip(it?.thread.subject ?? v.threadId, 90), sender: it?.messages[0]?.from.address ?? '', reason: v.reason, basis: v.basis }
     })
     const view: SpamView = {
-      rows, threads: recent.length, unsure: vs.filter((v) => v.verdict === 'unsure').length, notSpam: vs.filter((v) => v.verdict === 'not_spam').length, failedCalls: res.failedCalls,
+      rows, windowDays: days, threads: recent.length, unsure: vs.filter((v) => v.verdict === 'unsure').length, notSpam: vs.filter((v) => v.verdict === 'not_spam').length, failedCalls: res.failedCalls,
       learned: { senders: this.signals.junkSenders.length, domains: this.signals.junkDomains.length, correspondents: this.signals.correspondents.length },
     }
-    this.emit({ kind: 'result', text: `Spam: ${rows.length} probably spam, ${view.unsure} unsure, ${view.notSpam} not spam of ${recent.length}. Nothing was moved.` })
+    this.emit({ kind: 'result', text: `Spam (last ${days} days): ${rows.length} probably spam, ${view.unsure} unsure, ${view.notSpam} not spam of ${recent.length}. Nothing was moved.` })
     return view
   }
 

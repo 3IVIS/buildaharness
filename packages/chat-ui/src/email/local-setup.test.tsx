@@ -8,15 +8,20 @@ const handlers = () => ({ onUse: vi.fn(), onSignIn: vi.fn(), onCancel: vi.fn() }
 const fixture = (): FixtureLocalSource => new FixtureLocalSource(generateSyntheticMailbox({ seed: 2 }))
 
 describe('LocalMailSetup', () => {
+  it('says how much recent mail each account has, so a dormant account is not chosen by accident', async () => {
+    render(<LocalMailSetup source={fixture()} {...handlers()} />)
+    expect(await screen.findByText(/in the last 30 days/)).toBeTruthy()
+  })
   it('lists the accounts it found by count only, uses the chosen ones, and keeps the sign-in route', async () => {
     const h = handlers()
     render(<LocalMailSetup source={fixture()} {...h} />)
     expect(screen.getByRole('status')).toHaveTextContent('Looking for Apple Mail')
     expect(await screen.findByText(/Account 1/)).toBeTruthy()
-    expect(screen.getByText(/messages, \d+ folders/)).toBeTruthy()
+    expect(screen.getByText(/messages in all/)).toBeTruthy()
     expect(screen.getByText(/Sending is always done by you in Mail/)).toBeTruthy()
     fireEvent.click(screen.getByRole('button', { name: 'Use these accounts' }))
-    expect(h.onUse).toHaveBeenCalledWith(['11111111-2222-3333-4444-555555555555'])
+    expect(h.onUse).toHaveBeenCalledWith(['11111111-2222-3333-4444-555555555555'], expect.any(Object))
+    expect(Object.values(h.onUse.mock.calls[0]![1] as Record<string, string>)[0]).toMatch(/recent/)
     fireEvent.click(screen.getByRole('button', { name: 'Sign in to an account instead' }))
     expect(h.onSignIn).toHaveBeenCalled()
   })

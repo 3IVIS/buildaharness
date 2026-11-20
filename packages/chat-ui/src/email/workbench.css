@@ -9,3 +9,5 @@
 .wb__log { font: 12px/1.35 ui-monospace, monospace; max-height: 240px; overflow: auto; }
 .wb__event { padding: 2px 0; border-bottom: 1px dotted var(--line, #ddd); }
 .wb__event pre { white-space: pre-wrap; word-break: break-word; max-height: 200px; overflow: auto; margin: 2px 0; }
+.wb__note { margin: 4px 0; padding: 6px 8px; border-radius: 6px; background: color-mix(in srgb, #f0a050 18%, transparent); }
+.write-host__accounts { display: flex; align-items: center; gap: 10px; }

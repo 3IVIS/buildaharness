@@ -155,9 +155,9 @@ export function SampleMailboxView({ sample, onConnect, appSwitch, activity = [] 
             </div>
             {wb && (
               <WorkbenchPanel
-                running={running} events={activity} {...(catchUp ? { catchUp } : {})} {...(rules ? { rules } : {})} {...(wbError ? { error: wbError } : {})}
+                running={running} events={activity} {...(catchUp ? { catchUp } : {})} {...(liveSpam ? { spam: liveSpam } : {})} {...(rules ? { rules } : {})} {...(wbError ? { error: wbError } : {})}
                 onCatchUp={(days) => void runWb('catch-up', async () => { setCatchUp(await wb.catchUp(days)); await refreshTodo() })}
-                onSpam={() => void runWb('spam check', async () => { setLiveSpam(await wb.spam()); await refreshTodo() })}
+                onSpam={(days) => void runWb('spam check', async () => { setLiveSpam(await wb.spam(days)); await refreshTodo() })}
                 onRules={() => void runWb('rule proposals', async () => { setRules(await wb.ruleProposals()); await refreshTodo() })}
                 onTodo={() => void runWb('to do', refreshTodo)}
                 onOpenThread={(tid) => { setOpenId(inFolder.find((m) => m.threadId === tid)?.id); setFolderId(inbox?.id) }}

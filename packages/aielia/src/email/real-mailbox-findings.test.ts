@@ -98,3 +98,15 @@ describe('the owner address is inferred, not assumed', () => {
     expect(await inferOwnAddress(src, boxes[0]!.accountId, () => 'custom')).toBeUndefined()
   })
 })
+
+describe('recent activity per account', () => {
+  it('counts inbox mail in a window for each account, so a picker can show which have any', async () => {
+    const { recentInboxCounts } = await import('./local-source.js')
+    const src = new FixtureLocalSource(generateSyntheticMailbox({ seed: 1 }))
+    const all = await recentInboxCounts(src, 100_000, new Date('2027-01-01'))
+    expect([...all.values()].every((n) => n >= 0)).toBe(true)
+    expect([...all.values()].some((n) => n > 0)).toBe(true)
+    const none = await recentInboxCounts(src, 1, new Date('2030-01-01'))
+    expect([...none.values()].every((n) => n === 0)).toBe(true)
+  })
+})
