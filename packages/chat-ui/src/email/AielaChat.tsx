@@ -81,6 +81,23 @@ export function AielaChat(p: Props): React.JSX.Element {
         )}
       </ul>
       {p.activity && <ActivityLog events={p.activity} working={!!p.working} />}
+      {p.tasks && (
+        <div className="achat__tasks" role="group" aria-label="Tasks" title="Ask Aielia to do something with this mailbox. Everything here reads: nothing is moved, saved to Mail or sent.">
+          <select
+            aria-label="Aielia task"
+            value=""
+            disabled={p.busy}
+            onChange={(e) => { const v = e.target.value; if (v) p.tasks?.onPick(v) }}
+          >
+            <option value="">Ask or do…</option>
+            {p.tasks.groups.map((g) => (
+              <optgroup key={g.label} label={g.label}>
+                {g.options.map((o) => <option key={o.value} value={o.value}>{o.label}</option>)}
+              </optgroup>
+            ))}
+          </select>
+        </div>
+      )}
       <div className="achat__compose">
         <textarea
           ref={box}
@@ -91,26 +108,7 @@ export function AielaChat(p: Props): React.JSX.Element {
           onChange={(e) => p.onInput(e.target.value)}
           onKeyDown={(e) => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); if (!p.busy && p.input.trim()) p.onSend() } }}
         />
-        <div className="achat__bar">
-          {p.tasks && (
-            <label className="achat__task" title="Ask Aielia to do something with this mailbox. Everything here reads: nothing is moved, saved to Mail or sent.">
-              <select
-                aria-label="Aielia task"
-                value=""
-                disabled={p.busy}
-                onChange={(e) => { const v = e.target.value; if (v) p.tasks?.onPick(v) }}
-              >
-                <option value="">Ask, or choose a task…</option>
-                {p.tasks.groups.map((g) => (
-                  <optgroup key={g.label} label={g.label}>
-                    {g.options.map((o) => <option key={o.value} value={o.value}>{o.label}</option>)}
-                  </optgroup>
-                ))}
-              </select>
-            </label>
-          )}
-          <button type="button" className="achat__send" aria-label="Send" title="Send" onClick={() => p.onSend()} disabled={p.busy || !p.input.trim()}><MailIcon name="send" /></button>
-        </div>
+        <button type="button" className="achat__send" aria-label="Send" title="Send" onClick={() => p.onSend()} disabled={p.busy || !p.input.trim()}><MailIcon name="send" /></button>
       </div>
     </section>
   )

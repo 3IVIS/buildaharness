@@ -14,8 +14,13 @@ export interface ParsedMail {
   cc: ParsedAddress[]
   subject: string
   textBody: string
+  /** The HTML part as received (decoded), when there is one. Never given to a model; the reader sanitises it before showing it. Capped at `MAX_HTML_CHARS`. */
+  htmlBody?: string
   attachments: Array<{ id: string; filename: string; mimeType: string; sizeBytes: number; inline?: boolean }>
 }
+
+/** The longest HTML part kept (a larger one is dropped, and the text part is shown instead). */
+export const MAX_HTML_CHARS = 400_000
 
 function splitHead(raw: string): { head: string; body: string } {
   const m = /\r?\n\r?\n/.exec(raw)
@@ -133,6 +138,7 @@ export function parseMail(raw: string): ParsedMail {
     cc: parseAddressList(headers['cc']),
     subject: decodeEncodedWords(headers['subject'] ?? ''),
     textBody: acc.text ?? (acc.html ? stripHtml(acc.html) : ''),
+    ...(acc.html && acc.html.length <= MAX_HTML_CHARS ? { htmlBody: acc.html } : {}),
     attachments: acc.attachments,
   }
 }

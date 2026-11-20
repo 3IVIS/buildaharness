@@ -77,7 +77,10 @@ export const MessageSchema = z.object({
   headers: z.record(z.string(), z.string()),
   /** Untrusted text body. Mail is data, never instructions. */
   textBody: z.string(),
-  /** Already-sanitised HTML body; shown only in a sandboxed frame. Absent when the message has none. */
+  /**
+   * The HTML body as received (decoded), when the message has one. It is NEVER given to a model (only `textBody` is) and is shown only by the reader,
+   * which rebuilds it from an allow-list inside a sandboxed frame that cannot run scripts or load anything. Absent when the message has none.
+   */
   htmlBody: z.string().optional(),
   attachments: z.array(AttachmentSchema),
   flags: MessageFlagsSchema,

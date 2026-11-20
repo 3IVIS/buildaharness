@@ -141,7 +141,7 @@
 .achat__chips { list-style: none; margin: 4px 0 0; padding: 0; display: grid; gap: 6px; width: 100%; }
 .write .achat__chips button { width: 100%; text-align: left; padding: 8px 12px; border-radius: 10px; background: var(--bg); color: var(--text); }
 .write .achat__chips button:hover:not(:disabled) { border-color: var(--accent); }
-.achat__compose { flex: none; display: flex; flex-direction: column; align-items: stretch; gap: 4px; margin: 0 12px 12px; padding: 6px 6px 6px 12px; border: 1px solid var(--border); border-radius: 16px; background: var(--bg); }
+.achat__compose { flex: none; display: flex; align-items: flex-end; gap: 8px; margin: 0 12px 12px; padding: 6px 6px 6px 12px; border: 1px solid var(--border); border-radius: 16px; background: var(--bg); }
 .achat__compose:focus-within { border-color: var(--accent); }
 .write .achat__compose textarea { min-height: 36px; flex: 1; min-width: 0; resize: none; border: 0; background: transparent; padding: 6px 0; max-height: 160px; line-height: 1.45; }
 .write .achat__compose textarea:focus { outline: none; }
@@ -334,16 +334,15 @@
 .probably-spam li button { grid-column: 2; grid-row: 1 / span 3; align-self: center; }
 .mailpane__server { margin: 0 12px 8px; padding: 6px 10px; border: 1px dashed var(--border); border-radius: 8px; background: none; color: inherit; font: inherit; font-size: 0.86rem; cursor: pointer; text-align: left; }
 
-/* Resizable panes: the handles are thin lines between the panes; the hit area is wider than the line. */
-.email__split--list, .email__split--listy { flex: none; z-index: 2; background: transparent; }
-.email__split--list { width: 6px; margin: 0 -3px; cursor: col-resize; }
-.email__split--listy { height: 6px; width: auto; margin: -3px 0; cursor: row-resize; }
-.email__split--list:hover, .email__split--listy:hover, .email__split--list:focus-visible, .email__split--listy:focus-visible { background: var(--accent-a18); }
+/* Resizable panes. The shared handle style (Write's) makes a handle `position: absolute` at the top of its container, which put the list/reader handle at the
+   top of the whole window. Here the handles sit in the flow between the two panes, with a visible hairline, and a wider area to grab. */
+.email .email__split--list, .email .email__split--listy { position: relative; flex: none; z-index: 6; touch-action: none; background-repeat: no-repeat; background-position: center; background-color: transparent; }
+.email .email__split--list { top: auto; bottom: auto; left: auto; right: auto; width: 9px; height: auto; align-self: stretch; margin: 0 -4px; cursor: col-resize; background-image: linear-gradient(var(--border), var(--border)); background-size: 1px 100%; }
+.email .email__split--listy { top: auto; left: auto; right: auto; width: auto; height: 9px; margin: -4px 0; cursor: row-resize; background-image: linear-gradient(var(--border), var(--border)); background-size: 100% 1px; }
+.email .email__split--list:hover, .email .email__split--listy:hover, .email .email__split--list:focus-visible, .email .email__split--listy:focus-visible, body.write--resizing .email__split--list, body.write--resizing .email__split--listy { background-color: var(--accent-a18); background-image: none; outline: none; }
 
-/* The compose bar under the text box: the task dropdown on the left (as in Write), Send on the right. */
-.achat__bar { display: flex; align-items: center; gap: 8px; }
-.achat__task { flex: 1; min-width: 0; }
-.write .achat__task select { width: 100%; min-height: 32px; font-size: 0.85rem; padding: 4px 8px; background: var(--surface); }
-.achat__bar .achat__send { margin-left: auto; }
+/* The task box above the text box, as in Write (its "Adjust or do…" box): a bordered row with one full-width dropdown. */
+.achat__tasks { flex: none; margin: 0 12px 8px; padding: 8px; border: 1px solid var(--border); border-radius: 8px; background: var(--tint-1, var(--bg)); }
+.write .achat__tasks select { width: 100%; min-width: 0; box-sizing: border-box; }
 .achat__line--rich { max-width: 100%; white-space: normal; }
 .achat__line--working { color: var(--muted); font-style: italic; }

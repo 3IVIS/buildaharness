@@ -277,7 +277,7 @@ export class ImapEmailProvider implements EmailProvider {
     return {
       id, accountId: this.account.id, threadId: this.rootOf(e), providerId: `${e.path}|${e.validity}|${e.uid}`, folderIds,
       from: mail.from, to: mail.to, cc: mail.cc, subject: mail.subject, date: date.toISOString(), headers,
-      textBody: mail.textBody, attachments: mail.attachments, flags: { read: !!(e.bits & FLAG_BITS.seen), starred: !!(e.bits & FLAG_BITS.flagged), draft: !!(e.bits & FLAG_BITS.draft) },
+      textBody: mail.textBody, ...(mail.htmlBody ? { htmlBody: mail.htmlBody } : {}), attachments: mail.attachments, flags: { read: !!(e.bits & FLAG_BITS.seen), starred: !!(e.bits & FLAG_BITS.flagged), draft: !!(e.bits & FLAG_BITS.draft) },
     }
   }
 

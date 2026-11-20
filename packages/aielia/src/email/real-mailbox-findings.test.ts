@@ -110,3 +110,55 @@ describe('recent activity per account', () => {
     expect([...none.values()].every((n) => n === 0)).toBe(true)
   })
 })
+
+describe('the HTML part of a message is kept for the reader', () => {
+  const CRLF = '\r\n'
+  const multipart = ['From: News <n@shop.example>', 'To: me@owner.example', 'Subject: Sale', 'MIME-Version: 1.0', 'Content-Type: multipart/alternative; boundary="b1"', '',
+    '--b1', 'Content-Type: text/plain; charset=utf-8', '', 'Plain version', '--b1', 'Content-Type: text/html; charset=utf-8', '', '<p><b>Bold</b> version</p>', '--b1--', ''].join(CRLF)
+  it('parseMail returns the HTML part as well as the text, and nothing when there is none', async () => {
+    const { parseMail } = await import('./providers/imap-mime.js')
+    const m = parseMail(multipart)
+    expect(m.textBody).toContain('Plain version')
+    expect(m.htmlBody).toContain('<b>Bold</b>')
+    expect(parseMail(['From: a@b.example', 'Subject: x', 'Content-Type: text/plain', '', 'only text'].join(CRLF)).htmlBody).toBeUndefined()
+  })
+  it('an HTML-only message still gets a text body (for the model), and the HTML for the reader', async () => {
+    const { parseMail } = await import('./providers/imap-mime.js')
+    const m = parseMail(['From: a@b.example', 'Subject: x', 'Content-Type: text/html; charset=utf-8', '', '<p>Hello <i>there</i></p>'].join(CRLF))
+    expect(m.textBody).toContain('Hello')
+    expect(m.htmlBody).toContain('<i>there</i>')
+  })
+  it('an oversized HTML part is dropped (the text is shown instead)', async () => {
+    const { parseMail, MAX_HTML_CHARS } = await import('./providers/imap-mime.js')
+    const big = `<p>${'x'.repeat(MAX_HTML_CHARS + 10)}</p>`
+    const m = parseMail(['From: a@b.example', 'Subject: x', 'Content-Type: text/html', '', big].join(CRLF))
+    expect(m.htmlBody).toBeUndefined()
+  })
+  it('the model only ever gets the text: building model input never includes the HTML', async () => {
+    const { buildMailModelInput } = await import('./model-input.js')
+    const msg = { id: 'm', accountId: 'a', threadId: 't', providerId: 'p', folderIds: ['in'], from: { address: 'a@b.example' }, to: [], cc: [], subject: 's', date: '2026-11-01T00:00:00.000Z', headers: {}, textBody: 'visible text', htmlBody: '<p style="display:none">SECRET-HTML-ONLY</p>', attachments: [], flags: { read: false, starred: false, draft: false } }
+    const r = buildMailModelInput({ aieliaMayRead: true, excludedFolders: [], excludedSenders: [] }, msg as never)
+    expect(r.ok && r.text).toContain('visible text')
+    expect(JSON.stringify(r)).not.toContain('SECRET-HTML-ONLY')
+  })
+})
+
+describe('the local reader carries the HTML', () => {
+  it('a downloaded message with an HTML part comes back with htmlBody, a partial one without', async () => {
+    const src = new FixtureLocalSource(generateSyntheticMailbox({ seed: 3 }))
+    const html = ['From: News <n@shop.example>', 'To: me@owner.example', 'Subject: Sale', 'Content-Type: multipart/alternative; boundary="b1"', '', '--b1', 'Content-Type: text/plain', '', 'Plain', '--b1', 'Content-Type: text/html', '', '<p><b>Bold</b></p>', '--b1--', ''].join('\r\n')
+    let partial = false
+    ;(src as unknown as { body: (r: number) => Promise<{ rawBase64: string; partial: boolean }> }).body = async () => ({ rawBase64: Buffer.from(html).toString('base64'), partial })
+    const boxes = await src.mailboxes()
+    const inbox = boxes.find((b) => classifyLocalFolder(b.path) === 'inbox') ?? boxes[0]!
+    const provider = new LocalMailProvider({ account: { id: 'x', provider: 'apple_mail', address: 'a@b.c', displayName: 'x', aieliaMayRead: true, excludedFolders: [], excludedSenders: [] }, source: src, localAccountId: inbox.accountId })
+    const f = (await provider.listFolders()).find((x) => x.kind === 'inbox')!
+    const full = (await provider.listMessages(f.id, { limit: 3 })).items
+    expect(full.length).toBeGreaterThan(0)
+    expect(full[0]!.htmlBody).toContain('<b>Bold</b>')
+    partial = true
+    const p2 = new LocalMailProvider({ account: { id: 'y', provider: 'apple_mail', address: 'a@b.c', displayName: 'x', aieliaMayRead: true, excludedFolders: [], excludedSenders: [] }, source: src, localAccountId: inbox.accountId })
+    const f2 = (await p2.listFolders()).find((x) => x.kind === 'inbox')!
+    expect((await p2.listMessages(f2.id, { limit: 3 })).items[0]!.htmlBody).toBeUndefined()
+  })
+})

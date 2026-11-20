@@ -43,7 +43,10 @@ describe('Email host: the capabilities on a live mailbox with a model', () => {
   it('offers the tasks in a dropdown in the chat, and no panel above the mail list', async () => {
     await openLive()
     const select = await screen.findByLabelText('Aielia task')
-    expect(select.closest('.achat__bar')).toBeTruthy()
+    // Above the text box (a box of its own, as in Write), not inside it.
+    expect(select.closest('.achat__tasks')).toBeTruthy()
+    expect(select.closest('.achat__compose')).toBeNull()
+    expect(select.closest('.achat__tasks')!.nextElementSibling).toBe(document.querySelector('.achat__compose'))
     expect(document.querySelector('.wb')).toBeNull()
     for (const label of ['Catch up: last 7 days', 'Sort senders: last 30 days', 'Spam check: last 7 days', 'Propose rules from my folders', 'Update my To do list']) {
       expect(screen.getByRole('option', { name: label })).toBeTruthy()

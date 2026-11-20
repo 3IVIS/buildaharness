@@ -3,7 +3,7 @@ import type { Message } from '@buildaharness/aielia'
 /**
  * Safe mail HTML (U5). The reader shows mail HTML only inside a sandboxed frame (`sandbox=""`: no scripts, no forms,
  * no same-origin) whose srcdoc is produced here. The sanitiser is an allow-list: unknown elements are unwrapped,
- * every attribute not on the list is dropped (all `on*` handlers, `style` included), remote images are replaced by a
+ * every attribute not on the list is dropped (all `on*` handlers; `style` is rebuilt from a strict allow-list of harmless formatting such as colour, weight, alignment and size), remote images are replaced by a
  * placeholder until the user allows them, and every link target is kept as visible data. Text a human cannot see
  * (zero size, display:none, text colour equal to its background) is removed from what is shown and reported, so the
  * displayed text and any summary built from it match what the reader sees.
@@ -74,6 +74,55 @@ function isHidden(el: Element): boolean {
   return false
 }
 
+// ---- Basic formatting that is safe to keep. Every value is checked against a strict pattern; anything else is dropped (no url(), no position, no
+// negative margins, no huge text). The frame has no scripts and a CSP that loads nothing, so this only changes how the mail looks.
+const COLOR_VALUE = /^(#[0-9a-f]{3,8}|rgba?\(\d{1,3},\d{1,3},\d{1,3}(,(0|1|0?\.\d+))?\)|[a-z]{3,20})$/
+const num = (v: string, unit: string): number | undefined => { const m = new RegExp(`^(\\d+(?:\\.\\d+)?)${unit}$`).exec(v); return m ? Number(m[1]) : undefined }
+function safeSize(v: string): boolean {
+  const px = num(v, 'px'), pt = num(v, 'pt'), em = num(v, 'em') ?? num(v, 'rem'), pc = num(v, '%')
+  return (px !== undefined && px >= 8 && px <= 48) || (pt !== undefined && pt >= 6 && pt <= 36) || (em !== undefined && em >= 0.6 && em <= 3) || (pc !== undefined && pc >= 60 && pc <= 300)
+}
+function safePadding(v: string): boolean {
+  const parts = v.split(/\s+/)
+  return parts.length >= 1 && parts.length <= 4 && parts.every((p) => p === '0' || (num(p, 'px') !== undefined && num(p, 'px')! <= 60))
+}
+const RULES: Record<string, (v: string) => boolean> = {
+  color: (v) => COLOR_VALUE.test(v),
+  'background-color': (v) => COLOR_VALUE.test(v),
+  'font-weight': (v) => /^(normal|bold|bolder|lighter|[1-9]00)$/.test(v),
+  'font-style': (v) => /^(normal|italic|oblique)$/.test(v),
+  'text-decoration': (v) => /^(none|underline|line-through)$/.test(v),
+  'text-align': (v) => /^(left|right|center|justify)$/.test(v),
+  'text-transform': (v) => /^(none|uppercase|lowercase|capitalize)$/.test(v),
+  'vertical-align': (v) => /^(top|middle|bottom|baseline)$/.test(v),
+  'font-size': safeSize,
+  'line-height': (v) => (/^\d+(\.\d+)?$/.test(v) && Number(v) >= 1 && Number(v) <= 3) || (num(v, 'px') !== undefined && num(v, 'px')! <= 60),
+  padding: safePadding, 'padding-top': safePadding, 'padding-right': safePadding, 'padding-bottom': safePadding, 'padding-left': safePadding,
+}
+const PRESENTATIONAL = new Set(['div', 'p', 'span', 'td', 'th', 'tr', 'table', 'h1', 'h2', 'h3', 'h4', 'h5', 'h6', 'li', 'ul', 'ol', 'blockquote', 'center', 'font', 'b', 'strong', 'i', 'em', 'u'])
+
+/** The formatting of one element that is safe to show, as a style attribute value ('' when there is none). */
+function safeStyle(el: Element, tag: string): string {
+  if (!PRESENTATIONAL.has(tag)) return ''
+  const out: string[] = []
+  // Values keep single spaces between parts ("4px 8px") and none inside brackets ("rgb(1,2,3)"), unlike `styleProps`, which strips every space.
+  const given: Record<string, string> = {}
+  for (const part of (el.getAttribute('style') ?? '').split(';')) {
+    const i = part.indexOf(':')
+    if (i > 0) given[part.slice(0, i).trim().toLowerCase()] = part.slice(i + 1).trim().toLowerCase().replace(/\s+/g, ' ').replace(/\s*,\s*/g, ',').replace(/\(\s+/g, '(').replace(/\s+\)/g, ')')
+  }
+  const bgShort = given['background']
+  if (bgShort !== undefined && given['background-color'] === undefined && COLOR_VALUE.test(bgShort)) given['background-color'] = bgShort
+  for (const [prop, ok] of Object.entries(RULES)) { const v = given[prop]; if (v !== undefined && ok(v)) out.push(`${prop}:${v}`) }
+  const align = norm(el.getAttribute('align') ?? '')
+  if (/^(left|right|center|justify)$/.test(align) && given['text-align'] === undefined) out.push(`text-align:${align}`)
+  const bg = norm(el.getAttribute('bgcolor') ?? '')
+  if (bg && COLOR_VALUE.test(bg) && given['background-color'] === undefined) out.push(`background-color:${bg}`)
+  const fc = tag === 'font' ? norm(el.getAttribute('color') ?? '') : ''
+  if (fc && COLOR_VALUE.test(fc) && given['color'] === undefined) out.push(`color:${fc}`)
+  return out.join(';')
+}
+
 const isRemote = (src: string): boolean => /^\s*(https?:)?\/\//i.test(src)
 const SAFE_SCHEMES = new Set(['http:', 'https:', 'mailto:', 'tel:'])
 function linkTarget(href: string): string | undefined {
@@ -141,7 +190,8 @@ export function sanitizeMailHtml(html: string, opts: SanitizeOptions = {}): Sani
       return `<span class="mail-link${mismatch ? ' mail-link--mismatch' : ''}">${content} <small class="mail-link__dest">(${esc(href)})</small></span>`
     }
     const attrs = tag === 'td' || tag === 'th' ? ['colspan', 'rowspan'].filter((a) => el.hasAttribute(a)).map((a) => ` ${a}="${esc(el.getAttribute(a) ?? '')}"`).join('') : ''
-    return `<${tag}${attrs}>${inner()}</${tag}>`
+    const style = safeStyle(el, tag)
+    return `<${tag}${attrs}${style ? ` style="${esc(style)}"` : ''}>${inner()}</${tag}>`
   }
 
   const body = walk(doc.documentElement, false)

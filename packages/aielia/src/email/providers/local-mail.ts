@@ -145,6 +145,7 @@ export class LocalMailProvider implements EmailProvider {
           to: parsed?.to.length ? parsed.to : own.filter((x) => x.kind === 0).map((x) => ({ address: x.address, ...(x.name ? { name: x.name } : {}) })),
           cc: parsed?.cc.length ? parsed.cc : own.filter((x) => x.kind === 1).map((x) => ({ address: x.address, ...(x.name ? { name: x.name } : {}) })),
           subject: `${r.subjectPrefix ?? ''}${r.subject}`, date: iso(r.dateReceived), headers, textBody: missing ? (parsed?.textBody ?? '') : parsed!.textBody,
+          ...(!missing && parsed?.htmlBody ? { htmlBody: parsed.htmlBody } : {}),
           attachments: parsed?.attachments ?? [], flags: { read: r.read, starred: r.flagged, draft: kind === 'drafts' },
         }
       }
