@@ -84,6 +84,9 @@ export const SIDE_CALL_MARKERS: Array<[string, string]> = [
   ['You describe how an email writer writes', '{"voices":{}}'],
   ['You write an email reply for its owner', '{"body":""}'],
   ['A writer is working with an assistant on one or more articles', '{"articleId":null,"ops":[]}'],
+  ['You diagnose why an assistant run went wrong', '{"terminalCause":"none","criticality":"unknown","mechanism":"other","other":"","addressableByHarness":false,"incorrectStepIds":[],"reasoning":""}'],
+  ['You propose changes to an assistant harness', '{"bundles":[]}'],
+  ['You critique one proposed harness change', '{"verdict":"reject","reasons":["inert"]}'],
 ]
 
 /** The phrase that opens `turn-intent-classifier.ts`'s system prompt — stable, and how every scripted client tells that mandatory call apart from a real tool-loop call. */
