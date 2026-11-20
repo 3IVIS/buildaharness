@@ -70,3 +70,11 @@ describe('Email host: the capabilities on a live mailbox with a model', () => {
     expect(chatCalls).toBe(2)
   })
 })
+
+describe('a live mailbox is labelled as live', () => {
+  it('the chat column does not call a real mailbox a sample', async () => {
+    await openLive()
+    expect(screen.queryByText('Sample mailbox')).toBeNull()
+    expect(screen.getAllByText(/Apple Mail on this computer/).length).toBeGreaterThan(0)
+  })
+})

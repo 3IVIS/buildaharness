@@ -1,4 +1,5 @@
 import { z } from 'zod'
+import { mapLimit } from './concurrency.js'
 import { parseModelJson } from '../model-json.js'
 import { buildMailModelInput } from './model-input.js'
 import { MAIL_UNTRUSTED_PROMPT } from './untrusted.js'
@@ -164,6 +165,8 @@ export interface ClassifyJunkOptions {
   now?: () => string
   batchSize?: number
   maxBodyChars?: number
+  /** Model calls in flight at once (default 1). */
+  concurrency?: number
 }
 
 export interface ClassifyJunkResult {
@@ -225,11 +228,12 @@ export async function classifyJunk(items: readonly TriageThread[], o: ClassifyJu
   const examples = [renderExamples('junk', o.junkExamples, o), renderExamples('not junk', o.hamExamples, o)].filter(Boolean).join('\n\n')
   const size = Math.max(1, o.batchSize ?? 20)
   const corr = new Set(o.signals.correspondents)
-  for (let i = 0; i < forModel.length; i += size) {
-    const batch = forModel.slice(i, i + size)
+  const batches: Array<typeof forModel> = []
+  for (let i = 0; i < forModel.length; i += size) batches.push(forModel.slice(i, i + size))
+  await mapLimit(batches, o.concurrency ?? 1, async (batch) => {
     const byId = new Map(batch.map((b) => [b.id, b]))
     let answer: string
-    try { answer = await o.model(JUNK_SYSTEM_PROMPT, `${examples ? `${examples}\n\n=====\n\n` : ''}${batch.map((b) => b.text).join('\n\n=====\n\n')}`) } catch { result.failedCalls++; continue }
+    try { answer = await o.model(JUNK_SYSTEM_PROMPT, `${examples ? `${examples}\n\n=====\n\n` : ''}${batch.map((b) => b.text).join('\n\n=====\n\n')}`) } catch { result.failedCalls++; return }
     const entries = parseJunkAnswer(answer)
     if (entries.length === 0) result.failedCalls++
     const done = new Set<string>()
@@ -251,7 +255,7 @@ export async function classifyJunk(items: readonly TriageThread[], o: ClassifyJu
       await put(e.threadId, v)
     }
     for (const id of byId.keys()) if (!done.has(id)) result.unanswered.push(id)
-  }
+  })
   return result
 }
 

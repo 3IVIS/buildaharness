@@ -1,5 +1,6 @@
 import type { EmailCache } from './cache.js'
 import type { Account, Folder, Message, Thread, Triage } from './model.js'
+import { mapLimit } from './concurrency.js'
 import { triageThreads, type TriageModel, type TriageStore, type TriageThread } from './triage.js'
 
 /**
@@ -22,6 +23,8 @@ export interface CatchUpDeps {
   since?: string
   /** Threads per model call (default 20). */
   batchSize?: number
+  /** Model calls in flight at once (default 1). */
+  concurrency?: number
   now?: () => string
   /** Checked before every batch; true stops the run (`interrupted`). */
   shouldStop?: () => boolean
@@ -110,15 +113,19 @@ export async function runCatchUp(deps: CatchUpDeps): Promise<CatchUpResult> {
   const size = Math.max(1, deps.batchSize ?? BATCH)
   let reviewed = 0, failedCalls = 0
   let status: CatchUpResult['status'] = 'complete'
-  for (let i = 0; i < pending.length; i += size) {
-    if (deps.shouldStop?.()) { status = 'interrupted'; break }
-    const batch = pending.slice(i, i + size)
+  const chunks: Thread[][] = []
+  for (let i = 0; i < pending.length; i += size) chunks.push(pending.slice(i, i + size))
+  let done = 0
+  await mapLimit(chunks, deps.concurrency ?? 1, async (batch) => {
+    if (status === 'interrupted') return
+    if (deps.shouldStop?.()) { status = 'interrupted'; return }
     const items = await Promise.all(batch.map((t) => load(deps.cache, t, deps.account.id)))
     const r = await triageThreads(items, { account: deps.account, folders, model: deps.model, store: deps.store, batchSize: size, ...(deps.now ? { now: deps.now } : {}) })
     reviewed += r.written.length
     failedCalls += r.failedCalls
-    deps.onProgress?.({ done: Math.min(pending.length, i + batch.length), total: pending.length })
-  }
+    done += batch.length
+    deps.onProgress?.({ done: Math.min(pending.length, done), total: pending.length })
+  })
 
   const needs: CatchUpItem[] = []
   let withheld = 0

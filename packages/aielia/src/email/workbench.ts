@@ -52,6 +52,8 @@ export interface AskResult { reply: string; steps: number; cited: Array<{ thread
 
 const clip = (s: string, n: number): string => (s.length > n ? `${s.slice(0, n - 1)}…` : s)
 const MAX_TOOL_STEPS = 5
+/** Model calls in flight at once for the batch reviews: the mail is split into batches of about 20 threads and they are independent. */
+const PARALLEL_CALLS = 3
 
 export class EmailWorkbench {
   readonly triage = new InMemoryTriageStore()
@@ -115,7 +117,7 @@ export class EmailWorkbench {
   async catchUp(days: ReviewWindow = 7): Promise<CatchUpView> {
     this.label = `catch-up ${days}`
     const since = windowSince(days, new Date(this.now()))
-    const deps = { account: this.account, cache: this.o.cache, store: this.triage, model: this.model, ...(since ? { since } : {}), batchSize: 20, now: this.now, onProgress: (p: { done: number; total: number }) => this.emit({ kind: 'progress', text: `catch-up ${p.done}/${p.total}` }) }
+    const deps = { account: this.account, cache: this.o.cache, store: this.triage, model: this.model, ...(since ? { since } : {}), batchSize: 20, concurrency: PARALLEL_CALLS, now: this.now, onProgress: (p: { done: number; total: number }) => this.emit({ kind: 'progress', text: `catch-up ${p.done}/${p.total}` }) }
     const est = await estimateCatchUp(deps)
     this.emit({ kind: 'step', text: `${reviewWindowLabel(days)}: ${est.inWindow} thread(s) in the window, ${est.toReview} to review in ${est.calls} model call(s)` })
     if (est.inWindow === 0) {
@@ -153,10 +155,10 @@ export class EmailWorkbench {
     }
     this.emit({ kind: 'step', text: `Spam: ${recent.length} inbox thread(s) in ${days} days; ${unreviewed.length} not yet reviewed for replies are reviewed first` })
     this.label = 'review before spam'
-    if (unreviewed.length) await triageThreads(unreviewed.slice(0, 150), { account: this.account, model: this.model, store: this.triage, now: this.now })
+    if (unreviewed.length) await triageThreads(unreviewed.slice(0, 150), { account: this.account, model: this.model, store: this.triage, concurrency: PARALLEL_CALLS, now: this.now })
     this.label = 'spam judgement'
     const res = await classifyJunk(recent, {
-      account: this.account, folders: this.folders, signals: this.signals, model: this.model, store: this.junk, triage: this.triage, now: this.now,
+      account: this.account, folders: this.folders, signals: this.signals, model: this.model, store: this.junk, concurrency: PARALLEL_CALLS, triage: this.triage, now: this.now,
       junkExamples: this.all.filter((m) => this.kindOf.get(m.folderIds[0] ?? '') === 'junk').slice(0, 20),
       hamExamples: this.all.filter((m) => this.signals.correspondents.includes(m.from.address.toLowerCase())).slice(0, 20),
     })
@@ -182,7 +184,7 @@ export class EmailWorkbench {
     const need: TriageThread[] = []
     for (const id of ids) { const i = this.items.find((x) => x.thread.id === id); if (i && !(await this.triage.get(id))) need.push(i) }
     this.label = 'review for the rule gate'
-    if (need.length) await triageThreads(need, { account: this.account, model: this.model, store: this.triage, now: this.now })
+    if (need.length) await triageThreads(need, { account: this.account, model: this.model, store: this.triage, concurrency: PARALLEL_CALLS, now: this.now })
     const gate = createRuleGate(this.o.cache, { triage: this.triage, correspondents: await correspondentsOf(this.o.cache, this.account), ownAddresses: [this.account.address] })
     const sample = filed.filter((m) => ids.includes(m.threadId))
     const eligible = await eligibleMessageIds(sample, gate)

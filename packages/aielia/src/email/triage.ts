@@ -1,4 +1,5 @@
 import { z } from 'zod'
+import { mapLimit } from './concurrency.js'
 import { parseModelJson } from '../model-json.js'
 import { buildMailModelInput } from './model-input.js'
 import { MAIL_UNTRUSTED_PROMPT, structuralMailFlags, type MailFlag } from './untrusted.js'
@@ -59,6 +60,8 @@ export interface TriageOptions {
   maxBodyChars?: number
   /** Messages per thread shown, newest last (default 5). */
   maxMessagesPerThread?: number
+  /** Model calls in flight at once when the set is split into several (default 1). */
+  concurrency?: number
 }
 
 export interface TriageRunResult {
@@ -153,15 +156,16 @@ export async function triageThreads(items: readonly TriageThread[], opts: Triage
   }
 
   const size = Math.max(1, opts.batchSize ?? 20)
-  for (let i = 0; i < sendable.length; i += size) {
-    const batch = sendable.slice(i, i + size)
+  const batches: Array<typeof sendable> = []
+  for (let i = 0; i < sendable.length; i += size) batches.push(sendable.slice(i, i + size))
+  await mapLimit(batches, opts.concurrency ?? 1, async (batch) => {
     const ids = new Set(batch.map((b) => b.id))
     let answer: string
     try {
       answer = await opts.model(TRIAGE_SYSTEM_PROMPT, batch.map((b) => b.text).join('\n\n=====\n\n'))
     } catch {
       result.failedCalls++
-      continue
+      return
     }
     const entries = parseTriageAnswer(answer)
     if (entries.length === 0) result.failedCalls++
@@ -188,6 +192,6 @@ export async function triageThreads(items: readonly TriageThread[], opts: Triage
       done.add(e.threadId)
     }
     for (const id of ids) if (!done.has(id)) result.unanswered.push(id)
-  }
+  })
   return result
 }

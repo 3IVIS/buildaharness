@@ -11,3 +11,9 @@
 .wb__event pre { white-space: pre-wrap; word-break: break-word; max-height: 200px; overflow: auto; margin: 2px 0; }
 .wb__note { margin: 4px 0; padding: 6px 8px; border-radius: 6px; background: color-mix(in srgb, #f0a050 18%, transparent); }
 .write-host__accounts { display: flex; align-items: center; gap: 10px; }
+
+/* A long "probably spam" group must not push the message list off the screen. */
+.probably-spam ul { max-height: 34vh; overflow: auto; }
+.write-host__accounts { font-size: 0.85rem; padding: 6px 16px; }
+.write-host__accounts label { display: inline-flex; align-items: center; gap: 8px; color: var(--muted); }
+.write-host__accounts select { min-height: 30px; }

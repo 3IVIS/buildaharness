@@ -174,7 +174,7 @@ export function SampleMailboxView({ sample, onConnect, appSwitch, activity = [] 
           </div>
         }
         reader={open ? <MailReader message={open} /> : <ReaderEmpty unread={unread} />}
-        aielia={<AielaChat lines={lines} input={text} onInput={setText} onSend={(t) => void send(t)} busy={busy} suggestions={SUGGESTIONS} subtitle="Sample mailbox" />}
+        aielia={<AielaChat lines={lines} input={text} onInput={setText} onSend={(t) => void send(t)} busy={busy} suggestions={SUGGESTIONS} subtitle={sample.live ? sample.live.label.replace(/\.$/, '') : 'Sample mailbox'} />}
       />
     </div>
   )
