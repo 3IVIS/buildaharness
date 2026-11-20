@@ -7,6 +7,7 @@ import type { WorkbenchEvent } from '@buildaharness/aielia'
 import { createSampleMailbox, type SampleMailbox } from './sample-mode'
 import { createLocalMailbox } from './local-mode'
 import { LocalMailSetup } from './LocalMailSetup'
+import { monitorLog, startEmailMonitor } from './monitor'
 import { SampleMailboxView } from './SampleMailboxView'
 import '../write/write.css'
 
@@ -17,6 +18,9 @@ export interface LocalMailKit {
   listAccountNames?: () => Promise<Array<{ id: string; name: string }>>
   openFullDiskAccessSettings?: () => void
 }
+
+/** A workbench event for the record: the long fields (what was sent to the model and what came back) are cut short. */
+const briefly = (e: WorkbenchEvent): Record<string, unknown> => (e.kind === 'model_end' ? { kind: e.kind, n: e.n, label: e.label, ms: e.ms, prompt: e.prompt.slice(0, 300), response: e.response.slice(0, 300) } : { ...e })
 
 async function tauriLocalKit(): Promise<LocalMailKit> {
   const core = await import('@tauri-apps/api/core')
@@ -43,6 +47,14 @@ export default function EmailHost({ config, onClose, onSwitch, localKit }: { con
   const [llm, setLlm] = useState<ILLMClient | undefined>()
   const [activity, setActivity] = useState<WorkbenchEvent[]>([])
 
+  // A supervised test session can switch on a record of what is done here (only when the app was started with the monitor path; see monitor.ts).
+  useEffect(() => {
+    if (typeof window === 'undefined' || !('__TAURI_INTERNALS__' in window)) return undefined
+    let stop: (() => void) | undefined, gone = false
+    void import('@tauri-apps/api/core').then(async (core) => { const s = await startEmailMonitor(core.invoke as Invoke); if (gone) s?.(); else stop = s }, () => undefined)
+    return () => { gone = true; stop?.() }
+  }, [])
+
   useEffect(() => {
     let live = true
     // The platform is built first so a missing Tauri plugin is reported here, not later in the middle of mail work.
@@ -60,11 +72,14 @@ export default function EmailHost({ config, onClose, onSwitch, localKit }: { con
   const chooseAccounts = async (ids: string[]): Promise<void> => {
     if (!kit) return
     setBusy(true)
+    monitorLog('use_accounts', { accounts: ids.length, model: llm ? 'connected' : 'none' })
     try {
       setActivity([])
-      setMailbox(await createLocalMailbox({ source: kit.source, accountIds: ids, ...(kit.actions ? { actions: kit.actions } : {}), ...(llm ? { llm } : {}), onEvent: (e) => setActivity((a) => [...a.slice(-300), e]) }))
+      setMailbox(await createLocalMailbox({ source: kit.source, accountIds: ids, ...(kit.actions ? { actions: kit.actions } : {}), ...(llm ? { llm } : {}), onEvent: (e) => { setActivity((a) => [...a.slice(-300), e]); monitorLog('workbench', briefly(e)) } }))
+      monitorLog('mailbox_ready', {})
       setSetup(false)
     } catch (e) {
+      monitorLog('use_accounts_failed', { error: e instanceof Error ? e.message : String(e) })
       setNotice(`Aielia could not read that mail: ${e instanceof Error ? e.message : String(e)}`)
     } finally { setBusy(false) }
   }

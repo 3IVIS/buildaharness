@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useState } from 'react'
 import type { LocalDiscovery, LocalMailSource } from '@buildaharness/aielia'
+import { monitorLog } from './monitor'
 
 interface Props {
   source: LocalMailSource
@@ -38,9 +39,11 @@ export function LocalMailSetup({ source, listAccountNames, openFullDiskAccessSet
     setPhase({ kind: 'checking' })
     try {
       const d = await source.discover()
+      monitorLog('local_discover', { available: d.available, reason: d.reason ?? null, layout: d.layout ?? null, accounts: d.accounts.length, messages: d.messageCount })
       if (d.available && d.accounts.length > 0) { setPicked(new Set(d.accounts.map((a) => a.id))); setPhase({ kind: 'ready', d }) }
       else setPhase({ kind: 'blocked', reason: d.available ? 'not_found' : String(d.reason ?? 'other'), d })
     } catch (e) {
+      monitorLog('local_discover_error', { error: e instanceof Error ? e.message : String(e) })
       setPhase({ kind: 'blocked', reason: e instanceof Error && 'code' in e ? String((e as { code: unknown }).code) : 'other' })
     }
   }, [source])

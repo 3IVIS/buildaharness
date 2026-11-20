@@ -12,6 +12,7 @@ mod mail_imap;
 mod mail_keychain;
 mod mail_local_apple;
 mod mail_local_script;
+mod mail_monitor;
 mod mail_sso;
 mod mail_net;
 
@@ -1244,6 +1245,8 @@ pub fn run() {
       mail_local_apple::mail_local_body,
       mail_local_script::mail_local_script,
       mail_local_script::mail_local_open_privacy_settings,
+      mail_monitor::email_monitor_enabled,
+      mail_monitor::email_monitor_log,
       mail_sso::mail_sso_availability,
       mail_sso::mail_sso_acquire
     ])
