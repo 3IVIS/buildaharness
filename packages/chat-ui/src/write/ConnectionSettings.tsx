@@ -27,6 +27,7 @@ export function ConnectionSettings({ value, onSave, onForget, showWeb = true }: 
           <option value="openrouter">OpenRouter (recommended)</option>
           <option value="anthropic">Anthropic</option>
           <option value="openai">OpenAI</option>
+          <option value="deepseek">DeepSeek</option>
           <option value="proxy">A proxy I run (self-hosted)</option>
         </select>
       </label>

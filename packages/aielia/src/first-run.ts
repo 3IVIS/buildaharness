@@ -78,7 +78,7 @@ export async function maybeRunFirstRunSetup(deps: FirstRunDeps): Promise<Partial
     log('')
     log('Skipped. Until you set a provider, Aielia will try the "proxy" backend (needs')
     log('@buildaharness/proxy running on :8787). To set one up later, run:')
-    log('  /config set llmBackend <anthropic|openai|openrouter>')
+    log('  /config set llmBackend <anthropic|openai|openrouter|deepseek>')
     log('  /config set apiKey <your key>')
     log('')
     return persisted

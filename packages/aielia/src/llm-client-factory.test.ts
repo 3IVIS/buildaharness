@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, afterEach } from 'vitest'
-import { LLMClient, AnthropicLLMClient, OpenAICompatibleLLMClient, OPENAI_BASE_URL, OPENAI_DEFAULT_MODEL, OPENROUTER_BASE_URL, OPENROUTER_DEFAULT_MODEL, OPENROUTER_EXTRA_HEADERS, type ILLMClient } from '@buildaharness/runtime'
+import { LLMClient, AnthropicLLMClient, OpenAICompatibleLLMClient, OPENAI_BASE_URL, OPENAI_DEFAULT_MODEL, OPENROUTER_BASE_URL, OPENROUTER_DEFAULT_MODEL, OPENROUTER_EXTRA_HEADERS, DEEPSEEK_BASE_URL, DEEPSEEK_DEFAULT_MODEL, type ILLMClient } from '@buildaharness/runtime'
 import { DEFAULT_CONFIG, type AssistantConfig } from './config.js'
 import { createLlmClient } from './llm-client-factory.js'
 
@@ -48,6 +48,17 @@ describe('createLlmClient', () => {
     expect(url).toBe(`${OPENROUTER_BASE_URL}/chat/completions`)
     expect(JSON.parse(String(init.body)).model).toBe(OPENROUTER_DEFAULT_MODEL)
     expect(init.headers).toMatchObject(OPENROUTER_EXTRA_HEADERS)
+  })
+
+  it('builds the deepseek client with its base URL and default model, and switches thinking off', async () => {
+    const fetchImpl = vi.fn().mockRejectedValue(new Error('stop'))
+    const client = createLlmClient(cfg({ llmBackend: 'deepseek' }), { fetchImpl, claudeCli })
+    expect(client).toBeInstanceOf(OpenAICompatibleLLMClient)
+    const { url, init } = await firstRequest(client)
+    const body = JSON.parse(String(init.body))
+    expect(url).toBe(`${DEEPSEEK_BASE_URL}/chat/completions`)
+    expect(body.model).toBe(DEEPSEEK_DEFAULT_MODEL)
+    expect(body.thinking).toEqual({ type: 'disabled' })
   })
 
   it("returns the surface's own client for claude-cli", () => {

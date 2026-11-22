@@ -15,7 +15,7 @@ import {
   type MemorySummary,
   type DoctorCheck,
 } from '@buildaharness/aielia'
-import { ANTHROPIC_DEFAULT_MODEL, OPENAI_DEFAULT_MODEL, OPENROUTER_DEFAULT_MODEL, type TokenUsage } from '@buildaharness/runtime'
+import { ANTHROPIC_DEFAULT_MODEL, OPENAI_DEFAULT_MODEL, OPENROUTER_DEFAULT_MODEL, DEEPSEEK_DEFAULT_MODEL, type TokenUsage } from '@buildaharness/runtime'
 import { ENV_VAR_FOR_CONFIG_KEY } from '../browser-config'
 
 const LAYER_GROUPS: readonly [LayerGroup, string][] = [
@@ -31,6 +31,7 @@ const BACKEND_LABEL: Record<AssistantConfig['llmBackend'], string> = {
   anthropic: 'Claude API (direct)',
   openai: 'OpenAI API (direct)',
   openrouter: 'OpenRouter API (direct)',
+  deepseek: 'DeepSeek API (direct)',
 }
 
 /** Shown as the model input's placeholder, not written into the form — an empty field still falls through to each backend's own hardcoded default (LLMClient/AnthropicLLMClient/OpenAICompatibleLLMClient). */
@@ -40,10 +41,11 @@ const MODEL_PLACEHOLDER: Record<AssistantConfig['llmBackend'], string> = {
   anthropic: ANTHROPIC_DEFAULT_MODEL,
   openai: OPENAI_DEFAULT_MODEL,
   openrouter: OPENROUTER_DEFAULT_MODEL,
+  deepseek: DEEPSEEK_DEFAULT_MODEL,
 }
 
 /** The three backends where the user pastes in their own provider key — see config.ts's AssistantConfig.apiKey doc comment for the trust-boundary tradeoff this implies. */
-const DIRECT_API_BACKENDS: ReadonlySet<AssistantConfig['llmBackend']> = new Set(['anthropic', 'openai', 'openrouter'])
+const DIRECT_API_BACKENDS: ReadonlySet<AssistantConfig['llmBackend']> = new Set(['anthropic', 'openai', 'openrouter', 'deepseek'])
 
 /** Shell command timeout used when `shellTimeoutMs` is unset (matches the plan's documented 30 s default). */
 const DEFAULT_SHELL_TIMEOUT_MS = 30_000
@@ -278,6 +280,7 @@ export function SettingsScreen({
               <option value="anthropic">{BACKEND_LABEL.anthropic}</option>
               <option value="openai">{BACKEND_LABEL.openai}</option>
               <option value="openrouter">{BACKEND_LABEL.openrouter}</option>
+              <option value="deepseek">{BACKEND_LABEL.deepseek}</option>
             </select>
           </FieldRow>
 

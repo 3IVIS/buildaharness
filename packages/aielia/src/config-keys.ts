@@ -40,6 +40,7 @@ export function normalizeLlmBackend(raw: string): NonNullable<AssistantConfig['l
     case 'anthropic':
     case 'openai':
     case 'openrouter':
+    case 'deepseek':
       return raw
     default:
       return 'proxy'

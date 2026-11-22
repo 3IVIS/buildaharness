@@ -9,6 +9,8 @@ export interface OpenAICompatibleLLMClientOptions {
   defaultModel: string
   /** OpenRouter's recommended (not required) HTTP-Referer/X-Title headers, or any other provider-specific extras — merged into every request. */
   extraHeaders?: Record<string, string>
+  /** Extra top-level fields merged into every request body (DeepSeek's `thinking` switch, for one). Never overrides model, messages, stream or tools. */
+  extraBody?: Record<string, unknown>
   /** Injectable fetch — the Tauri webview's CSP blocks the global fetch to remote hosts, so the desktop app passes @tauri-apps/plugin-http's fetch here. Defaults to the global fetch. */
   fetchImpl?: typeof fetch
   /** Longest a single wait on the endpoint may take (headers, a whole non-streamed body, or the gap between streamed chunks) before the call fails with a timeout error. Defaults to DEFAULT_REQUEST_TIMEOUT_MS. */
@@ -27,7 +29,16 @@ export interface OpenAICompatibleLLMClientOptions {
  */
 export const OPENAI_BASE_URL = 'https://api.openai.com/v1'
 export const OPENROUTER_BASE_URL = 'https://openrouter.ai/api/v1'
-export { OPENAI_DEFAULT_MODEL, OPENROUTER_DEFAULT_MODEL } from './model-defaults'
+export const DEEPSEEK_BASE_URL = 'https://api.deepseek.com'
+export { OPENAI_DEFAULT_MODEL, OPENROUTER_DEFAULT_MODEL, DEEPSEEK_DEFAULT_MODEL } from './model-defaults'
+/**
+ * DeepSeek models think before answering by default and return the reasoning as `reasoning_content`.
+ * When a request carries tools, DeepSeek requires every earlier turn's `reasoning_content` to be sent
+ * back, and this client does not keep it, so a tool-calling turn would be rejected. Thinking is therefore
+ * switched off (docs: api-docs.deepseek.com/guides/thinking_mode); the answer quality of the non-thinking
+ * mode is what Aielia's loop and side calls are sized for, and it is faster and cheaper.
+ */
+export const DEEPSEEK_EXTRA_BODY: Record<string, unknown> = { thinking: { type: 'disabled' } }
 /**
  * OpenRouter's recommended (not required) leaderboard-attribution headers — see
  * https://openrouter.ai/docs. `HTTP-Referer` is rendered as the clickable link for
@@ -133,17 +144,19 @@ export class OpenAICompatibleLLMClient implements ILLMClient {
   private readonly baseUrl: string
   private readonly defaultModel: string
   private readonly extraHeaders: Record<string, string>
+  private readonly extraBody: Record<string, unknown>
   private readonly fetchImpl: typeof fetch
   private readonly requestTimeoutMs: number
   private readonly structuredRequestTimeoutMs: number
 
-  constructor({ apiKey, baseUrl, defaultModel, extraHeaders = {}, fetchImpl, requestTimeoutMs = DEFAULT_REQUEST_TIMEOUT_MS, structuredRequestTimeoutMs = DEFAULT_STRUCTURED_REQUEST_TIMEOUT_MS }: OpenAICompatibleLLMClientOptions) {
+  constructor({ apiKey, baseUrl, defaultModel, extraHeaders = {}, extraBody = {}, fetchImpl, requestTimeoutMs = DEFAULT_REQUEST_TIMEOUT_MS, structuredRequestTimeoutMs = DEFAULT_STRUCTURED_REQUEST_TIMEOUT_MS }: OpenAICompatibleLLMClientOptions) {
     this.requestTimeoutMs = requestTimeoutMs
     this.structuredRequestTimeoutMs = structuredRequestTimeoutMs
     this.apiKey = apiKey
     this.baseUrl = baseUrl
     this.defaultModel = defaultModel
     this.extraHeaders = extraHeaders
+    this.extraBody = extraBody
     this.fetchImpl = fetchImpl ?? ((...args: Parameters<typeof fetch>) => fetch(...args))
   }
 
@@ -152,7 +165,7 @@ export class OpenAICompatibleLLMClient implements ILLMClient {
     const controller = new AbortController()
     linkAbortSignal(controller, signal)
     return withRequestTimeout(
-      this.fetchImpl(`${this.baseUrl}/chat/completions`, { method: 'POST', headers: this.headers(), body: JSON.stringify(body), signal: controller.signal }),
+      this.fetchImpl(`${this.baseUrl}/chat/completions`, { method: 'POST', headers: this.headers(), body: JSON.stringify({ ...this.extraBody, ...body }), signal: controller.signal }),
       timeoutMs, 'openai-compatible-client', 'waiting for the model to respond', () => controller.abort(),
     )
   }
@@ -245,6 +258,8 @@ export class OpenAICompatibleLLMClient implements ILLMClient {
           if (typeof parsed?.usage?.prompt_tokens === 'number') inputTokens = parsed.usage.prompt_tokens
           if (typeof parsed?.usage?.completion_tokens === 'number') outputTokens = parsed.usage.completion_tokens
           if (typeof parsed?.usage?.prompt_tokens_details?.cached_tokens === 'number') cachedInputTokens = parsed.usage.prompt_tokens_details.cached_tokens
+          // DeepSeek names the same figure prompt_cache_hit_tokens (a subset of prompt_tokens).
+          else if (typeof parsed?.usage?.prompt_cache_hit_tokens === 'number') cachedInputTokens = parsed.usage.prompt_cache_hit_tokens
           // OpenRouter reports the real charged dollar cost on usage; OpenAI itself does not.
           if (typeof parsed?.usage?.cost === 'number') costUsd = parsed.usage.cost
           const delta = parsed?.choices?.[0]?.delta?.content
@@ -296,7 +311,7 @@ export class OpenAICompatibleLLMClient implements ILLMClient {
 
     const json = (await withRequestTimeout(response.json(), timeoutMs, 'openai-compatible-client', 'while reading the reply')) as {
       choices?: Array<{ message?: { content?: string; tool_calls?: unknown } }>
-      usage?: { prompt_tokens?: number; completion_tokens?: number; prompt_tokens_details?: { cached_tokens?: number }; cost?: number }
+      usage?: { prompt_tokens?: number; completion_tokens?: number; prompt_tokens_details?: { cached_tokens?: number }; prompt_cache_hit_tokens?: number; cost?: number }
     }
     const message = json.choices?.[0]?.message
     let toolCalls = parseToolCalls(message?.tool_calls)
@@ -312,7 +327,7 @@ export class OpenAICompatibleLLMClient implements ILLMClient {
       options.onUsage?.({
         inputTokens: json.usage.prompt_tokens,
         outputTokens: json.usage.completion_tokens,
-        cachedInputTokens: typeof json.usage.prompt_tokens_details?.cached_tokens === 'number' ? json.usage.prompt_tokens_details.cached_tokens : undefined,
+        cachedInputTokens: typeof json.usage.prompt_tokens_details?.cached_tokens === 'number' ? json.usage.prompt_tokens_details.cached_tokens : typeof json.usage.prompt_cache_hit_tokens === 'number' ? json.usage.prompt_cache_hit_tokens : undefined,
         ...(typeof json.usage.cost === 'number' ? { costUsd: json.usage.cost } : {}),
       })
     }

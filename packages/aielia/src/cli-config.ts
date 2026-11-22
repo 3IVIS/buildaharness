@@ -96,8 +96,8 @@ export function parseConfigValue(key: keyof AssistantConfig, raw: string): unkno
       return n
     }
     case 'llmBackend':
-      if (raw !== 'proxy' && raw !== 'claude-cli' && raw !== 'anthropic' && raw !== 'openai' && raw !== 'openrouter') {
-        throw new ConfigValueParseError('llmBackend must be one of "proxy", "claude-cli", "anthropic", "openai", "openrouter"')
+      if (raw !== 'proxy' && raw !== 'claude-cli' && raw !== 'anthropic' && raw !== 'openai' && raw !== 'openrouter' && raw !== 'deepseek') {
+        throw new ConfigValueParseError('llmBackend must be one of "proxy", "claude-cli", "anthropic", "openai", "openrouter", "deepseek"')
       }
       return raw
     case 'layers':

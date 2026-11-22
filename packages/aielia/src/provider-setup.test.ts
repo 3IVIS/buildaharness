@@ -4,6 +4,7 @@ import { checkApiKeyFormat, cleanApiKey, testApiKey } from './provider-setup.js'
 const ANT = 'sk-ant-api03-abcdefghijklmnopqrstuvwxyz'
 const OAI = 'sk-proj-abcdefghijklmnopqrstuvwxyz'
 const OR = 'sk-or-v1-abcdefghijklmnopqrstuvwxyz'
+const DS = 'sk-0123456789abcdef0123456789abcdef'
 
 describe('cleanApiKey', () => {
   it('trims whitespace and wrapping quotes', () => {
@@ -17,6 +18,7 @@ describe('checkApiKeyFormat', () => {
     expect(checkApiKeyFormat('anthropic', ANT)).toBeNull()
     expect(checkApiKeyFormat('openai', OAI)).toBeNull()
     expect(checkApiKeyFormat('openrouter', OR)).toBeNull()
+    expect(checkApiKeyFormat('deepseek', DS)).toBeNull()
   })
   it('rejects empty, spaced and too-short input', () => {
     expect(checkApiKeyFormat('anthropic', '')).toMatch(/Nothing was pasted/)
@@ -27,6 +29,8 @@ describe('checkApiKeyFormat', () => {
     expect(checkApiKeyFormat('anthropic', OR)).toMatch(/OpenRouter key/)
     expect(checkApiKeyFormat('openai', ANT)).toMatch(/Anthropic key/)
     expect(checkApiKeyFormat('openrouter', OAI)).toMatch(/start with sk-or-/)
+    expect(checkApiKeyFormat('deepseek', ANT)).toMatch(/Anthropic key/)
+    expect(checkApiKeyFormat('deepseek', OR)).toMatch(/OpenRouter key/)
   })
 })
 
@@ -39,6 +43,7 @@ describe('testApiKey', () => {
   it('is invalid on 401/403', async () => {
     expect((await testApiKey('openai', OAI, respond(401))).status).toBe('invalid')
     expect((await testApiKey('openrouter', OR, respond(403))).status).toBe('invalid')
+    expect((await testApiKey('deepseek', DS, respond(401))).status).toBe('invalid')
   })
   it('is unverified (not invalid) on network failure or a 5xx', async () => {
     const boom = vi.fn(async () => { throw new TypeError('Failed to fetch') }) as unknown as typeof fetch

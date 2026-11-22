@@ -9,7 +9,7 @@
 
 import type { AssistantConfig } from './config.js'
 
-export type KeyedBackend = Extract<AssistantConfig['llmBackend'], 'anthropic' | 'openai' | 'openrouter'>
+export type KeyedBackend = Extract<AssistantConfig['llmBackend'], 'anthropic' | 'openai' | 'openrouter' | 'deepseek'>
 
 /** A step-by-step page on the website, shown after the short in-app directions for readers who want every step spelled out. */
 export interface SetupGuide {
@@ -96,6 +96,19 @@ export const PROVIDER_SETUP: readonly ProviderSetupInfo[] = [
       'Open platform.openai.com/api-keys, click “Create new secret key”, and copy it right away.',
     ],
   },
+  {
+    backend: 'deepseek',
+    name: 'DeepSeek',
+    blurb: 'DeepSeek’s own API: very low prices and a long context. Pay-as-you-go with prepaid balance.',
+    keyUrl: 'https://platform.deepseek.com/api_keys',
+    keyUrlLabel: 'platform.deepseek.com/api_keys',
+    keyPrefix: 'sk-',
+    steps: [
+      'Go to platform.deepseek.com and sign up or sign in.',
+      'Top up a few dollars of balance under Top up (usage is deducted from it).',
+      'Open platform.deepseek.com/api_keys, click “Create new API key”, and copy it right away.',
+    ],
+  },
 ]
 
 export function getProviderSetup(backend: KeyedBackend): ProviderSetupInfo {
@@ -132,6 +145,13 @@ export function checkApiKeyFormat(backend: KeyedBackend, key: string): string | 
       ? 'That looks like an Anthropic key, not an OpenAI one. Go back and pick Anthropic, or paste an OpenAI key (starts with sk-).'
       : `OpenAI keys start with ${info.keyPrefix}. Double-check you copied the right one.`
   }
+  if (backend === 'deepseek' && (!key.startsWith('sk-') || key.startsWith('sk-ant-') || key.startsWith('sk-or-'))) {
+    return key.startsWith('sk-ant-')
+      ? 'That looks like an Anthropic key, not a DeepSeek one. Go back and pick Anthropic, or paste a DeepSeek key (starts with sk-).'
+      : key.startsWith('sk-or-')
+        ? 'That looks like an OpenRouter key, not a DeepSeek one. Go back and pick OpenRouter, or paste a DeepSeek key (starts with sk-).'
+        : `DeepSeek keys start with ${info.keyPrefix}. Double-check you copied the right one.`
+  }
   if (key.length < 20) return 'That looks too short to be a full API key. Make sure you copied the whole thing.'
   return null
 }
@@ -164,7 +184,9 @@ export async function testApiKey(
         }
       : backend === 'openai'
         ? { url: 'https://api.openai.com/v1/models', headers: { Authorization: `Bearer ${key}` } }
-        : { url: 'https://openrouter.ai/api/v1/key', headers: { Authorization: `Bearer ${key}` } }
+        : backend === 'deepseek'
+          ? { url: 'https://api.deepseek.com/models', headers: { Authorization: `Bearer ${key}` } }
+          : { url: 'https://openrouter.ai/api/v1/key', headers: { Authorization: `Bearer ${key}` } }
 
   const name = getProviderSetup(backend).name
   let response: Response

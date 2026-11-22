@@ -6,7 +6,7 @@ describe('KeyNotice', () => {
   it('says a key is needed and names the providers', () => {
     render(<KeyNotice onAddKey={() => {}} />)
     expect(screen.getByText(/Bring your own AI key to chat/i)).toBeTruthy()
-    expect(screen.getByText(/Anthropic, OpenAI or OpenRouter/)).toBeTruthy()
+    expect(screen.getByText(/Anthropic, OpenAI, DeepSeek or OpenRouter/)).toBeTruthy()
   })
   it('opens key setup when the button is pressed', () => {
     const onAddKey = vi.fn()
