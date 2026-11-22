@@ -2,12 +2,20 @@ name: Deploy Aielia Write to /write
 
 # Builds the Aielia Write page (packages/chat-ui, vite.write.config.ts) and publishes it to the myaielia repo under
 # /write/, which GitHub Pages serves at https://myaielia.com/write. Like /chat, it is bring-your-own-key: the visitor's key
-# stays in their browser. MANUAL ONLY (workflow_dispatch): it does not run on push, so merging code never publishes the
-# page by itself. Run it from the Actions tab when the page is ready to be public.
+# stays in their browser. Runs on every push to main that touches the packages the page is built from (the same
+# trigger as deploy-chat-ui.yml), and can still be run by hand from the Actions tab (workflow_dispatch).
 #
 # Needs secrets.MYAIELIA_DEPLOY_KEY, the same write-enabled deploy key deploy-chat-ui.yml uses.
 
 on:
+  push:
+    branches: [main]
+    paths:
+      - 'packages/chat-ui/**'
+      - 'packages/aielia/**'
+      - 'packages/runtime/**'
+      - 'packages/harness/**'
+      - '.github/workflows/deploy-write.yml'
   workflow_dispatch:
 
 concurrency:
