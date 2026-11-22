@@ -359,7 +359,7 @@ export interface CostSummaryInfo {
   lastTurn?: TokenUsage
   /** Running total across the session — {inputTokens: 0, outputTokens: 0} before any usage has ever been reported. */
   session: TokenUsage
-  backend: 'proxy' | 'claude-cli' | 'anthropic' | 'openai' | 'openrouter'
+  backend: 'proxy' | 'claude-cli' | 'anthropic' | 'openai' | 'openrouter' | 'deepseek'
   /** Pre-formatted by spend-cap.ts's formatSpendCapStatus — undefined when no ceiling is configured, in which case the line is omitted entirely (same convention as StatusInfo.spendCapLine). */
   spendCapLine?: string
 }

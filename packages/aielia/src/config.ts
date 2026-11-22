@@ -19,7 +19,7 @@ import type { GoalGraphSuggestMode } from './goal-graph-suggest-flag.js'
 import type { MemoryWriteMode } from './memory-governance.js'
 
 export interface AssistantConfig {
-  llmBackend: 'proxy' | 'claude-cli' | 'anthropic' | 'openai' | 'openrouter'
+  llmBackend: 'proxy' | 'claude-cli' | 'anthropic' | 'openai' | 'openrouter' | 'deepseek'
   proxyUrl: string
   authToken: string
   /**
@@ -324,7 +324,7 @@ export class ConfigValidationError extends Error {}
  * earlier `set`, and invalid if not. Callers (CLI's /config set, chat-ui's SettingsScreen) run
  * this before persisting, so a broken combination is rejected before it's ever written.
  */
-const DIRECT_API_BACKENDS: ReadonlySet<AssistantConfig['llmBackend']> = new Set(['anthropic', 'openai', 'openrouter'])
+const DIRECT_API_BACKENDS: ReadonlySet<AssistantConfig['llmBackend']> = new Set(['anthropic', 'openai', 'openrouter', 'deepseek'])
 
 export function validateConfig(patch: Partial<AssistantConfig>, existing: AssistantConfig): void {
   const merged = { ...existing, ...patch }

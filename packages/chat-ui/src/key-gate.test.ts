@@ -14,7 +14,7 @@ describe('requiresOwnKey', () => {
 
 describe('hasModelCredentials', () => {
   it('needs a non-blank apiKey for the direct providers', () => {
-    for (const llmBackend of ['anthropic', 'openai', 'openrouter'] as const) {
+    for (const llmBackend of ['anthropic', 'openai', 'openrouter', 'deepseek'] as const) {
       expect(hasModelCredentials({ llmBackend, apiKey: 'sk-x' })).toBe(true)
       expect(hasModelCredentials({ llmBackend, apiKey: '   ' })).toBe(false)
       expect(hasModelCredentials({ llmBackend })).toBe(false)

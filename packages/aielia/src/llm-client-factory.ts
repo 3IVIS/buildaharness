@@ -7,6 +7,9 @@ import {
   OPENROUTER_BASE_URL,
   OPENROUTER_DEFAULT_MODEL,
   OPENROUTER_EXTRA_HEADERS,
+  DEEPSEEK_BASE_URL,
+  DEEPSEEK_DEFAULT_MODEL,
+  DEEPSEEK_EXTRA_BODY,
   type ILLMClient,
 } from '@buildaharness/runtime'
 import type { AssistantConfig } from './config.js'
@@ -21,7 +24,7 @@ export interface LlmClientFactoryOptions {
   claudeCli: () => ILLMClient | undefined
 }
 
-/** The one switch over the five backends. Only the claude-cli client and `fetch` differ per surface, and both come in through the options. */
+/** The one switch over the six backends. Only the claude-cli client and `fetch` differ per surface, and both come in through the options. */
 export function createLlmClient(config: AssistantConfig, { fetchImpl, claudeCli }: LlmClientFactoryOptions): ILLMClient {
   switch (config.llmBackend) {
     case 'claude-cli': {
@@ -42,6 +45,8 @@ export function createLlmClient(config: AssistantConfig, { fetchImpl, claudeCli 
         extraHeaders: OPENROUTER_EXTRA_HEADERS,
         fetchImpl,
       })
+    case 'deepseek':
+      return new OpenAICompatibleLLMClient({ apiKey: config.apiKey ?? '', baseUrl: DEEPSEEK_BASE_URL, defaultModel: DEEPSEEK_DEFAULT_MODEL, extraBody: DEEPSEEK_EXTRA_BODY, fetchImpl })
     case 'proxy':
       return new LLMClient({ proxyUrl: config.proxyUrl, authToken: config.authToken, fetchImpl })
   }

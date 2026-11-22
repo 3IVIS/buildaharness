@@ -24,6 +24,7 @@ export function hasModelCredentials(config: ModelCredentials): boolean {
     case 'anthropic':
     case 'openai':
     case 'openrouter':
+    case 'deepseek':
       return Boolean(config.apiKey?.trim())
     case 'proxy':
       return Boolean(config.authToken?.trim())

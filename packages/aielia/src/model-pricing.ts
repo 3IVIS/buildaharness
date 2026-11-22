@@ -30,6 +30,11 @@ const OPENAI_PRICING: ReadonlyArray<readonly [string, ModelPriceUsd]> = [
   ['gpt-4.1', { inputPerMTok: 2, outputPerMTok: 8, cachedInputPerMTok: 0.5 }],
   ['gpt-4o-mini', { inputPerMTok: 0.15, outputPerMTok: 0.6, cachedInputPerMTok: 0.075 }],
   ['gpt-4o', { inputPerMTok: 2.5, outputPerMTok: 10, cachedInputPerMTok: 1.25 }],
+  // DeepSeek's own API, peak-hour list rates (off-peak is half); api-docs.deepseek.com/quick_start/pricing, 2026-11-22.
+  // "deepseek-v4-flash" is the retired name for deepseek-flash and is billed at the Flash price.
+  ['deepseek-v4-pro', { inputPerMTok: 1.32, outputPerMTok: 3.96, cachedInputPerMTok: 0.044 }],
+  ['deepseek-flash', { inputPerMTok: 0.3, outputPerMTok: 1.2, cachedInputPerMTok: 0.006 }],
+  ['deepseek-v4-flash', { inputPerMTok: 0.3, outputPerMTok: 1.2, cachedInputPerMTok: 0.006 }],
 ]
 
 /** Matches by substring rather than an exact model-id list, since versioned date suffixes (e.g. -20241022) change more often than the pricing tier itself. */

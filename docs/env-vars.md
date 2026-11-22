@@ -207,9 +207,9 @@ Aielia reads its own variables, separate from the Docker stack. In the CLI they 
 
 | Variable | Default | Description |
 |---|---|---|
-| `ASSISTANT_LLM_BACKEND` | `proxy` | `proxy`, `claude-cli`, `anthropic`, `openai` or `openrouter`. |
+| `ASSISTANT_LLM_BACKEND` | `proxy` | `proxy`, `claude-cli`, `anthropic`, `openai`, `openrouter` or `deepseek`. |
 | `ASSISTANT_PROXY_URL` (V), `ASSISTANT_PROXY_TOKEN` (V) | — | `@buildaharness/proxy` base URL and its bearer JWT (proxy backend). |
-| `ASSISTANT_API_KEY` | — | Real provider key for the direct `anthropic`/`openai`/`openrouter` backends. |
+| `ASSISTANT_API_KEY` | — | Real provider key for the direct `anthropic`/`openai`/`openrouter`/`deepseek` backends. |
 | `ASSISTANT_MODEL` (V) | per backend | Model id override. |
 | `CLAUDE_PATH` | `claude` | Path to the `claude` binary for the `claude-cli` backend. |
 | `ASSISTANT_ENABLE_WEB` (V) | off | Exactly `1` enables `web_search`/`fetch_url`. |

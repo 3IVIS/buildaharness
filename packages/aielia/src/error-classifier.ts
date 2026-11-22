@@ -48,7 +48,7 @@ const ERROR_PATTERNS: ErrorPattern[] = [
     test: (err) => hasName(err, 'FlowExecutionError') && typeof (err as { cause?: unknown }).cause === 'object',
     classify: (err, backend) => {
       const status = (err as { cause?: { status?: number } }).cause?.status
-      const isDirectApiBackend = backend === 'anthropic' || backend === 'openai' || backend === 'openrouter'
+      const isDirectApiBackend = backend === 'anthropic' || backend === 'openai' || backend === 'openrouter' || backend === 'deepseek'
       if (status === 401 || status === 403) {
         return isDirectApiBackend
           ? { message: `The ${backend} API rejected the request — check your apiKey.`, retryable: false }
@@ -69,7 +69,7 @@ const ERROR_PATTERNS: ErrorPattern[] = [
     // proxy isn't reachable at all (connection refused, DNS failure, offline).
     test: (err) => messageIncludes(err, 'fetch failed') || messageIncludes(err, 'failed to fetch') || messageIncludes(err, 'networkerror'),
     classify: (_err, backend) => {
-      const isDirectApiBackend = backend === 'anthropic' || backend === 'openai' || backend === 'openrouter'
+      const isDirectApiBackend = backend === 'anthropic' || backend === 'openai' || backend === 'openrouter' || backend === 'deepseek'
       return isDirectApiBackend
         ? { message: `Couldn't reach the ${backend} API. Check your network and try again.`, retryable: true }
         : { message: "Couldn't reach the LLM proxy. Check it's running and try again.", retryable: true }

@@ -5,7 +5,7 @@ import { resolveConfig, type AssistantConfig } from '@buildaharness/aielia'
  * change the settings of the Chat page, so the two can be set up, changed and cleared on their own.
  */
 export interface WriteConnection {
-  provider: 'anthropic' | 'openai' | 'openrouter' | 'proxy'
+  provider: 'anthropic' | 'openai' | 'openrouter' | 'deepseek' | 'proxy'
   /** The provider key; for a self-hosted model proxy, the access token that proxy asks for (may be empty). */
   apiKey: string
   /** Only for provider 'proxy': the address of a proxy you run that answers model calls (a self-hosted @buildaharness/proxy, or a bridge that speaks the same /llm/chat). */
@@ -22,7 +22,7 @@ export interface WriteConnection {
 
 const STORAGE_KEY = 'aielia-write.connection'
 
-const PROVIDERS = ['anthropic', 'openai', 'openrouter', 'proxy']
+const PROVIDERS = ['anthropic', 'openai', 'openrouter', 'deepseek', 'proxy']
 
 export function cleanConnection(raw: unknown): WriteConnection | undefined {
   if (typeof raw !== 'object' || raw === null) return undefined

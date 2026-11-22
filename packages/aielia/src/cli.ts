@@ -10,6 +10,7 @@ import {
   ANTHROPIC_DEFAULT_MODEL,
   OPENAI_DEFAULT_MODEL,
   OPENROUTER_DEFAULT_MODEL,
+  DEEPSEEK_DEFAULT_MODEL,
   FileSystemAdapter,
   FileSystemExperienceStore,
   InMemoryReminderStore,
@@ -401,6 +402,7 @@ export async function runCli(options: RunCliOptions = {}): Promise<CliInstance> 
     anthropic: ANTHROPIC_DEFAULT_MODEL,
     openai: OPENAI_DEFAULT_MODEL,
     openrouter: OPENROUTER_DEFAULT_MODEL,
+    deepseek: DEEPSEEK_DEFAULT_MODEL,
   }
   const backendLine = `${config.llmBackend} · ${config.model ?? backendDisplayModel[config.llmBackend]}`
 

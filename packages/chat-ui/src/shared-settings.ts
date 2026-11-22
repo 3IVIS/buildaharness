@@ -11,7 +11,7 @@ export const WRITE_KEY = 'aielia-write.connection'
 /** Set once a copy was made, or the writer cleared Write's connection on purpose, so a cleared page does not fill itself again. */
 export const SEEDED_KEY = 'aielia.settings-shared'
 
-const BACKENDS = ['anthropic', 'openai', 'openrouter']
+const BACKENDS = ['anthropic', 'openai', 'openrouter', 'deepseek']
 
 function readJson(key: string): Record<string, unknown> | undefined {
   try {

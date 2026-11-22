@@ -546,4 +546,34 @@ describe('shorter bound for structured side calls (a stalled classifier or audit
     expect(client.requestTimeoutMs).toBe(300_000)
     expect(client.structuredRequestTimeoutMs).toBe(120_000)
   })
+
+  describe('DeepSeek', () => {
+    it('merges extraBody into the request without overriding the core fields', async () => {
+      const fetchMock = mockFetchJson({ choices: [{ message: { content: 'ok' } }] })
+      const client = new OpenAICompatibleLLMClient({ apiKey: API_KEY, baseUrl: 'https://api.deepseek.com', defaultModel: 'deepseek-flash', extraBody: { thinking: { type: 'disabled' }, model: 'ignored' } })
+      await client.callChatStructured([{ role: 'user', content: 'hi' }])
+      const [url, init] = fetchMock.mock.calls[0] as [string, RequestInit]
+      const body = JSON.parse(init.body as string)
+      expect(url).toBe('https://api.deepseek.com/chat/completions')
+      expect(body.thinking).toEqual({ type: 'disabled' })
+      expect(body.model).toBe('deepseek-flash')
+    })
+
+    it('reads DeepSeek prompt_cache_hit_tokens as cachedInputTokens (non-streamed and streamed)', async () => {
+      mockFetchJson({ choices: [{ message: { content: 'ok' } }], usage: { prompt_tokens: 100, completion_tokens: 5, prompt_cache_hit_tokens: 80 } })
+      const client = new OpenAICompatibleLLMClient({ apiKey: API_KEY, baseUrl: 'https://api.deepseek.com', defaultModel: 'deepseek-flash' })
+      const onUsage = vi.fn()
+      await client.callChatStructured([{ role: 'user', content: 'hi' }], undefined, { onUsage })
+      expect(onUsage).toHaveBeenCalledWith(expect.objectContaining({ inputTokens: 100, cachedInputTokens: 80 }))
+
+      mockFetchOk([
+        'data: {"choices":[{"delta":{"content":"hi"}}]}',
+        'data: {"choices":[{"delta":{}}],"usage":{"prompt_tokens":100,"completion_tokens":3,"prompt_cache_hit_tokens":64}}',
+        'data: [DONE]',
+      ])
+      const onStreamUsage = vi.fn()
+      for await (const _ of client.callChat([{ role: 'user', content: 'hi' }], { onUsage: onStreamUsage })) { /* drain */ }
+      expect(onStreamUsage).toHaveBeenCalledWith(expect.objectContaining({ cachedInputTokens: 64 }))
+    })
+  })
 })

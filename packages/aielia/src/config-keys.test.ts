@@ -125,7 +125,7 @@ describe('"set" differs by surface on purpose', () => {
 
 describe('shared value parsers', () => {
   it('normalizeLlmBackend keeps a known backend and sends anything else to proxy', () => {
-    for (const b of ['claude-cli', 'anthropic', 'openai', 'openrouter'] as const) expect(normalizeLlmBackend(b)).toBe(b)
+    for (const b of ['claude-cli', 'anthropic', 'openai', 'openrouter', 'deepseek'] as const) expect(normalizeLlmBackend(b)).toBe(b)
     expect(normalizeLlmBackend('claud-cli')).toBe('proxy')
   })
   it('parseShellNetworkAllowlist trims and drops empties', () => {

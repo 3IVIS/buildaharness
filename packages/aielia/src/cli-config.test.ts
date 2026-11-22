@@ -49,7 +49,7 @@ describe('envOverridesFromProcessEnv', () => {
     expect(envOverridesFromProcessEnv({ ASSISTANT_DANGEROUSLY_SKIP_PERMISSIONS: 'yes' })).toEqual({ dangerouslySkipPermissions: false })
   })
 
-  it.each(['claude-cli', 'anthropic', 'openai', 'openrouter'] as const)('accepts ASSISTANT_LLM_BACKEND=%s', (backend) => {
+  it.each(['claude-cli', 'anthropic', 'openai', 'openrouter', 'deepseek'] as const)('accepts ASSISTANT_LLM_BACKEND=%s', (backend) => {
     expect(envOverridesFromProcessEnv({ ASSISTANT_LLM_BACKEND: backend })).toEqual({ llmBackend: backend })
   })
 
@@ -180,7 +180,7 @@ describe('parseConfigValue', () => {
     expect(() => parseConfigValue('goalGraphSuggestMode', 'on')).toThrow(ConfigValueParseError)
   })
 
-  it.each(['anthropic', 'openai', 'openrouter'] as const)('accepts llmBackend "%s"', (backend) => {
+  it.each(['anthropic', 'openai', 'openrouter', 'deepseek'] as const)('accepts llmBackend "%s"', (backend) => {
     expect(parseConfigValue('llmBackend', backend)).toBe(backend)
   })
 

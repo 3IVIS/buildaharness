@@ -33,6 +33,13 @@ export const OPENAI_DEFAULT_MODEL = 'gpt-5-mini'
 export const OPENROUTER_DEFAULT_MODEL = 'deepseek/deepseek-v4-flash'
 
 /**
+ * DeepSeek's own API (api.deepseek.com). `deepseek-flash` is the current Flash tier (1M context, tool calls,
+ * JSON output; docs: api-docs.deepseek.com/quick_start/pricing, checked 2026-11-22). The stronger tier is
+ * `deepseek-v4-pro`, picked by setting `model`. DeepSeek renames models, so re-verify now and then.
+ */
+export const DEEPSEEK_DEFAULT_MODEL = 'deepseek-flash'
+
+/**
  * The model a backend actually runs when `config.model` is unset, so callers that need to *name*
  * it (spend/cost estimates, the model shown to the user) don't assume the Anthropic default.
  * `undefined` for backends with no fixed default (claude-cli uses the user's own Claude Code default).
@@ -46,6 +53,8 @@ export function defaultModelForBackend(backend: string): string | undefined {
       return OPENAI_DEFAULT_MODEL
     case 'openrouter':
       return OPENROUTER_DEFAULT_MODEL
+    case 'deepseek':
+      return DEEPSEEK_DEFAULT_MODEL
     default:
       return undefined
   }
